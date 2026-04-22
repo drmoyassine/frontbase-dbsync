@@ -18,7 +18,7 @@ from sqlalchemy.orm import joinedload
 from app.models.models import Page, EdgeEngine, PageDeployment, Project
 from app.models.tenant import Tenant
 from app.services.page_hash import compute_page_hash
-from app.services.edge_client import get_edge_headers
+from app.services.edge_client import get_edge_headers, resolve_engine_url
 from app.services.publish_serializer import (
     get_datasources_for_publish,
     convert_to_publish_schema,
@@ -113,7 +113,7 @@ async def publish_to_target(page_id: str, engine_id: str):
         _ = page.is_public
         _ = page.is_homepage
         
-        engine_url = getattr(engine, 'url', None)
+        engine_url = resolve_engine_url(engine)
         if not engine_url:
             raise HTTPException(status_code=400, detail="Engine URL is missing")
             
@@ -271,12 +271,12 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
         engine_map: dict[str, dict[str, str]] = {}
         auth_headers_map: dict[str, dict[str, str]] = {}
         for eng in engines:
-            url = getattr(eng, 'url', None)
+            url = resolve_engine_url(eng)
             name = getattr(eng, 'name', '') or str(eng.id)
             # Force-load engine_config for get_edge_headers (requires active session)
             _ = eng.engine_config
             if url:
-                engine_map[str(eng.id)] = {"url": str(url), "name": str(name)}
+                engine_map[str(eng.id)] = {"url": url, "name": str(name)}
                 auth_headers_map[str(eng.id)] = get_edge_headers(eng)
 
         # Force-load page attributes before detaching

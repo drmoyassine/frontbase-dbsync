@@ -16,7 +16,7 @@ from ...database.utils import get_db, create_page, update_page, get_page_by_slug
 from ...models.schemas import PageCreateRequest, PageUpdateRequest
 from ...models.models import Page, PageDeployment, EdgeEngine, Project
 from app.services.page_hash import compute_page_hash
-from app.services.edge_client import get_edge_headers
+from app.services.edge_client import get_edge_headers, resolve_engine_url
 from app.middleware.tenant_context import TenantContext, get_tenant_context
 from .versions import create_version_snapshot
 from sqlalchemy.orm import joinedload
@@ -122,7 +122,7 @@ async def fan_out_unpublish(slug: str, page_id: str, db: Session):
     async with httpx.AsyncClient(timeout=10.0) as client:
         tasks = []
         for engine in engines:
-            url = f"{str(engine.url).rstrip('/')}/api/import/{original_slug}"
+            url = f"{resolve_engine_url(engine).rstrip('/')}/api/import/{original_slug}"
             auth_headers = get_edge_headers(engine)
             tasks.append(client.delete(url, headers=auth_headers))
         
@@ -156,7 +156,7 @@ async def unpublish_from_single_target(slug: str, page_id: str, engine_id: str, 
     # Send DELETE to the specific engine
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            url = f"{str(engine.url).rstrip('/')}/api/import/{original_slug}"
+            url = f"{resolve_engine_url(engine).rstrip('/')}/api/import/{original_slug}"
             auth_headers = get_edge_headers(engine)
             response = await client.delete(url, headers=auth_headers)
             if response.status_code == 200:

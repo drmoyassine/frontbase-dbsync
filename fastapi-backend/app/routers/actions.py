@@ -21,7 +21,7 @@ from app.middleware.tenant_context import TenantContext, get_tenant_context
 from app.database.config import SessionLocal
 from app.models.actions import AutomationDraft, AutomationExecution
 from app.models.models import EdgeEngine
-from app.services.edge_client import get_edge_headers
+from app.services.edge_client import get_edge_headers, resolve_engine_url
 from app.schemas.actions import (
     WorkflowDraftCreate,
     WorkflowDraftUpdate,
@@ -397,7 +397,7 @@ async def publish_draft_to_engine(
     if not engine:
         raise HTTPException(status_code=404, detail=f"Engine not found: {engine_id}")
     
-    engine_url = getattr(engine, 'url', None)
+    engine_url = resolve_engine_url(engine)
     engine_name = getattr(engine, 'name', f'Engine {engine_id}')
     if not engine_url:
         raise HTTPException(status_code=400, detail="Engine URL is missing")
@@ -548,7 +548,7 @@ async def publish_draft_batch(
 
     # Fan out to all engines in parallel
     async def _deploy_to_engine(engine: EdgeEngine):
-        engine_url = str(getattr(engine, 'url', ''))
+        engine_url = resolve_engine_url(engine)
         engine_name = str(getattr(engine, 'name', f'Engine {engine.id}'))
         engine_id = str(engine.id)
         if not engine_url:
@@ -646,7 +646,7 @@ async def toggle_target_active(
         raise HTTPException(status_code=404, detail="Deployment target not found")
         
     engine_name = str(engine.name)
-    engine_url = str(engine.url)
+    engine_url = resolve_engine_url(engine)
 
     # Re-build payload but override isActive
     deploy_payload = _build_deploy_payload(draft, override_is_active=request.is_active)
@@ -1030,7 +1030,7 @@ async def _collect_edge_urls(db: Session, ctx: TenantContext | None = None) -> d
     edge_map = {}
     for engine in all_engines:
         if str(engine.id) in deployed_engine_ids:
-            url = str(engine.url).rstrip("/")
+            url = resolve_engine_url(engine).rstrip("/")
             if url:
                 edge_map[url] = engine.name
     return edge_map
@@ -1367,7 +1367,7 @@ async def get_draft_executions(
         engine_map = {}
         for engine in all_engines:
             if str(engine.id) in deployed_engine_ids:
-                url = str(engine.url).rstrip("/")
+                url = resolve_engine_url(engine).rstrip("/")
                 if url:
                     engine_map[url] = str(engine.name)
 
@@ -1418,7 +1418,7 @@ async def get_production_executions(
     if not engine:
         raise HTTPException(status_code=404, detail=f"Engine not found: {engine_id}")
     
-    engine_url = getattr(engine, 'url', None)
+    engine_url = resolve_engine_url(engine)
     engine_name = getattr(engine, 'name', f'Engine {engine_id}')
     if not engine_url:
         return {"executions": [], "total": 0, "error": "Engine URL is missing"}

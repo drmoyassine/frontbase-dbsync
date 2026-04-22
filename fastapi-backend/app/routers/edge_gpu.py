@@ -21,6 +21,7 @@ from ..models.models import EdgeGPUModel, EdgeEngine, EdgeProviderAccount
 from ..services.gpu_adapters import get_adapter, get_schema_for_model_type, IO_SCHEMAS, available_providers
 from ..services.cloudflare_api import get_provider_credentials
 from ..services.engine_deploy import redeploy as _redeploy_engine
+from ..services.edge_client import resolve_engine_url
 
 router = APIRouter(prefix="/api/edge-gpu", tags=["edge-gpu"])
 
@@ -329,7 +330,7 @@ async def test_gpu_model(model_id: str, db: Session = Depends(get_db)):
     result = await adapter.test_inference(
         model_id=str(model.model_id),
         model_type=str(model.model_type),
-        engine_url=str(engine.url),
+        engine_url=resolve_engine_url(engine),
         slug=str(model.slug),
     )
     return result

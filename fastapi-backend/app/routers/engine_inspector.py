@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from ..database.config import get_db
 from ..models.models import EdgeEngine
 from ..core.credential_resolver import get_provider_context_by_id
+from ..services.edge_client import resolve_engine_url
 
 router = APIRouter(prefix="/api/edge-engines", tags=["Engine Inspector"])
 
@@ -599,18 +600,13 @@ async def health_check(engine_id: str, db: Session = Depends(get_db), tenant_ctx
     if not engine:
         raise HTTPException(404, "Edge engine not found")
 
-    engine_url = str(engine.url or '')
+    engine_url = resolve_engine_url(engine)
     if not engine_url:
         raise HTTPException(400, "Engine has no URL configured")
 
     # Normalize URL
     if not engine_url.startswith('http'):
         engine_url = f'https://{engine_url}'
-
-    # Community engines use wildcard URLs (e.g. https://*.frontbase.dev)
-    # DNS cannot resolve a literal '*', so replace with a concrete subdomain
-    if '://*.' in engine_url:
-        engine_url = engine_url.replace('://*.', '://_health-probe.')
 
     # Resolve system key from engine_config
     system_key: str | None = None

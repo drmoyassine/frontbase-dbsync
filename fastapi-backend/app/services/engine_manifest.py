@@ -22,7 +22,8 @@ async def sync_engine_manifest(engine: EdgeEngine, db: Session) -> dict:
 
     Silent on failure — engine might not be a Frontbase engine.
     """
-    engine_url = str(engine.url or "").rstrip("/")
+    from ..services.edge_client import resolve_engine_url
+    engine_url = resolve_engine_url(engine).rstrip("/")
     if not engine_url:
         return {"synced": False, "reason": "No engine URL configured"}
 

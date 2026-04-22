@@ -61,3 +61,33 @@ def get_edge_headers(engine: object) -> dict[str, str]:
     except (json.JSONDecodeError, TypeError):
         pass
     return headers
+
+
+def resolve_engine_url(engine: object) -> str:
+    """Get the actual HTTP-reachable URL for an engine.
+
+    When a wildcard custom domain (e.g. *.frontbase.dev) is set,
+    engine.url becomes unresolvable by DNS.  Fall back to the
+    concrete original URL saved by domain_manager._save_custom_domain().
+
+    Used by ALL backend→engine HTTP calls: publish, health check,
+    unpublish, settings sync, workflow deploy, manifest sync, etc.
+    """
+    url = str(getattr(engine, 'url', '') or '')
+    if not url:
+        return ''
+    # Normal URL — use as-is
+    if '://*.' not in url:
+        return url
+    # Wildcard detected — read original_url from engine_config
+    config_str = getattr(engine, 'engine_config', None)
+    if config_str:
+        try:
+            cfg = json.loads(str(config_str))
+            original = cfg.get('original_url')
+            if original:
+                return str(original)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    # Last resort: replace * with a concrete subdomain
+    return url.replace('://*.', '://_edge.')

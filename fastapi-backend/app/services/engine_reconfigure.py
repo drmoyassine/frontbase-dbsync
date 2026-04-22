@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from ..models.models import EdgeEngine, EdgeProviderAccount
 from ..services.secrets_builder import build_engine_secrets, FRONTBASE_BINDING_NAMES
 from ..services import engine_deploy
+from ..services.edge_client import resolve_engine_url
 from ..schemas.edge_engines import ReconfigureRequest
 from datetime import datetime
 
@@ -299,7 +300,7 @@ async def reconfigure(
             print(f"[Reconfigure] Redeploy failed for engine '{engine.name}': {e}")
 
     # 6. Flush edge cache on target
-    cache_flushed = await engine_deploy._flush_cache(engine, str(engine.url).rstrip('/'))
+    cache_flushed = await engine_deploy._flush_cache(engine, resolve_engine_url(engine).rstrip('/'))
 
     return {
         "success": True,
@@ -354,6 +355,6 @@ async def toggle_engine(
 
     if not is_active:
         # Best effort flush to clear out any cached pages that might still serve
-        await engine_deploy._flush_cache(engine, str(engine.url).rstrip('/'))
+        await engine_deploy._flush_cache(engine, resolve_engine_url(engine).rstrip('/'))
 
     return settings_patched

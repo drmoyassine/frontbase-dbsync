@@ -41,6 +41,7 @@ from ..services import engine_deploy, engine_test, engine_reconfigure
 from ..services.engine_manifest import sync_engine_manifest
 from ..services.engine_serializer import serialize_engine, get_current_hashes
 from ..services.engine_provisioner import provision_and_deploy
+from ..services.edge_client import resolve_engine_url
 
 router = APIRouter(prefix="/api/edge-engines", tags=["Edge Engines"])
 
@@ -193,7 +194,7 @@ async def batch_sync_check(
 
     async def _check_engine(engine: EdgeEngine):
         eid = str(engine.id)
-        url = str(engine.url)
+        url = resolve_engine_url(engine)
         provider_name = engine.edge_provider.provider if engine.edge_provider else "unknown"
         test_result = await engine_test.test_connection(url, str(provider_name))
         if test_result.success:
@@ -518,7 +519,7 @@ async def test_engine_connection(
     if not engine:
         raise HTTPException(404, f"Engine '{engine_id}' not found")
         
-    url = engine.url
+    url = resolve_engine_url(engine)
     provider_name = engine.edge_provider.provider if engine.edge_provider else "unknown"
 
     return await engine_test.test_connection(str(url), str(provider_name))
@@ -804,7 +805,7 @@ async def sync_engine_logs(engine_id: str, db: Session = Depends(get_db)):
         return {"synced": 0, "detail": "No new logs from provider"}
 
     # Push to edge engine's /api/edge-logs
-    engine_url = str(engine.url).rstrip("/")
+    engine_url = resolve_engine_url(engine).rstrip("/")
     try:
         from ..services.edge_client import get_edge_headers
         auth_headers = get_edge_headers(engine)

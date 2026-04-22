@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from ..models.models import EdgeEngine, EdgeProviderAccount
 from ..services.bundle import build_worker, build_worker_from_snapshot, get_source_hash, capture_source_snapshot, CORE_PREFIX
 from ..services.secrets_builder import build_engine_secrets
-from ..services.edge_client import get_edge_headers
+from ..services.edge_client import get_edge_headers, resolve_engine_url
 from ..services import cloudflare_api
 from ..services import supabase_deploy_api
 from ..services import vercel_deploy_api
@@ -68,7 +68,7 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
     - If engine has a customized snapshot (is_forked), build from snapshot in temp dir
     - Otherwise, build from the shared source tree
     """
-    engine_url = str(engine.url).rstrip('/')
+    engine_url = resolve_engine_url(engine).rstrip('/')
     # DEPRECATION NOTE (2026-03-24): Frontend now always deploys "full".
     # Legacy engines may still have "automations" adapter_type — kept for backward compat.
     adapter_type = str(engine.adapter_type) if engine.adapter_type is not None else "automations"

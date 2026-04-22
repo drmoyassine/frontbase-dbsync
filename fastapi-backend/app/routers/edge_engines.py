@@ -263,9 +263,9 @@ async def get_engine(
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
-            query = query.filter(EdgeEngine.project_id == project.id)
+            query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
         else:
-            raise HTTPException(404, f"Engine '{engine_id}' not found")
+            query = query.filter(EdgeEngine.is_shared == True)  # noqa: E712
             
     engine = query.first()
     if not engine:

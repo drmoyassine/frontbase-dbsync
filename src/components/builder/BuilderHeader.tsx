@@ -135,17 +135,12 @@ export const BuilderHeader: React.FC<{
       if (!currentPageId || !currentPage) return;
       setIsPublishing(true);
       try {
-        await publishPageToTarget(currentPageId, target.id);
+        const returnedPreviewUrl = await publishPageToTarget(currentPageId, target.id);
         // Reload once for single target
         await loadPagesFromDatabase(false, true);
-        // Use the previewUrl returned from the edge (tenant-aware) if available.
-        // Fallback: compute from target.url via resolveEngineOrigin.
-        const updatedPage = pages.find(p => p.id === currentPageId);
-        const storedPreviewUrl = updatedPage?.deployments?.find((d: any) => d.engineId === target.id && d.status === 'published')?.previewUrl;
-        const pagePath = currentPage.isHomepage ? '' : currentPage.slug;
-        const previewUrl = storedPreviewUrl || `${resolveEngineOrigin(target.url)}/${pagePath}`;
-        if (previewUrl) {
-          window.open(previewUrl, '_blank');
+        
+        if (returnedPreviewUrl) {
+          window.open(returnedPreviewUrl, '_blank');
         } else {
           toast.success(`Published to ${target.name}`);
         }

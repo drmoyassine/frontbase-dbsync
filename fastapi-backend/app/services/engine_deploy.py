@@ -190,6 +190,11 @@ async def _deploy_cloudflare(
         engine_id=str(engine.id),
         deploy_provider='cloudflare',
     )
+    if bool(engine.is_shared):
+        import os
+        secrets['FRONTBASE_DEPLOYMENT_MODE'] = 'cloud'
+        secrets['FRONTBASE_BASE_DOMAIN'] = os.environ.get('FRONTBASE_BASE_DOMAIN', 'frontbase.dev')
+
     if secrets:
         await cloudflare_api.set_secrets(api_token, account_id, worker_name, secrets)
 

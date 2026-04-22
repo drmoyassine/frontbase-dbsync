@@ -29,7 +29,8 @@ export function resolveEngineOrigin(engineUrl: string | undefined | null, isShar
     return window.location.origin;
   }
   
-  const urlWithProto = engineUrl.startsWith('http') ? engineUrl : `https://${engineUrl}`;
+  const cleanUrl = engineUrl.trim();
+  const urlWithProto = cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`;
   
   try {
     const host = new URL(urlWithProto).hostname;

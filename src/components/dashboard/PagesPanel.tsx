@@ -94,12 +94,13 @@ export const PagesPanel: React.FC = () => {
 
     // 2. If target URL looks like a real external URL (has a dot in hostname), use it
     if (targetUrl) {
+      const cleanTargetUrl = targetUrl.trim();
       try {
-        const parsed = new URL(targetUrl);
+        const parsed = new URL(cleanTargetUrl);
         // Internal Docker hostnames don't have dots (e.g. 'edge', 'localhost')
         const isExternal = parsed.hostname.includes('.') && parsed.hostname !== 'localhost';
         if (isExternal) {
-          return `${targetUrl.replace(/\/$/, '')}/${pagePath}`;
+          return `${cleanTargetUrl.replace(/\/$/, '')}/${pagePath}`;
         }
       } catch {
         // Invalid URL, fall through

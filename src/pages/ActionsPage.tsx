@@ -423,12 +423,12 @@ export default function ActionsPage() {
                                                                                     
                                                                                     <div className="flex-1 flex items-center bg-muted/30 rounded border border-border px-2 py-1 min-w-0 group relative overflow-hidden text-[10px]">
                                                                                         <span className="truncate opacity-70 group-hover:opacity-100 transition-opacity flex-1 font-mono select-all">
-                                                                                            {resolvePreviewUrl(deployedEngine.url, `/api/webhook/${draft.id}`)}
+                                                                                            {resolvePreviewUrl(deployedEngine.url, `/api/webhook/${draft.id}`, deployedEngine.is_shared)}
                                                                                         </span>
                                                                                         <button
                                                                                             className="absolute right-0 top-0 bottom-0 px-2 bg-gradient-to-l from-muted/80 via-muted/80 to-transparent flex items-center justify-center text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
                                                                                             onClick={(e) => {
-                                                                                                const url = resolvePreviewUrl(deployedEngine.url, `/api/webhook/${draft.id}`);
+                                                                                                const url = resolvePreviewUrl(deployedEngine.url, `/api/webhook/${draft.id}`, deployedEngine.is_shared);
                                                                                                 handleCopyWebhookUrl(e, url, draft.id);
                                                                                             }}
                                                                                             title="Copy webhook URL"

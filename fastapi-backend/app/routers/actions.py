@@ -439,7 +439,8 @@ async def publish_draft_to_engine(
     # Force-load attributes before detaching
     deploy_payload = _build_deploy_payload(draft)
     draft_id_str = str(draft.id)
-    
+    engine_is_shared = bool(getattr(engine, 'is_shared', False))  # capture before expunge
+
     # Release connection before slow I/O
     db.expunge(draft)
     db.close()
@@ -501,11 +502,15 @@ async def publish_draft_to_engine(
             draft_record.is_published = True  # type: ignore[assignment]
             draft_record.published_version = result_data.get("version", 1)
             draft_record.published_at = datetime.now(timezone.utc)  # type: ignore[assignment]
-            # Accumulate deployed engine record
+            # Accumulate deployed engine record.
+            # is_shared is baked in so the frontend can choose the correct webhook base URL:
+            #   shared  → window.location.origin (tenant.frontbase.dev routes to the worker)
+            #   private → engine URL directly
             engines: dict = dict(draft_record.deployed_engines or {})  # type: ignore[arg-type]
             engines[engine_id] = {
                 "name": engine_name,
                 "url": engine_url,
+                "is_shared": engine_is_shared,
                 "deployed_at": datetime.now(timezone.utc).isoformat(),
                 "is_active": bool(draft_record.is_active),  # Inherit global active state on fresh publish
                 "deployed_version_hash": str(draft_record.content_hash or ""),
@@ -613,9 +618,11 @@ async def publish_draft_batch(
             deployed: dict = dict(draft_record.deployed_engines or {})  # type: ignore[arg-type]
             for r in results:
                 if r["success"]:
+                    eng = engine_map.get(r["engineId"])
                     deployed[r["engineId"]] = {
                         "name": r["name"],
-                        "url": str(getattr(engine_map.get(r["engineId"]), 'url', '')),
+                        "url": str(getattr(eng, 'url', '')),
+                        "is_shared": bool(getattr(eng, 'is_shared', False)),
                         "deployed_at": datetime.now(timezone.utc).isoformat(),
                         "is_active": bool(is_active_global),
                         "deployed_version_hash": content_hash,

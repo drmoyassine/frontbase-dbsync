@@ -17,11 +17,17 @@
  * - If the target is internal, but we are in dev (port 5173), we return the local URL.
  * - If it's an external cloud target (e.g., Vercel, CF), we resolve it natively.
  * 
- * @param engineUrl String representing the backend URL of the engine
+ * @param isShared Whether the target engine is a shared community worker
  * @returns Fully qualified origin (e.g. `https://myfrontbase.com` or `https://worker.dev`)
  */
-export function resolveEngineOrigin(engineUrl: string | undefined | null): string {
+export function resolveEngineOrigin(engineUrl: string | undefined | null, isShared?: boolean): string {
   if (!engineUrl) return '';
+  
+  // If this is a shared community engine, the tenant's exact subdomain routing is what matters,
+  // so we always use the current window's origin (e.g., tenant.frontbase.dev) rather than the raw worker domain.
+  if (isShared) {
+    return window.location.origin;
+  }
   
   const urlWithProto = engineUrl.startsWith('http') ? engineUrl : `https://${engineUrl}`;
   
@@ -45,10 +51,10 @@ export function resolveEngineOrigin(engineUrl: string | undefined | null): strin
  * Computes a full edge preview/webhook URL directly appended to the normalized origin.
  * 
  * @param engineUrl The raw Edge engine URL from the data model
- * @param path The specific file/API path to append
+ * @param isShared Whether the engine is a shared community worker
  */
-export function resolvePreviewUrl(engineUrl: string | undefined | null, path: string = ''): string {
-  const origin = resolveEngineOrigin(engineUrl);
+export function resolvePreviewUrl(engineUrl: string | undefined | null, path: string = '', isShared?: boolean): string {
+  const origin = resolveEngineOrigin(engineUrl, isShared);
   if (!origin) return '';
   const cleanPath = path.replace(/^\//, ''); // Avoid double-slashes
   return cleanPath ? `${origin}/${cleanPath}` : origin;

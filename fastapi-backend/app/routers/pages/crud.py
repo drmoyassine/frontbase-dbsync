@@ -197,9 +197,7 @@ async def get_pages(
                 .scalar_subquery()
             )
             base_query = base_query.filter(Page.project_id.in_(project_ids))
-        elif ctx and ctx.is_master:
-            # Master admin: only show their own pages (not assigned to any tenant project)
-            base_query = base_query.filter(Page.project_id == None)
+        # Master admin: sees ALL pages across all tenants (no filter needed)
 
         if includeDeleted:
             pages = base_query.all()

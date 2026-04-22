@@ -3,7 +3,7 @@ Tenant context extraction — FastAPI dependency.
 
 Reads tenant identity from the session cookie.  Works for both:
 - Master admin (cookie-based, is_master=True, tenant_id=None)
-- Tenant users (cookie-based, is_master=False, tenant_id populated)
+- Tenant users (SuperTokens JWT, is_master=False, tenant_id populated)
 
 Usage in a router::
 
@@ -37,12 +37,50 @@ async def get_tenant_context(request: Request) -> Optional[TenantContext]:
     """FastAPI dependency — extract tenant context from cookie session.
 
     * **Self-host mode**: Returns ``None`` (no tenant scoping).
-    * **Cloud mode**: Reads session cookie and builds TenantContext.
+    * **Cloud mode**:
+      1. Tries SuperTokens session first (tenant users — JWT-based).
+      2. Falls back to master admin in-memory cookie session.
+      Returns ``None`` only when neither session is present.
+
+    This dual-path check is critical: tenant users authenticate via
+    SuperTokens and have NO ``frontbase_session`` cookie.  Checking only
+    the master admin cookie would always return ``None`` for tenants,
+    silently bypassing every project-scoping guard.
     """
     from app.config.edition import is_cloud
     if not is_cloud():
         return None
 
+    # -- Path 1: SuperTokens session (tenant users) ----------------------
+    try:
+        from supertokens_python.recipe.session.asyncio import get_session as st_get_session
+        st_session = await st_get_session(request, session_required=False)
+        if st_session:
+            payload = st_session.get_access_token_payload()
+            user_id = st_session.get_user_id()
+
+            email = payload.get("email", "")
+            if not email:
+                try:
+                    from supertokens_python.asyncio import get_user
+                    st_user = await get_user(user_id)
+                    if st_user and st_user.emails:
+                        email = st_user.emails[0]
+                except Exception:
+                    pass
+
+            return TenantContext(
+                user_id=user_id,
+                email=email,
+                tenant_id=payload.get("tenant_id"),
+                tenant_slug=payload.get("tenant_slug"),
+                role=payload.get("role", "owner"),
+                is_master=bool(payload.get("is_master", False)),
+            )
+    except Exception:
+        pass  # No SuperTokens session — try master admin cookie
+
+    # -- Path 2: Master admin cookie session -----------------------------
     from app.routers.auth import get_current_user
     user = get_current_user(request)
     if not user:

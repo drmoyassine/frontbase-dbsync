@@ -216,12 +216,27 @@ async def get_pages(
 
 
 @router.get("/{page_id}/")
-async def get_page(page_id: str, db: Session = Depends(get_db)):
+async def get_page(
+    page_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Get a page by ID - matches Express: { success, data: page }"""
     try:
-        page = db.query(Page).options(
+        base_query = db.query(Page).options(
             joinedload(Page.deployments).joinedload(PageDeployment.edge_engine)
-        ).filter(Page.id == page_id, Page.deleted_at == None).first()
+        ).filter(Page.id == page_id, Page.deleted_at == None)
+
+        # Cloud mode: tenants can only fetch their own pages
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .scalar_subquery()
+            )
+            base_query = base_query.filter(Page.project_id.in_(project_ids))
+
+        page = base_query.first()
         if not page:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -260,7 +275,10 @@ async def create_page_endpoint(
         # Use model_dump with by_alias=False to get snake_case field names
         page_data = request.model_dump(by_alias=False)
 
-        # Cloud mode: assign page to the tenant's first project
+        # Cloud mode: stamp page with the tenant's project_id so it is scoped
+        # correctly in all subsequent queries. Must go into page_data BEFORE
+        # calling create_page() — utils.create_page() reads project_id from the
+        # dict directly (its own ctx param is unused in this path).
         if ctx and ctx.tenant_id and not ctx.is_master:
             project = (
                 db.query(Project)
@@ -286,9 +304,27 @@ async def create_page_endpoint(
 
 
 @router.put("/{page_id}/")
-async def update_page_endpoint(page_id: str, request: PageUpdateRequest, db: Session = Depends(get_db)):
+async def update_page_endpoint(
+    page_id: str,
+    request: PageUpdateRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Update a page - matches Express: { success, data: page }"""
     try:
+        # Cloud mode: verify page belongs to this tenant before mutating
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .scalar_subquery()
+            )
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id.in_(project_ids)
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+
         # Use model_dump with by_alias=False and exclude_unset=True
         page_data = request.model_dump(by_alias=False, exclude_unset=True)
         page = update_page(db, page_id, page_data)
@@ -323,7 +359,12 @@ async def update_page_endpoint(page_id: str, request: PageUpdateRequest, db: Ses
 
 
 @router.put("/{page_id}/layout/")
-async def update_page_layout(page_id: str, request: dict, db: Session = Depends(get_db)):
+async def update_page_layout(
+    page_id: str,
+    request: dict,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Update page layout - matches Express: { success, data: page }"""
     try:
         layout_data = request.get("layoutData")
@@ -332,7 +373,20 @@ async def update_page_layout(page_id: str, request: dict, db: Session = Depends(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="layoutData is required"
             )
-        
+
+        # Cloud mode: verify ownership before mutating layout
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .scalar_subquery()
+            )
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id.in_(project_ids)
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+
         page = update_page(db, page_id, {"layout_data": layout_data})
         if not page:
             raise HTTPException(

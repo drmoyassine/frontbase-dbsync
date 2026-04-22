@@ -50,8 +50,11 @@ def get_user_by_email(db: Session, email: str):
 
 def create_page(db: Session, page_data: dict, ctx: TenantContext | None = None):
     """Create a new page"""
-    project_id = None
-    if ctx and ctx.tenant_id:
+    # Prefer project_id already stamped into page_data by the router (cloud mode).
+    # Only fall back to ctx resolution if it wasn't set — this prevents the router's
+    # correctly-computed project_id from being silently overwritten with None.
+    project_id = page_data.get('project_id')
+    if not project_id and ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
             project_id = project.id

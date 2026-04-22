@@ -8,10 +8,11 @@ Extracted: convert_component, convert_to_publish_schema → services/publish_ser
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from datetime import datetime
-from typing import List
+from typing import List, Any
 import asyncio
 import httpx
 import uuid
+import os
 
 from app.database.config import SessionLocal
 from sqlalchemy.orm import joinedload
@@ -174,6 +175,18 @@ async def publish_to_target(page_id: str, engine_id: str):
             success = response.status_code == 200
             error_msg = f"HTTP {response.status_code}: {response.text[:200]}" if not success else None
             
+            # Compute preview URL natively from backend to handle shared tenant routing securely
+            computed_preview_url = None
+            if success:
+                _res_json = response.json() if response.status_code == 200 else {}
+                is_shared = getattr(engine, "is_shared", False)
+                if is_shared and tenant_slug and tenant_slug != "_default":
+                    base_domain = os.environ.get("FRONTBASE_BASE_DOMAIN", "frontbase.dev")
+                    page_path = f"/{page.slug}" if not bool(page.is_homepage) else ""
+                    computed_preview_url = f"https://{tenant_slug}.{base_domain}{page_path}"
+                else:
+                    computed_preview_url = _res_json.get("previewUrl") or f"{engine_url.rstrip('/')}/{page.slug}"
+            
         # Update the DB
         deploy_db = SessionLocal()
         try:
@@ -191,16 +204,9 @@ async def publish_to_target(page_id: str, engine_id: str):
                 existing.published_at = now_str  # type: ignore[assignment]
                 existing.error_message = error_msg  # type: ignore[assignment]
                 existing.updated_at = now_str  # type: ignore[assignment]
-                if success:
-                    # Store the edge-computed URL so the pages card shows tenant.frontbase.dev/slug
-                    # rather than the engine's internal Docker URL.
-                    res_json_pre = response.json() if response.status_code == 200 else {}
-                    preview_url_val = res_json_pre.get("previewUrl") or f"{engine_url.rstrip('/')}/{page.slug}"
-                    existing.preview_url = preview_url_val  # type: ignore[assignment]
+                if success and computed_preview_url:
+                    existing.preview_url = computed_preview_url  # type: ignore[assignment]
             else:
-                # Compute preview URL for new deployment record
-                _res_json = response.json() if (success and response.status_code == 200) else {}
-                _preview_url = _res_json.get("previewUrl") or f"{engine_url.rstrip('/')}/{page.slug}" if success else None
                 new_deploy = PageDeployment(
                     id=str(uuid.uuid4()),
                     page_id=page_id,
@@ -210,7 +216,7 @@ async def publish_to_target(page_id: str, engine_id: str):
                     content_hash=page_content_hash,
                     published_at=now_str,
                     error_message=error_msg,
-                    preview_url=_preview_url,
+                    preview_url=computed_preview_url,
                     created_at=now_str,
                     updated_at=now_str
                 )
@@ -224,11 +230,10 @@ async def publish_to_target(page_id: str, engine_id: str):
             if not bool(page.is_public):
                 await _sync_settings_to_engine(str(engine_url), auth_headers)
 
-            res_json = response.json() if response.status_code == 200 else {}
             return {
                 "success": True,
                 "message": f"Page '{page.name}' published to specific target",
-                "previewUrl": res_json.get("previewUrl") or f"{engine_url.rstrip('/')}/{page.slug}",
+                "previewUrl": computed_preview_url,
                 "version": 1
             }
         else:
@@ -278,15 +283,16 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
             raise HTTPException(status_code=404, detail="No engines found for the given IDs")
 
         # Build lookup: id → url/name, and pre-compute auth headers while session is open
-        engine_map: dict[str, dict[str, str]] = {}
+        engine_map: dict[str, dict[str, Any]] = {}
         auth_headers_map: dict[str, dict[str, str]] = {}
         for eng in engines:
             url = resolve_engine_url(eng)
             name = getattr(eng, 'name', '') or str(eng.id)
+            is_shared = getattr(eng, 'is_shared', False)
             # Force-load engine_config for get_edge_headers (requires active session)
             _ = eng.engine_config
             if url:
-                engine_map[str(eng.id)] = {"url": url, "name": str(name)}
+                engine_map[str(eng.id)] = {"url": url, "name": str(name), "is_shared": is_shared}
                 auth_headers_map[str(eng.id)] = get_edge_headers(eng)
 
         # Force-load page attributes before detaching
@@ -326,7 +332,7 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
         return {"success": False, "error": f"Serialization failed: {e}", "results": []}
 
     # 3. FAN OUT to all engines in parallel
-    async def _send_to_engine(eid: str, info: dict[str, str]) -> dict[str, object]:
+    async def _send_to_engine(eid: str, info: dict[str, Any]) -> dict[str, object]:
         import_url = f"{str(info['url']).rstrip('/')}/api/import"
         # Use pre-computed auth headers (computed while session was open)
         auth_hdrs = auth_headers_map.get(eid, {})
@@ -340,9 +346,21 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
                 )
             ok = resp.status_code == 200
             err = f"HTTP {resp.status_code}: {resp.text[:200]}" if not ok else None
-            return {"engineId": eid, "name": info["name"], "success": ok, "error": err}
+            
+            # Compute preview URL securely in backend
+            computed_preview_url = None
+            if ok:
+                _res_json = resp.json() if resp.status_code == 200 else {}
+                if info.get("is_shared") and tenant_slug and tenant_slug != "_default":
+                    base_domain = os.environ.get("FRONTBASE_BASE_DOMAIN", "frontbase.dev")
+                    page_path = f"/{page.slug}" if not bool(page.is_homepage) else ""
+                    computed_preview_url = f"https://{tenant_slug}.{base_domain}{page_path}"
+                else:
+                    computed_preview_url = _res_json.get("previewUrl") or f"{str(info['url']).rstrip('/')}/{page.slug}"
+            
+            return {"engineId": eid, "name": info["name"], "success": ok, "error": err, "previewUrl": computed_preview_url}
         except Exception as exc:
-            return {"engineId": eid, "name": info["name"], "success": False, "error": str(exc)}
+            return {"engineId": eid, "name": info["name"], "success": False, "error": str(exc), "previewUrl": None}
 
     print(f"[Publish:Batch] Sending to {len(engine_map)} engines: {list(engine_map.keys())}")
     results = await asyncio.gather(
@@ -369,6 +387,8 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
                 existing.published_at = now_str  # type: ignore[assignment]
                 existing.error_message = error_msg  # type: ignore[assignment]
                 existing.updated_at = now_str  # type: ignore[assignment]
+                if r.get("previewUrl"):
+                    existing.preview_url = str(r["previewUrl"])  # type: ignore[assignment]
             else:
                 deploy_db.add(PageDeployment(
                     id=str(uuid.uuid4()),
@@ -379,6 +399,7 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
                     content_hash=page_content_hash,
                     published_at=now_str,
                     error_message=error_msg,
+                    preview_url=str(r["previewUrl"]) if r.get("previewUrl") else None,
                     created_at=now_str,
                     updated_at=now_str,
                 ))

@@ -21,6 +21,7 @@ from typing import Optional
 from sqlalchemy.orm import Session as DBSession
 
 from app.models.models import Tenant, TenantMember, Project
+from app.models.auth import User
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,17 @@ def provision_tenant(
     tenant_id = str(uuid.uuid4())
     project_id = str(uuid.uuid4())
     member_id = str(uuid.uuid4())
+
+    # 0. Sync User to public.users to satisfy Foreign Keys
+    user = User(
+        id=st_user_id,
+        username=email.split("@")[0] + "_" + st_user_id[:8],
+        email=email,
+        password_hash="[managed_by_supertokens]",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(user)
 
     # 1. Create Tenant
     tenant = Tenant(

@@ -21,12 +21,15 @@ router = APIRouter(prefix="/api/edge-providers", tags=["edge-providers"])
 
 def _scoped_provider_query(db: Session, ctx: TenantContext | None):
     q = db.query(EdgeProviderAccount)
-    if ctx and ctx.tenant_id:
+    if ctx and ctx.tenant_id and not ctx.is_master:
         project = get_project(db, ctx)
         if project:
             q = q.filter(EdgeProviderAccount.project_id == project.id)
         else:
             q = q.filter(EdgeProviderAccount.id == "not-found")
+    elif ctx and ctx.is_master:
+        # Master admin: only their own (unassigned) accounts
+        q = q.filter(EdgeProviderAccount.project_id == None)  # noqa: E711
     return q
 
 

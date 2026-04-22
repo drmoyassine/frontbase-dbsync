@@ -22,12 +22,15 @@ router = APIRouter(prefix="/api/edge-queues", tags=["edge-queues"])
 
 def _scoped_queue_query(db, ctx: TenantContext | None):
     q = db.query(EdgeQueue)
-    if ctx and ctx.tenant_id:
+    if ctx and ctx.tenant_id and not ctx.is_master:
         project = get_project(db, ctx)
         if project:
             q = q.filter(EdgeQueue.project_id == project.id)
         else:
             q = q.filter(EdgeQueue.id == "not-found")
+    elif ctx and ctx.is_master:
+        # Master admin: only their own (unassigned) queues
+        q = q.filter(EdgeQueue.project_id == None)  # noqa: E711
     return q
 
 

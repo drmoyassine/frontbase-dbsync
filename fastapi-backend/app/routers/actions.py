@@ -39,32 +39,41 @@ router = APIRouter()
 
 def _scoped_draft_select(db: Session, ctx: TenantContext | None):
     q = select(AutomationDraft)
-    if ctx and ctx.tenant_id:
+    if ctx and ctx.tenant_id and not ctx.is_master:
         project = get_project(db, ctx)
         if project:
             q = q.where(AutomationDraft.project_id == project.id)
         else:
             q = q.where(AutomationDraft.id == "not-found")
+    elif ctx and ctx.is_master:
+        # Master admin: only their own (unassigned) drafts
+        q = q.where(AutomationDraft.project_id == None)  # noqa: E711
     return q
 
 def _scoped_draft_query(db: Session, ctx: TenantContext | None):
     q = db.query(AutomationDraft)
-    if ctx and ctx.tenant_id:
+    if ctx and ctx.tenant_id and not ctx.is_master:
         project = get_project(db, ctx)
         if project:
             q = q.filter(AutomationDraft.project_id == project.id)
         else:
             q = q.filter(AutomationDraft.id == "not-found")
+    elif ctx and ctx.is_master:
+        # Master admin: only their own (unassigned) drafts
+        q = q.filter(AutomationDraft.project_id == None)  # noqa: E711
     return q
 
 def _scoped_exec_select(db: Session, ctx: TenantContext | None):
     q = select(AutomationExecution)
-    if ctx and ctx.tenant_id:
+    if ctx and ctx.tenant_id and not ctx.is_master:
         project = get_project(db, ctx)
         if project:
             q = q.where(AutomationExecution.project_id == project.id)
         else:
             q = q.where(AutomationExecution.id == "not-found")
+    elif ctx and ctx.is_master:
+        # Master admin: only their own (unassigned) executions
+        q = q.where(AutomationExecution.project_id == None)  # noqa: E711
     return q
 
 

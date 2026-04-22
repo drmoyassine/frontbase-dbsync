@@ -189,15 +189,18 @@ async def get_pages(
             joinedload(Page.deployments).joinedload(PageDeployment.edge_engine)
         )
 
-        # Cloud mode: scope to tenant's projects
+        # Cloud mode: strict bidirectional isolation
         if ctx and ctx.tenant_id and not ctx.is_master:
+            # Tenant: only their own project's pages
             project_ids = (
                 db.query(Project.id)
                 .filter(Project.tenant_id == ctx.tenant_id)
                 .scalar_subquery()
             )
             base_query = base_query.filter(Page.project_id.in_(project_ids))
-        # Master admin: sees ALL pages across all tenants (no filter needed)
+        elif ctx and ctx.is_master:
+            # Master admin: only pages NOT assigned to any tenant project
+            base_query = base_query.filter(Page.project_id == None)  # noqa: E711
 
         if includeDeleted:
             pages = base_query.all()
@@ -227,14 +230,18 @@ async def get_page(
             joinedload(Page.deployments).joinedload(PageDeployment.edge_engine)
         ).filter(Page.id == page_id, Page.deleted_at == None)
 
-        # Cloud mode: tenants can only fetch their own pages
+        # Cloud mode: strict bidirectional isolation
         if ctx and ctx.tenant_id and not ctx.is_master:
+            # Tenant: only their own project's pages
             project_ids = (
                 db.query(Project.id)
                 .filter(Project.tenant_id == ctx.tenant_id)
                 .scalar_subquery()
             )
             base_query = base_query.filter(Page.project_id.in_(project_ids))
+        elif ctx and ctx.is_master:
+            # Master admin: only pages NOT assigned to any tenant project
+            base_query = base_query.filter(Page.project_id == None)  # noqa: E711
 
         page = base_query.first()
         if not page:

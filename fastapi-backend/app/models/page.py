@@ -13,7 +13,7 @@ class Page(Base):
     
     id = Column(String, primary_key=True)
     name = Column(String(100), nullable=False)
-    slug = Column(String(100), unique=True, nullable=False)
+    slug = Column(String(100), nullable=False)  # unique per project (see __table_args__)
     title = Column(String(200))
     description = Column(Text)
     keywords = Column(String(500))
@@ -31,6 +31,11 @@ class Page(Base):
     deployments = relationship("PageDeployment", back_populates="page", cascade="all, delete-orphan")
     versions = relationship("PageVersion", back_populates="page", cascade="all, delete-orphan", order_by="PageVersion.version_number.desc()")
     project = relationship("Project", back_populates="pages")
+
+    # Slug must be unique within a project (NULL project_id = masteradmin scope).
+    # We cannot use a simple DB unique constraint across (slug, project_id) when project_id
+    # is nullable in SQLite/Postgres (NULLs are not equal), so we enforce it in Python.
+    # The old global unique=True on slug is removed to support multi-tenancy.
     
     @property
     def layout_data_dict(self):
@@ -69,6 +74,7 @@ class PageDeployment(Base):
     content_hash = Column(String(64))               # Hash of what was published
     published_at = Column(String)                    # Last attempt timestamp
     error_message = Column(Text)                     # If status == 'failed'
+    preview_url = Column(String(2000))               # Tenant-aware preview URL returned by edge on publish
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     

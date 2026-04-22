@@ -191,7 +191,16 @@ async def publish_to_target(page_id: str, engine_id: str):
                 existing.published_at = now_str  # type: ignore[assignment]
                 existing.error_message = error_msg  # type: ignore[assignment]
                 existing.updated_at = now_str  # type: ignore[assignment]
+                if success:
+                    # Store the edge-computed URL so the pages card shows tenant.frontbase.dev/slug
+                    # rather than the engine's internal Docker URL.
+                    res_json_pre = response.json() if response.status_code == 200 else {}
+                    preview_url_val = res_json_pre.get("previewUrl") or f"{engine_url.rstrip('/')}/{page.slug}"
+                    existing.preview_url = preview_url_val  # type: ignore[assignment]
             else:
+                # Compute preview URL for new deployment record
+                _res_json = response.json() if (success and response.status_code == 200) else {}
+                _preview_url = _res_json.get("previewUrl") or f"{engine_url.rstrip('/')}/{page.slug}" if success else None
                 new_deploy = PageDeployment(
                     id=str(uuid.uuid4()),
                     page_id=page_id,
@@ -201,6 +210,7 @@ async def publish_to_target(page_id: str, engine_id: str):
                     content_hash=page_content_hash,
                     published_at=now_str,
                     error_message=error_msg,
+                    preview_url=_preview_url,
                     created_at=now_str,
                     updated_at=now_str
                 )

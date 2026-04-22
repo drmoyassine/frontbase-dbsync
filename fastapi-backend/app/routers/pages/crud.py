@@ -67,6 +67,7 @@ def serialize_page(page: Page) -> dict:
                 "contentHash": dep.content_hash,
                 "publishedAt": dep.published_at,
                 "errorMessage": dep.error_message,
+                "previewUrl": getattr(dep, 'preview_url', None),  # tenant-aware URL from edge
                 "target": target_data
             })
             
@@ -271,8 +272,10 @@ async def create_page_endpoint(
 ):
     """Create a new page - matches Express: { success, data: page }"""
     try:
-        # Check if slug is already taken
-        existing_page = get_page_by_slug(db, request.slug)
+        # Check if slug is already taken — scoped to this tenant's project.
+        # In multi-tenant mode, /hello can exist once per tenant project,
+        # not just once globally. Pass ctx so the check is project-scoped.
+        existing_page = get_page_by_slug(db, request.slug, ctx)
         if existing_page:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

@@ -138,10 +138,14 @@ export const BuilderHeader: React.FC<{
         await publishPageToTarget(currentPageId, target.id);
         // Reload once for single target
         await loadPagesFromDatabase(false, true);
+        // Use the previewUrl returned from the edge (tenant-aware) if available.
+        // Fallback: compute from target.url via resolveEngineOrigin.
+        const updatedPage = pages.find(p => p.id === currentPageId);
+        const storedPreviewUrl = updatedPage?.deployments?.find((d: any) => d.engineId === target.id && d.status === 'published')?.previewUrl;
         const pagePath = currentPage.isHomepage ? '' : currentPage.slug;
-        const origin = resolveEngineOrigin(target.url);
-        if (origin) {
-          window.open(`${origin}/${pagePath}`, '_blank');
+        const previewUrl = storedPreviewUrl || `${resolveEngineOrigin(target.url)}/${pagePath}`;
+        if (previewUrl) {
+          window.open(previewUrl, '_blank');
         } else {
           toast.success(`Published to ${target.name}`);
         }
@@ -459,7 +463,10 @@ export const BuilderHeader: React.FC<{
                     {targets.map(target => {
                       const synced = isTargetSynced(target.id);
                       const pagePath = currentPage?.isHomepage ? '' : currentPage?.slug || '';
-                      const previewUrl = resolvePreviewUrl(target.url, pagePath);
+                      // Prefer the stored previewUrl from the deployment record (tenant-aware)
+                      // rather than computing from target.url which may be an internal worker URL.
+                      const storedDep = currentPage?.deployments?.find((d: any) => d.engineId === target.id && d.status === 'published');
+                      const previewUrl = storedDep?.previewUrl || resolvePreviewUrl(target.url, pagePath);
                       return (
                         <div
                           key={target.id}

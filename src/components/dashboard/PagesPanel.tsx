@@ -83,12 +83,16 @@ export const PagesPanel: React.FC = () => {
     return matchesTrashView && matchesSearch && matchesFilter;
   });
 
-  // Get a browser-accessible preview URL.
-  // Always use window.location.origin — the reverse proxy routes to edge.
-  // project.appUrl and dep.target.url may contain Docker-internal hostnames
-  // (e.g. http://edge:3002) that aren't reachable from the browser.
-  const getPreviewUrl = (pagePath: string, targetUrl?: string) => {
-    // If target URL looks like a real external URL (has a dot in hostname), use it
+  // Get a browser-accessible preview URL for a deployment.
+  // Priority: dep.previewUrl (tenant-aware URL stored on publish from the edge response)
+  // → dep.target.url if it's a real external hostname
+  // → window.location.origin fallback (reverse proxy routes to edge).
+  const getPreviewUrl = (pagePath: string, targetUrl?: string, storedPreviewUrl?: string | null) => {
+    // 1. Prefer the stored previewUrl — it's the exact URL returned by the edge on publish
+    //    and correctly reflects tenant-aware subdomain routing (tenant.frontbase.dev/slug)
+    if (storedPreviewUrl) return storedPreviewUrl;
+
+    // 2. If target URL looks like a real external URL (has a dot in hostname), use it
     if (targetUrl) {
       try {
         const parsed = new URL(targetUrl);
@@ -101,7 +105,7 @@ export const PagesPanel: React.FC = () => {
         // Invalid URL, fall through
       }
     }
-    // Fallback: use the current browser origin (reverse proxy handles routing)
+    // 3. Fallback: use the current browser origin (reverse proxy handles routing)
     return `${window.location.origin}/${pagePath}`;
   };
 
@@ -118,9 +122,9 @@ export const PagesPanel: React.FC = () => {
 
   const handlePreviewPage = (page: any) => {
     const pagePath = page.isHomepage ? '' : page.slug;
-    // Try to use the first published deployment's target URL
+    // Try to use the first published deployment's stored previewUrl (tenant-aware)
     const publishedDep = page.deployments?.find((d: any) => d.status === 'published');
-    const url = getPreviewUrl(pagePath, publishedDep?.target?.url);
+    const url = getPreviewUrl(pagePath, publishedDep?.target?.url, publishedDep?.previewUrl);
     window.open(url, '_blank');
   };
 
@@ -638,7 +642,7 @@ export const PagesPanel: React.FC = () => {
                                 size="sm"
                                 variant="ghost"
                                 className="h-6 px-2 text-xs"
-                                onClick={() => window.open(getPreviewUrl(page.isHomepage ? '' : page.slug, dep.target?.url), '_blank')}
+                              onClick={() => window.open(getPreviewUrl(page.isHomepage ? '' : page.slug, dep.target?.url, dep.previewUrl), '_blank')}
                               >
                                 Preview
                               </Button>

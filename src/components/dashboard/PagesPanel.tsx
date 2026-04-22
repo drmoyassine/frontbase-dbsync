@@ -125,7 +125,7 @@ export const PagesPanel: React.FC = () => {
     // Try to use the first published deployment's stored previewUrl (tenant-aware)
     const publishedDep = page.deployments?.find((d: any) => d.status === 'published');
     const url = getPreviewUrl(pagePath, publishedDep?.target?.url, publishedDep?.previewUrl);
-    window.open(url, '_blank');
+    window.open(url?.trim(), '_blank');
   };
 
   const handleSyncAllTargets = async (pageId: string) => {

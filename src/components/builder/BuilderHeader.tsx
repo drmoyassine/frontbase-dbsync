@@ -140,7 +140,7 @@ export const BuilderHeader: React.FC<{
         await loadPagesFromDatabase(false, true);
         
         if (returnedPreviewUrl) {
-          window.open(returnedPreviewUrl, '_blank');
+          window.open(returnedPreviewUrl.trim(), '_blank');
         } else {
           toast.success(`Published to ${target.name}`);
         }
@@ -491,7 +491,7 @@ export const BuilderHeader: React.FC<{
                             className="flex-shrink-0 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                             onClick={(e) => {
                               e.stopPropagation();
-                              window.open(previewUrl, '_blank');
+                              window.open(previewUrl?.trim(), '_blank');
                             }}
                             title={`Preview on ${target.name}`}
                           >

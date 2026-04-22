@@ -93,15 +93,16 @@ importRoute.post('/', async (c) => {
                 console.log(`[Import] Cache invalidated: ${cachePrefix}__homepage__`);
             }
             // Invalidate SEO caches — sitemap/llms may include new or changed pages
-            await redis.del('seo:sitemap', 'seo:llms');
+            const seoSuffix = page.tenantSlug && page.tenantSlug !== '_default' ? `:${page.tenantSlug}` : '';
+            await redis.del(`seo:sitemap${seoSuffix}`, `seo:llms${seoSuffix}`);
         } catch {
             // Redis not configured — no-op
         }
 
         // Invalidate L1 HTML Cache
-        invalidateHtmlCache(page.slug);
+        invalidateHtmlCache(page.slug, page.tenantSlug);
         if (page.isHomepage) {
-            invalidateHtmlCache('__homepage__');
+            invalidateHtmlCache('__homepage__', page.tenantSlug);
         }
 
         // Build preview URL - use PUBLIC_URL env var for production, fallback to host header for dev
@@ -184,7 +185,18 @@ importRoute.delete('/:slug', async (c) => {
         await stateProvider.deletePage(slug, tenantSlug);
         console.log(`[Import] Successfully unpublished: ${slug}`);
 
-        invalidateHtmlCache(slug);
+        invalidateHtmlCache(slug, tenantSlug);
+
+        try {
+            const { getRedis } = await import('../cache/redis.js');
+            const redis = getRedis();
+            const cachePrefix = tenantSlug && tenantSlug !== '_default' ? `page:${tenantSlug}:` : 'page:';
+            await redis.del(`${cachePrefix}${slug}`);
+            const seoSuffix = tenantSlug && tenantSlug !== '_default' ? `:${tenantSlug}` : '';
+            await redis.del(`seo:sitemap${seoSuffix}`, `seo:llms${seoSuffix}`);
+        } catch {
+            // Redis not configured — no-op
+        }
 
         return c.json({
             success: true,

@@ -45,17 +45,19 @@ const PAGE_CACHE_TTL_MS = 60_000;
 const _htmlCache = new Map<string, { html: string; ts: number }>();
 const HTML_CACHE_TTL_MS = 600_000; // 10 minutes
 
-export function invalidateHtmlCache(slug: string) {
-    _htmlCache.delete(`html:${slug}:mobile`);
-    _htmlCache.delete(`html:${slug}:tablet`);
-    _htmlCache.delete(`html:${slug}:desktop`);
-    _htmlCache.delete(`html:__homepage__:mobile`);
-    _htmlCache.delete(`html:__homepage__:tablet`);
-    _htmlCache.delete(`html:__homepage__:desktop`);
+export function invalidateHtmlCache(slug: string, tenantSlug?: string) {
+    const prefix = tenantSlug && tenantSlug !== '_default' ? `html:${tenantSlug}:` : 'html:';
+    _htmlCache.delete(`${prefix}${slug}:mobile`);
+    _htmlCache.delete(`${prefix}${slug}:tablet`);
+    _htmlCache.delete(`${prefix}${slug}:desktop`);
+    _htmlCache.delete(`${prefix}__homepage__:mobile`);
+    _htmlCache.delete(`${prefix}__homepage__:tablet`);
+    _htmlCache.delete(`${prefix}__homepage__:desktop`);
 }
 
-function getCacheKey(slug: string, device: string): string {
-    return `html:${slug}:${device}`;
+function getCacheKey(slug: string, device: string, tenantSlug?: string): string {
+    const prefix = tenantSlug && tenantSlug !== '_default' ? `html:${tenantSlug}:` : 'html:';
+    return `${prefix}${slug}:${device}`;
 }
 
 const DEFAULT_FAVICON = '/static/icon.png';
@@ -321,9 +323,11 @@ async function fetchTrackingConfig(): Promise<TrackingConfig> {
 pagesRoute.openapi(renderPageRoute, async (c) => {
     const { slug } = c.req.param();
 
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+
     const deviceMatch = c.req.header('user-agent')?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
     const deviceType = deviceMatch[0] ? (deviceMatch[0].includes('ipad') || deviceMatch[0].includes('tablet') ? 'tablet' : 'mobile') : 'desktop';
-    const htmlKey = getCacheKey(slug, deviceType);
+    const htmlKey = getCacheKey(slug, deviceType, tenantSlug);
 
     // Try L1 cache FIRST before doing any DB or Redis lookups
     const cachedHtml = _htmlCache.get(htmlKey);
@@ -335,7 +339,6 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     }
 
     // Fetch page data (tenant-scoped in cloud mode)
-    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
     const page = await fetchPage(slug, tenantSlug);
 
     if (!page) {

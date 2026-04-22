@@ -44,11 +44,14 @@ function getBaseUrl(request: Request): string {
 // =============================================================================
 
 seoRoute.get('/sitemap.xml', async (c) => {
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const cacheKey = tenantSlug && tenantSlug !== '_default' ? `seo:sitemap:${tenantSlug}` : 'seo:sitemap';
+
     // Try Redis cache first
     try {
         const { getRedis } = await import('../cache/redis.js');
         const redis = getRedis();
-        const cached = await redis.get<string>('seo:sitemap');
+        const cached = await redis.get<string>(cacheKey);
         if (cached) {
             c.header('Content-Type', 'application/xml');
             c.header('Cache-Control', 'public, max-age=3600');
@@ -60,7 +63,6 @@ seoRoute.get('/sitemap.xml', async (c) => {
     }
 
     const baseUrl = getBaseUrl(c.req.raw);
-    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
     const pages = await stateProvider.listPublicPageSlugs(tenantSlug);
 
     const urls = pages.map((page) => {
@@ -77,7 +79,7 @@ seoRoute.get('/sitemap.xml', async (c) => {
     try {
         const { getRedis } = await import('../cache/redis.js');
         const redis = getRedis();
-        await redis.setex('seo:sitemap', 3600, xml);
+        await redis.setex(cacheKey, 3600, xml);
     } catch {
         // Redis not configured — skip caching
     }
@@ -107,11 +109,14 @@ seoRoute.get('/robots.txt', async (c) => {
 // =============================================================================
 
 seoRoute.get('/llms.txt', async (c) => {
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const cacheKey = tenantSlug && tenantSlug !== '_default' ? `seo:llms:${tenantSlug}` : 'seo:llms';
+
     // Try Redis cache first
     try {
         const { getRedis } = await import('../cache/redis.js');
         const redis = getRedis();
-        const cached = await redis.get<string>('seo:llms');
+        const cached = await redis.get<string>(cacheKey);
         if (cached) {
             c.header('Content-Type', 'text/plain');
             c.header('Cache-Control', 'public, max-age=3600');
@@ -123,7 +128,6 @@ seoRoute.get('/llms.txt', async (c) => {
     }
 
     const baseUrl = getBaseUrl(c.req.raw);
-    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
     const pages = await stateProvider.listPublicPageSlugs(tenantSlug);
     const settings = await stateProvider.getProjectSettings();
 
@@ -152,7 +156,7 @@ seoRoute.get('/llms.txt', async (c) => {
     try {
         const { getRedis } = await import('../cache/redis.js');
         const redis = getRedis();
-        await redis.setex('seo:llms', 3600, llmsTxt);
+        await redis.setex(cacheKey, 3600, llmsTxt);
     } catch {
         // Redis not configured
     }

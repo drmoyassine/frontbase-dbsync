@@ -92,6 +92,15 @@ export abstract class DrizzleStateProvider implements IStateProvider {
         return record ? this.recordToPage(record) : null;
     }
 
+    async tenantExists(tenantSlug: string): Promise<boolean> {
+        if (!isMultiTenantSlug(tenantSlug)) return true; // Single-tenant always "exists"
+        const record = await this.getDb().select({ id: publishedPages.id })
+            .from(publishedPages)
+            .where(eq(publishedPages.tenantSlug, tenantSlug))
+            .limit(1).get();
+        return !!record;
+    }
+
     async getHomepage(tenantSlug?: string): Promise<PublishPage | null> {
         const conditions = [eq(publishedPages.isHomepage, true)];
         if (isMultiTenantSlug(tenantSlug)) conditions.push(eq(publishedPages.tenantSlug, tenantSlug));

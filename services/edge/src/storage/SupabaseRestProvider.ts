@@ -219,6 +219,19 @@ export class SupabaseRestProvider implements IStateProvider {
         return data ? this.rowToPage(data) : null;
     }
 
+    async tenantExists(tenantSlug: string): Promise<boolean> {
+        if (!isMultiTenantSlug(tenantSlug)) return true;
+        const client = getClient();
+        const { data, error } = await client
+            .from('published_pages')
+            .select('id')
+            .eq('tenant_slug', tenantSlug)
+            .limit(1)
+            .maybeSingle();
+        if (error) throw new Error(`[SupabaseRest] tenantExists: ${error.message}`);
+        return !!data;
+    }
+
     async getHomepage(tenantSlug?: string): Promise<PublishPage | null> {
         const client = getClient();
         let query = client

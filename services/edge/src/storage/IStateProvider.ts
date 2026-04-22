@@ -175,6 +175,8 @@ export interface IStateProvider {
     upsertPage(page: PublishPage): Promise<{ success: boolean; version: number }>;
     /** Get a published page by slug (optionally scoped to tenant) */
     getPageBySlug(slug: string, tenantSlug?: string): Promise<PublishPage | null>;
+    /** Check if a tenant actually exists (has at least 1 page) */
+    tenantExists(tenantSlug: string): Promise<boolean>;
     /** Get the homepage (optionally scoped to tenant) */
     getHomepage(tenantSlug?: string): Promise<PublishPage | null>;
     /** Delete a published page by slug (optionally scoped to tenant) */

@@ -300,6 +300,12 @@ export class NeonHttpProvider implements IStateProvider {
         return row ? this.rowToPage(row) : null;
     }
 
+    async tenantExists(tenantSlug: string): Promise<boolean> {
+        if (!isMultiTenantSlug(tenantSlug)) return true;
+        const row = await this.get(`SELECT id FROM ${SCHEMA}.published_pages WHERE tenant_slug = $1 LIMIT 1`, [tenantSlug]);
+        return !!row;
+    }
+
     async getHomepage(tenantSlug?: string): Promise<PublishPage | null> {
         const where = isMultiTenantSlug(tenantSlug)
             ? `WHERE is_homepage = TRUE AND tenant_slug = $1`

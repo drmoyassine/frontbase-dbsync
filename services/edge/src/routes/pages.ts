@@ -342,6 +342,16 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     const page = await fetchPage(slug, tenantSlug);
 
     if (!page) {
+        // Distinguish between a missing page and a non-existent tenant
+        if (tenantSlug && tenantSlug !== '_default') {
+            const exists = await stateProvider.tenantExists(tenantSlug);
+            if (!exists) {
+                const { renderWorkspaceNotFound } = await import('../middleware/tenant.js');
+                c.header('Content-Type', 'text/html; charset=utf-8');
+                return c.html(renderWorkspaceNotFound(tenantSlug), 404);
+            }
+        }
+
         return c.json(
             { error: 'Page not found', message: `No page found with slug: ${slug}` },
             404

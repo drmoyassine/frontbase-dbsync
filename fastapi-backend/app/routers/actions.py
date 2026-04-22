@@ -152,6 +152,16 @@ async def create_draft(
             return obj.dict()
         return obj
 
+    # Resolve project_id for cloud-mode multi-tenancy.
+    # Without this stamp, the draft is created with project_id=NULL, causing it to
+    # appear globally visible (bypassing _scoped_draft_query on reads/updates/deletes)
+    # and then vanish once the scoping filter is correctly applied.
+    project_id = None
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            project_id = project.id
+
     db_draft = AutomationDraft(
         name=draft.name,
         description=draft.description,
@@ -159,6 +169,7 @@ async def create_draft(
         trigger_config=draft.trigger_config,
         nodes=[safe_dump(node) for node in draft.nodes],
         edges=[safe_dump(edge) for edge in draft.edges],
+        project_id=project_id,
     )
     
     db.add(db_draft)

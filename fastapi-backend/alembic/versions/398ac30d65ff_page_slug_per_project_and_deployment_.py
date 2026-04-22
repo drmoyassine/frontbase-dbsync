@@ -40,8 +40,18 @@ def upgrade() -> None:
     #    have unique=True on slug), so the rebuilt table won't have the constraint.
     page_columns = [c['name'] for c in inspector.get_columns('pages')]
     if 'slug' in page_columns:
-        with op.batch_alter_table('pages', schema=None, recreate='always') as batch_op:
-            pass  # No structural changes; recreate='always' rebuilds without inline unique
+        bind = op.get_bind()
+        if bind.dialect.name == 'sqlite':
+            with op.batch_alter_table('pages', schema=None, recreate='always') as batch_op:
+                pass  # Rebuild table to drop inline unique constraint
+        else:
+            # Find the actual unique constraint name on Postgres
+            unique_constraints = inspector.get_unique_constraints('pages')
+            for uc in unique_constraints:
+                if 'slug' in uc['column_names']:
+                    with op.batch_alter_table('pages', schema=None) as batch_op:
+                        batch_op.drop_constraint(uc['name'], type_='unique')
+                    break
 
 
 def downgrade() -> None:

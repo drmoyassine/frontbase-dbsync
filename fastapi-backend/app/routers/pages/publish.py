@@ -14,7 +14,9 @@ import httpx
 import uuid
 
 from app.database.config import SessionLocal
-from app.models.models import Page, EdgeEngine, PageDeployment
+from sqlalchemy.orm import joinedload
+from app.models.models import Page, EdgeEngine, PageDeployment, Project
+from app.models.tenant import Tenant
 from app.services.page_hash import compute_page_hash
 from app.services.edge_client import get_edge_headers
 from app.services.publish_serializer import (
@@ -86,7 +88,9 @@ async def publish_to_target(page_id: str, engine_id: str):
     engine = None
     datasources = []
     try:
-        page = db.query(Page).filter(
+        page = db.query(Page).options(
+            joinedload(Page.project).joinedload(Project.tenant)
+        ).filter(
             Page.id == page_id,
             Page.deleted_at == None
         ).first()
@@ -125,6 +129,13 @@ async def publish_to_target(page_id: str, engine_id: str):
         page.content_hash = page_content_hash  # type: ignore[assignment]
         db.commit()
         
+        # Resolve tenant_slug BEFORE expunging (lazy loads require live session)
+        tenant_slug = '_default'
+        if page.project and page.project.tenant:
+            tenant_slug = str(page.project.tenant.slug)
+            print(f"[publish] Resolved tenant_slug='{tenant_slug}' from project '{page.project.name}'")
+        tenant_id_str = str(page.project.tenant_id) if page.project and page.project.tenant_id else None
+
         db.expunge(page)
         db.expunge(engine)
         datasources = get_datasources_for_publish(db)
@@ -133,7 +144,7 @@ async def publish_to_target(page_id: str, engine_id: str):
         
     try:
         # Convert to publish schema
-        publish_data = await convert_to_publish_schema(page, datasources)
+        publish_data = await convert_to_publish_schema(page, datasources, tenant_slug=tenant_slug)
         
         payload = ImportPagePayload(
             page=publish_data,
@@ -145,8 +156,8 @@ async def publish_to_target(page_id: str, engine_id: str):
         if "page" in serialized:
             serialized["page"]["contentHash"] = page_content_hash
             # Prepare for Phase 3 tenant-aware subdomain routing
-            if hasattr(page, 'project') and page.project and hasattr(page.project, 'tenant_id'):
-                serialized["page"]["tenantId"] = str(page.project.tenant_id) if page.project.tenant_id else None
+            if tenant_id_str:
+                serialized["page"]["tenantId"] = tenant_id_str
             
         # POST to specific engine
         import_url = f"{engine_url.rstrip('/')}/api/import"
@@ -241,7 +252,9 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
     db = SessionLocal()
     db.expire_on_commit = False
     try:
-        page = db.query(Page).filter(
+        page = db.query(Page).options(
+            joinedload(Page.project).joinedload(Project.tenant)
+        ).filter(
             Page.id == page_id,
             Page.deleted_at == None
         ).first()
@@ -281,6 +294,12 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
         page.content_hash = page_content_hash  # type: ignore[assignment]
         db.commit()
 
+        # Resolve tenant_slug BEFORE expunging (lazy loads require live session)
+        tenant_slug = '_default'
+        if page.project and page.project.tenant:
+            tenant_slug = str(page.project.tenant.slug)
+            print(f"[publish:batch] Resolved tenant_slug='{tenant_slug}'")
+
         db.expunge(page)
         datasources = get_datasources_for_publish(db)
     finally:
@@ -288,7 +307,7 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
 
     # 2. SERIALIZE ONCE (the expensive part — icons, CSS bundling, FK enrichment)
     try:
-        publish_data = await convert_to_publish_schema(page, datasources)
+        publish_data = await convert_to_publish_schema(page, datasources, tenant_slug=tenant_slug)
         payload = ImportPagePayload(page=publish_data, force=True)
         serialized = payload.model_dump(by_alias=True, exclude_none=True)
         if "page" in serialized:

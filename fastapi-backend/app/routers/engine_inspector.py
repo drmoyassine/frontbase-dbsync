@@ -607,6 +607,11 @@ async def health_check(engine_id: str, db: Session = Depends(get_db), tenant_ctx
     if not engine_url.startswith('http'):
         engine_url = f'https://{engine_url}'
 
+    # Community engines use wildcard URLs (e.g. https://*.frontbase.dev)
+    # DNS cannot resolve a literal '*', so replace with a concrete subdomain
+    if '://*.' in engine_url:
+        engine_url = engine_url.replace('://*.', '://_health-probe.')
+
     # Resolve system key from engine_config
     system_key: str | None = None
     if engine.engine_config is not None:

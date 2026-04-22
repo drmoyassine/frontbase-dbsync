@@ -266,8 +266,16 @@ def convert_component(c: dict, datasources_list: list | None = None) -> dict:
     return result
 
 
-async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPageRequest:
-    """Convert Page model to PublishPageRequest schema."""
+async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: str = '_default') -> PublishPageRequest:
+    """Convert Page model to PublishPageRequest schema.
+    
+    Args:
+        page: Detached Page ORM object (must NOT require lazy loads).
+        datasources: Pre-fetched datasource configs.
+        tenant_slug: Pre-resolved tenant slug. Resolved by the caller
+                     while the DB session is alive. Defaults to '_default'
+                     for self-host / master admin.
+    """
     # Lazy imports to avoid circular import
     from app.routers.pages.transforms import (
         collect_icons_from_component, fetch_icons_batch, inject_icon_svg,
@@ -364,12 +372,7 @@ async def convert_to_publish_schema(page: Page, datasources: list) -> PublishPag
             print(f"[publish] Could not fetch primary auth form: {e}")
     # ======================================================
     
-    # ==== RESOLVE TENANT SLUG (cloud mode) ====
-    tenant_slug = '_default'
-    if hasattr(page, 'project') and page.project and hasattr(page.project, 'tenant') and page.project.tenant:
-        tenant_slug = str(page.project.tenant.slug)
-        print(f"[publish] Resolved tenant_slug='{tenant_slug}' from project '{page.project.name}'")
-    # =============================================
+    # tenant_slug is passed in by the caller (resolved before session close)
 
     return PublishPageRequest(
         id=str(page.id),

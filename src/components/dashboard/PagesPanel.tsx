@@ -85,6 +85,24 @@ export const PagesPanel: React.FC = () => {
     return matchesTrashView && matchesSearch && matchesFilter;
   });
 
+  // Safe window.open — validates the URL before opening to prevent DOMException
+  const safeOpen = (url: string | undefined | null, context?: string) => {
+    const trimmed = (url ?? '').trim();
+    if (!trimmed) {
+      console.error(`[Preview] Empty URL. Context: ${context}, tenantSlug=${tenantSlug}`);
+      toast.error('Preview URL could not be resolved — no valid URL found.');
+      return;
+    }
+    try {
+      new URL(trimmed); // Validate it's a parseable URL
+    } catch {
+      console.error(`[Preview] Invalid URL: "${trimmed}". Context: ${context}, tenantSlug=${tenantSlug}`);
+      toast.error(`Preview URL is invalid: ${trimmed}`);
+      return;
+    }
+    window.open(trimmed, '_blank');
+  };
+
   // Get a browser-accessible preview URL for a deployment.
   const getPreviewUrl = (pagePath: string, targetUrl?: string, storedPreviewUrl?: string | null, isShared?: boolean) => {
     // If it's a shared community engine, forcibly dynamically resolve it since stored URLs might just be the backend request origin.
@@ -122,7 +140,7 @@ export const PagesPanel: React.FC = () => {
     // Try to use the first published deployment's stored previewUrl (tenant-aware)
     const publishedDep = page.deployments?.find((d: any) => d.status === 'published');
     const url = getPreviewUrl(pagePath, publishedDep?.target?.url, publishedDep?.previewUrl, publishedDep?.target?.is_shared);
-    window.open(url?.trim(), '_blank');
+    safeOpen(url, `handlePreviewPage slug=${page.slug} isShared=${publishedDep?.target?.is_shared} targetUrl=${publishedDep?.target?.url} storedPreviewUrl=${publishedDep?.previewUrl}`);
   };
 
   const handleSyncAllTargets = async (pageId: string) => {
@@ -639,7 +657,7 @@ export const PagesPanel: React.FC = () => {
                                 size="sm"
                                 variant="ghost"
                                 className="h-6 px-2 text-xs"
-                              onClick={() => window.open(getPreviewUrl(page.isHomepage ? '' : page.slug, dep.target?.url, dep.previewUrl, dep.target?.is_shared), '_blank')}
+                              onClick={() => safeOpen(getPreviewUrl(page.isHomepage ? '' : page.slug, dep.target?.url, dep.previewUrl, dep.target?.is_shared), `inline slug=${page.slug} isShared=${dep.target?.is_shared} targetUrl=${dep.target?.url} storedPreviewUrl=${dep.previewUrl}`)}
                               >
                                 Preview
                               </Button>

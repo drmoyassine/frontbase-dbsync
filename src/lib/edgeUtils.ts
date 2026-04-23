@@ -21,8 +21,6 @@
  * @returns Fully qualified origin (e.g. `https://myfrontbase.com` or `https://worker.dev`)
  */
 export function resolveEngineOrigin(engineUrl: string | undefined | null, isShared?: boolean, tenantSlug?: string): string {
-  if (!engineUrl) return '';
-  
   // If this is a shared community engine, the tenant's exact subdomain routing is what matters,
   // so we always use the current window's origin (e.g., tenant.frontbase.dev) rather than the raw worker domain.
   if (isShared) {
@@ -36,6 +34,8 @@ export function resolveEngineOrigin(engineUrl: string | undefined | null, isShar
     }
     return window.location.origin;
   }
+
+  if (!engineUrl) return '';
   
   const cleanUrl = engineUrl.trim();
   const urlWithProto = cleanUrl.startsWith('http') ? cleanUrl : `https://${cleanUrl}`;

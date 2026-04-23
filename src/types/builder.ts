@@ -74,6 +74,7 @@ export interface PageDeployment {
         name?: string;
         url?: string;
         provider?: string;
+        is_shared?: boolean;
     };
 }
 

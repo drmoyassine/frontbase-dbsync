@@ -29,12 +29,14 @@ import {
 import { Plus, Search, MoreHorizontal, Eye, Edit, Copy, Trash2, FileText, RotateCcw, Trash, CheckSquare, Square, Download, Globe, GlobeLock, Upload as UploadIcon } from 'lucide-react';
 import { PageExportEnvelope } from '@/types/page-export';
 import { toast } from 'sonner';
+import { resolvePreviewUrl } from '@/lib/edgeUtils';
 import { CreatePageDialog } from './CreatePageDialog';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
   const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPageToTarget, publishPageToTargets, unpublishPageFromTarget } = useBuilderStore();
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, tenant, user } = useAuthStore();
+  const tenantSlug = tenant?.slug || user?.tenant_slug;
   const { searchQuery, setSearchQuery, filterStatus } = useDashboardStore();
   const [isCreating, setIsCreating] = useState(false);
   const [isLoadingPages, setIsLoadingPages] = useState(true);
@@ -84,30 +86,18 @@ export const PagesPanel: React.FC = () => {
   });
 
   // Get a browser-accessible preview URL for a deployment.
-  // Priority: dep.previewUrl (tenant-aware URL stored on publish from the edge response)
-  // → dep.target.url if it's a real external hostname
-  // → window.location.origin fallback (reverse proxy routes to edge).
-  const getPreviewUrl = (pagePath: string, targetUrl?: string, storedPreviewUrl?: string | null) => {
+  const getPreviewUrl = (pagePath: string, targetUrl?: string, storedPreviewUrl?: string | null, isShared?: boolean) => {
+    // If it's a shared community engine, forcibly dynamically resolve it since stored URLs might just be the backend request origin.
+    if (isShared && tenantSlug) {
+      return resolvePreviewUrl(targetUrl, pagePath, isShared, tenantSlug);
+    }
+
     // 1. Prefer the stored previewUrl — it's the exact URL returned by the edge on publish
     //    and correctly reflects tenant-aware subdomain routing (tenant.frontbase.dev/slug)
     if (storedPreviewUrl) return storedPreviewUrl;
 
-    // 2. If target URL looks like a real external URL (has a dot in hostname), use it
-    if (targetUrl) {
-      const cleanTargetUrl = targetUrl.trim();
-      try {
-        const parsed = new URL(cleanTargetUrl);
-        // Internal Docker hostnames don't have dots (e.g. 'edge', 'localhost')
-        const isExternal = parsed.hostname.includes('.') && parsed.hostname !== 'localhost';
-        if (isExternal) {
-          return `${cleanTargetUrl.replace(/\/$/, '')}/${pagePath}`;
-        }
-      } catch {
-        // Invalid URL, fall through
-      }
-    }
-    // 3. Fallback: use the current browser origin (reverse proxy handles routing)
-    return `${window.location.origin}/${pagePath}`;
+    // 2. Fallback to resolution 
+    return resolvePreviewUrl(targetUrl, pagePath, isShared, tenantSlug);
   };
 
   const handlePageCreated = (pageId: string) => {
@@ -125,7 +115,7 @@ export const PagesPanel: React.FC = () => {
     const pagePath = page.isHomepage ? '' : page.slug;
     // Try to use the first published deployment's stored previewUrl (tenant-aware)
     const publishedDep = page.deployments?.find((d: any) => d.status === 'published');
-    const url = getPreviewUrl(pagePath, publishedDep?.target?.url, publishedDep?.previewUrl);
+    const url = getPreviewUrl(pagePath, publishedDep?.target?.url, publishedDep?.previewUrl, publishedDep?.target?.is_shared);
     window.open(url?.trim(), '_blank');
   };
 
@@ -643,7 +633,7 @@ export const PagesPanel: React.FC = () => {
                                 size="sm"
                                 variant="ghost"
                                 className="h-6 px-2 text-xs"
-                              onClick={() => window.open(getPreviewUrl(page.isHomepage ? '' : page.slug, dep.target?.url, dep.previewUrl), '_blank')}
+                              onClick={() => window.open(getPreviewUrl(page.isHomepage ? '' : page.slug, dep.target?.url, dep.previewUrl, dep.target?.is_shared), '_blank')}
                               >
                                 Preview
                               </Button>

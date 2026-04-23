@@ -89,7 +89,8 @@ export const PagesPanel: React.FC = () => {
   const getPreviewUrl = (pagePath: string, targetUrl?: string, storedPreviewUrl?: string | null, isShared?: boolean) => {
     // If it's a shared community engine, forcibly dynamically resolve it since stored URLs might just be the backend request origin.
     if (isShared && tenantSlug) {
-      return resolvePreviewUrl(targetUrl, pagePath, isShared, tenantSlug);
+      const resolved = resolvePreviewUrl(targetUrl, pagePath, isShared, tenantSlug);
+      if (resolved) return resolved;
     }
 
     // 1. Prefer the stored previewUrl — it's the exact URL returned by the edge on publish
@@ -97,7 +98,12 @@ export const PagesPanel: React.FC = () => {
     if (storedPreviewUrl) return storedPreviewUrl;
 
     // 2. Fallback to resolution 
-    return resolvePreviewUrl(targetUrl, pagePath, isShared, tenantSlug);
+    const fallbackResolved = resolvePreviewUrl(targetUrl, pagePath, isShared, tenantSlug);
+    if (fallbackResolved) return fallbackResolved;
+
+    // 3. Absolute fallback: use the current browser origin (reverse proxy handles routing)
+    const cleanPath = pagePath.replace(/^\//, '');
+    return `${window.location.origin}/${cleanPath}`;
   };
 
   const handlePageCreated = (pageId: string) => {

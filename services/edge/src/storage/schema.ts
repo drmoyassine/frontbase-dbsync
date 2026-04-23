@@ -68,6 +68,7 @@ export const workflowsTable = sqliteTable('workflows', {
     createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     publishedBy: text('published_by'),
+    tenantSlug: text('tenant_slug').notNull().default('_default'),
 });
 
 // =============================================================================

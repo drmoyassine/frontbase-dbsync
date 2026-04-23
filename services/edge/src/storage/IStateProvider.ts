@@ -78,6 +78,7 @@ export interface WorkflowData {
     createdAt: string;
     updatedAt: string;
     publishedBy: string | null;
+    tenantSlug?: string;
 }
 
 export interface NewExecutionData {
@@ -202,15 +203,15 @@ export interface IStateProvider {
     /** Upsert a workflow (insert or update). Returns version number. */
     upsertWorkflow(workflow: WorkflowData): Promise<{ version: number }>;
     /** Get a workflow by ID */
-    getWorkflowById(id: string): Promise<WorkflowData | null>;
+    getWorkflowById(id: string, tenantSlug?: string): Promise<WorkflowData | null>;
     /** Get an active webhook-triggered workflow by ID */
-    getActiveWebhookWorkflow(id: string): Promise<WorkflowData | null>;
+    getActiveWebhookWorkflow(id: string, tenantSlug?: string): Promise<WorkflowData | null>;
     /** List all deployed workflows */
-    listWorkflows(): Promise<WorkflowData[]>;
+    listWorkflows(tenantSlug?: string): Promise<WorkflowData[]>;
     /** Delete a workflow by ID */
-    deleteWorkflow(id: string): Promise<boolean>;
+    deleteWorkflow(id: string, tenantSlug?: string): Promise<boolean>;
     /** Toggle workflow active/inactive */
-    toggleWorkflow(id: string, isActive: boolean): Promise<void>;
+    toggleWorkflow(id: string, isActive: boolean, tenantSlug?: string): Promise<void>;
 
     // --- Executions ---
     /** Create a new execution record */

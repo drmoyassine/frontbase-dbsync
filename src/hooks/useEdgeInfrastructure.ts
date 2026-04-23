@@ -40,6 +40,7 @@ export interface EdgeEngine {
     }[];
     is_active: boolean;
     is_system?: boolean;
+    is_shared?: boolean;
     bundle_checksum?: string | null;
     config_checksum?: string | null;
     last_deployed_at?: string | null;

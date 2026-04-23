@@ -60,11 +60,12 @@ deployRoute.openapi(route, async (c) => {
             nodes: JSON.stringify(body.nodes),
             edges: JSON.stringify(body.edges),
             settings: (body as any).settings ? JSON.stringify((body as any).settings) : null,
+            publishedBy: body.publishedBy || null,
+            tenantSlug: body.tenantSlug || '_default',
             version: 1,
             isActive: body.isActive ?? true,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            publishedBy: body.publishedBy || null,
         };
 
         const { version } = await stateProvider.upsertWorkflow(workflow);

@@ -97,7 +97,7 @@ def _compute_content_hash(draft: AutomationDraft) -> str:
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
-def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "", override_is_active: Optional[bool] = None) -> dict:
+def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "", override_is_active: Optional[bool] = None, tenant_slug: Optional[str] = None) -> dict:
     """Build the deploy payload for the Edge /api/deploy endpoint."""
     import json
     return {
@@ -111,6 +111,7 @@ def _build_deploy_payload(draft: AutomationDraft, name_prefix: str = "", overrid
         "settings": json.dumps(draft.settings) if draft.settings else None,  # type: ignore[truthy-bool]
         "isActive": override_is_active if override_is_active is not None else draft.is_active,
         "publishedBy": str(draft.created_by) if str(draft.created_by or "") else None,
+        "tenantSlug": tenant_slug or "_default",
     }
 
 
@@ -350,7 +351,8 @@ async def publish_draft(
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     
-    deploy_payload = _build_deploy_payload(draft)
+    tenant_slug = ctx.tenant_id if ctx and ctx.tenant_id else None
+    deploy_payload = _build_deploy_payload(draft, tenant_slug=tenant_slug)
     
     try:
         async with httpx.AsyncClient() as client:
@@ -437,7 +439,8 @@ async def publish_draft_to_engine(
         )
     
     # Force-load attributes before detaching
-    deploy_payload = _build_deploy_payload(draft)
+    tenant_slug = ctx.tenant_id if ctx and ctx.tenant_id else None
+    deploy_payload = _build_deploy_payload(draft, tenant_slug=tenant_slug)
     draft_id_str = str(draft.id)
     engine_is_shared = bool(getattr(engine, 'is_shared', False))  # capture before expunge
 

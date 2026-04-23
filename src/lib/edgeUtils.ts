@@ -20,12 +20,20 @@
  * @param isShared Whether the target engine is a shared community worker
  * @returns Fully qualified origin (e.g. `https://myfrontbase.com` or `https://worker.dev`)
  */
-export function resolveEngineOrigin(engineUrl: string | undefined | null, isShared?: boolean): string {
+export function resolveEngineOrigin(engineUrl: string | undefined | null, isShared?: boolean, tenantSlug?: string): string {
   if (!engineUrl) return '';
   
   // If this is a shared community engine, the tenant's exact subdomain routing is what matters,
   // so we always use the current window's origin (e.g., tenant.frontbase.dev) rather than the raw worker domain.
   if (isShared) {
+    if (tenantSlug) {
+      const hostParts = window.location.hostname.split('.');
+      if (hostParts.length >= 3 && window.location.hostname !== 'localhost') {
+        // App is on app.frontbase.dev or another domain with subdomains, replace first
+        hostParts[0] = tenantSlug;
+        return `${window.location.protocol}//${hostParts.join('.')}${window.location.port ? ':' + window.location.port : ''}`;
+      }
+    }
     return window.location.origin;
   }
   
@@ -54,8 +62,8 @@ export function resolveEngineOrigin(engineUrl: string | undefined | null, isShar
  * @param engineUrl The raw Edge engine URL from the data model
  * @param isShared Whether the engine is a shared community worker
  */
-export function resolvePreviewUrl(engineUrl: string | undefined | null, path: string = '', isShared?: boolean): string {
-  const origin = resolveEngineOrigin(engineUrl, isShared);
+export function resolvePreviewUrl(engineUrl: string | undefined | null, path: string = '', isShared?: boolean, tenantSlug?: string): string {
+  const origin = resolveEngineOrigin(engineUrl, isShared, tenantSlug);
   if (!origin) return '';
   const cleanPath = path.replace(/^\//, ''); // Avoid double-slashes
   return cleanPath ? `${origin}/${cleanPath}` : origin;

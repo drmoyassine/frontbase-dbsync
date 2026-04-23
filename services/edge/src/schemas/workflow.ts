@@ -102,6 +102,7 @@ export const DeployWorkflowSchema = z.object({
     edges: z.array(WorkflowEdgeSchema),
     isActive: z.boolean().optional(),
     publishedBy: z.string().optional().nullable(),
+    tenantSlug: z.string().default('_default'),
 }).openapi('DeployWorkflow');
 
 // ============ Execution ============

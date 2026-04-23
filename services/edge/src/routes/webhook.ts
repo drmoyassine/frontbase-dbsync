@@ -77,8 +77,11 @@ webhookRoute.openapi(route, async (c) => {
         const { id } = c.req.valid('param');
         const payload = c.req.valid('json');
 
-        // Fetch active workflow via provider
-        const workflow = await stateProvider.getActiveWebhookWorkflow(id);
+        // Retrieve tenant slug from context (injected by middleware or binding)
+        const tenantSlug = (c.env as any)?.FRONTBASE_TENANT_SLUG || (c.get as any)('tenantSlug') || undefined;
+
+        // Fetch active workflow via provider, enforcing tenant isolation
+        const workflow = await stateProvider.getActiveWebhookWorkflow(id, tenantSlug);
 
         if (!workflow) {
             return c.json({

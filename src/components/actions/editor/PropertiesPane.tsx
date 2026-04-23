@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { useAuthStore } from '@/stores/auth';
 import { useActionsStore } from '@/stores/actions';
 import { cn } from '@/lib/utils';
 import {
@@ -56,6 +57,7 @@ interface PropertiesPaneProps {
 
 export function PropertiesPane({ className, nodeExecutions, onTestNode, isTestingNode }: PropertiesPaneProps) {
     const { nodes, edges, selectedNodeId, currentDraftId, updateNode, removeNode, selectNode } = useActionsStore();
+    const tenantSlug = useAuthStore(state => state.tenant?.slug || state.user?.tenant_slug);
     const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
     const { data: engines = [] } = useEdgeEngines();
 
@@ -413,7 +415,7 @@ export function PropertiesPane({ className, nodeExecutions, onTestNode, isTestin
                     <div className="pt-3 border-t space-y-2">
                         <Label className="text-xs font-medium text-muted-foreground">Endpoint URLs</Label>
                         {engines.map((engine: any) => {
-                            const endpointUrl = resolvePreviewUrl(engine.url, `/api/webhook/${currentDraftId}`, engine.is_shared);
+                            const endpointUrl = resolvePreviewUrl(engine.url, `/api/webhook/${currentDraftId}`, engine.is_shared, tenantSlug);
                             const isCopied = copiedUrl === endpointUrl;
                             return (
                                 <div key={engine.id} className="flex items-center gap-1">

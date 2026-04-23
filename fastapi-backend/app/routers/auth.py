@@ -68,6 +68,10 @@ class UserResponse(BaseModel):
     username: Optional[str] = None
     created_at: str
     updated_at: str
+    tenant_id: Optional[str] = None
+    tenant_slug: Optional[str] = None
+    role: Optional[str] = None
+    is_master: Optional[bool] = False
 
 
 class AuthResponse(BaseModel):
@@ -257,6 +261,10 @@ async def login(request: Request, body: LoginRequest, response: Response):
             email=body.email,
             created_at=now,
             updated_at=now,
+            tenant_id=tenant_id,
+            tenant_slug=tenant_slug,
+            role=role,
+            is_master=False,
         ),
         message="Login successful",
     )

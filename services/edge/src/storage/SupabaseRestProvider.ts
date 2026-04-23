@@ -363,6 +363,8 @@ export class SupabaseRestProvider implements IStateProvider {
 
         const newVersion = existing ? ((existing.version as number) || 1) + 1 : 1;
 
+        const tenantSlug = workflow.tenantSlug || '_default';
+
         const row = {
             id: workflow.id,
             name: workflow.name,
@@ -377,6 +379,7 @@ export class SupabaseRestProvider implements IStateProvider {
             created_at: existing ? undefined : now,   // Only set on insert
             updated_at: now,
             published_by: workflow.publishedBy,
+            tenant_slug: tenantSlug,
         };
 
         // Remove undefined fields for upsert
@@ -392,25 +395,27 @@ export class SupabaseRestProvider implements IStateProvider {
         return { version: newVersion };
     }
 
-    async getWorkflowById(id: string): Promise<WorkflowData | null> {
+    async getWorkflowById(id: string, tenantSlug?: string): Promise<WorkflowData | null> {
         const client = getClient();
-        const { data, error } = await client
+        let query = client
             .from('workflows')
             .select('*')
-            .eq('id', id)
-            .maybeSingle();
+            .eq('id', id);
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const { data, error } = await query.maybeSingle();
         if (error) throw new Error(`[SupabaseRest] getWorkflowById: ${error.message}`);
         return data ? this.rowToWorkflow(data) : null;
     }
 
-    async getActiveWebhookWorkflow(id: string): Promise<WorkflowData | null> {
+    async getActiveWebhookWorkflow(id: string, tenantSlug?: string): Promise<WorkflowData | null> {
         const client = getClient();
-        const { data, error } = await client
+        let query = client
             .from('workflows')
             .select('*')
             .eq('id', id)
-            .eq('is_active', true)
-            .maybeSingle();
+            .eq('is_active', true);
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const { data, error } = await query.maybeSingle();
         if (error) throw new Error(`[SupabaseRest] getActiveWebhookWorkflow: ${error.message}`);
         return data ? this.rowToWorkflow(data) : null;
     }
@@ -430,34 +435,41 @@ export class SupabaseRestProvider implements IStateProvider {
             createdAt: row.created_at as string,
             updatedAt: row.updated_at as string,
             publishedBy: (row.published_by as string) || null,
+            tenantSlug: (row.tenant_slug as string) || '_default',
         };
     }
 
-    async listWorkflows(): Promise<WorkflowData[]> {
+    async listWorkflows(tenantSlug?: string): Promise<WorkflowData[]> {
         const client = getClient();
-        const { data, error } = await client
+        let query = client
             .from('workflows')
             .select('*');
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const { data, error } = await query;
         if (error) throw new Error(`[SupabaseRest] listWorkflows: ${error.message}`);
         return (data || []).map(r => this.rowToWorkflow(r));
     }
 
-    async deleteWorkflow(id: string): Promise<boolean> {
+    async deleteWorkflow(id: string, tenantSlug?: string): Promise<boolean> {
         const client = getClient();
-        const result = await client
+        let query = client
             .from('workflows')
             .delete()
             .eq('id', id);
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const result = await query;
         throwIfError(result, `deleteWorkflow(${id})`);
         return true;
     }
 
-    async toggleWorkflow(id: string, isActive: boolean): Promise<void> {
+    async toggleWorkflow(id: string, isActive: boolean, tenantSlug?: string): Promise<void> {
         const client = getClient();
-        const result = await client
+        let query = client
             .from('workflows')
             .update({ is_active: isActive, updated_at: new Date().toISOString() })
             .eq('id', id);
+        if (isMultiTenantSlug(tenantSlug)) query = query.eq('tenant_slug', tenantSlug);
+        const result = await query;
         throwIfError(result, `toggleWorkflow(${id})`);
     }
 

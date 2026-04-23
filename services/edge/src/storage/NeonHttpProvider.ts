@@ -136,7 +136,8 @@ const PG_MIGRATIONS = [
         is_active BOOLEAN NOT NULL DEFAULT TRUE,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        published_by TEXT
+        published_by TEXT,
+        tenant_slug TEXT NOT NULL DEFAULT '_default'
     )`,
 
     // Executions
@@ -409,6 +410,7 @@ export class NeonHttpProvider implements IStateProvider {
     // =========================================================================
 
     async upsertWorkflow(workflow: WorkflowData): Promise<{ version: number }> {
+        const tenantSlug = workflow.tenantSlug || '_default';
         const existing = await this.get<{ version: number }>(
             `SELECT version FROM ${SCHEMA}.workflows WHERE id = $1`, [workflow.id]
         );
@@ -417,28 +419,34 @@ export class NeonHttpProvider implements IStateProvider {
         if (existing) {
             const newVersion = (existing.version || 1) + 1;
             await this.query(
-                `UPDATE ${SCHEMA}.workflows SET name=$1, description=$2, trigger_type=$3, trigger_config=$4, nodes=$5, edges=$6, settings=$7, version=$8, updated_at=$9, published_by=$10 WHERE id=$11`,
-                [workflow.name, workflow.description, workflow.triggerType, workflow.triggerConfig, workflow.nodes, workflow.edges, workflow.settings || null, newVersion, now, workflow.publishedBy, workflow.id]
+                `UPDATE ${SCHEMA}.workflows SET name=$1, description=$2, trigger_type=$3, trigger_config=$4, nodes=$5, edges=$6, settings=$7, version=$8, updated_at=$9, published_by=$10, tenant_slug=$11 WHERE id=$12`,
+                [workflow.name, workflow.description, workflow.triggerType, workflow.triggerConfig, workflow.nodes, workflow.edges, workflow.settings || null, newVersion, now, workflow.publishedBy, tenantSlug, workflow.id]
             );
             return { version: newVersion };
         } else {
             await this.query(
-                `INSERT INTO ${SCHEMA}.workflows (id, name, description, trigger_type, trigger_config, nodes, edges, settings, version, is_active, created_at, updated_at, published_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, TRUE, $9, $9, $10)`,
-                [workflow.id, workflow.name, workflow.description, workflow.triggerType, workflow.triggerConfig, workflow.nodes, workflow.edges, workflow.settings || null, now, workflow.publishedBy]
+                `INSERT INTO ${SCHEMA}.workflows (id, name, description, trigger_type, trigger_config, nodes, edges, settings, version, is_active, created_at, updated_at, published_by, tenant_slug) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, TRUE, $9, $9, $10, $11)`,
+                [workflow.id, workflow.name, workflow.description, workflow.triggerType, workflow.triggerConfig, workflow.nodes, workflow.edges, workflow.settings || null, now, workflow.publishedBy, tenantSlug]
             );
             return { version: 1 };
         }
     }
 
-    async getWorkflowById(id: string): Promise<WorkflowData | null> {
-        const row = await this.get(`SELECT * FROM ${SCHEMA}.workflows WHERE id = $1`, [id]);
+    async getWorkflowById(id: string, tenantSlug?: string): Promise<WorkflowData | null> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE id = $1 AND tenant_slug = $2`
+            : `WHERE id = $1`;
+        const params = isMultiTenantSlug(tenantSlug) ? [id, tenantSlug] : [id];
+        const row = await this.get(`SELECT * FROM ${SCHEMA}.workflows ${where}`, params);
         return row ? this.rowToWorkflow(row) : null;
     }
 
-    async getActiveWebhookWorkflow(id: string): Promise<WorkflowData | null> {
-        const row = await this.get(
-            `SELECT * FROM ${SCHEMA}.workflows WHERE id = $1 AND is_active = TRUE`, [id]
-        );
+    async getActiveWebhookWorkflow(id: string, tenantSlug?: string): Promise<WorkflowData | null> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE id = $1 AND is_active = TRUE AND tenant_slug = $2`
+            : `WHERE id = $1 AND is_active = TRUE`;
+        const params = isMultiTenantSlug(tenantSlug) ? [id, tenantSlug] : [id];
+        const row = await this.get(`SELECT * FROM ${SCHEMA}.workflows ${where}`, params);
         return row ? this.rowToWorkflow(row) : null;
     }
 
@@ -455,23 +463,34 @@ export class NeonHttpProvider implements IStateProvider {
             createdAt: row.created_at as string,
             updatedAt: row.updated_at as string,
             publishedBy: (row.published_by as string) || null,
+            tenantSlug: (row.tenant_slug as string) || '_default',
         };
     }
 
-    async listWorkflows(): Promise<WorkflowData[]> {
-        const rows = await this.all(`SELECT * FROM ${SCHEMA}.workflows`);
+    async listWorkflows(tenantSlug?: string): Promise<WorkflowData[]> {
+        const where = isMultiTenantSlug(tenantSlug) ? `WHERE tenant_slug = $1` : '';
+        const params = isMultiTenantSlug(tenantSlug) ? [tenantSlug] : [];
+        const rows = await this.all(`SELECT * FROM ${SCHEMA}.workflows ${where}`, params);
         return rows.map(r => this.rowToWorkflow(r));
     }
 
-    async deleteWorkflow(id: string): Promise<boolean> {
-        await this.query(`DELETE FROM ${SCHEMA}.workflows WHERE id = $1`, [id]);
+    async deleteWorkflow(id: string, tenantSlug?: string): Promise<boolean> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE id = $1 AND tenant_slug = $2`
+            : `WHERE id = $1`;
+        const params = isMultiTenantSlug(tenantSlug) ? [id, tenantSlug] : [id];
+        await this.query(`DELETE FROM ${SCHEMA}.workflows ${where}`, params);
         return true;
     }
 
-    async toggleWorkflow(id: string, isActive: boolean): Promise<void> {
+    async toggleWorkflow(id: string, isActive: boolean, tenantSlug?: string): Promise<void> {
+        const where = isMultiTenantSlug(tenantSlug)
+            ? `WHERE id = $1 AND tenant_slug = $2`
+            : `WHERE id = $1`;
+        const params = isMultiTenantSlug(tenantSlug) ? [isActive, new Date().toISOString(), id, tenantSlug] : [isActive, new Date().toISOString(), id];
         await this.query(
-            `UPDATE ${SCHEMA}.workflows SET is_active = $1, updated_at = $2 WHERE id = $3`,
-            [isActive, new Date().toISOString(), id]
+            `UPDATE ${SCHEMA}.workflows SET is_active = $1, updated_at = $2 ${where}`,
+            params
         );
     }
 

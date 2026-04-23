@@ -101,8 +101,11 @@ executeRoute.openapi(route, async (c) => {
         }
     }
 
-    // Fetch workflow via provider
-    const workflow = await stateProvider.getWorkflowById(id);
+    // Retrieve tenant slug from context (injected by middleware or binding)
+    const tenantSlug = (c.env as any)?.FRONTBASE_TENANT_SLUG || (c.get as any)('tenantSlug') || undefined;
+
+    // Fetch workflow via provider, enforcing tenant isolation
+    const workflow = await stateProvider.getWorkflowById(id, tenantSlug);
 
     if (!workflow) {
         return c.json({

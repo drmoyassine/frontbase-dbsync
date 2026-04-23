@@ -209,6 +209,7 @@ export abstract class DrizzleStateProvider implements IStateProvider {
                     nodes: workflow.nodes, edges: workflow.edges,
                     settings: workflow.settings || null,
                     version: newVersion, updatedAt: now, publishedBy: workflow.publishedBy,
+                    tenantSlug: workflow.tenantSlug || '_default',
                 })
                 .where(eq(workflowsTable.id, workflow.id));
             return { version: newVersion };
@@ -220,38 +221,57 @@ export abstract class DrizzleStateProvider implements IStateProvider {
                 settings: workflow.settings || null,
                 version: 1, isActive: true, createdAt: now, updatedAt: now,
                 publishedBy: workflow.publishedBy,
+                tenantSlug: workflow.tenantSlug || '_default',
             });
             return { version: 1 };
         }
     }
 
-    async getWorkflowById(id: string): Promise<WorkflowData | null> {
+    async getWorkflowById(id: string, tenantSlug?: string): Promise<WorkflowData | null> {
+        const conditions = [eq(workflowsTable.id, id)];
+        if (tenantSlug) conditions.push(eq(workflowsTable.tenantSlug, tenantSlug));
+        
         const row = await this.getDb().select().from(workflowsTable)
-            .where(eq(workflowsTable.id, id)).get();
+            .where(and(...conditions)).get();
         return row ? { ...row, isActive: !!row.isActive } as WorkflowData : null;
     }
 
-    async getActiveWebhookWorkflow(id: string): Promise<WorkflowData | null> {
+    async getActiveWebhookWorkflow(id: string, tenantSlug?: string): Promise<WorkflowData | null> {
+        const conditions = [eq(workflowsTable.id, id), eq(workflowsTable.isActive, true)];
+        if (tenantSlug) conditions.push(eq(workflowsTable.tenantSlug, tenantSlug));
+        
         const row = await this.getDb().select().from(workflowsTable)
-            .where(and(eq(workflowsTable.id, id), eq(workflowsTable.isActive, true)))
+            .where(and(...conditions))
             .get();
         return row ? { ...row, isActive: !!row.isActive } as WorkflowData : null;
     }
 
-    async listWorkflows(): Promise<WorkflowData[]> {
-        const rows = await this.getDb().select().from(workflowsTable);
+    async listWorkflows(tenantSlug?: string): Promise<WorkflowData[]> {
+        const conditions = [];
+        if (tenantSlug) conditions.push(eq(workflowsTable.tenantSlug, tenantSlug));
+        
+        let query = this.getDb().select().from(workflowsTable);
+        if (conditions.length > 0) query = query.where(and(...conditions)) as any;
+        
+        const rows = await query;
         return rows.map((r: any) => ({ ...r, isActive: !!r.isActive } as WorkflowData));
     }
 
-    async deleteWorkflow(id: string): Promise<boolean> {
-        await this.getDb().delete(workflowsTable).where(eq(workflowsTable.id, id));
+    async deleteWorkflow(id: string, tenantSlug?: string): Promise<boolean> {
+        const conditions = [eq(workflowsTable.id, id)];
+        if (tenantSlug) conditions.push(eq(workflowsTable.tenantSlug, tenantSlug));
+        
+        await this.getDb().delete(workflowsTable).where(and(...conditions));
         return true;
     }
 
-    async toggleWorkflow(id: string, isActive: boolean): Promise<void> {
+    async toggleWorkflow(id: string, isActive: boolean, tenantSlug?: string): Promise<void> {
+        const conditions = [eq(workflowsTable.id, id)];
+        if (tenantSlug) conditions.push(eq(workflowsTable.tenantSlug, tenantSlug));
+        
         await this.getDb().update(workflowsTable)
-            .set({ isActive, updatedAt: new Date().toISOString() })
-            .where(eq(workflowsTable.id, id));
+            .set({ isActive: isActive, updatedAt: new Date().toISOString() })
+            .where(and(...conditions));
     }
 
     // =========================================================================

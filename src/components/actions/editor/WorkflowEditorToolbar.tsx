@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { WorkflowSettingsPanel, type WorkflowSettings } from './WorkflowSettingsPanel';
 import { useActionsStore } from '@/stores/actions';
+import { useAuthStore } from '@/stores/auth';
 import { cn } from '@/lib/utils';
 
 interface EdgeTarget {

@@ -56,7 +56,7 @@ def serialize_page(page: Page) -> dict:
                     "id": dep.edge_engine.id,
                     "name": dep.edge_engine.name,
                     "url": dep.edge_engine.url,
-                    "is_shared": getattr(dep.edge_engine, 'is_shared', False),
+                    "is_shared": bool(getattr(dep.edge_engine, 'is_shared', False)),
                     "provider": dep.edge_engine.edge_provider.provider if getattr(dep.edge_engine, 'edge_provider', None) else "unknown"
                 }
                 

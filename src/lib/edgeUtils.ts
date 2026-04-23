@@ -21,17 +21,33 @@
  * @returns Fully qualified origin (e.g. `https://myfrontbase.com` or `https://worker.dev`)
  */
 export function resolveEngineOrigin(engineUrl: string | undefined | null, isShared?: boolean, tenantSlug?: string): string {
-  // If this is a shared community engine, the tenant's exact subdomain routing is what matters,
-  // so we always use the current window's origin (e.g., tenant.frontbase.dev) rather than the raw worker domain.
-  if (isShared) {
-    if (tenantSlug) {
-      const hostParts = window.location.hostname.split('.');
-      if (hostParts.length >= 3 && window.location.hostname !== 'localhost') {
-        // App is on app.frontbase.dev or another domain with subdomains, replace first
-        hostParts[0] = tenantSlug;
-        return `${window.location.protocol}//${hostParts.join('.')}${window.location.port ? ':' + window.location.port : ''}`;
+  // Detect wildcard URLs (e.g., https://*.frontbase.dev) — treat as implicitly shared
+  const isWildcard = engineUrl?.includes('*') ?? false;
+  const effectivelyShared = isShared || isWildcard;
+
+  // If this is a shared community engine (or wildcard URL), the tenant's exact subdomain routing
+  // is what matters — resolve to tenant.frontbase.dev rather than the raw worker domain.
+  if (effectivelyShared && tenantSlug) {
+    // If the engine URL is a wildcard like https://*.frontbase.dev, replace * with tenantSlug
+    if (isWildcard && engineUrl) {
+      const resolved = engineUrl.replace('*', tenantSlug);
+      try {
+        new URL(resolved); // Validate the result is a parseable URL
+        return resolved.replace(/\/$/, '');
+      } catch {
+        // Fall through to hostname-based resolution
       }
     }
+
+    const hostParts = window.location.hostname.split('.');
+    if (hostParts.length >= 3 && window.location.hostname !== 'localhost') {
+      // App is on app.frontbase.dev or another domain with subdomains, replace first
+      hostParts[0] = tenantSlug;
+      return `${window.location.protocol}//${hostParts.join('.')}${window.location.port ? ':' + window.location.port : ''}`;
+    }
+  }
+
+  if (effectivelyShared) {
     return window.location.origin;
   }
 

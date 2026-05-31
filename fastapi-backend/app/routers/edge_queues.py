@@ -103,6 +103,20 @@ def _query_linked_engines(db, fk_column, resource_id) -> tuple[int, list[dict]]:
     return len(linked), linked
 
 
+def _validate_provider_account_ownership(db, ctx: TenantContext | None, provider_account_id: str | None) -> None:
+    if ctx and ctx.tenant_id and provider_account_id:
+        from ..models.models import EdgeProviderAccount
+        project = get_project(db, ctx)
+        if not project:
+            raise HTTPException(403, "Access denied: tenant project not found")
+        acct = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == provider_account_id,
+            EdgeProviderAccount.project_id == project.id
+        ).first()
+        if not acct:
+            raise HTTPException(403, "Access denied: provider account not found or does not belong to this tenant")
+
+
 def _serialize_queue(queue, db, engine_count: int = 0, linked_engines: Optional[list] = None, warning: Optional[str] = None) -> EdgeQueueResponse:
     """Serialize an EdgeQueue ORM object."""
     from ..models.models import EdgeProviderAccount
@@ -167,6 +181,11 @@ class TestQueueInline(BaseModel):
 @router.post("/test-connection", response_model=TestQueueResult)
 async def test_connection_inline(payload: TestQueueInline, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test a queue connection before saving it."""
+    db = SessionLocal()
+    try:
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+    finally:
+        db.close()
     return await _test_queue(payload.provider, payload.queue_url, payload.queue_token, payload.provider_account_id)
 
 
@@ -176,6 +195,9 @@ async def create_edge_queue(payload: EdgeQueueCreate, ctx: TenantContext | None 
     """Create a new edge queue connection."""
     db = SessionLocal()
     try:
+        # Validate provider account ownership
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+
         import json
         # Prevent duplicate queue URLs
         existing = _scoped_queue_query(db, ctx).filter(
@@ -256,6 +278,9 @@ async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate, ctx: Tenant
         if not queue:
             raise HTTPException(404, f"Edge queue '{queue_id}' not found")
         
+        if payload.provider_account_id is not None:
+            _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+
         if payload.name is not None:
             queue.name = payload.name  # type: ignore[assignment]
         if payload.provider is not None:

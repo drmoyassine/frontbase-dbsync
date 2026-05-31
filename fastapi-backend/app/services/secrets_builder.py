@@ -167,12 +167,121 @@ def _build_agent_profiles_config(db: Session, engine_id: str | None) -> dict:
     return config
 
 
+def _build_project_auth_config(db: Session, project) -> dict:
+    """Build AuthConfig for a specific Project."""
+    from ..core.security import decrypt_field
+    from ..models.models import EdgeProviderAccount
+    
+    auth: dict = {'provider': 'none'}
+    
+    # ── Auth Provider (Supabase) ─────────────────────────────────────────
+    # Try to find a connected provider account linked to this project
+    provider = db.query(EdgeProviderAccount).filter(
+        EdgeProviderAccount.provider == "supabase",
+        EdgeProviderAccount.project_id == project.id,
+        EdgeProviderAccount.is_active == True,
+    ).first()
+    
+    url = None
+    anon_key = None
+    jwt_secret = None
+    
+    if provider:
+        metadata = {}
+        if provider.provider_metadata is not None:
+            try:
+                metadata = json.loads(str(provider.provider_metadata))
+            except Exception:
+                pass
+        from ..core.security import decrypt_credentials
+        creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
+        url = metadata.get("api_url") or project.supabase_url
+        anon_key = creds.get("anon_key") or metadata.get("anon_key") or project.supabase_anon_key
+        jwt_secret = creds.get("jwt_secret")
+    else:
+        url = project.supabase_url
+        anon_key = project.supabase_anon_key
+        
+    if url and anon_key:
+        auth['provider'] = 'supabase'
+        auth['url'] = url
+        auth['anonKey'] = anon_key
+        if jwt_secret:
+            auth['jwtSecret'] = jwt_secret
+
+    # ── Users Config (contacts table, mapping, types, etc.) ──────────────
+    try:
+        if project.users_config and str(project.users_config or ""):
+            users_cfg = json.loads(str(project.users_config)) if not isinstance(project.users_config, dict) else project.users_config
+
+            contacts: dict = {}
+            contacts['table'] = users_cfg.get('contactsTable', 'contacts')
+            
+            if users_cfg.get('columnMapping'):
+                contacts['columnMapping'] = users_cfg['columnMapping']
+            if users_cfg.get('contactTypes'):
+                contacts['contactTypes'] = users_cfg['contactTypes']
+            if users_cfg.get('contactTypeHomePages'):
+                contacts['contactTypeHomePages'] = users_cfg['contactTypeHomePages']
+            if users_cfg.get('permissionLevels'):
+                contacts['permissionLevels'] = users_cfg['permissionLevels']
+
+            # Resolve contacts datasource credentials
+            contacts_db_id = users_cfg.get('contactsDbId') or users_cfg.get('authDataSourceId')
+            if contacts_db_id:
+                from ..services.sync.models.datasource import Datasource
+                ds = db.query(Datasource).filter(Datasource.id == contacts_db_id).first()
+                if ds:
+                    ds_url = ds.api_url
+                    anon_key_ds = ds.anon_key_encrypted
+                    if str(ds.type.value) == 'supabase':
+                        anon_key_ds = auth.get('anonKey') or anon_key_ds
+                        ds_url = ds_url or auth.get('url')
+                    if not ds_url and ds.host:
+                        ds_url = f"postgresql://{ds.host}:{ds.port}/{ds.database}"
+
+                    contacts['datasource'] = {
+                        'type': str(ds.type.value),
+                        'url': ds_url,
+                        'anonKey': anon_key_ds,
+                    }
+
+            auth['contacts'] = contacts
+            auth['enabled'] = users_cfg.get('enabled', False)
+    except Exception as e:
+        print(f"[SecretsBuilder] Could not resolve users config for project {project.id}: {e}")
+
+    return auth
+
+
 def _build_auth_config(db: Session, engine_id: str | None) -> dict:
     """Build FRONTBASE_AUTH JSON blob.
 
     Contains user authentication config only (Supabase Auth, Clerk, etc.).
-    Engine access control (system key, API key hashes) is in FRONTBASE_API_KEYS.
+    In cloud mode, returns a dictionary of tenant slug -> AuthConfig.
     """
+    from ..config.edition import is_cloud
+    
+    if is_cloud():
+        from ..models.tenant import Tenant
+        from ..models.models import Project
+        
+        auth_map = {}
+        tenants = db.query(Tenant).all()
+        for t in tenants:
+            project = db.query(Project).filter(Project.tenant_id == t.id).first()
+            if project:
+                auth_cfg = _build_project_auth_config(db, project)
+                if auth_cfg.get('provider') != 'none':
+                    auth_map[str(t.slug)] = auth_cfg
+        
+        default_project = db.query(Project).filter(Project.tenant_id == None).first()
+        if default_project:
+            auth_map['_default'] = _build_project_auth_config(db, default_project)
+            
+        return auth_map
+
+    # Single-tenant / Self-host mode
     auth: dict = {'provider': 'none'}
 
     if not engine_id:

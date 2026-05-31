@@ -744,6 +744,10 @@ async def list_account_tables(account_id: str, db: Session = Depends(get_db), ct
     import httpx
     from ..core.credential_resolver import get_provider_context_by_id
 
+    provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == account_id).first()
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider account not found")
+
     try:
         provider_ctx = get_provider_context_by_id(db, account_id)
     except HTTPException:

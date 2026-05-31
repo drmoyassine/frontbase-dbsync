@@ -21,10 +21,11 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from ..database.config import get_db
-from ..database.utils import encrypt_data, decrypt_data
+from ..database.utils import encrypt_data, decrypt_data, get_project
 from ..models.models import EdgeAPIKey, EdgeEngine, EdgeProviderAccount
 from ..services.secrets_builder import build_engine_secrets, _build_api_keys_config
 from ..services.engine_reconfigure import _resolve_cf_credentials, _patch_cf_settings
+from ..middleware.tenant_context import TenantContext, get_tenant_context
 
 
 router = APIRouter(prefix="/api/edge-api-keys", tags=["edge-api-keys"])
@@ -194,13 +195,25 @@ def _build_key_secrets(engine: EdgeEngine, db: Session) -> dict:
 def list_api_keys(
     engine_id: Optional[str] = None,
     db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """List API keys. Optionally filter by engine_id (includes 'All Engines' keys)."""
     query = db.query(EdgeAPIKey)
-    if engine_id:
-        query = query.filter(
-            (EdgeAPIKey.edge_engine_id == engine_id) | (EdgeAPIKey.edge_engine_id == None)
-        )
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.join(EdgeEngine, EdgeAPIKey.edge_engine_id == EdgeEngine.id).filter(
+                EdgeEngine.project_id == project.id
+            )
+            if engine_id:
+                query = query.filter(EdgeAPIKey.edge_engine_id == engine_id)
+        else:
+            return {"keys": [], "total": 0}
+    else:
+        if engine_id:
+            query = query.filter(
+                (EdgeAPIKey.edge_engine_id == engine_id) | (EdgeAPIKey.edge_engine_id == None)
+            )
     keys = query.order_by(EdgeAPIKey.created_at.desc()).all()
     result = []
     for key in keys:
@@ -218,15 +231,29 @@ def create_api_key(
     payload: APIKeyCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Create a new API key. Returns the full key ONCE."""
     # Validate engine if specified
-    if payload.edge_engine_id:
+    if ctx and ctx.tenant_id:
+        if not payload.edge_engine_id:
+            raise HTTPException(400, "edge_engine_id is required in cloud mode")
+        project = get_project(db, ctx)
+        if not project:
+            raise HTTPException(403, "Access denied: tenant project not found")
         engine = db.query(EdgeEngine).filter(
-            EdgeEngine.id == payload.edge_engine_id
+            EdgeEngine.id == payload.edge_engine_id,
+            EdgeEngine.project_id == project.id
         ).first()
         if not engine:
             raise HTTPException(404, "Edge engine not found")
+    else:
+        if payload.edge_engine_id:
+            engine = db.query(EdgeEngine).filter(
+                EdgeEngine.id == payload.edge_engine_id
+            ).first()
+            if not engine:
+                raise HTTPException(404, "Edge engine not found")
 
     full_key, prefix, key_hash = _generate_key()
     now = datetime.utcnow().isoformat()
@@ -272,9 +299,23 @@ def update_api_key(
     payload: APIKeyUpdate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Update an API key's name, active status, or expiry."""
-    api_key = db.query(EdgeAPIKey).filter(EdgeAPIKey.id == key_id).first()
+    query = db.query(EdgeAPIKey)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.join(EdgeEngine, EdgeAPIKey.edge_engine_id == EdgeEngine.id).filter(
+                EdgeAPIKey.id == key_id,
+                EdgeEngine.project_id == project.id
+            )
+        else:
+            raise HTTPException(404, "API key not found")
+    else:
+        query = query.filter(EdgeAPIKey.id == key_id)
+
+    api_key = query.first()
     if not api_key:
         raise HTTPException(404, "API key not found")
 
@@ -320,9 +361,23 @@ def delete_api_key(
     key_id: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Revoke and delete an API key."""
-    api_key = db.query(EdgeAPIKey).filter(EdgeAPIKey.id == key_id).first()
+    query = db.query(EdgeAPIKey)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.join(EdgeEngine, EdgeAPIKey.edge_engine_id == EdgeEngine.id).filter(
+                EdgeAPIKey.id == key_id,
+                EdgeEngine.project_id == project.id
+            )
+        else:
+            raise HTTPException(404, "API key not found")
+    else:
+        query = query.filter(EdgeAPIKey.id == key_id)
+
+    api_key = query.first()
     if not api_key:
         raise HTTPException(404, "API key not found")
 
@@ -337,9 +392,22 @@ def delete_api_key(
 
 
 @router.get("/{key_id}/reveal")
-def reveal_api_key(key_id: str, db: Session = Depends(get_db)):
+def reveal_api_key(key_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Reveal the full API key (only works for Fernet-encrypted keys)."""
-    api_key = db.query(EdgeAPIKey).filter(EdgeAPIKey.id == key_id).first()
+    query = db.query(EdgeAPIKey)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.join(EdgeEngine, EdgeAPIKey.edge_engine_id == EdgeEngine.id).filter(
+                EdgeAPIKey.id == key_id,
+                EdgeEngine.project_id == project.id
+            )
+        else:
+            raise HTTPException(404, "API key not found")
+    else:
+        query = query.filter(EdgeAPIKey.id == key_id)
+
+    api_key = query.first()
     if not api_key:
         raise HTTPException(404, "API key not found")
 

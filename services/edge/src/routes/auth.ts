@@ -15,12 +15,13 @@ async function resolveDynamicRedirect(
     userId: string,
     formId: string | undefined,
     isEmbed: boolean,
-    fallbackRedirect: string
+    fallbackRedirect: string,
+    tenantSlug?: string
 ): Promise<string> {
     if (!client) return fallbackRedirect;
 
     try {
-        const settings = await stateProvider.getProjectSettings();
+        const settings = await stateProvider.getProjectSettings(tenantSlug);
         
         // 1. Form-level override (Embedded Auth)
         if (isEmbed && formId && settings.authForms) {
@@ -32,7 +33,7 @@ async function resolveDynamicRedirect(
         }
 
         // 2. Contact Type Gated Homepage override (from FRONTBASE_AUTH env var)
-        const authCfg = getAuthConfig();
+        const authCfg = getAuthConfig(tenantSlug);
         const contacts = authCfg.contacts;
         if (contacts?.table && contacts?.columnMapping && contacts?.contactTypeHomePages) {
             const typeCol = contacts.columnMapping.contactTypeColumn;
@@ -50,7 +51,7 @@ async function resolveDynamicRedirect(
                     const homePageId = contacts.contactTypeHomePages[contactType];
                     
                     if (homePageId && homePageId !== '_default_') {
-                        const pages = await stateProvider.listPages();
+                        const pages = await stateProvider.listPages(tenantSlug);
                         const targetPage = pages.find((p: any) => p.id === homePageId);
                         if (targetPage) {
                             return `/${targetPage.slug}`;
@@ -75,7 +76,8 @@ const authRoute = new OpenAPIHono();
 // =============================================================================
 
 authRoute.post('/login', async (c) => {
-    const provider = new SupabaseAuthProvider();
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const provider = new SupabaseAuthProvider(tenantSlug);
     const client = await provider.createClient(c.req.raw);
 
     if (!client) {
@@ -131,7 +133,7 @@ authRoute.post('/login', async (c) => {
     let finalRedirect = redirectTo;
     let enrichedUser = null;
     if (data.user) {
-        finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo);
+        finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo, tenantSlug);
         enrichedUser = await provider.enrichUserContext(data.user, data.session?.access_token);
     }
 
@@ -164,7 +166,8 @@ authRoute.post('/login', async (c) => {
 // =============================================================================
 
 authRoute.get('/me', async (c) => {
-    const provider = new SupabaseAuthProvider();
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const provider = new SupabaseAuthProvider(tenantSlug);
     const user = await provider.getUserFromRequest(c.req.raw);
     
     if (user) {
@@ -179,7 +182,8 @@ authRoute.get('/me', async (c) => {
 // =============================================================================
 
 authRoute.post('/signup', async (c) => {
-    const provider = new SupabaseAuthProvider();
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const provider = new SupabaseAuthProvider(tenantSlug);
     const client = await provider.createClient(c.req.raw);
 
     if (!client) {
@@ -259,7 +263,7 @@ authRoute.post('/signup', async (c) => {
     let finalRedirect = redirectTo;
     let enrichedUser = null;
     if (data.user) {
-        finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo);
+        finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo, tenantSlug);
         enrichedUser = await provider.enrichUserContext(data.user, data.session?.access_token);
     }
 
@@ -292,7 +296,8 @@ authRoute.post('/signup', async (c) => {
 // =============================================================================
 
 authRoute.post('/logout', async (c) => {
-    const provider = new SupabaseAuthProvider();
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const provider = new SupabaseAuthProvider(tenantSlug);
     const client = await provider.createClient(c.req.raw);
 
     if (!client) {

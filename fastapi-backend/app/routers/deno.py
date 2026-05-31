@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 from ..database.config import get_db
 from ..models.models import EdgeProviderAccount
 from ..core.security import decrypt_credentials, encrypt_credentials
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
 
 router = APIRouter(prefix="/api/deno", tags=["Deno Deploy"])
 
@@ -26,22 +28,20 @@ class DenoConnectRequest(BaseModel):
 
 
 @router.post("/connect")
-async def connect_deno(payload: DenoConnectRequest, db: Session = Depends(get_db)):
+async def connect_deno(payload: DenoConnectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Auto-detect Deno org info using the personal (ddp_) token.
-    
-    Flow:
-        1. Read saved credentials from the provider account
-        2. Use ddp_ (personal_token) to call dash.deno.com/api/user
-        3. Extract org_slug (login) and user_id (id) from response
-        4. Call dash.deno.com/api/organizations to get org UUID
-        5. Enrich and re-save credentials with org_slug + user_id + org_uuid
-    
-    Returns:
-        org_slug, user_id, org_uuid, account_name for the frontend to display
+    ...
     """
-    provider = db.query(EdgeProviderAccount).filter(
+    provider_query = db.query(EdgeProviderAccount).filter(
         EdgeProviderAccount.id == payload.provider_id
-    ).first()
+    )
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            provider_query = provider_query.filter(EdgeProviderAccount.project_id == project.id)
+        else:
+            raise HTTPException(403, "Access denied: tenant project not found")
+    provider = provider_query.first()
     if not provider:
         raise HTTPException(404, "Provider account not found")
     

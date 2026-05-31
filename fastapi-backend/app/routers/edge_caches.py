@@ -77,6 +77,20 @@ def _query_linked_engines(db, fk_column, resource_id) -> tuple[int, list[dict]]:
     return len(linked), linked
 
 
+def _validate_provider_account_ownership(db, ctx: TenantContext | None, provider_account_id: str | None) -> None:
+    if ctx and ctx.tenant_id and provider_account_id:
+        from ..models.models import EdgeProviderAccount
+        project = get_project(db, ctx)
+        if not project:
+            raise HTTPException(403, "Access denied: tenant project not found")
+        acct = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == provider_account_id,
+            EdgeProviderAccount.project_id == project.id
+        ).first()
+        if not acct:
+            raise HTTPException(403, "Access denied: provider account not found or does not belong to this tenant")
+
+
 def _serialize_cache(cache, db, engine_count: int = 0, linked_engines: Optional[list] = None, warning: Optional[str] = None) -> EdgeCacheResponse:
     """Serialize an EdgeCache ORM object."""
     from ..models.models import EdgeProviderAccount
@@ -142,6 +156,9 @@ async def create_edge_cache(payload: EdgeCacheCreate, ctx: TenantContext | None 
     """Create a new edge cache connection."""
     db = SessionLocal()
     try:
+        # Validate provider account ownership
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+
         # Prevent duplicate cache URLs
         existing = db.query(EdgeCache).filter(
             EdgeCache.cache_url == payload.cache_url
@@ -223,6 +240,9 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate, ctx: Tenant
         if not cache:
             raise HTTPException(404, f"Edge cache '{cache_id}' not found")
         
+        if payload.provider_account_id is not None:
+            _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+
         if payload.name is not None:
             cache.name = payload.name  # type: ignore[assignment]
         if payload.provider is not None:
@@ -444,7 +464,12 @@ async def test_edge_cache(cache_id: str, ctx: TenantContext | None = Depends(get
 
 
 @router.post("/test-connection", response_model=TestCacheResult)
-async def test_connection_inline(payload: EdgeCacheCreate):
+async def test_connection_inline(payload: EdgeCacheCreate, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test a cache connection before saving it."""
+    db = SessionLocal()
+    try:
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+    finally:
+        db.close()
     return await test_cache(payload.provider, payload.cache_url, payload.cache_token, payload.provider_account_id)
 

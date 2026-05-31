@@ -216,10 +216,11 @@ export const createSupabaseJwtAuth = (secret: string) => jwt({
  * Falls back to allowing all if no secret configured (dev mode).
  */
 export const supabaseJwtAuth = (c: Context, next: Next) => {
-    const secret = getAuthConfig().jwtSecret;
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const secret = getAuthConfig(tenantSlug).jwtSecret;
 
     if (!secret) {
-        console.warn('⚠️ No jwtSecret in FRONTBASE_AUTH - JWT auth disabled');
+        console.warn(`⚠️ No jwtSecret in FRONTBASE_AUTH for tenant "${tenantSlug || '_default'}" - JWT auth disabled`);
         return next();
     }
 

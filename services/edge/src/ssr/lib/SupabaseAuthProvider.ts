@@ -17,14 +17,7 @@ import type { IAuthProvider, UserContext, SessionRefreshResult } from './IAuthPr
 // =============================================================================
 
 import { getAuthConfig } from '../../config/env.js';
-
-function getSupabaseConfig(): { url: string; anonKey: string } | null {
-    const auth = getAuthConfig();
-    if (auth.provider === 'supabase' && auth.url && auth.anonKey) {
-        return { url: auth.url, anonKey: auth.anonKey };
-    }
-    return null;
-}
+import type { AuthConfig } from '../../config/env.js';
 
 // =============================================================================
 // Cookie Helpers
@@ -63,6 +56,16 @@ function serializeSetCookie(
 // =============================================================================
 
 export class SupabaseAuthProvider implements IAuthProvider {
+    private config: AuthConfig;
+
+    constructor(configOrSlug?: string | AuthConfig) {
+        const resolved = configOrSlug || '_default';
+        if (typeof resolved === 'string') {
+            this.config = getAuthConfig(resolved);
+        } else {
+            this.config = resolved;
+        }
+    }
 
     /**
      * Create a server-side Supabase client that reads cookies from the request
@@ -72,13 +75,14 @@ export class SupabaseAuthProvider implements IAuthProvider {
         supabase: ReturnType<typeof createServerClient>;
         getCookieHeaders: () => string[];
     } | null> {
-        const config = await getSupabaseConfig();
-        if (!config) return null;
+        if (this.config.provider !== 'supabase' || !this.config.url || !this.config.anonKey) {
+            return null;
+        }
 
         const cookies = parseCookieHeader(request.headers.get('Cookie') || '');
         const setCookieHeaders: string[] = [];
 
-        const supabase = createServerClient(config.url, config.anonKey, {
+        const supabase = createServerClient(this.config.url, this.config.anonKey, {
             cookies: {
                 getAll: () => cookies,
                 setAll: (cookiesToSet) => {
@@ -156,9 +160,8 @@ export class SupabaseAuthProvider implements IAuthProvider {
         };
 
         try {
-            // Read contacts config from FRONTBASE_AUTH env var (not state DB)
-            const authCfg = getAuthConfig();
-            const contacts = authCfg.contacts;
+            // Read contacts config from the instance config
+            const contacts = this.config.contacts;
             if (!contacts?.table || !contacts?.datasource || !contacts?.columnMapping) {
                 return baseContext;
             }

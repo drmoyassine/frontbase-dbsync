@@ -46,6 +46,51 @@ from ..services.edge_client import resolve_engine_url
 router = APIRouter(prefix="/api/edge-engines", tags=["Edge Engines"])
 
 
+def _validate_resource_ownership(
+    db: Session,
+    ctx: TenantContext | None,
+    edge_provider_id: str | None = None,
+    edge_db_id: str | None = None,
+    edge_cache_id: str | None = None,
+    edge_queue_id: str | None = None
+) -> None:
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if not project:
+            raise HTTPException(403, "Access denied: tenant project not found")
+        if edge_provider_id:
+            acct = db.query(EdgeProviderAccount).filter(
+                EdgeProviderAccount.id == edge_provider_id,
+                EdgeProviderAccount.project_id == project.id
+            ).first()
+            if not acct:
+                raise HTTPException(403, "Access denied: provider account not found or does not belong to this tenant")
+        if edge_db_id:
+            from ..models.models import EdgeDatabase
+            db_record = db.query(EdgeDatabase).filter(
+                EdgeDatabase.id == edge_db_id,
+                EdgeDatabase.project_id == project.id
+            ).first()
+            if not db_record:
+                raise HTTPException(403, "Access denied: database not found or does not belong to this tenant")
+        if edge_cache_id:
+            from ..models.models import EdgeCache
+            cache_record = db.query(EdgeCache).filter(
+                EdgeCache.id == edge_cache_id,
+                EdgeCache.project_id == project.id
+            ).first()
+            if not cache_record:
+                raise HTTPException(403, "Access denied: cache not found or does not belong to this tenant")
+        if edge_queue_id:
+            from ..models.models import EdgeQueue
+            queue_record = db.query(EdgeQueue).filter(
+                EdgeQueue.id == edge_queue_id,
+                EdgeQueue.project_id == project.id
+            ).first()
+            if not queue_record:
+                raise HTTPException(403, "Access denied: queue not found or does not belong to this tenant")
+
+
 # =============================================================================
 # CRUD Endpoints
 # =============================================================================
@@ -61,7 +106,8 @@ async def get_bundle_hashes():
 @router.post("/deploy")
 async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Provider-agnostic one-click deploy. Delegates to engine_provisioner."""
-    return await provision_and_deploy(payload, db)
+    _validate_resource_ownership(db, ctx, payload.provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id)
+    return await provision_and_deploy(payload, db, ctx)
 
 
 # =============================================================================
@@ -69,7 +115,7 @@ async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get
 # =============================================================================
 
 @router.post("/batch/redeploy", response_model=BatchResult)
-async def batch_redeploy_engines(payload: BatchRequest, db: Session = Depends(get_db)):
+async def batch_redeploy_engines(payload: BatchRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Batch redeploy multiple edge engines.
     
     Uses asyncio.Semaphore(3) to limit concurrent redeploys and avoid provider rate limits.
@@ -79,7 +125,15 @@ async def batch_redeploy_engines(payload: BatchRequest, db: Session = Depends(ge
 
     engines = []
     for eid in payload.engine_ids:
-        engine = db.query(EdgeEngine).filter(EdgeEngine.id == eid).first()
+        query = db.query(EdgeEngine).filter(EdgeEngine.id == eid)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+            else:
+                result.failed.append({"id": eid, "error": "Not found"})
+                continue
+        engine = query.first()
         if not engine:
             result.failed.append({"id": eid, "error": "Not found"})
             continue
@@ -276,6 +330,7 @@ async def get_engine(
 @router.post("/", response_model=EdgeEngineResponse, status_code=201)
 async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new engine record (manual mode - does not deploy code)."""
+    _validate_resource_ownership(db, ctx, payload.edge_provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id)
     if payload.edge_provider_id:
         provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.edge_provider_id).first()
         if not provider:
@@ -335,6 +390,8 @@ async def update_engine(
     engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
+
+    _validate_resource_ownership(db, ctx, payload.edge_provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id)
 
     if payload.edge_provider_id:
         provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.edge_provider_id).first()
@@ -696,6 +753,7 @@ async def get_engine_logs(
     cursor: str | None = Query(default=None),
     level: str | None = Query(default=None),
     db: Session = Depends(get_db),
+    tenant_ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Fetch runtime logs from the engine's provider.
 
@@ -705,7 +763,15 @@ async def get_engine_logs(
     from ..services.edge_logs import fetch_logs
     from ..core.credential_resolver import get_provider_context_by_id
 
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if tenant_ctx and tenant_ctx.tenant_id:
+        project = get_project(db, tenant_ctx)
+        if project:
+            query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+        else:
+            raise HTTPException(status_code=404, detail="Edge engine not found")
+
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
     if not str(engine.edge_provider_id or ""):
@@ -751,7 +817,11 @@ async def get_engine_logs(
 
 
 @router.post("/{engine_id}/logs/sync")
-async def sync_engine_logs(engine_id: str, db: Session = Depends(get_db)):
+async def sync_engine_logs(
+    engine_id: str,
+    db: Session = Depends(get_db),
+    tenant_ctx: TenantContext | None = Depends(get_tenant_context)
+):
     """Batch-sync logs from provider to the edge state DB.
 
     Triggered by QStash cron. Fetches all logs since last sync,
@@ -761,7 +831,15 @@ async def sync_engine_logs(engine_id: str, db: Session = Depends(get_db)):
     from ..services.edge_logs import fetch_logs
     from ..core.credential_resolver import get_provider_context_by_id
 
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if tenant_ctx and tenant_ctx.tenant_id:
+        project = get_project(db, tenant_ctx)
+        if project:
+            query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+        else:
+            raise HTTPException(status_code=404, detail="Edge engine not found")
+
+    engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
     if not str(engine.edge_provider_id or ""):

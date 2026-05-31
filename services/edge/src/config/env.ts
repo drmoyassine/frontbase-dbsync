@@ -118,7 +118,8 @@ function parseEnv<T>(key: string, fallback: T): T {
 // =============================================================================
 
 let _stateDb: StateDbConfig | null = null;
-let _auth: AuthConfig | null = null;
+let _authMap = new Map<string, AuthConfig>();
+let _authSingle: AuthConfig | null = null;
 let _apiKeys: ApiKeysConfig | null = null;
 let _cache: CacheConfig | null = null;
 let _queue: QueueConfig | null = null;
@@ -131,8 +132,28 @@ export function getStateDbConfig(): StateDbConfig {
 }
 
 /** Auth + users config (supabase | none) */
-export function getAuthConfig(): AuthConfig {
-    return (_auth ??= parseEnv<AuthConfig>('FRONTBASE_AUTH', { provider: 'none' }));
+export function getAuthConfig(tenantSlug?: string): AuthConfig {
+    const key = tenantSlug || '_default';
+    if (_authMap.has(key)) {
+        return _authMap.get(key)!;
+    }
+    if (_authSingle) {
+        return _authSingle;
+    }
+
+    const parsed = parseEnv<any>('FRONTBASE_AUTH', { provider: 'none' });
+    if (parsed && typeof parsed === 'object' && !('provider' in parsed)) {
+        // Multi-tenant map format
+        for (const [slug, cfg] of Object.entries(parsed)) {
+            _authMap.set(slug, cfg as AuthConfig);
+        }
+        const res = _authMap.get(key) || _authMap.get('_default') || { provider: 'none' };
+        return res;
+    } else {
+        // Single-tenant format
+        _authSingle = parsed as AuthConfig;
+        return _authSingle;
+    }
 }
 
 /** Engine access control — system key + API key hashes */
@@ -176,7 +197,10 @@ export function getAgentProfilesConfig(): AgentProfilesConfig {
 /** Reset a specific config singleton (forces re-parse on next access) */
 export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'queue' | 'gpu' | 'agentProfiles' | 'all'): void {
     if (key === 'stateDb' || key === 'all') _stateDb = null;
-    if (key === 'auth' || key === 'all') _auth = null;
+    if (key === 'auth' || key === 'all') {
+        _authSingle = null;
+        _authMap.clear();
+    }
     if (key === 'apiKeys' || key === 'all') _apiKeys = null;
     if (key === 'cache' || key === 'all') _cache = null;
     if (key === 'queue' || key === 'all') _queue = null;

@@ -21,6 +21,9 @@ from datetime import datetime
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from ..middleware.tenant_context import TenantContext
+from ..database.utils import get_project
+
 from ..models.models import EdgeEngine, EdgeProviderAccount
 from ..schemas.edge_engines import GenericDeployRequest
 from ..services.provider_registry import (
@@ -138,7 +141,7 @@ PRE_DEPLOY_HOOKS: dict = {
 # Provision + Deploy
 # =============================================================================
 
-async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> dict:
+async def provision_and_deploy(payload: GenericDeployRequest, db: Session, ctx: TenantContext | None = None) -> dict:
     """Provider-agnostic one-click deploy.
 
     1. Resolve provider type from provider_id
@@ -163,7 +166,7 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
     if provider_type not in PROVIDER_LABELS:
         raise HTTPException(400, f"Unsupported provider type: {provider_type}")
 
-    ctx = get_provider_context_by_id(db, payload.provider_id)
+    provider_ctx = get_provider_context_by_id(db, payload.provider_id)
     label = PROVIDER_LABELS[provider_type]
 
     # --- Resolve edge IDs (handle '__none__' sentinel) ---
@@ -173,7 +176,12 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
 
     # Default DB if none specified
     if not edge_db_id and payload.edge_db_id != "__none__":
-        default_db = db.query(EdgeDatabase).filter(EdgeDatabase.is_default == True).first()  # noqa: E712
+        default_db_query = db.query(EdgeDatabase).filter(EdgeDatabase.is_default == True)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                default_db_query = default_db_query.filter(EdgeDatabase.project_id == project.id)
+        default_db = default_db_query.first()
         if default_db:
             edge_db_id = str(default_db.id)
 
@@ -181,13 +189,23 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
     if provider_type == "deno" and not edge_cache_id and payload.edge_cache_id != "__none__":
         from ..models.models import EdgeCache
         # Check if a Deno KV cache already exists for this provider
-        existing_kv = db.query(EdgeCache).filter(
+        existing_kv_query = db.query(EdgeCache).filter(
             EdgeCache.provider == "deno_kv",
             EdgeCache.provider_account_id == payload.provider_id,
-        ).first()
+        )
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                existing_kv_query = existing_kv_query.filter(EdgeCache.project_id == project.id)
+        existing_kv = existing_kv_query.first()
         if existing_kv:
             edge_cache_id = str(existing_kv.id)
         else:
+            project_id_kv = None
+            if ctx and ctx.tenant_id:
+                project = get_project(db, ctx)
+                if project:
+                    project_id_kv = project.id
             kv_cache = EdgeCache(
                 id=str(uuid.uuid4()),
                 name=f"Deno KV ({payload.worker_name})",
@@ -199,6 +217,7 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
                 is_system=True,  # System-managed, not user-deletable
                 created_at=datetime.utcnow().isoformat(),
                 updated_at=datetime.utcnow().isoformat(),
+                project_id=project_id_kv,
             )
             db.add(kv_cache)
             db.commit()
@@ -206,10 +225,10 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
             print(f"[Deno Deploy] Auto-provisioned Deno KV cache: {kv_cache.id}")
 
     # --- Construct engine URL (with optional per-provider hook) ---
-    engine_url = _build_engine_url(provider_type, ctx, payload.worker_name)
+    engine_url = _build_engine_url(provider_type, provider_ctx, payload.worker_name)
     pre_deploy = PRE_DEPLOY_HOOKS.get(provider_type)
     if pre_deploy:
-        engine_url = await pre_deploy(ctx, provider, payload.worker_name, db)
+        engine_url = await pre_deploy(provider_ctx, provider, payload.worker_name, db)
 
     # --- Engine config (provider-specific key name) ---
     config_key = PROVIDER_CONFIG_KEY.get(provider_type, "worker_name")
@@ -233,10 +252,19 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
         existing.updated_at = now  # type: ignore[assignment]
         if payload.compute_type == "community":
             existing.is_shared = True  # type: ignore[assignment]
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                existing.project_id = project.id  # type: ignore[assignment]
         engine_id = str(existing.id)
         db.commit()
         engine = existing
     else:
+        project_id = None
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                project_id = project.id
         engine = EdgeEngine(
             id=str(uuid.uuid4()),
             name=payload.worker_name,
@@ -251,6 +279,7 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session) -> di
             is_shared=payload.compute_type == "community",
             created_at=now,
             updated_at=now,
+            project_id=project_id,
         )
         db.add(engine)
         db.commit()

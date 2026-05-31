@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from ..database.config import get_db
 from ..models.models import EdgeAgentProfile, EdgeEngine
 from ..schemas.edge_engines import EdgeAgentProfileCreate, EdgeAgentProfileUpdate, EdgeAgentProfileResponse
+from sqlalchemy import or_
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
 
 router = APIRouter(prefix="/api/edge-engines/{engine_id}/agent-profiles", tags=["edge-agent-profiles"])
 
@@ -26,14 +29,32 @@ def _serialize(profile: EdgeAgentProfile) -> dict:
     }
 
 @router.get("")
-def list_profiles(engine_id: str, db: Session = Depends(get_db)):
+def list_profiles(engine_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
+    engine_query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            engine_query = engine_query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+        else:
+            raise HTTPException(404, "Edge engine not found")
+    engine = engine_query.first()
+    if not engine:
+        raise HTTPException(404, "Edge engine not found")
+
     profiles = db.query(EdgeAgentProfile).filter(EdgeAgentProfile.engine_id == engine_id).all()
     result = [_serialize(p) for p in profiles]
     return {"profiles": result, "total": len(result)}
 
 @router.post("", status_code=201)
-def create_profile(engine_id: str, payload: EdgeAgentProfileCreate, db: Session = Depends(get_db)):
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+def create_profile(engine_id: str, payload: EdgeAgentProfileCreate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
+    engine_query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            engine_query = engine_query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+        else:
+            raise HTTPException(404, "Edge engine not found")
+    engine = engine_query.first()
     if not engine:
         raise HTTPException(404, "Edge engine not found")
 
@@ -62,7 +83,18 @@ def create_profile(engine_id: str, payload: EdgeAgentProfileCreate, db: Session 
     return _serialize(profile)
 
 @router.put("/{profile_id}")
-def update_profile(engine_id: str, profile_id: str, payload: EdgeAgentProfileUpdate, db: Session = Depends(get_db)):
+def update_profile(engine_id: str, profile_id: str, payload: EdgeAgentProfileUpdate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
+    engine_query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            engine_query = engine_query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+        else:
+            raise HTTPException(404, "Edge engine not found")
+    engine = engine_query.first()
+    if not engine:
+        raise HTTPException(404, "Edge engine not found")
+
     profile = db.query(EdgeAgentProfile).filter(
         EdgeAgentProfile.id == profile_id,
         EdgeAgentProfile.engine_id == engine_id
@@ -97,7 +129,18 @@ def update_profile(engine_id: str, profile_id: str, payload: EdgeAgentProfileUpd
     return _serialize(profile)
 
 @router.delete("/{profile_id}", status_code=204)
-def delete_profile(engine_id: str, profile_id: str, db: Session = Depends(get_db)):
+def delete_profile(engine_id: str, profile_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
+    engine_query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            engine_query = engine_query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+        else:
+            raise HTTPException(404, "Edge engine not found")
+    engine = engine_query.first()
+    if not engine:
+        raise HTTPException(404, "Edge engine not found")
+
     profile = db.query(EdgeAgentProfile).filter(
         EdgeAgentProfile.id == profile_id,
         EdgeAgentProfile.engine_id == engine_id

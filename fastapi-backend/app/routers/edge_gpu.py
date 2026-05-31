@@ -22,6 +22,8 @@ from ..services.gpu_adapters import get_adapter, get_schema_for_model_type, IO_S
 from ..services.cloudflare_api import get_provider_credentials
 from ..services.engine_deploy import redeploy as _redeploy_engine
 from ..services.edge_client import resolve_engine_url
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
 
 router = APIRouter(prefix="/api/edge-gpu", tags=["edge-gpu"])
 
@@ -115,12 +117,24 @@ async def get_catalog(
     provider_id: str,
     provider: str = "workers_ai",
     db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Fetch available models from a GPU provider.
 
     Uses the adapter factory to select the correct implementation.
     For CF Workers AI, calls GET /accounts/{id}/ai/models/search.
     """
+    prov_query = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            prov_query = prov_query.filter(EdgeProviderAccount.project_id == project.id)
+        else:
+            raise HTTPException(403, "Access denied: tenant project not found")
+    prov = prov_query.first()
+    if not prov:
+        raise HTTPException(status_code=404, detail="Provider account not found")
+
     adapter = get_adapter(provider)
 
     # Build credentials dict based on provider
@@ -133,18 +147,16 @@ async def get_catalog(
                 account_id = await detect_account_id(api_token)
                 # Persist so future calls don't need to auto-detect
                 import json as _json
-                prov = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == provider_id).first()
-                if prov:
-                    existing_meta = {}
-                    if str(prov.provider_metadata or ""):
-                        try:
-                            existing_meta = _json.loads(str(prov.provider_metadata))
-                        except (_json.JSONDecodeError, TypeError):
-                            pass
-                    existing_meta["account_id"] = account_id
-                    prov.provider_metadata = _json.dumps(existing_meta)  # type: ignore[assignment]
-                    db.commit()
-                    print(f"[GPU Catalog] Backfilled account_id for provider {provider_id}")
+                existing_meta = {}
+                if str(prov.provider_metadata or ""):
+                    try:
+                        existing_meta = _json.loads(str(prov.provider_metadata))
+                    except (_json.JSONDecodeError, TypeError):
+                        pass
+                existing_meta["account_id"] = account_id
+                prov.provider_metadata = _json.dumps(existing_meta)  # type: ignore[assignment]
+                db.commit()
+                print(f"[GPU Catalog] Backfilled account_id for provider {provider_id}")
             except Exception as e:
                 raise HTTPException(400, f"Provider account missing account_id and auto-detect failed: {e}")
         credentials = {"api_token": api_token, "account_id": account_id}
@@ -177,21 +189,35 @@ async def get_schemas():
 # =============================================================================
 
 @router.get("/")
-async def list_gpu_models(db: Session = Depends(get_db)):
+async def list_gpu_models(db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all deployed GPU models."""
-    models = db.query(EdgeGPUModel).all()
+    query = db.query(EdgeGPUModel).join(EdgeEngine, EdgeGPUModel.edge_engine_id == EdgeEngine.id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            return []
+    models = query.all()
     return [_serialize(m) for m in models]
 
 
 @router.post("/")
-async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db), skip_redeploy: bool = Query(False)):
+async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context), skip_redeploy: bool = Query(False)):
     """Deploy a new GPU model to an edge engine.
 
     After saving the model record, auto-redeploys CF engines so the AI
     binding + FRONTBASE_GPU_MODELS secret are pushed immediately.
     """
     # Validate engine exists
-    engine = db.query(EdgeEngine).filter(EdgeEngine.id == payload.edge_engine_id).first()
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == payload.edge_engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, "Edge engine not found")
+    engine = query.first()
     if not engine:
         raise HTTPException(404, "Edge engine not found")
 
@@ -253,9 +279,16 @@ async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db
 
 
 @router.put("/{model_id}")
-async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session = Depends(get_db)):
+async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update a GPU model's configuration."""
-    model = db.query(EdgeGPUModel).filter(EdgeGPUModel.id == model_id).first()
+    query = db.query(EdgeGPUModel).join(EdgeEngine, EdgeGPUModel.edge_engine_id == EdgeEngine.id).filter(EdgeGPUModel.id == model_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, "GPU model not found")
+    model = query.first()
     if not model:
         raise HTTPException(404, "GPU model not found")
 
@@ -280,13 +313,20 @@ async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session =
 
 
 @router.delete("/{model_id}")
-async def delete_gpu_model(model_id: str, db: Session = Depends(get_db), skip_redeploy: bool = Query(False)):
+async def delete_gpu_model(model_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context), skip_redeploy: bool = Query(False)):
     """Delete a GPU model.
 
     After deletion, auto-redeploys CF engines to remove stale AI
     binding / secrets.
     """
-    model = db.query(EdgeGPUModel).filter(EdgeGPUModel.id == model_id).first()
+    query = db.query(EdgeGPUModel).join(EdgeEngine, EdgeGPUModel.edge_engine_id == EdgeEngine.id).filter(EdgeGPUModel.id == model_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, "GPU model not found")
+    model = query.first()
     if not model:
         raise HTTPException(404, "GPU model not found")
 
@@ -316,9 +356,16 @@ async def delete_gpu_model(model_id: str, db: Session = Depends(get_db), skip_re
 # =============================================================================
 
 @router.post("/{model_id}/test")
-async def test_gpu_model(model_id: str, db: Session = Depends(get_db)):
+async def test_gpu_model(model_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test a deployed GPU model by running a sample inference."""
-    model = db.query(EdgeGPUModel).filter(EdgeGPUModel.id == model_id).first()
+    query = db.query(EdgeGPUModel).join(EdgeEngine, EdgeGPUModel.edge_engine_id == EdgeEngine.id).filter(EdgeGPUModel.id == model_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, "GPU model not found")
+    model = query.first()
     if not model:
         raise HTTPException(404, "GPU model not found")
 

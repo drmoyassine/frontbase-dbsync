@@ -28,6 +28,8 @@ from sqlalchemy.orm import Session
 
 from ..database.config import get_db
 from ..models.models import EdgeEngine, EdgeDatabase, EdgeCache, EdgeQueue, EdgeProviderAccount
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
 
 from ..schemas.cloudflare import ConnectRequest, DeployRequest, StatusRequest, TeardownRequest
 from ..services import cloudflare_api
@@ -42,13 +44,24 @@ router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 # =============================================================================
 
 @router.post("/connect")
-async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_db)):
+async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """
     List existing workers using saved credentials from EdgeProviderAccount.
     
     Uses run_in_executor to run sync httpx calls in a thread,
     avoiding Windows ProactorEventLoop Errno 22 with HTTPS.
     """
+    provider_query = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            provider_query = provider_query.filter(EdgeProviderAccount.project_id == project.id)
+        else:
+            raise HTTPException(403, "Access denied: tenant project not found")
+    provider_record = provider_query.first()
+    if not provider_record:
+        raise HTTPException(404, "Provider account not found")
+
     api_token, account_id = cloudflare_api.get_provider_credentials(payload.provider_id, db)
     
     def _do_connect():
@@ -108,9 +121,20 @@ async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_
 
 
 @router.post("/deploy")
-async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get_db)):
+async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """One-click deploy the Edge Engine to Cloudflare Workers."""
     try:
+        provider_query = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                provider_query = provider_query.filter(EdgeProviderAccount.project_id == project.id)
+            else:
+                raise HTTPException(403, "Access denied: tenant project not found")
+        provider_record = provider_query.first()
+        if not provider_record:
+            raise HTTPException(404, "Provider account not found")
+
         api_token, account_id = cloudflare_api.get_provider_credentials(payload.provider_id, db)
 
         if not account_id:
@@ -148,9 +172,41 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
 
         # Use default DB if none specified
         if not edge_db_id and payload.edge_db_id != "__none__":
-            default_db = db.query(EdgeDatabase).filter(EdgeDatabase.is_default == True).first()  # noqa: E712
+            default_db_query = db.query(EdgeDatabase).filter(EdgeDatabase.is_default == True)
+            if ctx and ctx.tenant_id:
+                project = get_project(db, ctx)
+                if project:
+                    default_db_query = default_db_query.filter(EdgeDatabase.project_id == project.id)
+            default_db = default_db_query.first()
             if default_db:
                 edge_db_id = str(default_db.id)
+
+        # Enforce scoping of referenced DB/cache/queue in cloud mode:
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if not project:
+                raise HTTPException(403, "Access denied: tenant project not found")
+            if edge_db_id:
+                db_record = db.query(EdgeDatabase).filter(
+                    EdgeDatabase.id == edge_db_id,
+                    EdgeDatabase.project_id == project.id
+                ).first()
+                if not db_record:
+                    raise HTTPException(403, "Access denied: database not found or does not belong to this tenant")
+            if edge_cache_id:
+                cache_record = db.query(EdgeCache).filter(
+                    EdgeCache.id == edge_cache_id,
+                    EdgeCache.project_id == project.id
+                ).first()
+                if not cache_record:
+                    raise HTTPException(403, "Access denied: cache not found or does not belong to this tenant")
+            if edge_queue_id:
+                queue_record = db.query(EdgeQueue).filter(
+                    EdgeQueue.id == edge_queue_id,
+                    EdgeQueue.project_id == project.id
+                ).first()
+                if not queue_record:
+                    raise HTTPException(403, "Access denied: queue not found or does not belong to this tenant")
 
         # Register as Edge Engine FIRST (so we have engine_id for secrets)
         engine_id = None
@@ -175,6 +231,10 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
                 existing.edge_db_id = edge_db_id  # type: ignore[assignment]
                 existing.edge_cache_id = edge_cache_id  # type: ignore[assignment]
                 existing.edge_queue_id = edge_queue_id  # type: ignore[assignment]
+                if ctx and ctx.tenant_id:
+                    project = get_project(db, ctx)
+                    if project:
+                        existing.project_id = project.id  # type: ignore[assignment]
                 # Preserve existing system key if present
                 if str(existing.engine_config or ''):
                     try:
@@ -192,6 +252,11 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
                 engine_id = str(existing.id)
                 db.commit()
             else:
+                project_id = None
+                if ctx and ctx.tenant_id:
+                    project = get_project(db, ctx)
+                    if project:
+                        project_id = project.id
                 engine = EdgeEngine(
                     id=str(uuid.uuid4()),
                     name=payload.worker_name,
@@ -207,6 +272,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
                     is_active=True,
                     created_at=now,
                     updated_at=now,
+                    project_id=project_id,
                 )
                 db.add(engine)
                 db.commit()
@@ -263,9 +329,20 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
 
 
 @router.post("/status")
-async def cloudflare_status(payload: StatusRequest, db: Session = Depends(get_db)):
+async def cloudflare_status(payload: StatusRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Check if a Worker is deployed and get its details."""
     try:
+        provider_query = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                provider_query = provider_query.filter(EdgeProviderAccount.project_id == project.id)
+            else:
+                raise HTTPException(403, "Access denied: tenant project not found")
+        provider_record = provider_query.first()
+        if not provider_record:
+            raise HTTPException(404, "Provider account not found")
+
         api_token, account_id = cloudflare_api.get_provider_credentials(payload.provider_id, db)
 
         if not account_id:
@@ -301,9 +378,20 @@ async def cloudflare_status(payload: StatusRequest, db: Session = Depends(get_db
 
 
 @router.post("/teardown")
-async def teardown_cloudflare(payload: TeardownRequest, db: Session = Depends(get_db)):
+async def teardown_cloudflare(payload: TeardownRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Remove a Worker and deactivate its edge engine target."""
     try:
+        provider_query = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                provider_query = provider_query.filter(EdgeProviderAccount.project_id == project.id)
+            else:
+                raise HTTPException(403, "Access denied: tenant project not found")
+        provider_record = provider_query.first()
+        if not provider_record:
+            raise HTTPException(404, "Provider account not found")
+
         api_token, account_id = cloudflare_api.get_provider_credentials(payload.provider_id, db)
         if not account_id:
             account_id = await cloudflare_api.detect_account_id(api_token)
@@ -312,9 +400,16 @@ async def teardown_cloudflare(payload: TeardownRequest, db: Session = Depends(ge
         await cloudflare_api.delete_worker(api_token, account_id, payload.worker_name)
 
         # Deactivate Edge Engines
-        engines = db.query(EdgeEngine).filter(
+        engines_query = db.query(EdgeEngine).filter(
             EdgeEngine.name.contains(payload.worker_name),
-        ).all()
+        )
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                engines_query = engines_query.filter(EdgeEngine.project_id == project.id)
+            else:
+                raise HTTPException(404, "Engine not found")
+        engines = engines_query.all()
         for t in engines:
             t.is_active = False  # type: ignore[assignment]
             t.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]

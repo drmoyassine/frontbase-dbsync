@@ -71,14 +71,15 @@ export async function buildTemplateContext(
     request: Request,
     pageData: PageData,
     trackingConfig?: TrackingConfig,
-    dataContext?: { record?: Record<string, unknown>; records?: Record<string, unknown>[] }
+    dataContext?: { record?: Record<string, unknown>; records?: Record<string, unknown>[] },
+    tenantSlug?: string
 ): Promise<TemplateContext> {
 
     // Parse cookies
     const cookies = parseCookies(request.headers.get('Cookie') || '');
 
     // Get user from session (if authenticated)
-    const user = await getUserFromSession(request);
+    const user = await getUserFromSession(request, tenantSlug);
 
     // Build base visitor context from headers
     let visitor = buildVisitorContext(request);

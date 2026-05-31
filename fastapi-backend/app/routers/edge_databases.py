@@ -50,6 +50,20 @@ def _query_linked_engines(db, fk_column, resource_id) -> tuple[int, list[dict]]:
     return len(linked), linked
 
 
+def _validate_provider_account_ownership(db, ctx: TenantContext | None, provider_account_id: str | None) -> None:
+    if ctx and ctx.tenant_id and provider_account_id:
+        from ..models.models import EdgeProviderAccount
+        project = get_project(db, ctx)
+        if not project:
+            raise HTTPException(403, "Access denied: tenant project not found")
+        acct = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == provider_account_id,
+            EdgeProviderAccount.project_id == project.id
+        ).first()
+        if not acct:
+            raise HTTPException(403, "Access denied: provider account not found or does not belong to this tenant")
+
+
 def _serialize_edge_db(edb, db, target_count: int = 0, linked_engines: Optional[list] = None, warning: Optional[str] = None) -> EdgeDatabaseResponse:
     """Serialize an EdgeDatabase ORM object."""
     from ..models.models import EdgeProviderAccount
@@ -129,6 +143,9 @@ async def create_edge_database(payload: EdgeDatabaseCreate, ctx: TenantContext |
     """
     db = SessionLocal()
     try:
+        # Validate provider account ownership
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+        
         now = datetime.utcnow().isoformat() + "Z"
         
         # If this is set as default, unset all others
@@ -222,6 +239,9 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate, ctx: Ten
         if not edge_db:
             raise HTTPException(404, f"Edge database '{db_id}' not found")
         
+        if payload.provider_account_id is not None:
+            _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+
         if payload.name is not None:
             edge_db.name = payload.name  # type: ignore[assignment]
         if payload.provider is not None:
@@ -473,19 +493,31 @@ async def test_edge_database(db_id: str, ctx: TenantContext | None = Depends(get
 
 
 @router.post("/test-connection", response_model=TestConnectionResult)
-async def test_connection_inline(payload: EdgeDatabaseCreate):
+async def test_connection_inline(payload: EdgeDatabaseCreate, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test a database connection before saving it."""
+    db = SessionLocal()
+    try:
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+    finally:
+        db.close()
+        
     from ..services.db_connection_tester import test_db_connection
     return await test_db_connection(payload.provider, payload.db_url, payload.db_token, payload.provider_account_id)
 
 
 @router.post("/discover-schemas")
-async def discover_schemas(payload: DiscoverSchemasRequest):
+async def discover_schemas(payload: DiscoverSchemasRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Discover existing frontbase_edge* schemas in a PG database.
     
     Called after user picks a Supabase/Neon/Postgres resource to list
     available schemas for state isolation.
     """
+    db = SessionLocal()
+    try:
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+    finally:
+        db.close()
+
     if payload.provider == 'supabase' and payload.provider_account_id:
         # Use Supabase Management API — no pooler URL needed
         from ..services.supabase_state_db import discover_pg_schemas_supabase
@@ -505,11 +537,17 @@ async def discover_schemas(payload: DiscoverSchemasRequest):
 
 
 @router.post("/create-schema")
-async def create_schema(payload: CreateSchemaRequest):
+async def create_schema(payload: CreateSchemaRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new frontbase_edge_<suffix> schema in a PG database.
     
     Suffix must be lowercase alphanumeric + underscores.
     """
+    db = SessionLocal()
+    try:
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+    finally:
+        db.close()
+
     if payload.provider == 'supabase' and payload.provider_account_id:
         # Use Supabase Management API — no pooler URL needed
         from ..services.supabase_state_db import create_pg_schema_supabase
@@ -529,12 +567,18 @@ async def create_schema(payload: CreateSchemaRequest):
 
 
 @router.post("/reset-role-password")
-async def reset_role_password(payload: ResetRolePasswordRequest):
+async def reset_role_password(payload: ResetRolePasswordRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Reset the scoped role password for an existing Supabase schema.
 
     Used during re-import: the schema exists but the password is lost.
     Returns {success, role_name, role_password}.
     """
+    db = SessionLocal()
+    try:
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+    finally:
+        db.close()
+
     from ..services.db_connection_tester import get_supabase_api_context
     token, project_ref = await get_supabase_api_context(payload.db_url, payload.provider_account_id)
     if not token or not project_ref:

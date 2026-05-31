@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 from ..database.config import get_db
 from ..schemas.cloudflare import InspectRequest
 from ..services.cloudflare_api import CF_API, headers, get_provider_credentials, detect_account_id
+from ..models.models import EdgeProviderAccount
+from ..middleware.tenant_context import TenantContext, get_tenant_context
+from ..database.utils import get_project
 
 router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Inspector"])
 
@@ -130,9 +133,20 @@ def _inspect_settings_sync(api_token: str, account_id: str, worker_name: str) ->
 # =============================================================================
 
 @router.post("/inspect/content")
-async def inspect_worker_content(payload: InspectRequest, db: Session = Depends(get_db)):
+async def inspect_worker_content(payload: InspectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch the deployed worker's script source code."""
     try:
+        provider_query = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                provider_query = provider_query.filter(EdgeProviderAccount.project_id == project.id)
+            else:
+                raise HTTPException(403, "Access denied: tenant project not found")
+        provider_record = provider_query.first()
+        if not provider_record:
+            raise HTTPException(404, "Provider account not found")
+
         api_token, account_id = get_provider_credentials(payload.provider_id, db)
         if not account_id:
             account_id = await detect_account_id(api_token)
@@ -152,9 +166,20 @@ async def inspect_worker_content(payload: InspectRequest, db: Session = Depends(
 
 
 @router.post("/inspect/settings")
-async def inspect_worker_settings(payload: InspectRequest, db: Session = Depends(get_db)):
+async def inspect_worker_settings(payload: InspectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch a worker's settings: bindings, compatibility, routes, crons."""
     try:
+        provider_query = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                provider_query = provider_query.filter(EdgeProviderAccount.project_id == project.id)
+            else:
+                raise HTTPException(403, "Access denied: tenant project not found")
+        provider_record = provider_query.first()
+        if not provider_record:
+            raise HTTPException(404, "Provider account not found")
+
         api_token, account_id = get_provider_credentials(payload.provider_id, db)
         if not account_id:
             account_id = await detect_account_id(api_token)
@@ -176,9 +201,20 @@ async def inspect_worker_settings(payload: InspectRequest, db: Session = Depends
 
 
 @router.post("/inspect/secrets")
-async def inspect_worker_secrets(payload: InspectRequest, db: Session = Depends(get_db)):
+async def inspect_worker_secrets(payload: InspectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List secret names deployed to a worker (values are never returned by CF)."""
     try:
+        provider_query = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.provider_id)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                provider_query = provider_query.filter(EdgeProviderAccount.project_id == project.id)
+            else:
+                raise HTTPException(403, "Access denied: tenant project not found")
+        provider_record = provider_query.first()
+        if not provider_record:
+            raise HTTPException(404, "Provider account not found")
+
         api_token, account_id = get_provider_credentials(payload.provider_id, db)
         if not account_id:
             account_id = await detect_account_id(api_token)

@@ -97,7 +97,7 @@ async function getCachedSettings(tenantSlug?: string, sessionAccessToken?: strin
 
         // Build authConfig from FRONTBASE_AUTH env var (not state DB)
         let authConfig: AuthConfig | null = null;
-        const authEnv = getAuthConfig();
+        const authEnv = getAuthConfig(tenantSlug);
         if (authEnv.contacts?.table && authEnv.url && authEnv.anonKey) {
             authConfig = {
                 url: authEnv.url,
@@ -372,7 +372,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     let sessionAccessToken: string | undefined;
     if (!page.isPublic) {
         // Use refreshSession to validate + renew tokens in one call
-        const refreshResult = await refreshSession(c.req.raw);
+        const refreshResult = await refreshSession(c.req.raw, tenantSlug);
         const { user, setCookieHeaders } = refreshResult;
         sessionAccessToken = refreshResult.accessToken;
 
@@ -390,7 +390,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
                 updatedAt: (page as any).updatedAt || new Date().toISOString(),
                 canonicalUrl: undefined, ogImage: undefined, ogType: 'website', customVariables: {},
             };
-            const context = await buildTemplateContext(c.req.raw, contextPageData);
+            const context = await buildTemplateContext(c.req.raw, contextPageData, undefined, undefined, tenantSlug);
             const bodyHtml = await renderPage(page.layoutData, context);
             const initialState = { pageVariables: context.local, sessionVariables: context.session, cookies: context.cookies, user: context.user };
             const trackingConfig = await fetchTrackingConfig();
@@ -429,7 +429,8 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
         c.req.raw,
         contextPageData,
         undefined,  // trackingConfig (use defaults)
-        undefined   // dataContext
+        undefined,  // dataContext
+        tenantSlug
     );
 
     // Render page components to HTML (async with LiquidJS)
@@ -574,7 +575,7 @@ pagesRoute.get('/', async (c) => {
         if (homepage) {
             // Private homepage gating
             if (!homepage.isPublic) {
-                const { user, setCookieHeaders } = await refreshSession(c.req.raw);
+                const { user, setCookieHeaders } = await refreshSession(c.req.raw, tenantSlug);
                 for (const header of setCookieHeaders) {
                     c.header('Set-Cookie', header, { append: true });
                 }
@@ -594,7 +595,7 @@ pagesRoute.get('/', async (c) => {
                         updatedAt: homepage.publishedAt || new Date().toISOString(),
                         canonicalUrl: undefined, ogImage: undefined, ogType: 'website', customVariables: {},
                     };
-                    const ctx = await buildTemplateContext(c.req.raw, cpd);
+                    const ctx = await buildTemplateContext(c.req.raw, cpd, undefined, undefined, tenantSlug);
                     const bodyHtml = await renderPage(page.layoutData, ctx);
                     const is = { pageVariables: ctx.local, sessionVariables: ctx.session, cookies: ctx.cookies };
                     const tc = await fetchTrackingConfig();
@@ -638,7 +639,8 @@ pagesRoute.get('/', async (c) => {
                 c.req.raw,
                 contextPageData,
                 undefined,  // trackingConfig
-                undefined   // dataContext
+                undefined,  // dataContext
+                tenantSlug
             );
 
             // Render the page content (async with LiquidJS)

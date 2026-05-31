@@ -10,9 +10,12 @@ import {
     HardDrive,
     Workflow,
     Server,
-    LogOut
+    LogOut,
+    Shield
 } from 'lucide-react'
 import { useState } from 'react'
+import { useAuthStore } from '@/stores/auth'
+import { isCloud } from '@/lib/edition'
 
 const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -27,6 +30,10 @@ const navItems = [
 
 export function Layout() {
     const [sidebarOpen, setSidebarOpen] = useState(false)
+    const { user, _realUser } = useAuthStore()
+    
+    const isMaster = user?.is_master || _realUser?.is_master
+    const showAdminTools = isCloud() && isMaster
 
     return (
         <div className="h-screen flex overflow-hidden bg-white dark:bg-slate-900">
@@ -75,7 +82,7 @@ export function Layout() {
                                 flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
                                 ${isActive
                                     ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+                                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 font-medium'
                                 }
                             `}
                             onClick={() => setSidebarOpen(false)}
@@ -84,6 +91,29 @@ export function Layout() {
                             <span className="font-medium">{item.label}</span>
                         </NavLink>
                     ))}
+
+                    {/* Admin Tools Gated Category */}
+                    {showAdminTools && (
+                        <div className="pt-4 mt-4 border-t border-gray-255 dark:border-gray-700">
+                            <span className="px-4 text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-2">
+                                Admin Tools
+                            </span>
+                            <NavLink
+                                to="/admin/tenants"
+                                className={({ isActive }) => `
+                                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                                    ${isActive
+                                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                                        : 'text-gray-650 hover:bg-gray-100 dark:text-gray-450 dark:hover:bg-gray-700 font-medium'
+                                    }
+                                `}
+                                onClick={() => setSidebarOpen(false)}
+                            >
+                                <Shield className="w-5 h-5 text-amber-500" />
+                                <span className="font-medium">Tenants Table</span>
+                            </NavLink>
+                        </div>
+                    )}
                 </nav>
 
                 {/* Bottom Actions */}

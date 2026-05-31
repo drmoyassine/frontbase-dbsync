@@ -52,6 +52,11 @@ class CreateTenantUserRequest(BaseModel):
     username: Optional[str] = None
     role: str = "owner"  # owner | admin | editor | viewer
 
+class UpdateTenantRequest(BaseModel):
+    name: Optional[str] = None
+    plan: Optional[str] = None
+    status: Optional[str] = None
+
 class TenantResponse(BaseModel):
     id: str
     slug: str
@@ -61,6 +66,7 @@ class TenantResponse(BaseModel):
     member_count: int
     created_at: str
     owner_last_login_at: Optional[str] = None
+    owner_email: Optional[str] = None
     project_count: int = 1
 
 class TenantDetailResponse(TenantResponse):
@@ -85,13 +91,16 @@ async def list_tenants(
             TenantMember.tenant_id == t.id
         ).count()
         
-        # Resolve owner last login time
+        # Resolve owner details
         owner_id = str(t.owner_id) if t.owner_id is not None else None
         owner_last_login_at = None
+        owner_email = None
         if owner_id and owner_id != "pending":
             owner = db.query(User).filter(User.id == owner_id).first()
-            if owner and owner.last_login_at is not None:
-                owner_last_login_at = str(owner.last_login_at)
+            if owner:
+                if owner.last_login_at is not None:
+                    owner_last_login_at = str(owner.last_login_at)
+                owner_email = str(owner.email)
 
         # Resolve projects count
         project_count = db.query(Project).filter(Project.tenant_id == t.id).count()
@@ -105,6 +114,7 @@ async def list_tenants(
             member_count=member_count,
             created_at=str(t.created_at),
             owner_last_login_at=owner_last_login_at,
+            owner_email=owner_email,
             project_count=project_count,
         ))
     return {"tenants": [r.model_dump() for r in result]}
@@ -143,10 +153,13 @@ async def get_tenant(
 
     owner_id = str(tenant.owner_id) if tenant.owner_id is not None else None
     owner_last_login_at = None
+    owner_email = None
     if owner_id and owner_id != "pending":
         owner = db.query(User).filter(User.id == owner_id).first()
-        if owner and owner.last_login_at is not None:
-            owner_last_login_at = str(owner.last_login_at)
+        if owner:
+            if owner.last_login_at is not None:
+                owner_last_login_at = str(owner.last_login_at)
+            owner_email = str(owner.email)
 
     project_count = db.query(Project).filter(Project.tenant_id == tenant_id).count()
 
@@ -162,6 +175,7 @@ async def get_tenant(
             "members": member_list,
             "project_id": str(project.id) if project else None,
             "owner_last_login_at": owner_last_login_at,
+            "owner_email": owner_email,
             "project_count": project_count,
         }
     }
@@ -296,7 +310,39 @@ async def create_tenant_user(
     }
 
 
+@router.put("/{tenant_id}")
+async def update_tenant(
+    tenant_id: str,
+    body: UpdateTenantRequest,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_master_admin),
+):
+    """Update a tenant's plan, status, or name."""
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+        
+    now = datetime.utcnow().isoformat()
+    if body.name is not None:
+        tenant.name = body.name  # type: ignore[assignment]
+    if body.plan is not None:
+        tenant.plan = body.plan  # type: ignore[assignment]
+    if body.status is not None:
+        tenant.status = body.status  # type: ignore[assignment]
+        
+    tenant.updated_at = now  # type: ignore[assignment]
+    db.commit()
+    
+    return {"success": True, "tenant": {
+        "id": str(tenant.id),
+        "name": str(tenant.name),
+        "plan": str(tenant.plan),
+        "status": str(tenant.status),
+    }}
+
+
 @router.delete("/{tenant_id}")
+
 async def delete_tenant(
     tenant_id: str,
     db: Session = Depends(get_db),

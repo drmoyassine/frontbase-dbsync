@@ -1,0 +1,795 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+    Users,
+    Plus,
+    Search,
+    ExternalLink,
+    ShieldAlert,
+    Sliders,
+    CheckCircle,
+    AlertTriangle,
+    RefreshCw,
+    Copy,
+    Trash2,
+    Loader2,
+    Shield,
+    UserPlus,
+    Lock,
+    Eye,
+    Globe,
+    Check,
+    Mail,
+    FileText,
+    Settings,
+    Activity,
+    Layers,
+    Server,
+    Clock,
+    X,
+    FolderGit2
+} from 'lucide-react';
+import { tenantAdminApi, TenantAdminResponse } from '@/services/tenantAdminApi';
+import { useAuthStore } from '@/stores/auth';
+import { toast } from 'sonner';
+
+// Format relative time helper
+function formatRelativeTime(dateStr?: string | null): string {
+    if (!dateStr) return 'Never';
+    try {
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return 'Never';
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffSecs = Math.floor(diffMs / 1000);
+        const diffMins = Math.floor(diffSecs / 60);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+
+        if (diffSecs < 60) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 30) return `${diffDays}d ago`;
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+        return 'Never';
+    }
+}
+
+export function TenantsDirectory() {
+    const queryClient = useQueryClient();
+    const { setImpersonation, isImpersonating, clearImpersonation } = useAuthStore();
+
+    // Filters and Search States
+    const [searchQuery, setSearchQuery] = useState('');
+    const [planFilter, setPlanFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('all');
+
+    // Modal States
+    const [isProvisionModalOpen, setIsProvisionModalOpen] = useState(false);
+    const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [selectedTenant, setSelectedTenant] = useState<TenantAdminResponse | null>(null);
+
+    // Form inputs for Tenant Provision
+    const [newTenantSlug, setNewTenantSlug] = useState('');
+    const [newTenantName, setNewTenantName] = useState('');
+    const [newTenantPlan, setNewTenantPlan] = useState('free');
+
+    // Form inputs for Tenant User Provision
+    const [newUserId, setNewUserId] = useState('');
+    const [newUserEmail, setNewUserEmail] = useState('');
+    const [newUserPass, setNewUserPass] = useState('');
+    const [newUserRole, setNewUserRole] = useState('owner');
+
+    // Form inputs for Edit Plan/Status
+    const [editPlan, setEditPlan] = useState('free');
+    const [editStatus, setEditStatus] = useState('active');
+
+    // Fetch Tenants List
+    const { data, isLoading, isRefetching, refetch, error } = useQuery({
+        queryKey: ['admin-tenants'],
+        queryFn: () => tenantAdminApi.listTenants(),
+        staleTime: 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    const tenantsList = data?.tenants || [];
+
+    // Copy To Clipboard utility
+    const copyToClipboard = (text: string, label: string) => {
+        navigator.clipboard.writeText(text);
+        toast.success(`${label} copied to clipboard`);
+    };
+
+    // Mutations
+    const createTenantMutation = useMutation({
+        mutationFn: (payload: { slug: string; name: string; plan: string }) =>
+            tenantAdminApi.createTenant(payload),
+        onSuccess: () => {
+            toast.success('Workspace tenant provisioned successfully');
+            setIsProvisionModalOpen(false);
+            setNewTenantSlug('');
+            setNewTenantName('');
+            setNewTenantPlan('free');
+            queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || 'Failed to provision tenant');
+        }
+    });
+
+    const createTenantUserMutation = useMutation({
+        mutationFn: (payload: { tenantId: string; body: { email: string; password?: string; role?: string } }) =>
+            tenantAdminApi.createTenantUser(payload.tenantId, payload.body),
+        onSuccess: () => {
+            toast.success('User registered inside tenant successfully');
+            setIsUserModalOpen(false);
+            setNewUserId('');
+            setNewUserEmail('');
+            setNewUserPass('');
+            setNewUserRole('owner');
+            queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || 'Failed to create tenant user');
+        }
+    });
+
+    const updateTenantMutation = useMutation({
+        mutationFn: (payload: { tenantId: string; body: { plan?: string; status?: string } }) =>
+            tenantAdminApi.updateTenant(payload.tenantId, payload.body),
+        onSuccess: () => {
+            toast.success('Tenant settings updated successfully');
+            setIsEditModalOpen(false);
+            setSelectedTenant(null);
+            queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || 'Failed to update tenant');
+        }
+    });
+
+    const suspendTenantMutation = useMutation({
+        mutationFn: (tenantId: string) => tenantAdminApi.deleteTenant(tenantId),
+        onSuccess: (_, tenantId) => {
+            toast.success('Tenant status updated to Suspended');
+            queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
+        },
+        onError: (err: any) => {
+            toast.error(err.response?.data?.detail || 'Failed to suspend tenant');
+        }
+    });
+
+    // Form handlers
+    const handleCreateTenant = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newTenantSlug.trim() || !newTenantName.trim()) {
+            toast.error('Slug and Name are required');
+            return;
+        }
+        createTenantMutation.mutate({
+            slug: newTenantSlug.trim(),
+            name: newTenantName.trim(),
+            plan: newTenantPlan
+        });
+    };
+
+    const handleCreateTenantUser = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newUserEmail.trim() || !newUserPass.trim()) {
+            toast.error('Email and Password are required');
+            return;
+        }
+        createTenantUserMutation.mutate({
+            tenantId: newUserId,
+            body: {
+                email: newUserEmail.trim(),
+                password: newUserPass,
+                role: newUserRole
+            }
+        });
+    };
+
+    const handleUpdateTenant = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedTenant) return;
+        updateTenantMutation.mutate({
+            tenantId: selectedTenant.id,
+            body: {
+                plan: editPlan,
+                status: editStatus
+            }
+        });
+    };
+
+    // Derived Statistics
+    const totalTenantsCount = tenantsList.length;
+    const proOrEnterpriseCount = tenantsList.filter(t => t.plan === 'pro' || t.plan === 'enterprise').length;
+    const totalMembersCount = tenantsList.reduce((acc, t) => acc + t.member_count, 0);
+    const totalProjectsCount = tenantsList.reduce((acc, t) => acc + t.project_count, 0);
+
+    // Filter logic
+    const filteredTenants = tenantsList.filter(t => {
+        const matchesSearch =
+            t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            t.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (t.owner_email && t.owner_email.toLowerCase().includes(searchQuery.toLowerCase()));
+
+        const matchesPlan = planFilter === 'all' || t.plan === planFilter;
+        const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
+
+        return matchesSearch && matchesPlan && matchesStatus;
+    });
+
+    return (
+        <div className="space-y-6 max-w-7xl mx-auto">
+            {/* Header section with Glassmorphism Title */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl bg-opacity-70 backdrop-blur-md">
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2.5 py-0.5 text-xs font-semibold text-primary-400 bg-primary-950/50 border border-primary-800 rounded-full uppercase tracking-wider">
+                            Cloud Control Plane
+                        </span>
+                    </div>
+                    <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                        <Shield className="w-8 h-8 text-primary-500" />
+                        Tenants Directory
+                    </h1>
+                    <p className="text-slate-400 mt-1">
+                        Global administrative console for client organizations, user provisioning, and resource mapping.
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => refetch()}
+                        disabled={isLoading || isRefetching}
+                        className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-all flex items-center justify-center disabled:opacity-50"
+                        title="Reload Tenants"
+                    >
+                        <RefreshCw className={`w-5 h-5 ${(isLoading || isRefetching) ? 'animate-spin' : ''}`} />
+                    </button>
+                    <button
+                        onClick={() => setIsProvisionModalOpen(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-semibold shadow-lg shadow-primary-950/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Provision Tenant
+                    </button>
+                </div>
+            </div>
+
+            {/* Quick Statistics Summary Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-900/55 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                    <div className="p-3 bg-blue-500/10 rounded-xl">
+                        <Globe className="w-6 h-6 text-blue-500" />
+                    </div>
+                    <div>
+                        <p className="text-2xl font-black text-slate-900 dark:text-white">{totalTenantsCount}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Tenants</p>
+                    </div>
+                </div>
+
+                <div className="bg-slate-900/55 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                    <div className="p-3 bg-purple-500/10 rounded-xl">
+                        <Layers className="w-6 h-6 text-purple-500" />
+                    </div>
+                    <div>
+                        <p className="text-2xl font-black text-slate-900 dark:text-white">{proOrEnterpriseCount}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pro / Enterprise</p>
+                    </div>
+                </div>
+
+                <div className="bg-slate-900/55 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                    <div className="p-3 bg-orange-500/10 rounded-xl">
+                        <Users className="w-6 h-6 text-orange-500" />
+                    </div>
+                    <div>
+                        <p className="text-2xl font-black text-slate-900 dark:text-white">{totalMembersCount}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Global Members</p>
+                    </div>
+                </div>
+
+                <div className="bg-slate-900/55 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                    <div className="p-3 bg-emerald-500/10 rounded-xl">
+                        <FolderGit2 className="w-6 h-6 text-emerald-500" />
+                    </div>
+                    <div>
+                        <p className="text-2xl font-black text-slate-900 dark:text-white">{totalProjectsCount}</p>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Projects</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-850 flex flex-col md:flex-row gap-4 items-center">
+                <div className="relative flex-1 w-full">
+                    <Search className="w-5 h-5 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-450 dark:text-slate-500" />
+                    <input
+                        type="text"
+                        placeholder="Search by workspace, subdomain, owner..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-11 pr-4 py-2.5 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                    />
+                </div>
+                <div className="flex gap-2 w-full md:w-auto">
+                    <select
+                        value={planFilter}
+                        onChange={(e) => setPlanFilter(e.target.value)}
+                        className="text-sm bg-slate-55 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer w-full md:w-40"
+                    >
+                        <option value="all">All Plans</option>
+                        <option value="free">Free</option>
+                        <option value="pro">Pro</option>
+                        <option value="enterprise">Enterprise</option>
+                    </select>
+                    <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="text-sm bg-slate-55 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer w-full md:w-40"
+                    >
+                        <option value="all">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="suspended">Suspended</option>
+                    </select>
+                </div>
+            </div>
+
+            {/* Error or Empty State or Loading Table */}
+            {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-850 shadow-sm space-y-4">
+                    <Loader2 className="w-10 h-10 animate-spin text-primary-500" />
+                    <p className="text-slate-500 font-medium">Fetching global tenants data...</p>
+                </div>
+            ) : error ? (
+                <div className="p-8 bg-red-500/10 border border-red-900/30 rounded-2xl text-center space-y-4">
+                    <ShieldAlert className="w-12 h-12 text-red-500 mx-auto" />
+                    <h3 className="text-lg font-bold text-red-650 dark:text-red-400">Failed to Load Tenants</h3>
+                    <p className="text-slate-400 text-sm">{(error as any)?.response?.data?.detail || 'You do not have access to master admin resources.'}</p>
+                </div>
+            ) : filteredTenants.length === 0 ? (
+                <div className="p-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-850 text-center space-y-4">
+                    <Globe className="w-16 h-16 text-slate-350 dark:text-slate-600 mx-auto" />
+                    <h3 className="text-xl font-bold">No Tenants Found</h3>
+                    <p className="text-slate-500 max-w-sm mx-auto">No workspaces match your query or have been provisioned in the cloud database.</p>
+                </div>
+            ) : (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-850 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-200 dark:border-slate-800 text-xs font-semibold uppercase tracking-wider text-slate-500 bg-slate-50 dark:bg-slate-900/50">
+                                    <th className="px-6 py-4">Workspace / Tenant</th>
+                                    <th className="px-6 py-4">Subdomain / Slug</th>
+                                    <th className="px-6 py-4">Primary Owner</th>
+                                    <th className="px-6 py-4 text-center">Projects</th>
+                                    <th className="px-6 py-4">Tier Plan</th>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4">Owner Last Login</th>
+                                    <th className="px-6 py-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
+                                {filteredTenants.map((tenant) => (
+                                    <tr key={tenant.id} className="hover:bg-slate-50 dark:hover:bg-slate-850/40 transition-colors">
+                                        {/* Workspace Name & UUID */}
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-250 dark:border-slate-700 flex items-center justify-center font-bold text-slate-700 dark:text-slate-300">
+                                                    {tenant.name.substring(0, 2).toUpperCase()}
+                                                </div>
+                                                <div>
+                                                    <div className="font-semibold text-slate-900 dark:text-white">{tenant.name}</div>
+                                                    <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono mt-0.5">
+                                                        <span>{tenant.id.substring(0, 8)}...</span>
+                                                        <button
+                                                            onClick={() => copyToClipboard(tenant.id, 'Tenant ID')}
+                                                            className="hover:text-slate-700 dark:hover:text-white"
+                                                            title="Copy Tenant ID"
+                                                        >
+                                                            <Copy className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        {/* Subdomain slug */}
+                                        <td className="px-6 py-4">
+                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-slate-800 dark:text-slate-300">
+                                                {tenant.slug}
+                                                <ExternalLink className="w-3 h-3 text-slate-400" />
+                                            </span>
+                                        </td>
+
+                                        {/* Primary Owner Email */}
+                                        <td className="px-6 py-4">
+                                            {tenant.owner_email ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Mail className="w-4 h-4 text-slate-400 shrink-0" />
+                                                    <span className="truncate max-w-[180px] font-medium text-slate-700 dark:text-slate-300">
+                                                        {tenant.owner_email}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => {
+                                                        setNewUserId(tenant.id);
+                                                        setIsUserModalOpen(true);
+                                                    }}
+                                                    className="inline-flex items-center gap-1 text-xs text-amber-500 hover:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 font-medium transition-colors"
+                                                >
+                                                    <UserPlus className="w-3.5 h-3.5" />
+                                                    Add Owner
+                                                </button>
+                                            )}
+                                        </td>
+
+                                        {/* Projects badge counts */}
+                                        <td className="px-6 py-4 text-center">
+                                            <span className="inline-flex items-center justify-center w-7 h-7 text-xs font-bold rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/25">
+                                                {tenant.project_count}
+                                            </span>
+                                        </td>
+
+                                        {/* Tier Plan */}
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold uppercase tracking-wider
+                                                ${tenant.plan === 'enterprise'
+                                                    ? 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
+                                                    : tenant.plan === 'pro'
+                                                        ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
+                                                        : 'bg-slate-500/10 text-slate-400 border border-slate-500/30'
+                                                }`}
+                                            >
+                                                {tenant.plan}
+                                            </span>
+                                        </td>
+
+                                        {/* Status */}
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
+                                                ${tenant.status === 'active'
+                                                    ? 'bg-green-500/10 text-green-400 border border-green-500/30'
+                                                    : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                                                }`}
+                                            >
+                                                <span className={`w-1.5 h-1.5 rounded-full ${tenant.status === 'active' ? 'bg-green-400' : 'bg-red-400'}`} />
+                                                {tenant.status}
+                                            </span>
+                                        </td>
+
+                                        {/* Last Login relative date */}
+                                        <td className="px-6 py-4 text-slate-500 dark:text-slate-400 font-medium">
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <Clock className="w-3.5 h-3.5 text-slate-450" />
+                                                <span>{formatRelativeTime(tenant.owner_last_login_at)}</span>
+                                            </div>
+                                        </td>
+
+                                        {/* Quick Actions popover/buttons */}
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-1.5">
+                                                {/* Impersonate button */}
+                                                <button
+                                                    onClick={() => {
+                                                        setImpersonation(tenant.plan, 'owner');
+                                                        toast.success(`Spoofing active for Plan: ${tenant.plan.toUpperCase()}`);
+                                                    }}
+                                                    className="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-all"
+                                                    title="Spoof Tenant UI"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </button>
+
+                                                {/* Edit Plan / Status button */}
+                                                <button
+                                                    onClick={() => {
+                                                        setSelectedTenant(tenant);
+                                                        setEditPlan(tenant.plan);
+                                                        setEditStatus(tenant.status);
+                                                        setIsEditModalOpen(true);
+                                                    }}
+                                                    className="p-1.5 text-slate-400 hover:text-primary-500 hover:bg-primary-500/10 rounded-lg transition-all"
+                                                    title="Manage Plan & Status"
+                                                >
+                                                    <Sliders className="w-4 h-4" />
+                                                </button>
+
+                                                {/* Suspend or Unsuspend toggle */}
+                                                {tenant.status === 'active' ? (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (confirm(`Are you sure you want to suspend tenant '${tenant.name}'?`)) {
+                                                                suspendTenantMutation.mutate(tenant.id);
+                                                            }
+                                                        }}
+                                                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"
+                                                        title="Suspend Tenant"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => {
+                                                            updateTenantMutation.mutate({
+                                                                tenantId: tenant.id,
+                                                                body: { status: 'active' }
+                                                            });
+                                                        }}
+                                                        className="p-1.5 text-slate-400 hover:text-green-500 hover:bg-green-500/10 rounded-lg transition-all"
+                                                        title="Reactivate Tenant"
+                                                    >
+                                                        <CheckCircle className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Provision Tenant */}
+            {isProvisionModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-155">
+                        <div className="bg-slate-50 dark:bg-slate-950 p-5 border-b border-slate-100 dark:border-slate-850 flex justify-between items-center">
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                                <Globe className="w-5 h-5 text-primary-500" />
+                                Provision New Tenant
+                            </h3>
+                            <button
+                                onClick={() => setIsProvisionModalOpen(false)}
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateTenant} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    Workspace Name
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="Acme Corporation"
+                                    value={newTenantName}
+                                    onChange={(e) => setNewTenantName(e.target.value)}
+                                    className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    Subdomain Slug
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="acme"
+                                    value={newTenantSlug}
+                                    onChange={(e) => setNewTenantSlug(e.target.value)}
+                                    className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all font-mono"
+                                    required
+                                />
+                                <p className="text-[11px] text-slate-450 dark:text-slate-500 mt-1">
+                                    Lowercase alphanumeric characters and hyphens only. E.g. acme.frontbase.dev
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    Plan Tier
+                                </label>
+                                <select
+                                    value={newTenantPlan}
+                                    onChange={(e) => setNewTenantPlan(e.target.value)}
+                                    className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                                >
+                                    <option value="free">Free Tier</option>
+                                    <option value="pro">Pro Tier</option>
+                                    <option value="enterprise">Enterprise Tier</option>
+                                </select>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100 dark:border-slate-850 flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsProvisionModalOpen(false)}
+                                    className="px-4 py-2 text-sm text-slate-650 hover:bg-slate-100 dark:text-slate-350 dark:hover:bg-slate-800 rounded-lg transition-colors font-semibold"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={createTenantMutation.isPending}
+                                    className="px-5 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5"
+                                >
+                                    {createTenantMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                                    Provision Workspace
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Provision Tenant User / Owner */}
+            {isUserModalOpen && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-155">
+                        <div className="bg-slate-50 dark:bg-slate-950 p-5 border-b border-slate-100 dark:border-slate-850 flex justify-between items-center">
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                                <UserPlus className="w-5 h-5 text-primary-500" />
+                                Add User to Workspace
+                            </h3>
+                            <button
+                                onClick={() => setIsUserModalOpen(false)}
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateTenantUser} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    Email Address
+                                </label>
+                                <input
+                                    type="email"
+                                    placeholder="owner@clientdomain.com"
+                                    value={newUserEmail}
+                                    onChange={(e) => setNewUserEmail(e.target.value)}
+                                    className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    Secure Password
+                                </label>
+                                <input
+                                    type="password"
+                                    placeholder="••••••••"
+                                    value={newUserPass}
+                                    onChange={(e) => setNewUserPass(e.target.value)}
+                                    className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                    required
+                                    minLength={8}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    Role Assignment
+                                </label>
+                                <select
+                                    value={newUserRole}
+                                    onChange={(e) => setNewUserRole(e.target.value)}
+                                    className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                                >
+                                    <option value="owner">Owner (Full Admin Overrides)</option>
+                                    <option value="admin">Admin (Collaborator Manager)</option>
+                                    <option value="editor">Editor (Pages / Data Studio Access)</option>
+                                    <option value="viewer">Viewer (Read Only Canvas)</option>
+                                </select>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100 dark:border-slate-850 flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsUserModalOpen(false)}
+                                    className="px-4 py-2 text-sm text-slate-650 hover:bg-slate-100 dark:text-slate-350 dark:hover:bg-slate-800 rounded-lg transition-colors font-semibold"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={createTenantUserMutation.isPending}
+                                    className="px-5 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5"
+                                >
+                                    {createTenantUserMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                                    Create User Account
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Edit Plan & Status */}
+            {isEditModalOpen && selectedTenant && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-155">
+                        <div className="bg-slate-50 dark:bg-slate-950 p-5 border-b border-slate-100 dark:border-slate-850 flex justify-between items-center">
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                                <Sliders className="w-5 h-5 text-primary-500" />
+                                Manage Workspace Quota & Plan
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setIsEditModalOpen(false);
+                                    setSelectedTenant(null);
+                                }}
+                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleUpdateTenant} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-550 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    Workspace
+                                </label>
+                                <div className="text-sm font-bold bg-slate-50 dark:bg-slate-950 px-4.5 py-3 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-800 dark:text-slate-200">
+                                    {selectedTenant.name} ({selectedTenant.slug})
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-550 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    Subscription Plan Tier
+                                </label>
+                                <select
+                                    value={editPlan}
+                                    onChange={(e) => setEditPlan(e.target.value)}
+                                    className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                                >
+                                    <option value="free">Free Tier</option>
+                                    <option value="pro">Pro Tier</option>
+                                    <option value="enterprise">Enterprise Tier</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-550 dark:text-slate-400 uppercase tracking-wider mb-1">
+                                    Workspace Access Status
+                                </label>
+                                <select
+                                    value={editStatus}
+                                    onChange={(e) => setEditStatus(e.target.value)}
+                                    className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                                >
+                                    <option value="active">Active (Access allowed)</option>
+                                    <option value="suspended">Suspended (Access blocked)</option>
+                                </select>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100 dark:border-slate-850 flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsEditModalOpen(false);
+                                        setSelectedTenant(null);
+                                    }}
+                                    className="px-4 py-2 text-sm text-slate-650 hover:bg-slate-100 dark:text-slate-350 dark:hover:bg-slate-800 rounded-lg transition-colors font-semibold"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={updateTenantMutation.isPending}
+                                    className="px-5 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5"
+                                >
+                                    {updateTenantMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                                    Save Configurations
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+export default TenantsDirectory;

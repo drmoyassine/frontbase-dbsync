@@ -324,6 +324,7 @@ class TrailingSlashMiddleware:
         "/api/settings",
         "/api/agent",
         "/api/tenants",
+        "/api/admin/tenants",
     ]
     
     def __init__(self, app: ASGIApp):

@@ -41,6 +41,9 @@ import ActionsPage from "./pages/ActionsPage";
 import VariablesPage from "./pages/VariablesPage";
 import EmbedAuthPage from "./pages/EmbedAuthPage";
 import NotFound from "./pages/NotFound";
+import { AdminRoute } from "./routes/adminRoutes";
+import { TenantsDirectory } from "./modules/admin/pages/TenantsDirectory";
+
 
 // Create QueryClient with cacheTime for persistence
 const queryClient = new QueryClient({
@@ -157,6 +160,11 @@ const App = () => {
                   <Route path="/storage" element={<StoragePanel />} />
                   <Route path="/edge" element={<EdgeInfrastructurePanel />} />
                   <Route path="/settings" element={<SettingsPanel />} />
+
+                  {/* Admin Tools Gated Routes */}
+                  <Route element={<AdminRoute />}>
+                    <Route path="/admin/tenants" element={<TenantsDirectory />} />
+                  </Route>
                 </Route>
 
                 {/* Standalone / Fullscreen Pages (Protected) */}

@@ -15,6 +15,7 @@
 import { Hono } from 'hono';
 import { handleDataQuery, createDatasourceAdapter } from '../db/datasource-adapter';
 import { stateProvider } from '../storage/index.js';
+import { isMultiTenantSlug } from '../storage/IStateProvider.js';
 import { getRedis, cached } from '../cache/redis.js';
 import type { DatasourceConfig, DataRequest } from '../schemas/publish';
 
@@ -312,18 +313,21 @@ async function executeDataRequestUncached(
     return { data, total };
 }
 
-async function getDefaultDatasource(): Promise<DatasourceConfig | null> {
-    if (cachedDatasource) return cachedDatasource;
+async function getDefaultDatasource(tenantSlug?: string): Promise<DatasourceConfig | null> {
+    // Only use module-level cache for single-tenant (non-cloud) deployments
+    if (!isMultiTenantSlug(tenantSlug) && cachedDatasource) return cachedDatasource;
 
     try {
-        // Get any published page to extract its datasources
-        const pages = await stateProvider.listPages();
+        // Get any published page to extract its datasources (tenant-scoped)
+        const pages = await stateProvider.listPages(tenantSlug);
         if (pages.length > 0) {
-            const page = await stateProvider.getPageBySlug(pages[0].slug);
+            const page = await stateProvider.getPageBySlug(pages[0].slug, tenantSlug);
             if (page?.datasources && page.datasources.length > 0) {
-                cachedDatasource = page.datasources[0];
-                console.log(`[Data API] Using datasource: ${cachedDatasource.name} (${cachedDatasource.type})`);
-                return cachedDatasource;
+                if (!isMultiTenantSlug(tenantSlug)) {
+                    cachedDatasource = page.datasources[0];
+                }
+                console.log(`[Data API] Using datasource: ${page.datasources[0].name} (${page.datasources[0].type})`);
+                return page.datasources[0];
             }
         }
     } catch (error) {
@@ -354,7 +358,8 @@ dataRoute.get('/:table', async (c) => {
         console.log(`[Data API] Querying ${table}:`, { columns, limit, offset });
 
         // Get datasource from published page
-        const datasource = await getDefaultDatasource();
+        const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+        const datasource = await getDefaultDatasource(tenantSlug);
 
         // Query the datasource
         const result = await handleDataQuery(table, {
@@ -399,7 +404,8 @@ dataRoute.get('/:table/:id', async (c) => {
     const id = c.req.param('id');
 
     try {
-        const datasource = await getDefaultDatasource();
+        const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+        const datasource = await getDefaultDatasource(tenantSlug);
 
         const result = await handleDataQuery(table, {
             filters: { id },
@@ -428,6 +434,7 @@ dataRoute.post('/execute', async (c) => {
     try {
         const body = await c.req.json();
         const dataRequest = body.dataRequest;
+        const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
 
         if (!dataRequest) {
             return c.json({
@@ -444,6 +451,18 @@ dataRoute.post('/execute', async (c) => {
                 success: false,
                 error: 'Invalid dataRequest: missing url (direct) or datasourceId (proxy)',
             }, 400);
+        }
+
+        // V1 Critical Fix: Verify datasource ownership before execution
+        if (isProxy && dataRequest.datasourceId) {
+            const isAuthorized = await stateProvider.isDatasourceAuthorized(dataRequest.datasourceId, tenantSlug);
+            if (!isAuthorized) {
+                console.warn(`[Data Execute] Unauthorized access attempt: tenantSlug='${tenantSlug}', datasourceId='${dataRequest.datasourceId}'`);
+                return c.json({
+                    success: false,
+                    error: 'Unauthorized access to this datasource',
+                }, 403);
+            }
         }
 
         const label = isProxy

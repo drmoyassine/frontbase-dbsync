@@ -145,7 +145,7 @@ describe('Import Route', () => {
 
             expect(res.status).toBe(200);
             expect(body.success).toBe(true);
-            expect(mockDeletePage).toHaveBeenCalledWith('my-page');
+            expect(mockDeletePage).toHaveBeenCalledWith('my-page', undefined);
         });
 
         it('returns success even if page does not exist', async () => {

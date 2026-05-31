@@ -78,11 +78,12 @@ embedRoute.get('/embed.js', (c) => {
 
 embedRoute.get('/auth/:formId', async (c) => {
     const formId = c.req.param('formId');
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
 
-    // Read auth form config from project settings (synced at publish time)
+    // Read auth form config from project settings (synced at publish time, tenant-scoped)
     let formConfig: any = null;
     try {
-        const settings = await stateProvider.getProjectSettings();
+        const settings = await stateProvider.getProjectSettings(tenantSlug);
         if (settings.authForms) {
             const formsMap = JSON.parse(settings.authForms);
             formConfig = formsMap[formId] || null;

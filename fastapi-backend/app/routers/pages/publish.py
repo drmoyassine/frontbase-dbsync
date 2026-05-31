@@ -41,8 +41,12 @@ router = APIRouter()
 async def _sync_settings_to_engine(
     engine_url: str,
     auth_headers: dict[str, str],
+    tenant_slug: str | None = None,
 ) -> None:
-    """Sync enriched project settings to a specific engine (non-fatal)."""
+    """Sync enriched project settings to a specific engine (non-fatal).
+    If tenant_slug is provided, appends ?tenant_slug=... so the edge
+    stores settings under the correct tenant key (V2 isolation).
+    """
     from app.routers.project import _enrich_users_config_for_edge
     from app.database.utils import get_project
 
@@ -57,10 +61,14 @@ async def _sync_settings_to_engine(
 
     enriched = _enrich_users_config_for_edge(users_config)
 
+    import_url = f"{engine_url.rstrip('/')}/api/import/settings"
+    if tenant_slug and tenant_slug != '_default':
+        import_url += f"?tenant_slug={tenant_slug}"
+
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.post(
-                f"{engine_url.rstrip('/')}/api/import/settings",
+                import_url,
                 json={
                     "faviconUrl": getattr(project, 'favicon_url', None),
                     "logoUrl": getattr(project, 'logo_url', None),
@@ -71,9 +79,9 @@ async def _sync_settings_to_engine(
                 },
                 headers={"Content-Type": "application/json", **auth_headers},
             )
-            print(f"[Publish] ✅ Settings synced to {engine_url}")
+            print(f"[Publish] ✅ Settings synced to {import_url}")
     except Exception as e:
-        print(f"[Publish] Settings sync failed for {engine_url} (non-fatal): {e}")
+        print(f"[Publish] Settings sync failed for {import_url} (non-fatal): {e}")
 
 
 
@@ -228,7 +236,7 @@ async def publish_to_target(page_id: str, engine_id: str):
         if success:
             # Option B: sync project settings for private pages
             if not bool(page.is_public):
-                await _sync_settings_to_engine(str(engine_url), auth_headers)
+                await _sync_settings_to_engine(str(engine_url), auth_headers, tenant_slug=tenant_slug)
 
             return {
                 "success": True,
@@ -417,7 +425,7 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
             eid = str(r["engineId"])
             if eid in engine_map:
                 eng_hdrs = auth_headers_map.get(eid, {})
-                await _sync_settings_to_engine(engine_map[eid]["url"], eng_hdrs)
+                await _sync_settings_to_engine(engine_map[eid]["url"], eng_hdrs, tenant_slug=tenant_slug)
 
     return {
         "success": len(failed) == 0,

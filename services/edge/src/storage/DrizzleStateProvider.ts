@@ -150,15 +150,42 @@ export abstract class DrizzleStateProvider implements IStateProvider {
     }
 
     // =========================================================================
-    // Project Settings
+    // Datasource Authorization (V1)
     // =========================================================================
 
-    async getProjectSettings(): Promise<ProjectSettingsData> {
+    async isDatasourceAuthorized(datasourceId: string, tenantSlug?: string): Promise<boolean> {
+        if (!isMultiTenantSlug(tenantSlug)) {
+            return true; // Single-tenant — all datasources are owned
+        }
+        const pages = await this.getDb().select({
+            datasources: publishedPages.datasources
+        }).from(publishedPages).where(eq(publishedPages.tenantSlug, tenantSlug));
+
+        for (const page of pages) {
+            if (!page.datasources) continue;
+            try {
+                const dsList = JSON.parse(page.datasources) as DatasourceConfig[];
+                if (Array.isArray(dsList) && dsList.some(ds => ds.id === datasourceId)) {
+                    return true;
+                }
+            } catch {
+                // ignore JSON parse errors
+            }
+        }
+        return false;
+    }
+
+    // =========================================================================
+    // Project Settings (tenant-scoped)
+    // =========================================================================
+
+    async getProjectSettings(tenantSlug?: string): Promise<ProjectSettingsData> {
+        const key = tenantSlug || 'default';
         const record = await this.getDb().select()
-            .from(projectSettings).where(eq(projectSettings.id, 'default')).get();
+            .from(projectSettings).where(eq(projectSettings.id, key)).get();
         if (!record) {
             return {
-                id: 'default', faviconUrl: null, logoUrl: null,
+                id: key, faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
                 authForms: null,
                 updatedAt: new Date().toISOString(),
@@ -167,27 +194,29 @@ export abstract class DrizzleStateProvider implements IStateProvider {
         return record;
     }
 
-    async getFaviconUrl(): Promise<string> {
-        return (await this.getProjectSettings()).faviconUrl || DEFAULT_FAVICON;
+    async getFaviconUrl(tenantSlug?: string): Promise<string> {
+        return (await this.getProjectSettings(tenantSlug)).faviconUrl || DEFAULT_FAVICON;
     }
 
     async updateProjectSettings(
-        updates: Partial<Omit<ProjectSettingsData, 'id' | 'updatedAt'>>
+        updates: Partial<Omit<ProjectSettingsData, 'id' | 'updatedAt'>>,
+        tenantSlug?: string
     ): Promise<ProjectSettingsData> {
         const database = this.getDb();
+        const key = tenantSlug || 'default';
         const existing = await database.select()
-            .from(projectSettings).where(eq(projectSettings.id, 'default')).get();
+            .from(projectSettings).where(eq(projectSettings.id, key)).get();
 
         if (existing) {
             await database.update(projectSettings)
                 .set({ ...updates, updatedAt: new Date().toISOString() })
-                .where(eq(projectSettings.id, 'default'));
+                .where(eq(projectSettings.id, key));
         } else {
             await database.insert(projectSettings).values({
-                id: 'default', ...updates, updatedAt: new Date().toISOString(),
+                id: key, ...updates, updatedAt: new Date().toISOString(),
             });
         }
-        return this.getProjectSettings();
+        return this.getProjectSettings(tenantSlug);
     }
 
     // =========================================================================

@@ -69,24 +69,27 @@ interface CachedSettings {
     authConfig: AuthConfig | null;
     ts: number;
 }
-let _settingsCache: CachedSettings | null = null;
+let _settingsCache = new Map<string, CachedSettings>();
 
 /**
  * Get project settings with in-memory cache + timeout guard.
  * Consolidates getFaviconUrl() + getProjectSettings() into one call.
  * On timeout or error, returns safe defaults so the page still renders.
+ * Cache is keyed by tenantSlug to prevent cross-tenant settings leakage (V2).
  */
-async function getCachedSettings(sessionAccessToken?: string): Promise<CachedSettings> {
-    if (_settingsCache && (Date.now() - _settingsCache.ts) < SETTINGS_TTL_MS) {
+async function getCachedSettings(tenantSlug?: string, sessionAccessToken?: string): Promise<CachedSettings> {
+    const cacheKey = tenantSlug || '_default';
+    const cached = _settingsCache.get(cacheKey);
+    if (cached && (Date.now() - cached.ts) < SETTINGS_TTL_MS) {
         // Return cached copy, but update the accessToken (per-request)
-        if (sessionAccessToken && _settingsCache.authConfig) {
-            return { ..._settingsCache, authConfig: { ..._settingsCache.authConfig, accessToken: sessionAccessToken } };
+        if (sessionAccessToken && cached.authConfig) {
+            return { ...cached, authConfig: { ...cached.authConfig, accessToken: sessionAccessToken } };
         }
-        return _settingsCache;
+        return cached;
     }
     try {
         const settings = await Promise.race([
-            stateProvider.getProjectSettings(),
+            stateProvider.getProjectSettings(tenantSlug),
             new Promise<null>((_, reject) =>
                 setTimeout(() => reject(new Error('settings_timeout')), SETTINGS_TIMEOUT_MS)
             ),
@@ -105,17 +108,18 @@ async function getCachedSettings(sessionAccessToken?: string): Promise<CachedSet
             };
         }
 
-        _settingsCache = {
+        const newCached = {
             faviconUrl: settings?.faviconUrl || DEFAULT_FAVICON,
             authConfig,
             ts: Date.now(),
         };
-        return _settingsCache;
+        _settingsCache.set(cacheKey, newCached);
+        return newCached;
     } catch (e) {
         console.warn('[Pages] Settings fetch failed/timeout:', (e as Error).message);
         // Return safe defaults — page renders without auth config
         return {
-            faviconUrl: _settingsCache?.faviconUrl || DEFAULT_FAVICON,
+            faviconUrl: cached?.faviconUrl || DEFAULT_FAVICON,
             authConfig: null,
             ts: Date.now(),
         };
@@ -390,7 +394,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
             const bodyHtml = await renderPage(page.layoutData, context);
             const initialState = { pageVariables: context.local, sessionVariables: context.session, cookies: context.cookies, user: context.user };
             const trackingConfig = await fetchTrackingConfig();
-            const { faviconUrl } = await getCachedSettings();
+            const { faviconUrl } = await getCachedSettings(tenantSlug);
 
             // Get primary auth form config if baked into page bundle
             const authFormConfig = (page as any)._primaryAuthForm || undefined;
@@ -443,7 +447,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     const trackingConfig = await fetchTrackingConfig();
 
     // Get settings (favicon + auth config) from cached helper — single DB call, 3s timeout
-    const { faviconUrl, authConfig } = await getCachedSettings(sessionAccessToken);
+    const { faviconUrl, authConfig } = await getCachedSettings(tenantSlug, sessionAccessToken);
 
     // Generate full HTML document
     const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl, authConfig);
@@ -594,7 +598,7 @@ pagesRoute.get('/', async (c) => {
                     const bodyHtml = await renderPage(page.layoutData, ctx);
                     const is = { pageVariables: ctx.local, sessionVariables: ctx.session, cookies: ctx.cookies };
                     const tc = await fetchTrackingConfig();
-                    const { faviconUrl: fav } = await getCachedSettings();
+                    const { faviconUrl: fav } = await getCachedSettings(tenantSlug);
                     const afc = (homepage as any)._primaryAuthForm || undefined;
                     return c.html(generateGatedPageDocument(page, bodyHtml, is, tc, fav, afc));
                 }
@@ -651,7 +655,7 @@ pagesRoute.get('/', async (c) => {
             const trackingConfig = await fetchTrackingConfig();
 
             // Get favicon from local project settings (self-sufficient)
-            const { faviconUrl } = await getCachedSettings();
+            const { faviconUrl } = await getCachedSettings(tenantSlug);
 
             // Return full HTML page
             const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);

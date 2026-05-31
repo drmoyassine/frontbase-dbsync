@@ -17,6 +17,7 @@ import httpx
 
 from app.database.utils import get_db
 from app.database.config import SessionLocal
+from app.middleware.tenant_context import TenantContext, get_tenant_context
 
 router = APIRouter()
 
@@ -111,8 +112,9 @@ def row_to_dict(row):
 # Edge Sync Helper
 # =============================================================================
 
-async def _sync_embeddable_forms_to_edge():
+async def _sync_embeddable_forms_to_edge(tenant_slug: str | None = None, tenant_id: str | None = None):
     """Sync all embeddable auth forms to active edge engines via /api/import/settings.
+    If tenant_slug is provided, appends ?tenant_slug=... so the edge stores settings under the correct tenant key.
     Non-fatal: failures are logged but don't block the CRUD response.
     """
     db = SessionLocal()
@@ -138,10 +140,37 @@ async def _sync_embeddable_forms_to_edge():
 
         auth_forms_json = json.dumps(forms_map) if forms_map else None
 
-        # Fetch all active edge engines
-        from app.models.models import EdgeEngine
+        # Fetch active edge engines (scoped by tenant if applicable)
+        from app.models.models import EdgeEngine, Project
         from app.services.edge_client import get_edge_headers
-        engines = db.query(EdgeEngine).filter(EdgeEngine.url.isnot(None)).all()
+        from sqlalchemy import or_
+        from app.database.utils import get_project
+
+        query = db.query(EdgeEngine).filter(EdgeEngine.url.isnot(None))
+        if tenant_id:
+            project = db.query(Project).filter(Project.tenant_id == tenant_id).first()
+            if project:
+                query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))
+            else:
+                return
+        elif tenant_slug:
+            from app.models.tenant import Tenant
+            tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
+            if tenant:
+                project = db.query(Project).filter(Project.tenant_id == tenant.id).first()
+                if project:
+                    query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))
+                else:
+                    return
+            else:
+                return
+        else:
+            project = get_project(db)
+            if project and project.tenant_id is not None:
+                query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))
+                tenant_slug = str(project.tenant.slug) if project.tenant else None
+
+        engines = query.all()
 
         if not engines:
             return
@@ -161,11 +190,16 @@ async def _sync_embeddable_forms_to_edge():
     async with httpx.AsyncClient(timeout=5.0) as client:
         for eng in engine_data:
             try:
+                import_url = f"{eng['url'].rstrip('/')}/api/import/settings"
+                if tenant_slug and tenant_slug != '_default':
+                    import_url += f"?tenant_slug={tenant_slug}"
+
                 await client.post(
-                    f"{eng['url'].rstrip('/')}/api/import/settings",
+                    import_url,
                     json={"authForms": auth_forms_json},
                     headers={"Content-Type": "application/json", **eng["headers"]},
                 )
+                print(f"[AuthForms] Synced embeddable forms to {import_url}")
             except Exception as e:
                 print(f"[AuthForms] Edge sync failed for {eng['url']}: {e}")
 
@@ -212,7 +246,11 @@ async def get_auth_form(form_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_auth_form(form: AuthFormCreate, db: Session = Depends(get_db)):
+async def create_auth_form(
+    form: AuthFormCreate,
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Create a new auth form"""
     try:
         form_id = str(uuid.uuid4())
@@ -273,7 +311,9 @@ async def create_auth_form(form: AuthFormCreate, db: Session = Depends(get_db)):
         # Sync to edge if embeddable
         if config_data.get("is_embeddable"):
             try:
-                await _sync_embeddable_forms_to_edge()
+                tenant_slug = ctx.tenant_slug if ctx else None
+                tenant_id = ctx.tenant_id if ctx else None
+                await _sync_embeddable_forms_to_edge(tenant_slug=tenant_slug, tenant_id=tenant_id)
             except Exception as e:
                 print(f"[AuthForms] Edge sync failed (non-fatal): {e}")
         
@@ -284,7 +324,12 @@ async def create_auth_form(form: AuthFormCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{form_id}/")
-async def update_auth_form(form_id: str, form: AuthFormUpdate, db: Session = Depends(get_db)):
+async def update_auth_form(
+    form_id: str,
+    form: AuthFormUpdate,
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Update an existing auth form"""
     try:
         # Check if exists
@@ -342,7 +387,9 @@ async def update_auth_form(form_id: str, form: AuthFormUpdate, db: Session = Dep
 
         # Sync to edge (form might have toggled is_embeddable)
         try:
-            await _sync_embeddable_forms_to_edge()
+            tenant_slug = ctx.tenant_slug if ctx else None
+            tenant_id = ctx.tenant_id if ctx else None
+            await _sync_embeddable_forms_to_edge(tenant_slug=tenant_slug, tenant_id=tenant_id)
         except Exception as e:
             print(f"[AuthForms] Edge sync failed (non-fatal): {e}")
         
@@ -353,7 +400,11 @@ async def update_auth_form(form_id: str, form: AuthFormUpdate, db: Session = Dep
 
 
 @router.delete("/{form_id}/")
-async def delete_auth_form(form_id: str, db: Session = Depends(get_db)):
+async def delete_auth_form(
+    form_id: str,
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Delete an auth form"""
     try:
         result = db.execute(
@@ -375,7 +426,9 @@ async def delete_auth_form(form_id: str, db: Session = Depends(get_db)):
         # Sync to edge if deleted form was embeddable
         if was_embeddable:
             try:
-                await _sync_embeddable_forms_to_edge()
+                tenant_slug = ctx.tenant_slug if ctx else None
+                tenant_id = ctx.tenant_id if ctx else None
+                await _sync_embeddable_forms_to_edge(tenant_slug=tenant_slug, tenant_id=tenant_id)
             except Exception as e:
                 print(f"[AuthForms] Edge sync failed (non-fatal): {e}")
         

@@ -283,16 +283,41 @@ export class CfD1HttpProvider implements IStateProvider {
     }
 
     // =========================================================================
-    // Project Settings
+    // Datasource Authorization (V1)
     // =========================================================================
 
-    async getProjectSettings(): Promise<ProjectSettingsData> {
+    async isDatasourceAuthorized(datasourceId: string, tenantSlug?: string): Promise<boolean> {
+        if (!isMultiTenantSlug(tenantSlug)) {
+            return true;
+        }
+        const rows = await this.all(`SELECT datasources FROM published_pages WHERE tenant_slug = ?1`, [tenantSlug]);
+        for (const row of rows) {
+            const datasourcesStr = row.datasources as string;
+            if (!datasourcesStr) continue;
+            try {
+                const dsList = JSON.parse(datasourcesStr) as DatasourceConfig[];
+                if (Array.isArray(dsList) && dsList.some(ds => ds.id === datasourceId)) {
+                    return true;
+                }
+            } catch {
+                // ignore
+            }
+        }
+        return false;
+    }
+
+    // =========================================================================
+    // Project Settings (tenant-scoped)
+    // =========================================================================
+
+    async getProjectSettings(tenantSlug?: string): Promise<ProjectSettingsData> {
+        const key = tenantSlug || 'default';
         const row = await this.get(
-            `SELECT * FROM project_settings WHERE id = 'default'`
+            `SELECT * FROM project_settings WHERE id = ?1`, [key]
         );
         if (!row) {
             return {
-                id: 'default', faviconUrl: null, logoUrl: null,
+                id: key, faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
                 authForms: null,
                 updatedAt: new Date().toISOString(),
@@ -310,15 +335,17 @@ export class CfD1HttpProvider implements IStateProvider {
         };
     }
 
-    async getFaviconUrl(): Promise<string> {
-        const settings = await this.getProjectSettings();
+    async getFaviconUrl(tenantSlug?: string): Promise<string> {
+        const settings = await this.getProjectSettings(tenantSlug);
         return settings.faviconUrl || DEFAULT_FAVICON;
     }
 
     async updateProjectSettings(
-        updates: Partial<Omit<ProjectSettingsData, 'id' | 'updatedAt'>>
+        updates: Partial<Omit<ProjectSettingsData, 'id' | 'updatedAt'>>,
+        tenantSlug?: string
     ): Promise<ProjectSettingsData> {
-        const existing = await this.get(`SELECT id FROM project_settings WHERE id = 'default'`);
+        const key = tenantSlug || 'default';
+        const existing = await this.get(`SELECT id FROM project_settings WHERE id = ?1`, [key]);
         const now = new Date().toISOString();
 
         if (existing) {
@@ -331,14 +358,15 @@ export class CfD1HttpProvider implements IStateProvider {
             if (updates.siteDescription !== undefined) { setClauses.push(`site_description = ?${idx}`); params.push(updates.siteDescription); idx++; }
             if (updates.appUrl !== undefined) { setClauses.push(`app_url = ?${idx}`); params.push(updates.appUrl); idx++; }
             if (updates.authForms !== undefined) { setClauses.push(`auth_forms = ?${idx}`); params.push(updates.authForms); idx++; }
-            await this.run(`UPDATE project_settings SET ${setClauses.join(', ')} WHERE id = 'default'`, params);
+            params.push(key);
+            await this.run(`UPDATE project_settings SET ${setClauses.join(', ')} WHERE id = ?${idx}`, params);
         } else {
             await this.run(
-                `INSERT INTO project_settings (id, favicon_url, logo_url, site_name, site_description, app_url, auth_forms, updated_at) VALUES ('default', ?1, ?2, ?3, ?4, ?5, ?6, ?7)`,
-                [updates.faviconUrl || null, updates.logoUrl || null, updates.siteName || null, updates.siteDescription || null, updates.appUrl || null, updates.authForms || null, now]
+                `INSERT INTO project_settings (id, favicon_url, logo_url, site_name, site_description, app_url, auth_forms, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+                [key, updates.faviconUrl || null, updates.logoUrl || null, updates.siteName || null, updates.siteDescription || null, updates.appUrl || null, updates.authForms || null, now]
             );
         }
-        return this.getProjectSettings();
+        return this.getProjectSettings(tenantSlug);
     }
 
     // =========================================================================

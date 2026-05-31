@@ -187,16 +187,21 @@ export interface IStateProvider {
     /** List public page slugs for sitemap/llms.txt (optionally scoped to tenant) */
     listPublicPageSlugs(tenantSlug?: string): Promise<{ slug: string; updatedAt: string; isHomepage: boolean }[]>;
 
+    // --- Datasource Authorization ---
+    /** Verify that a datasourceId belongs to a tenant's published pages (V1 guard) */
+    isDatasourceAuthorized(datasourceId: string, tenantSlug?: string): Promise<boolean>;
+
     // --- Project Settings ---
     /** Initialize settings storage */
     initSettings(): Promise<void>;
     /** Get project settings (returns defaults if not set) */
-    getProjectSettings(): Promise<ProjectSettingsData>;
+    getProjectSettings(tenantSlug?: string): Promise<ProjectSettingsData>;
     /** Get favicon URL (with fallback to default) */
-    getFaviconUrl(): Promise<string>;
+    getFaviconUrl(tenantSlug?: string): Promise<string>;
     /** Update project settings */
     updateProjectSettings(
-        updates: Partial<Omit<ProjectSettingsData, 'id' | 'updatedAt'>>
+        updates: Partial<Omit<ProjectSettingsData, 'id' | 'updatedAt'>>,
+        tenantSlug?: string
     ): Promise<ProjectSettingsData>;
 
     // --- Workflows ---

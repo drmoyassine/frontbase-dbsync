@@ -284,21 +284,51 @@ export class SupabaseRestProvider implements IStateProvider {
     }
 
     // =========================================================================
-    // Project Settings
+    // Datasource Authorization (V1)
     // =========================================================================
 
-    async getProjectSettings(): Promise<ProjectSettingsData> {
+    async isDatasourceAuthorized(datasourceId: string, tenantSlug?: string): Promise<boolean> {
+        if (!isMultiTenantSlug(tenantSlug)) {
+            return true;
+        }
         const client = getClient();
+        const { data, error } = await client
+            .from('published_pages')
+            .select('datasources')
+            .eq('tenant_slug', tenantSlug);
+        if (error) throw new Error(`[SupabaseRest] isDatasourceAuthorized: ${error.message}`);
+
+        for (const row of data || []) {
+            let dsList: DatasourceConfig[] | null = null;
+            if (typeof row.datasources === 'string') {
+                try { dsList = JSON.parse(row.datasources) as DatasourceConfig[]; } catch {}
+            } else if (Array.isArray(row.datasources)) {
+                dsList = row.datasources as DatasourceConfig[];
+            }
+            if (dsList && dsList.some(ds => ds.id === datasourceId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // =========================================================================
+    // Project Settings (tenant-scoped)
+    // =========================================================================
+
+    async getProjectSettings(tenantSlug?: string): Promise<ProjectSettingsData> {
+        const client = getClient();
+        const key = tenantSlug || 'default';
         const { data, error } = await client
             .from('project_settings')
             .select('*')
-            .eq('id', 'default')
+            .eq('id', key)
             .maybeSingle();
         if (error) throw new Error(`[SupabaseRest] getProjectSettings: ${error.message}`);
 
         if (!data) {
             return {
-                id: 'default', faviconUrl: null, logoUrl: null,
+                id: key, faviconUrl: null, logoUrl: null,
                 siteName: null, siteDescription: null, appUrl: null,
                 authForms: null,
                 updatedAt: new Date().toISOString(),
@@ -316,18 +346,20 @@ export class SupabaseRestProvider implements IStateProvider {
         };
     }
 
-    async getFaviconUrl(): Promise<string> {
-        return (await this.getProjectSettings()).faviconUrl || DEFAULT_FAVICON;
+    async getFaviconUrl(tenantSlug?: string): Promise<string> {
+        return (await this.getProjectSettings(tenantSlug)).faviconUrl || DEFAULT_FAVICON;
     }
 
     async updateProjectSettings(
-        updates: Partial<Omit<ProjectSettingsData, 'id' | 'updatedAt'>>
+        updates: Partial<Omit<ProjectSettingsData, 'id' | 'updatedAt'>>,
+        tenantSlug?: string
     ): Promise<ProjectSettingsData> {
         const client = getClient();
+        const key = tenantSlug || 'default';
         const now = new Date().toISOString();
 
         const row: Record<string, unknown> = {
-            id: 'default',
+            id: key,
             updated_at: now,
         };
         if (updates.faviconUrl !== undefined) row.favicon_url = updates.faviconUrl;
@@ -337,13 +369,12 @@ export class SupabaseRestProvider implements IStateProvider {
         if (updates.appUrl !== undefined) row.app_url = updates.appUrl;
         if (updates.authForms !== undefined) row.auth_forms = updates.authForms;
 
-
         const result = await client
             .from('project_settings')
             .upsert(row, { onConflict: 'id' });
         throwIfError(result, 'updateProjectSettings');
 
-        return this.getProjectSettings();
+        return this.getProjectSettings(tenantSlug);
     }
 
     // =========================================================================

@@ -264,8 +264,11 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
     const { id, nodeId } = c.req.valid('param');
     const body = await c.req.json().catch(() => ({}));
 
+    // Retrieve tenant slug from context (injected by middleware or binding)
+    const tenantSlug = (c.env as any)?.FRONTBASE_TENANT_SLUG || (c.get as any)('tenantSlug') || undefined;
+
     // Fetch workflow via provider
-    const workflow = await stateProvider.getWorkflowById(id);
+    const workflow = await stateProvider.getWorkflowById(id, tenantSlug);
 
     if (!workflow) {
         return c.json({

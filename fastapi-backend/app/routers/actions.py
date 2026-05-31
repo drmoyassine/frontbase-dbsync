@@ -1134,7 +1134,9 @@ async def list_all_executions(
     edge_params = {"limit": str(limit)}
     if status:
         edge_params["status"] = status
-    edge_executions = await _pull_from_edges(db, edge_params)
+    if ctx and ctx.tenant_slug:
+        edge_params["tenant_slug"] = str(ctx.tenant_slug)
+    edge_executions = await _pull_from_edges(db, edge_params, ctx)
 
     # Also get test runs from PostgreSQL
     test_query = (
@@ -1403,9 +1405,12 @@ async def get_draft_executions(
 
         async def _fetch_workflow_logs(client: httpx.AsyncClient, url: str, name: str):
             try:
+                params = {"limit": str(limit)}
+                if ctx and ctx.tenant_slug:
+                    params["tenant_slug"] = str(ctx.tenant_slug)
                 resp = await client.get(
                     f"{url}/api/executions/workflow/{draft_id}",
-                    params={"limit": str(limit)},
+                    params=params,
                     timeout=5.0,
                 )
                 if resp.status_code == 200:
@@ -1454,10 +1459,13 @@ async def get_production_executions(
         return {"executions": [], "total": 0, "error": "Engine URL is missing"}
     
     try:
+        params = {"limit": str(limit)}
+        if ctx and ctx.tenant_slug:
+            params["tenant_slug"] = str(ctx.tenant_slug)
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{engine_url.rstrip('/')}/api/executions/workflow/{draft_id}",
-                params={"limit": str(limit)},
+                params=params,
                 timeout=10.0
             )
             if response.status_code == 200:

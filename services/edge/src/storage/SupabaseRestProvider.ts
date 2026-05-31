@@ -524,13 +524,19 @@ export class SupabaseRestProvider implements IStateProvider {
         throwIfError(result, 'createExecution');
     }
 
-    async getExecutionById(id: string): Promise<ExecutionData | null> {
+    async getExecutionById(id: string, tenantSlug?: string): Promise<ExecutionData | null> {
         const client = getClient();
-        const { data, error } = await client
-            .from('executions')
-            .select('*')
-            .eq('id', id)
-            .maybeSingle();
+        let query;
+        if (tenantSlug) {
+            query = client.from('executions').select('*, workflows!inner(tenant_slug)') as any;
+        } else {
+            query = client.from('executions').select('*');
+        }
+        query = query.eq('id', id);
+        if (tenantSlug) {
+            query = query.eq('workflows.tenant_slug', tenantSlug);
+        }
+        const { data, error } = await query.maybeSingle();
         if (error) throw new Error(`[SupabaseRest] getExecutionById: ${error.message}`);
         return data ? this.rowToExecution(data) : null;
     }
@@ -554,27 +560,34 @@ export class SupabaseRestProvider implements IStateProvider {
         }
     }
 
-    async listExecutionsByWorkflow(workflowId: string, limit: number = 20): Promise<ExecutionData[]> {
+    async listExecutionsByWorkflow(workflowId: string, limit: number = 20, tenantSlug?: string): Promise<ExecutionData[]> {
         const client = getClient();
-        const { data, error } = await client
-            .from('executions')
-            .select('*')
-            .eq('workflow_id', workflowId)
-            .order('started_at', { ascending: false })
-            .limit(limit);
+        let query;
+        if (tenantSlug) {
+            query = client.from('executions').select('*, workflows!inner(tenant_slug)') as any;
+        } else {
+            query = client.from('executions').select('*');
+        }
+        query = query.eq('workflow_id', workflowId).order('started_at', { ascending: false }).limit(limit);
+        if (tenantSlug) {
+            query = query.eq('workflows.tenant_slug', tenantSlug);
+        }
+        const { data, error } = await query;
         if (error) throw new Error(`[SupabaseRest] listExecutionsByWorkflow: ${error.message}`);
-        return (data || []).map(r => this.rowToExecution(r));
+        return (data || []).map((r: any) => this.rowToExecution(r));
     }
 
     async listAllExecutions(filters?: {
-        limit?: number; status?: string[]; workflowId?: string; since?: string; until?: string;
+        limit?: number; status?: string[]; workflowId?: string; since?: string; until?: string; tenantSlug?: string;
     }): Promise<ExecutionData[]> {
         const client = getClient();
-        let query = client
-            .from('executions')
-            .select('*')
-            .order('started_at', { ascending: false })
-            .limit(filters?.limit || 100);
+        let query;
+        if (filters?.tenantSlug) {
+            query = client.from('executions').select('*, workflows!inner(tenant_slug)') as any;
+        } else {
+            query = client.from('executions').select('*');
+        }
+        query = query.order('started_at', { ascending: false }).limit(filters?.limit || 100);
 
         if (filters?.workflowId) query = query.eq('workflow_id', filters.workflowId);
         if (filters?.since) query = query.gte('started_at', filters.since);
@@ -582,17 +595,27 @@ export class SupabaseRestProvider implements IStateProvider {
         if (filters?.status && filters.status.length > 0) {
             query = query.in('status', filters.status);
         }
+        if (filters?.tenantSlug) {
+            query = query.eq('workflows.tenant_slug', filters.tenantSlug);
+        }
 
         const { data, error } = await query;
         if (error) throw new Error(`[SupabaseRest] listAllExecutions: ${error.message}`);
-        return (data || []).map(r => this.rowToExecution(r));
+        return (data || []).map((r: any) => this.rowToExecution(r));
     }
 
-    async getExecutionStats(): Promise<ExecutionStats[]> {
+    async getExecutionStats(tenantSlug?: string): Promise<ExecutionStats[]> {
         const client = getClient();
-        const { data, error } = await client
-            .from('executions')
-            .select('workflow_id, status');
+        let query;
+        if (tenantSlug) {
+            query = client.from('executions').select('workflow_id, status, workflows!inner(tenant_slug)') as any;
+        } else {
+            query = client.from('executions').select('workflow_id, status');
+        }
+        if (tenantSlug) {
+            query = query.eq('workflows.tenant_slug', tenantSlug);
+        }
+        const { data, error } = await query;
         if (error) throw new Error(`[SupabaseRest] getExecutionStats: ${error.message}`);
 
         const statsMap = new Map<string, ExecutionStats>();

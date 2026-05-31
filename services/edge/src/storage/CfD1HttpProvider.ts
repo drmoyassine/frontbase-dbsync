@@ -471,8 +471,12 @@ export class CfD1HttpProvider implements IStateProvider {
         );
     }
 
-    async getExecutionById(id: string): Promise<ExecutionData | null> {
-        const row = await this.get(`SELECT * FROM executions WHERE id = ?1`, [id]);
+    async getExecutionById(id: string, tenantSlug?: string): Promise<ExecutionData | null> {
+        const sql = tenantSlug
+            ? `SELECT e.* FROM executions e LEFT JOIN workflows w ON e.workflow_id = w.id WHERE e.id = ?1 AND w.tenant_slug = ?2`
+            : `SELECT * FROM executions WHERE id = ?1`;
+        const params = tenantSlug ? [id, tenantSlug] : [id];
+        const row = await this.get(sql, params);
         return row ? this.rowToExecution(row) : null;
     }
 
@@ -493,29 +497,32 @@ export class CfD1HttpProvider implements IStateProvider {
         }
     }
 
-    async listExecutionsByWorkflow(workflowId: string, limit: number = 20): Promise<ExecutionData[]> {
-        const rows = await this.all(
-            `SELECT * FROM executions WHERE workflow_id = ?1 ORDER BY started_at DESC LIMIT ?2`,
-            [workflowId, limit]
-        );
+    async listExecutionsByWorkflow(workflowId: string, limit: number = 20, tenantSlug?: string): Promise<ExecutionData[]> {
+        const sql = tenantSlug
+            ? `SELECT e.* FROM executions e LEFT JOIN workflows w ON e.workflow_id = w.id WHERE e.workflow_id = ?1 AND w.tenant_slug = ?2 ORDER BY e.started_at DESC LIMIT ?3`
+            : `SELECT * FROM executions WHERE workflow_id = ?1 ORDER BY started_at DESC LIMIT ?2`;
+        const params = tenantSlug ? [workflowId, tenantSlug, limit] : [workflowId, limit];
+        const rows = await this.all(sql, params);
         return rows.map(r => this.rowToExecution(r));
     }
 
     async listAllExecutions(filters?: {
-        limit?: number; status?: string[]; workflowId?: string; since?: string; until?: string;
+        limit?: number; status?: string[]; workflowId?: string; since?: string; until?: string; tenantSlug?: string;
     }): Promise<ExecutionData[]> {
         const conditions: string[] = [];
         const params: unknown[] = [];
         let idx = 1;
 
-        if (filters?.workflowId) { conditions.push(`workflow_id = ?${idx}`); params.push(filters.workflowId); idx++; }
-        if (filters?.since) { conditions.push(`started_at >= ?${idx}`); params.push(filters.since); idx++; }
-        if (filters?.until) { conditions.push(`started_at <= ?${idx}`); params.push(filters.until); idx++; }
+        if (filters?.workflowId) { conditions.push(`e.workflow_id = ?${idx}`); params.push(filters.workflowId); idx++; }
+        if (filters?.since) { conditions.push(`e.started_at >= ?${idx}`); params.push(filters.since); idx++; }
+        if (filters?.until) { conditions.push(`e.started_at <= ?${idx}`); params.push(filters.until); idx++; }
+        if (filters?.tenantSlug) { conditions.push(`w.tenant_slug = ?${idx}`); params.push(filters.tenantSlug); idx++; }
 
         const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+        const join = filters?.tenantSlug ? `LEFT JOIN workflows w ON e.workflow_id = w.id` : '';
         params.push(filters?.limit || 100);
         let rows = await this.all(
-            `SELECT * FROM executions ${where} ORDER BY started_at DESC LIMIT ?${idx}`, params
+            `SELECT e.* FROM executions e ${join} ${where} ORDER BY e.started_at DESC LIMIT ?${idx}`, params
         );
 
         if (filters?.status && filters.status.length > 0) {
@@ -524,8 +531,12 @@ export class CfD1HttpProvider implements IStateProvider {
         return rows.map(r => this.rowToExecution(r));
     }
 
-    async getExecutionStats(): Promise<ExecutionStats[]> {
-        const rows = await this.all(`SELECT * FROM executions`);
+    async getExecutionStats(tenantSlug?: string): Promise<ExecutionStats[]> {
+        const sql = tenantSlug
+            ? `SELECT e.* FROM executions e LEFT JOIN workflows w ON e.workflow_id = w.id WHERE w.tenant_slug = ?1`
+            : `SELECT * FROM executions`;
+        const params = tenantSlug ? [tenantSlug] : [];
+        const rows = await this.all(sql, params);
         const statsMap = new Map<string, ExecutionStats>();
 
         for (const exec of rows) {

@@ -317,9 +317,28 @@ export abstract class DrizzleStateProvider implements IStateProvider {
         });
     }
 
-    async getExecutionById(id: string): Promise<ExecutionData | null> {
-        const row = await this.getDb().select().from(executionsTable)
-            .where(eq(executionsTable.id, id)).get();
+    async getExecutionById(id: string, tenantSlug?: string): Promise<ExecutionData | null> {
+        let query = this.getDb().select({
+            id: executionsTable.id,
+            workflowId: executionsTable.workflowId,
+            status: executionsTable.status,
+            triggerType: executionsTable.triggerType,
+            triggerPayload: executionsTable.triggerPayload,
+            nodeExecutions: executionsTable.nodeExecutions,
+            result: executionsTable.result,
+            error: executionsTable.error,
+            usage: executionsTable.usage,
+            startedAt: executionsTable.startedAt,
+            endedAt: executionsTable.endedAt,
+        }).from(executionsTable)
+        .where(eq(executionsTable.id, id));
+
+        if (tenantSlug) {
+            query = query.leftJoin(workflowsTable, eq(executionsTable.workflowId, workflowsTable.id))
+                         .where(and(eq(executionsTable.id, id), eq(workflowsTable.tenantSlug, tenantSlug))) as any;
+        }
+
+        const row = await query.get();
         return row as ExecutionData | null;
     }
 
@@ -338,23 +357,59 @@ export abstract class DrizzleStateProvider implements IStateProvider {
         }
     }
 
-    async listExecutionsByWorkflow(workflowId: string, limit: number = 20): Promise<ExecutionData[]> {
-        return await this.getDb().select().from(executionsTable)
-            .where(eq(executionsTable.workflowId, workflowId))
-            .orderBy(desc(executionsTable.startedAt))
-            .limit(limit) as ExecutionData[];
+    async listExecutionsByWorkflow(workflowId: string, limit: number = 20, tenantSlug?: string): Promise<ExecutionData[]> {
+        let query = this.getDb().select({
+            id: executionsTable.id,
+            workflowId: executionsTable.workflowId,
+            status: executionsTable.status,
+            triggerType: executionsTable.triggerType,
+            triggerPayload: executionsTable.triggerPayload,
+            nodeExecutions: executionsTable.nodeExecutions,
+            result: executionsTable.result,
+            error: executionsTable.error,
+            usage: executionsTable.usage,
+            startedAt: executionsTable.startedAt,
+            endedAt: executionsTable.endedAt,
+        }).from(executionsTable)
+        .where(eq(executionsTable.workflowId, workflowId));
+
+        if (tenantSlug) {
+            query = query.leftJoin(workflowsTable, eq(executionsTable.workflowId, workflowsTable.id))
+                         .where(and(eq(executionsTable.workflowId, workflowId), eq(workflowsTable.tenantSlug, tenantSlug))) as any;
+        }
+
+        return await query.orderBy(desc(executionsTable.startedAt)).limit(limit) as ExecutionData[];
     }
 
     async listAllExecutions(filters?: {
         limit?: number; status?: string[]; workflowId?: string;
         since?: string; until?: string;
+        tenantSlug?: string;
     }): Promise<ExecutionData[]> {
         const conditions = [];
         if (filters?.workflowId) conditions.push(eq(executionsTable.workflowId, filters.workflowId));
         if (filters?.since) conditions.push(sql`${executionsTable.startedAt} >= ${filters.since}`);
         if (filters?.until) conditions.push(sql`${executionsTable.startedAt} <= ${filters.until}`);
+        if (filters?.tenantSlug) conditions.push(eq(workflowsTable.tenantSlug, filters.tenantSlug));
 
-        let query = this.getDb().select().from(executionsTable);
+        let query = this.getDb().select({
+            id: executionsTable.id,
+            workflowId: executionsTable.workflowId,
+            status: executionsTable.status,
+            triggerType: executionsTable.triggerType,
+            triggerPayload: executionsTable.triggerPayload,
+            nodeExecutions: executionsTable.nodeExecutions,
+            result: executionsTable.result,
+            error: executionsTable.error,
+            usage: executionsTable.usage,
+            startedAt: executionsTable.startedAt,
+            endedAt: executionsTable.endedAt,
+        }).from(executionsTable);
+
+        if (filters?.tenantSlug) {
+            query = query.leftJoin(workflowsTable, eq(executionsTable.workflowId, workflowsTable.id)) as any;
+        }
+
         if (conditions.length > 0) query = query.where(and(...conditions)) as any;
         let rows = await (query as any).orderBy(desc(executionsTable.startedAt)).limit(filters?.limit || 100);
 
@@ -364,8 +419,27 @@ export abstract class DrizzleStateProvider implements IStateProvider {
         return rows as ExecutionData[];
     }
 
-    async getExecutionStats(): Promise<ExecutionStats[]> {
-        const allExecutions = await this.getDb().select().from(executionsTable);
+    async getExecutionStats(tenantSlug?: string): Promise<ExecutionStats[]> {
+        let query = this.getDb().select({
+            id: executionsTable.id,
+            workflowId: executionsTable.workflowId,
+            status: executionsTable.status,
+            triggerType: executionsTable.triggerType,
+            triggerPayload: executionsTable.triggerPayload,
+            nodeExecutions: executionsTable.nodeExecutions,
+            result: executionsTable.result,
+            error: executionsTable.error,
+            usage: executionsTable.usage,
+            startedAt: executionsTable.startedAt,
+            endedAt: executionsTable.endedAt,
+        }).from(executionsTable);
+
+        if (tenantSlug) {
+            query = query.leftJoin(workflowsTable, eq(executionsTable.workflowId, workflowsTable.id))
+                         .where(eq(workflowsTable.tenantSlug, tenantSlug)) as any;
+        }
+
+        const allExecutions = await query;
         const statsMap = new Map<string, ExecutionStats>();
 
         for (const exec of allExecutions) {

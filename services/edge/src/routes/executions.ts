@@ -42,12 +42,14 @@ const allRoute = createRoute({
 
 executionsRoute.openapi(allRoute, async (c) => {
     const q = c.req.valid('query');
+    const tenantSlug = c.req.query('tenant_slug') || undefined;
     const filters = {
         limit: Math.min(parseInt(q.limit || '100'), 500),
         status: q.status ? q.status.split(',') : undefined,
         workflowId: q.workflowId || undefined,
         since: q.since || undefined,
         until: q.until || undefined,
+        tenantSlug,
     };
 
     const results = await stateProvider.listAllExecutions(filters);
@@ -95,7 +97,8 @@ const statsRoute = createRoute({
 });
 
 executionsRoute.openapi(statsRoute, async (c) => {
-    const stats = await stateProvider.getExecutionStats();
+    const tenantSlug = c.req.query('tenant_slug') || undefined;
+    const stats = await stateProvider.getExecutionStats(tenantSlug);
     return c.json({ stats }, 200);
 });
 
@@ -134,8 +137,9 @@ const getRoute = createRoute({
 
 executionsRoute.openapi(getRoute, async (c) => {
     const { id } = c.req.valid('param');
+    const tenantSlug = c.req.query('tenant_slug') || undefined;
 
-    const execution = await stateProvider.getExecutionById(id);
+    const execution = await stateProvider.getExecutionById(id, tenantSlug);
 
     if (!execution) {
         return c.json({
@@ -193,9 +197,10 @@ const listRoute = createRoute({
 executionsRoute.openapi(listRoute, async (c) => {
     const { workflowId } = c.req.valid('param');
     const { limit } = c.req.valid('query');
+    const tenantSlug = c.req.query('tenant_slug') || undefined;
     const maxResults = Math.min(parseInt(limit || '20'), 100);
 
-    const results = await stateProvider.listExecutionsByWorkflow(workflowId, maxResults);
+    const results = await stateProvider.listExecutionsByWorkflow(workflowId, maxResults, tenantSlug);
 
     return c.json({
         executions: results.map(e => ({

@@ -53,7 +53,8 @@ const listRoute = createRoute({
 });
 
 workflowsRoute.openapi(listRoute, async (c) => {
-    const workflows = await stateProvider.listWorkflows();
+    const tenantSlug = c.req.query('tenant_slug') || undefined;
+    const workflows = await stateProvider.listWorkflows(tenantSlug);
     return c.json({
         workflows: workflows.map(w => ({
             id: w.id, name: w.name, triggerType: w.triggerType,
@@ -97,7 +98,8 @@ const getRoute = createRoute({
 
 workflowsRoute.openapi(getRoute, async (c) => {
     const { id } = c.req.valid('param');
-    const workflow = await stateProvider.getWorkflowById(id);
+    const tenantSlug = c.req.query('tenant_slug') || undefined;
+    const workflow = await stateProvider.getWorkflowById(id, tenantSlug);
     if (!workflow) {
         return c.json({ error: 'NotFound', message: `Workflow ${id} not found` }, 404);
     }
@@ -131,7 +133,8 @@ const deleteRoute = createRoute({
 
 workflowsRoute.openapi(deleteRoute, async (c) => {
     const { id } = c.req.valid('param');
-    await stateProvider.deleteWorkflow(id);
+    const tenantSlug = c.req.query('tenant_slug') || undefined;
+    await stateProvider.deleteWorkflow(id, tenantSlug);
     return c.json({ success: true as const, message: `Workflow ${id} deleted` }, 200);
 });
 
@@ -174,7 +177,8 @@ const toggleRoute = createRoute({
 workflowsRoute.openapi(toggleRoute, async (c) => {
     const { id } = c.req.valid('param');
     const { isActive } = c.req.valid('json');
-    await stateProvider.toggleWorkflow(id, isActive);
+    const tenantSlug = c.req.query('tenant_slug') || undefined;
+    await stateProvider.toggleWorkflow(id, isActive, tenantSlug);
     return c.json({
         success: true as const,
         message: `Workflow ${id} ${isActive ? 'activated' : 'deactivated'}`,

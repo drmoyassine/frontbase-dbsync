@@ -222,11 +222,11 @@ export interface IStateProvider {
     /** Create a new execution record */
     createExecution(execution: NewExecutionData): Promise<void>;
     /** Get an execution by ID */
-    getExecutionById(id: string): Promise<ExecutionData | null>;
+    getExecutionById(id: string, tenantSlug?: string): Promise<ExecutionData | null>;
     /** Update an execution (status, result, error, etc.) */
     updateExecution(id: string, updates: Partial<ExecutionData>): Promise<void>;
     /** List executions for a workflow, ordered by most recent */
-    listExecutionsByWorkflow(workflowId: string, limit?: number): Promise<ExecutionData[]>;
+    listExecutionsByWorkflow(workflowId: string, limit?: number, tenantSlug?: string): Promise<ExecutionData[]>;
     /** List all executions across all workflows, with optional filters */
     listAllExecutions(filters?: {
         limit?: number;
@@ -234,9 +234,10 @@ export interface IStateProvider {
         workflowId?: string;
         since?: string;
         until?: string;
+        tenantSlug?: string;
     }): Promise<ExecutionData[]>;
     /** Get execution stats (counts) for all workflows */
-    getExecutionStats(): Promise<ExecutionStats[]>;
+    getExecutionStats(tenantSlug?: string): Promise<ExecutionStats[]>;
 
     // --- Dead Letter Queue ---
     /** Write a failed execution to the dead letters table (optional) */

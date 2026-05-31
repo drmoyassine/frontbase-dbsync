@@ -119,8 +119,16 @@ async def _sync_embeddable_forms_to_edge(tenant_slug: str | None = None, tenant_
     """
     db = SessionLocal()
     try:
-        # Fetch all active auth forms
-        rows = db.execute(text("SELECT * FROM auth_forms WHERE is_active = 1")).fetchall()
+        # Fetch all active auth forms scoped by tenant
+        if tenant_id:
+            rows = db.execute(
+                text("SELECT * FROM auth_forms WHERE is_active = 1 AND tenant_id = :tenant_id"),
+                {"tenant_id": tenant_id}
+            ).fetchall()
+        else:
+            rows = db.execute(
+                text("SELECT * FROM auth_forms WHERE is_active = 1 AND tenant_id IS NULL")
+            ).fetchall()
         forms_map = {}
         for row in rows:
             config = parse_json_field(row.config, {})
@@ -211,10 +219,21 @@ async def _sync_embeddable_forms_to_edge(tenant_slug: str | None = None, tenant_
 # =============================================================================
 
 @router.get("/")
-async def list_auth_forms(db: Session = Depends(get_db)):
+async def list_auth_forms(
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """List all auth forms"""
     try:
-        result = db.execute(text("SELECT * FROM auth_forms ORDER BY created_at DESC"))
+        if ctx and ctx.tenant_id:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE tenant_id = :tenant_id ORDER BY created_at DESC"),
+                {"tenant_id": ctx.tenant_id}
+            )
+        else:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE tenant_id IS NULL ORDER BY created_at DESC")
+            )
         rows = result.fetchall()
         
         forms = [row_to_dict(row) for row in rows]
@@ -228,13 +247,23 @@ async def list_auth_forms(db: Session = Depends(get_db)):
 
 
 @router.get("/{form_id}/")
-async def get_auth_form(form_id: str, db: Session = Depends(get_db)):
+async def get_auth_form(
+    form_id: str,
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Get a single auth form by ID"""
     try:
-        result = db.execute(
-            text("SELECT * FROM auth_forms WHERE id = :id"),
-            {"id": form_id}
-        )
+        if ctx and ctx.tenant_id:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE id = :id AND tenant_id = :tenant_id"),
+                {"id": form_id, "tenant_id": ctx.tenant_id}
+            )
+        else:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE id = :id AND tenant_id IS NULL"),
+                {"id": form_id}
+            )
         row = result.fetchone()
         
         if not row:
@@ -259,14 +288,15 @@ async def create_auth_form(
         # Config already contains is_primary and is_embeddable from frontend
         config_data = form.config or {}
         
+        tenant_id = ctx.tenant_id if ctx else None
         db.execute(
             text("""
                 INSERT INTO auth_forms (id, name, type, config, target_contact_type, 
                                         allowed_contact_types, redirect_url, is_active, 
-                                        created_at, updated_at)
+                                        created_at, updated_at, tenant_id)
                 VALUES (:id, :name, :type, :config, :target_contact_type, 
                         :allowed_contact_types, :redirect_url, :is_active, 
-                        :created_at, :updated_at)
+                        :created_at, :updated_at, :tenant_id)
             """),
             {
                 "id": form_id,
@@ -278,7 +308,8 @@ async def create_auth_form(
                 "redirect_url": form.redirect_url,
                 "is_active": 1 if form.is_active else 0,
                 "created_at": now,
-                "updated_at": now
+                "updated_at": now,
+                "tenant_id": tenant_id
             }
         )
         db.commit()
@@ -333,10 +364,16 @@ async def update_auth_form(
     """Update an existing auth form"""
     try:
         # Check if exists
-        result = db.execute(
-            text("SELECT * FROM auth_forms WHERE id = :id"),
-            {"id": form_id}
-        )
+        if ctx and ctx.tenant_id:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE id = :id AND tenant_id = :tenant_id"),
+                {"id": form_id, "tenant_id": ctx.tenant_id}
+            )
+        else:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE id = :id AND tenant_id IS NULL"),
+                {"id": form_id}
+            )
         existing = result.fetchone()
         
         if not existing:
@@ -370,18 +407,30 @@ async def update_auth_form(
         
         updates.append("updated_at = :updated_at")
         
+        if ctx and ctx.tenant_id:
+            params["tenant_id"] = ctx.tenant_id
+            where_clause = "WHERE id = :id AND tenant_id = :tenant_id"
+        else:
+            where_clause = "WHERE id = :id AND tenant_id IS NULL"
+            
         if updates:
             db.execute(
-                text(f"UPDATE auth_forms SET {', '.join(updates)} WHERE id = :id"),
+                text(f"UPDATE auth_forms SET {', '.join(updates)} {where_clause}"),
                 params
             )
             db.commit()
         
         # Return updated form
-        result = db.execute(
-            text("SELECT * FROM auth_forms WHERE id = :id"),
-            {"id": form_id}
-        )
+        if ctx and ctx.tenant_id:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE id = :id AND tenant_id = :tenant_id"),
+                {"id": form_id, "tenant_id": ctx.tenant_id}
+            )
+        else:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE id = :id AND tenant_id IS NULL"),
+                {"id": form_id}
+            )
         row = result.fetchone()
         updated_data = row_to_dict(row)
 
@@ -407,20 +456,32 @@ async def delete_auth_form(
 ):
     """Delete an auth form"""
     try:
-        result = db.execute(
-            text("SELECT id, config FROM auth_forms WHERE id = :id"),
-            {"id": form_id}
-        )
+        if ctx and ctx.tenant_id:
+            result = db.execute(
+                text("SELECT id, config FROM auth_forms WHERE id = :id AND tenant_id = :tenant_id"),
+                {"id": form_id, "tenant_id": ctx.tenant_id}
+            )
+        else:
+            result = db.execute(
+                text("SELECT id, config FROM auth_forms WHERE id = :id AND tenant_id IS NULL"),
+                {"id": form_id}
+            )
         row = result.fetchone()
         if not row:
             return {"success": False, "error": "Auth form not found"}
         
         was_embeddable = parse_json_field(row.config, {}).get("is_embeddable", False)
         
-        db.execute(
-            text("DELETE FROM auth_forms WHERE id = :id"),
-            {"id": form_id}
-        )
+        if ctx and ctx.tenant_id:
+            db.execute(
+                text("DELETE FROM auth_forms WHERE id = :id AND tenant_id = :tenant_id"),
+                {"id": form_id, "tenant_id": ctx.tenant_id}
+            )
+        else:
+            db.execute(
+                text("DELETE FROM auth_forms WHERE id = :id AND tenant_id IS NULL"),
+                {"id": form_id}
+            )
         db.commit()
 
         # Sync to edge if deleted form was embeddable
@@ -439,14 +500,23 @@ async def delete_auth_form(
 
 
 @router.get("/primary/")
-async def get_primary_auth_form(db: Session = Depends(get_db)):
+async def get_primary_auth_form(
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Get the primary auth form (used for private page gating).
     Reads is_primary from config JSON with Python filtering.
     """
     try:
-        result = db.execute(
-            text("SELECT * FROM auth_forms WHERE is_active = 1")
-        )
+        if ctx and ctx.tenant_id:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE is_active = 1 AND tenant_id = :tenant_id"),
+                {"tenant_id": ctx.tenant_id}
+            )
+        else:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE is_active = 1 AND tenant_id IS NULL")
+            )
         rows = result.fetchall()
 
         # Python filter: find form with is_primary in config
@@ -471,37 +541,68 @@ async def get_primary_auth_form(db: Session = Depends(get_db)):
 
 
 @router.put("/{form_id}/set-primary/")
-async def set_primary_auth_form(form_id: str, db: Session = Depends(get_db)):
+async def set_primary_auth_form(
+    form_id: str,
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Set a form as primary (clears primary from all others).
     Updates is_primary flag inside config JSON for each form.
     """
     try:
-        # Verify form exists
-        result = db.execute(
-            text("SELECT id FROM auth_forms WHERE id = :id"),
-            {"id": form_id}
-        )
+        # Verify form exists under tenant
+        if ctx and ctx.tenant_id:
+            result = db.execute(
+                text("SELECT id FROM auth_forms WHERE id = :id AND tenant_id = :tenant_id"),
+                {"id": form_id, "tenant_id": ctx.tenant_id}
+            )
+        else:
+            result = db.execute(
+                text("SELECT id FROM auth_forms WHERE id = :id AND tenant_id IS NULL"),
+                {"id": form_id}
+            )
         if not result.fetchone():
             return {"success": False, "error": "Auth form not found"}
 
         # Fetch all forms, update config JSON
-        all_rows = db.execute(text("SELECT id, config FROM auth_forms")).fetchall()
+        if ctx and ctx.tenant_id:
+            all_rows = db.execute(
+                text("SELECT id, config FROM auth_forms WHERE tenant_id = :tenant_id"),
+                {"tenant_id": ctx.tenant_id}
+            ).fetchall()
+        else:
+            all_rows = db.execute(
+                text("SELECT id, config FROM auth_forms WHERE tenant_id IS NULL")
+            ).fetchall()
+
         for row in all_rows:
             config = parse_json_field(row.config, {})
             new_is_primary = (row.id == form_id)
             if config.get("is_primary") != new_is_primary:
                 config["is_primary"] = new_is_primary
-                db.execute(
-                    text("UPDATE auth_forms SET config = :config, updated_at = :now WHERE id = :id"),
-                    {"config": json.dumps(config), "now": datetime.utcnow().isoformat(), "id": row.id}
-                )
+                if ctx and ctx.tenant_id:
+                    db.execute(
+                        text("UPDATE auth_forms SET config = :config, updated_at = :now WHERE id = :id AND tenant_id = :tenant_id"),
+                        {"config": json.dumps(config), "now": datetime.utcnow().isoformat(), "id": row.id, "tenant_id": ctx.tenant_id}
+                    )
+                else:
+                    db.execute(
+                        text("UPDATE auth_forms SET config = :config, updated_at = :now WHERE id = :id AND tenant_id IS NULL"),
+                        {"config": json.dumps(config), "now": datetime.utcnow().isoformat(), "id": row.id}
+                    )
         db.commit()
 
         # Return updated form
-        result = db.execute(
-            text("SELECT * FROM auth_forms WHERE id = :id"),
-            {"id": form_id}
-        )
+        if ctx and ctx.tenant_id:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE id = :id AND tenant_id = :tenant_id"),
+                {"id": form_id, "tenant_id": ctx.tenant_id}
+            )
+        else:
+            result = db.execute(
+                text("SELECT * FROM auth_forms WHERE id = :id AND tenant_id IS NULL"),
+                {"id": form_id}
+            )
         row = result.fetchone()
 
         return {"success": True, "data": row_to_dict(row)}

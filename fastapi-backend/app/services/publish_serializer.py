@@ -341,10 +341,25 @@ async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: 
             import json as _json
             pub_db = PubSessionLocal()
             try:
-                # Python filtering: fetch all active, find primary in config JSON
-                rows = pub_db.execute(
-                    sa_text("SELECT * FROM auth_forms WHERE is_active = 1 ORDER BY created_at ASC")
-                ).fetchall()
+                # Find the tenant_id associated with the page
+                tenant_id = None
+                if page.project_id is not None:
+                    from app.models.auth import Project
+                    proj = pub_db.query(Project).filter(Project.id == str(page.project_id)).first()
+                    if proj and proj.tenant_id is not None:
+                        tenant_id = str(proj.tenant_id)
+
+                # Fetch active auth forms scoped by tenant
+                if tenant_id is not None:
+                    rows = pub_db.execute(
+                        sa_text("SELECT * FROM auth_forms WHERE is_active = 1 AND tenant_id = :tenant_id ORDER BY created_at ASC"),
+                        {"tenant_id": tenant_id}
+                    ).fetchall()
+                else:
+                    rows = pub_db.execute(
+                        sa_text("SELECT * FROM auth_forms WHERE is_active = 1 AND tenant_id IS NULL ORDER BY created_at ASC")
+                    ).fetchall()
+
                 primary_row = None
                 first_row = None
                 for row in rows:

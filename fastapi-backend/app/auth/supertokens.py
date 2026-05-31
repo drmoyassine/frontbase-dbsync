@@ -30,6 +30,49 @@ def init_supertokens():
         original.disable_sign_up_post = True
         return original
 
+    # ── Override: capture session creation to record last login ──────────
+    from supertokens_python.recipe.session.interfaces import RecipeInterface as SessionRecipeInterface
+    from supertokens_python.recipe.session import SessionContainer
+    from supertokens_python.types import RecipeUserId
+    from typing import Optional, Dict, Any
+
+    def override_session_functions(original: SessionRecipeInterface) -> SessionRecipeInterface:
+        original_create_new_session = original.create_new_session
+        
+        async def create_new_session(
+            user_id: str,
+            recipe_user_id: RecipeUserId,
+            *args: Any,
+            **kwargs: Any,
+        ) -> SessionContainer:
+            # Update user's last login in the DB (cloud only)
+            from app.database.config import SessionLocal
+            from app.models.auth import User
+            from datetime import datetime
+
+            db = SessionLocal()
+            try:
+                user = db.query(User).filter(User.id == user_id).first()
+                if user:
+                    user.last_login_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+                    db.commit()
+                    print(f"[SuperTokens Session Hook] Updated last_login_at for user {user_id}")
+            except Exception as e:
+                # Log error but do not block authentication/login flow
+                print(f"[SuperTokens Session Hook] Failed to update last_login_at for user {user_id}: {e}")
+            finally:
+                db.close()
+                
+            return await original_create_new_session(
+                user_id,
+                recipe_user_id,
+                *args,
+                **kwargs
+            )
+            
+        original.create_new_session = create_new_session
+        return original
+
     init(
         app_info=InputAppInfo(
             app_name="Frontbase Cloud",
@@ -44,7 +87,11 @@ def init_supertokens():
         ),
         framework='fastapi',
         recipe_list=[
-            session.init(),
+            session.init(
+                override=session.InputOverrideConfig(
+                    functions=override_session_functions
+                )
+            ),
             emailpassword.init(
                 override=emailpassword.InputOverrideConfig(
                     apis=override_emailpassword_apis,

@@ -60,6 +60,8 @@ class TenantResponse(BaseModel):
     status: str
     member_count: int
     created_at: str
+    owner_last_login_at: Optional[str] = None
+    project_count: int = 1
 
 class TenantDetailResponse(TenantResponse):
     members: List[dict]
@@ -82,6 +84,18 @@ async def list_tenants(
         member_count = db.query(TenantMember).filter(
             TenantMember.tenant_id == t.id
         ).count()
+        
+        # Resolve owner last login time
+        owner_id = str(t.owner_id) if t.owner_id is not None else None
+        owner_last_login_at = None
+        if owner_id and owner_id != "pending":
+            owner = db.query(User).filter(User.id == owner_id).first()
+            if owner and owner.last_login_at is not None:
+                owner_last_login_at = str(owner.last_login_at)
+
+        # Resolve projects count
+        project_count = db.query(Project).filter(Project.tenant_id == t.id).count()
+
         result.append(TenantResponse(
             id=str(t.id),
             slug=str(t.slug),
@@ -90,6 +104,8 @@ async def list_tenants(
             status=str(t.status) if getattr(t, 'status', None) is not None else "active",
             member_count=member_count,
             created_at=str(t.created_at),
+            owner_last_login_at=owner_last_login_at,
+            project_count=project_count,
         ))
     return {"tenants": [r.model_dump() for r in result]}
 
@@ -120,10 +136,19 @@ async def get_tenant(
             "created_at": str(m.created_at),
         })
 
-    # Find project
+    # Find project and stats
     project = db.query(Project).filter(
         Project.tenant_id == tenant_id
     ).first()
+
+    owner_id = str(tenant.owner_id) if tenant.owner_id is not None else None
+    owner_last_login_at = None
+    if owner_id and owner_id != "pending":
+        owner = db.query(User).filter(User.id == owner_id).first()
+        if owner and owner.last_login_at is not None:
+            owner_last_login_at = str(owner.last_login_at)
+
+    project_count = db.query(Project).filter(Project.tenant_id == tenant_id).count()
 
     return {
         "tenant": {
@@ -136,6 +161,8 @@ async def get_tenant(
             "created_at": str(tenant.created_at),
             "members": member_list,
             "project_id": str(project.id) if project else None,
+            "owner_last_login_at": owner_last_login_at,
+            "project_count": project_count,
         }
     }
 

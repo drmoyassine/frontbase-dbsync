@@ -15,6 +15,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
+    last_login_at = Column(String, nullable=True)
     
     # Relationships
     sessions = relationship("UserSession", back_populates="user")

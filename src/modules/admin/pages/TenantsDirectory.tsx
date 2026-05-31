@@ -37,7 +37,12 @@ import { toast } from 'sonner';
 function formatRelativeTime(dateStr?: string | null): string {
     if (!dateStr) return 'Never';
     try {
-        const date = new Date(dateStr);
+        // If the date string doesn't specify a timezone offset, treat it as UTC by appending 'Z'
+        let formattedDateStr = dateStr;
+        if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('-')) {
+            formattedDateStr = dateStr + 'Z';
+        }
+        const date = new Date(formattedDateStr);
         if (isNaN(date.getTime())) return 'Never';
         const now = new Date();
         const diffMs = now.getTime() - date.getTime();
@@ -226,19 +231,11 @@ export function TenantsDirectory() {
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto">
-            {/* Header section with Glassmorphism Title */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl bg-opacity-70 backdrop-blur-md">
+            {/* Header section matching Dashboard style */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="px-2.5 py-0.5 text-xs font-semibold text-primary-400 bg-primary-950/50 border border-primary-800 rounded-full uppercase tracking-wider">
-                            Cloud Control Plane
-                        </span>
-                    </div>
-                    <h1 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
-                        <Shield className="w-8 h-8 text-primary-500" />
-                        Tenants Directory
-                    </h1>
-                    <p className="text-slate-400 mt-1">
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Tenants Directory</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                         Global administrative console for client organizations, user provisioning, and resource mapping.
                     </p>
                 </div>
@@ -246,60 +243,60 @@ export function TenantsDirectory() {
                     <button
                         onClick={() => refetch()}
                         disabled={isLoading || isRefetching}
-                        className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 transition-all flex items-center justify-center disabled:opacity-50"
+                        className="p-2 text-gray-550 hover:text-gray-750 bg-white dark:bg-gray-800 dark:text-gray-400 dark:hover:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
                         title="Reload Tenants"
                     >
-                        <RefreshCw className={`w-5 h-5 ${(isLoading || isRefetching) ? 'animate-spin' : ''}`} />
+                        <RefreshCw className={`w-4 h-4 ${(isLoading || isRefetching) ? 'animate-spin' : ''}`} />
                     </button>
                     <button
                         onClick={() => setIsProvisionModalOpen(true)}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-semibold shadow-lg shadow-primary-950/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg text-sm font-medium transition-colors"
                     >
-                        <Plus className="w-5 h-5" />
+                        <Plus className="w-4 h-4" />
                         Provision Tenant
                     </button>
                 </div>
             </div>
 
-            {/* Quick Statistics Summary Grid */}
+            {/* Quick Statistics Summary Grid - Simple Dashboard Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-900/55 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-                    <div className="p-3 bg-blue-500/10 rounded-xl">
-                        <Globe className="w-6 h-6 text-blue-500" />
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+                    <div className="p-3 bg-blue-500/10 rounded-lg shrink-0">
+                        <Globe className="w-5 h-5 text-blue-500" />
                     </div>
                     <div>
-                        <p className="text-2xl font-black text-slate-900 dark:text-white">{totalTenantsCount}</p>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Tenants</p>
+                        <p className="text-2xl font-bold">{totalTenantsCount}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Total Tenants</p>
                     </div>
                 </div>
 
-                <div className="bg-slate-900/55 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-                    <div className="p-3 bg-purple-500/10 rounded-xl">
-                        <Layers className="w-6 h-6 text-purple-500" />
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+                    <div className="p-3 bg-purple-500/10 rounded-lg shrink-0">
+                        <Layers className="w-5 h-5 text-purple-500" />
                     </div>
                     <div>
-                        <p className="text-2xl font-black text-slate-900 dark:text-white">{proOrEnterpriseCount}</p>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pro / Enterprise</p>
+                        <p className="text-2xl font-bold">{proOrEnterpriseCount}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Pro / Enterprise</p>
                     </div>
                 </div>
 
-                <div className="bg-slate-900/55 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-                    <div className="p-3 bg-orange-500/10 rounded-xl">
-                        <Users className="w-6 h-6 text-orange-500" />
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+                    <div className="p-3 bg-orange-500/10 rounded-lg shrink-0">
+                        <Users className="w-5 h-5 text-orange-500" />
                     </div>
                     <div>
-                        <p className="text-2xl font-black text-slate-900 dark:text-white">{totalMembersCount}</p>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Global Members</p>
+                        <p className="text-2xl font-bold">{totalMembersCount}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Global Members</p>
                     </div>
                 </div>
 
-                <div className="bg-slate-900/55 dark:bg-slate-800/40 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-                    <div className="p-3 bg-emerald-500/10 rounded-xl">
-                        <FolderGit2 className="w-6 h-6 text-emerald-500" />
+                <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+                    <div className="p-3 bg-emerald-500/10 rounded-lg shrink-0">
+                        <FolderGit2 className="w-5 h-5 text-emerald-500" />
                     </div>
                     <div>
-                        <p className="text-2xl font-black text-slate-900 dark:text-white">{totalProjectsCount}</p>
-                        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Projects</p>
+                        <p className="text-2xl font-bold">{totalProjectsCount}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Total Projects</p>
                     </div>
                 </div>
             </div>

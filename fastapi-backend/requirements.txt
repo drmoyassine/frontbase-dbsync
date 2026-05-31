@@ -42,7 +42,7 @@ PyMySQL==1.1.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 python-jose==3.5.0
-python-multipart==0.0.21
+python-multipart>=0.0.26
 PyYAML==6.0.3
 redis==7.1.0
 rsa==4.9.1

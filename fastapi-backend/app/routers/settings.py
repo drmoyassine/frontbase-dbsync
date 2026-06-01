@@ -4,11 +4,14 @@ Settings API - Privacy & Tracking Configuration + Redis Cache
 Manages global settings including visitor tracking configuration and Redis caching.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, Literal
 import json
 import os
+
+from app.config.edition import is_cloud
+from app.middleware.tenant_context import TenantContext, get_tenant_context
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -32,14 +35,15 @@ class RedisTestResult(BaseModel):
 
 
 @router.get("/redis/", response_model=RedisSettings)
-async def get_redis_settings():
+async def get_redis_settings(ctx: TenantContext | None = Depends(get_tenant_context)):
     """
     Get Redis cache settings.
     
     Returns the explicitly configured Upstash instance from UI if present.
     Otherwise, returns the fallback local Redis configuration (powered by env vars).
     """
-    settings = load_settings()
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings = load_settings(tenant_slug)
     redis_settings = settings.get("redis", {})
     
     # 1. Did the user explicitly configure and save an Upstash instance via the UI?
@@ -72,13 +76,14 @@ async def get_redis_settings():
 
 
 @router.put("/redis/", response_model=RedisSettings)
-async def update_redis_settings(settings_update: RedisSettings):
+async def update_redis_settings(settings_update: RedisSettings, ctx: TenantContext | None = Depends(get_tenant_context)):
     """
     Update Redis cache settings.
     """
-    settings = load_settings()
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings = load_settings(tenant_slug)
     settings["redis"] = settings_update.dict()
-    save_settings(settings)
+    save_settings(settings, tenant_slug)
     
     return settings_update
 
@@ -168,29 +173,36 @@ SETTINGS_FILE = "/app/data/settings.json"
 LEGACY_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "settings.json")
 
 
-def ensure_data_dir():
+def ensure_data_dir(file_path: str):
     """Ensure the data directory exists"""
-    data_dir = os.path.dirname(SETTINGS_FILE)
+    data_dir = os.path.dirname(file_path)
     if not os.path.exists(data_dir):
         os.makedirs(data_dir, exist_ok=True)
 
 
-def load_settings() -> dict:
+def get_settings_file_path(tenant_slug: Optional[str] = None) -> str:
+    if is_cloud() and tenant_slug and tenant_slug != "_default":
+        return f"/app/data/settings_{tenant_slug}.json"
+    return SETTINGS_FILE
+
+
+def load_settings(tenant_slug: Optional[str] = None) -> dict:
     """Load settings from file, with migration from legacy path"""
+    file_path = get_settings_file_path(tenant_slug)
     try:
         # First try the new persisted path
-        if os.path.exists(SETTINGS_FILE):
-            with open(SETTINGS_FILE, "r") as f:
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
                 return json.load(f)
         
-        # Check legacy path and migrate if found
-        if os.path.exists(LEGACY_SETTINGS_FILE):
+        # Check legacy path and migrate if found (only for default settings)
+        if file_path == SETTINGS_FILE and os.path.exists(LEGACY_SETTINGS_FILE):
             print(f"[Settings] Migrating settings from legacy path to persisted volume...")
             with open(LEGACY_SETTINGS_FILE, "r") as f:
                 settings = json.load(f)
             # Save to new persisted path
-            save_settings(settings)
-            print(f"[Settings] Migration complete: {SETTINGS_FILE}")
+            save_settings(settings, tenant_slug)
+            print(f"[Settings] Migration complete: {file_path}")
             return settings
             
     except Exception as e:
@@ -198,11 +210,12 @@ def load_settings() -> dict:
     return {}
 
 
-def save_settings(settings: dict):
+def save_settings(settings: dict, tenant_slug: Optional[str] = None):
     """Save settings to file"""
-    ensure_data_dir()
+    file_path = get_settings_file_path(tenant_slug)
+    ensure_data_dir(file_path)
     try:
-        with open(SETTINGS_FILE, "w") as f:
+        with open(file_path, "w") as f:
             json.dump(settings, f, indent=2)
     except Exception as e:
         print(f"Error saving settings: {e}")
@@ -210,13 +223,14 @@ def save_settings(settings: dict):
 
 
 @router.get("/privacy/", response_model=PrivacySettings)
-async def get_privacy_settings():
+async def get_privacy_settings(ctx: TenantContext | None = Depends(get_tenant_context)):
     """
     Get privacy and tracking settings.
     
     Returns configuration for visitor tracking cookies and advanced variables.
     """
-    settings = load_settings()
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings = load_settings(tenant_slug)
     privacy = settings.get("privacy", {})
     
     # Parse advancedVariables with defaults
@@ -252,7 +266,7 @@ async def get_privacy_settings():
 
 
 @router.put("/privacy/", response_model=PrivacySettings)
-async def update_privacy_settings(settings_update: PrivacySettings):
+async def update_privacy_settings(settings_update: PrivacySettings, ctx: TenantContext | None = Depends(get_tenant_context)):
     """
     Update privacy and tracking settings.
     
@@ -261,9 +275,10 @@ async def update_privacy_settings(settings_update: PrivacySettings):
     - cookieExpiryDays: Number of days before tracking cookie expires
     - requireCookieConsent: Require user consent before setting tracking cookies
     """
-    settings = load_settings()
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings = load_settings(tenant_slug)
     settings["privacy"] = settings_update.dict()
-    save_settings(settings)
+    save_settings(settings, tenant_slug)
     
     return settings_update
 
@@ -280,9 +295,10 @@ class GeneralSettings(BaseModel):
 
 
 @router.get("/general", response_model=GeneralSettings)
-async def get_general_settings():
+async def get_general_settings(ctx: TenantContext | None = Depends(get_tenant_context)):
     """Get general site settings"""
-    settings = load_settings()
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings = load_settings(tenant_slug)
     general = settings.get("general", {})
     
     return GeneralSettings(
@@ -294,11 +310,12 @@ async def get_general_settings():
 
 
 @router.put("/general", response_model=GeneralSettings)
-async def update_general_settings(settings_update: GeneralSettings):
+async def update_general_settings(settings_update: GeneralSettings, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update general site settings"""
-    settings = load_settings()
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings = load_settings(tenant_slug)
     settings["general"] = settings_update.dict()
-    save_settings(settings)
+    save_settings(settings, tenant_slug)
     
     return settings_update
 
@@ -382,18 +399,20 @@ class EmailProviderSettings(BaseModel):
     from_name: Optional[str] = None
 
 @router.get("/email", response_model=EmailProviderSettings)
-async def get_email_settings():
+async def get_email_settings(ctx: TenantContext | None = Depends(get_tenant_context)):
     """Get email provider settings"""
-    settings = load_settings()
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings = load_settings(tenant_slug)
     email_config = settings.get("email_provider", {})
     return EmailProviderSettings(**email_config)
 
 @router.put("/email", response_model=EmailProviderSettings)
-async def update_email_settings(settings_update: EmailProviderSettings):
+async def update_email_settings(settings_update: EmailProviderSettings, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update email provider settings"""
-    settings = load_settings()
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings = load_settings(tenant_slug)
     settings["email_provider"] = settings_update.dict()
-    save_settings(settings)
+    save_settings(settings, tenant_slug)
     return settings_update
 
 

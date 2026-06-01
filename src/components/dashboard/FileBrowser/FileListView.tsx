@@ -142,8 +142,17 @@ export function FileListView({
     // ── File query ──
     const fullPath = `${currentBucket}/${currentPath}`.replace(/\/$/, '');
     const { data: files, isLoading: filesLoading, error: filesError } = useQuery({
-        queryKey: ['storage-files', storageProviderId, fullPath, page, fileSearch],
-        queryFn: () => fetchFiles(storageProviderId, currentBucket, currentPath || undefined, page, PAGE_SIZE, fileSearch),
+        queryKey: ['storage-files', storageProviderId, fullPath, page, fileSearch, sortConfig.key, sortConfig.direction],
+        queryFn: () => fetchFiles(
+            storageProviderId,
+            currentBucket,
+            currentPath || undefined,
+            page,
+            PAGE_SIZE,
+            fileSearch,
+            sortConfig.key,
+            sortConfig.direction
+        ),
         enabled: !!currentBucket,
         retry: 1,
         refetchOnWindowFocus: false,
@@ -174,8 +183,7 @@ export function FileListView({
     }, [folderFiles, folderSizeQueries]);
 
     // ── Computed ──
-    const sortedFiles = files ? getSortedFiles(files, folderSizes) : [];
-    const filteredFiles = sortedFiles.filter((f) => fileSearch === '' || f.name.toLowerCase().includes(fileSearch.toLowerCase()));
+    const filteredFiles = files || [];
     const currentBucketData = buckets?.find(b => b.name === currentBucket);
 
     // ── Breadcrumb segments ──

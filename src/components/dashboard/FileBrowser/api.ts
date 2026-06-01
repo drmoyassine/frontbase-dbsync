@@ -105,7 +105,9 @@ export async function fetchFiles(
     path?: string,
     page: number = 0,
     limit: number = 10,
-    search?: string
+    search?: string,
+    sortBy?: string,
+    sortOrder?: string
 ): Promise<StorageFile[]> {
     const params = new URLSearchParams();
     params.set('provider_id', providerId);
@@ -114,6 +116,8 @@ export async function fetchFiles(
     params.set('limit', limit.toString());
     params.set('offset', (page * limit).toString());
     if (search) params.set('search', search);
+    if (sortBy) params.set('sort_by', sortBy);
+    if (sortOrder) params.set('sort_order', sortOrder);
 
     const res = await api.get(`/api/storage/list?${params.toString()}`);
     const data = res.data;

@@ -1,6 +1,7 @@
 // FileBrowser State Hook
 
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
     Bucket,
     StorageFile,
@@ -13,10 +14,43 @@ import {
 import { BUCKET_PAGE_SIZE } from '../constants';
 
 export function useFileBrowserState() {
-    // Navigation State
-    const [currentBucket, setCurrentBucket] = useState<string | null>(null);
-    const [currentPath, setCurrentPath] = useState<string>('');
-    const [page, setPage] = useState(0);
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Navigation State (synchronized with URL search parameters)
+    const currentBucket = searchParams.get('bucket');
+    const currentPath = searchParams.get('path') || '';
+    const rawPage = searchParams.get('page');
+    const page = rawPage ? Math.max(0, parseInt(rawPage, 10) - 1) : 0;
+
+    const setCurrentBucket = (bucket: string | null) => {
+        const params = new URLSearchParams(searchParams);
+        if (bucket) {
+            params.set('bucket', bucket);
+        } else {
+            params.delete('bucket');
+        }
+        params.delete('path');
+        params.delete('page');
+        setSearchParams(params, { replace: true });
+    };
+
+    const setCurrentPath = (path: string) => {
+        const params = new URLSearchParams(searchParams);
+        if (path) {
+            params.set('path', path);
+        } else {
+            params.delete('path');
+        }
+        params.delete('page');
+        setSearchParams(params, { replace: true });
+    };
+
+    const setPage = (v: number | ((p: number) => number)) => {
+        const params = new URLSearchParams(searchParams);
+        const newPage = typeof v === 'function' ? v(page) : v;
+        params.set('page', (newPage + 1).toString());
+        setSearchParams(params, { replace: true });
+    };
 
     // File Sorting
     const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'asc' });
@@ -170,21 +204,31 @@ export function useFileBrowserState() {
     };
 
     const handleBucketClick = (bucket: Bucket) => {
-        setCurrentBucket(bucket.name);
-        setCurrentPath('');
-        setPage(0);
+        const params = new URLSearchParams(searchParams);
+        params.set('bucket', bucket.name);
+        params.delete('path');
+        params.delete('page');
+        setSearchParams(params, { replace: true });
     };
 
     const handleBack = () => {
+        const params = new URLSearchParams(searchParams);
         if (currentPath) {
             const parts = currentPath.split('/');
             parts.pop();
-            setCurrentPath(parts.join('/'));
-            setPage(0);
+            const newPath = parts.join('/');
+            if (newPath) {
+                params.set('path', newPath);
+            } else {
+                params.delete('path');
+            }
+            params.delete('page');
         } else {
-            setCurrentBucket(null);
-            setPage(0);
+            params.delete('bucket');
+            params.delete('path');
+            params.delete('page');
         }
+        setSearchParams(params, { replace: true });
     };
 
     const handleOpenCreateBucket = () => {

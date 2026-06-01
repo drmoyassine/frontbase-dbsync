@@ -536,16 +536,89 @@ async def list_files(
     limit: int = 100,
     offset: int = 0,
     search: Optional[str] = None,
+    sort_by: str = Query("name", description="Field to sort by (name, size, type, updated_at)"),
+    sort_order: str = Query("asc", description="Sort order (asc, desc)"),
     ctx: TenantContext | None = Depends(get_tenant_context)
 ):
-    """List files in a bucket path (fast — folder sizes fetched lazily via /compute-size)."""
+    """List files in a bucket path with global sorting, lazy folder size lookup, and pagination."""
     try:
         adapter = _resolve_adapter(provider_id, ctx)
-        files = await adapter.list_files(bucket, path, limit, offset, search)
-        return {"success": True, "files": files}
+        # Fetch a large batch (up to 3000) from the adapter to sort globally.
+        # Use search=None to retrieve all items so we can perform uniform substring search in python.
+        files = await adapter.list_files(bucket, path, limit=3000, offset=0, search=None)
+        
+        # 1. Substring search filtering
+        if search:
+            search_lower = search.lower()
+            files = [f for f in files if search_lower in f.get("name", "").lower()]
+            
+        # 2. Separate folders and files (always keep folders on top)
+        folders = [f for f in files if f.get("isFolder")]
+        files_only = [f for f in files if not f.get("isFolder")]
+        
+        # 3. Handle folder sizes cache pre-fetching if sorting by size
+        folder_sizes = {}
+        if sort_by == "size" and folders:
+            from app.services.storage.cache import get_cached_size
+            import asyncio
+            
+            async def _fetch_folder_size(f):
+                item_name = f.get("name", "")
+                folder_path = f"{path}/{item_name}" if path else item_name
+                size = await get_cached_size(provider_id, bucket, folder_path)
+                return item_name, (size or 0)
+                
+            sizes = await asyncio.gather(*[_fetch_folder_size(f) for f in folders])
+            folder_sizes = dict(sizes)
+            
+        # 4. Sort helper keys
+        def sort_folders_key(item):
+            if sort_by == "size":
+                return folder_sizes.get(item.get("name", ""), 0)
+            elif sort_by == "updated_at":
+                val = item.get("updated_at")
+                return str(val) if val is not None else ""
+            elif sort_by == "type":
+                return "Folder"
+            else:
+                return str(item.get("name", "")).lower()
+                
+        def sort_files_key(item):
+            if sort_by == "size":
+                try:
+                    return int(item.get("size") or 0)
+                except (ValueError, TypeError):
+                    return 0
+            elif sort_by == "updated_at":
+                val = item.get("updated_at")
+                return str(val) if val is not None else ""
+            elif sort_by == "type":
+                name = item.get("name", "")
+                mimetype = item.get("mimetype")
+                if mimetype:
+                    return str(mimetype)
+                ext = name.split(".")[-1] if "." in name else ""
+                return ext.lower()
+            else:
+                return str(item.get("name", "")).lower()
+                
+        # 5. Apply sorting
+        reverse = (sort_order == "desc")
+        folders.sort(key=sort_folders_key, reverse=reverse)
+        files_only.sort(key=sort_files_key, reverse=reverse)
+        
+        sorted_files = folders + files_only
+        
+        # 6. Pagination slice
+        total_count = len(sorted_files)
+        paginated_files = sorted_files[offset : offset + limit]
+        
+        return {"success": True, "files": paginated_files, "total": total_count}
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(500, str(e))
 
 

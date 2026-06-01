@@ -264,6 +264,22 @@ async def login(request: Request, body: LoginRequest, response: Response):
     logger.info(f"[Auth] Tenant user login: {body.email} (tenant={tenant_slug})")
 
     now = datetime.utcnow().isoformat()
+    
+    # Update last_login_at in database
+    from app.database.config import SessionLocal
+    from app.models.auth import User as DBUser
+    db = SessionLocal()
+    try:
+        user_record = db.query(DBUser).filter(DBUser.id == st_user_id).first()
+        if user_record:
+            user_record.last_login_at = now  # type: ignore[assignment]
+            db.commit()
+    except Exception as e:
+        logger.error(f"[Auth] Failed to update last_login_at for user {st_user_id}: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
     return AuthResponse(
         user=UserResponse(
             id=st_user_id,

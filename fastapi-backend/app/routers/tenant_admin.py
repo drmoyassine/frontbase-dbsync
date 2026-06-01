@@ -15,7 +15,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.database.utils import get_db
-from app.models.models import Tenant, TenantMember, User, Project
+from app.models.models import Tenant, TenantMember, User, Project, Page, AutomationDraft, AutomationExecution
 from app.routers.auth import get_current_user, ADMIN_USERS
 
 
@@ -57,6 +57,16 @@ class UpdateTenantRequest(BaseModel):
     plan: Optional[str] = None
     status: Optional[str] = None
 
+class ActiveResources(BaseModel):
+    pages: int
+    workflows: int
+    app_users: int
+
+class UsageStats(BaseModel):
+    executions_current: int
+    executions_limit: int
+    executions_percentage: float
+
 class TenantResponse(BaseModel):
     id: str
     slug: str
@@ -68,11 +78,95 @@ class TenantResponse(BaseModel):
     owner_last_login_at: Optional[str] = None
     owner_email: Optional[str] = None
     project_count: int = 1
+    active_resources: Optional[ActiveResources] = None
+    usage_stats: Optional[UsageStats] = None
 
 class TenantDetailResponse(TenantResponse):
     members: List[dict]
     project_id: Optional[str]
 
+
+import logging
+logger = logging.getLogger(__name__)
+
+PLAN_QUOTAS = {
+    "free": {
+        "executions_limit": 1000,
+    },
+    "pro": {
+        "executions_limit": 10000,
+    },
+    "enterprise": {
+        "executions_limit": 100000,
+    }
+}
+
+async def get_tenant_supabase_user_count(db: Session, tenant_id: str) -> int:
+    """Fetch the number of users registered in the tenant's Supabase connection."""
+    from app.models.models import Project, EdgeProviderAccount
+    from app.core.security import decrypt_credentials
+    from app.database.utils import decrypt_data
+    import httpx
+    import json
+    
+    project = db.query(Project).filter(Project.tenant_id == tenant_id).first()
+    if not project:
+        return 0
+        
+    url = None
+    service_key = None
+    
+    # 1. Try connected accounts first
+    provider = db.query(EdgeProviderAccount).filter(
+        EdgeProviderAccount.provider == "supabase",
+        EdgeProviderAccount.project_id == project.id,
+        EdgeProviderAccount.is_active == True
+    ).first()
+    
+    if provider:
+        try:
+            metadata = json.loads(str(provider.provider_metadata or "{}"))
+            creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
+            url = metadata.get("api_url")
+            service_key = creds.get("service_role_key")
+        except Exception:
+            pass
+            
+    # 2. Fallback to project legacy settings
+    if not url or not service_key:
+        proj_url = str(project.supabase_url) if project.supabase_url is not None else ""
+        proj_key_enc = str(project.supabase_service_key_encrypted) if project.supabase_service_key_encrypted is not None else ""
+        if proj_url:
+            url = proj_url
+            if proj_key_enc:
+                try:
+                    decrypted = decrypt_data(proj_key_enc)
+                    if decrypted and decrypted != proj_key_enc:
+                        service_key = decrypted
+                except Exception:
+                    pass
+                    
+    if not url or not service_key:
+        return 0
+        
+    # Call Supabase Auth Admin API to get user count
+    try:
+        headers = {
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}"
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            res = await client.get(f"{url}/auth/v1/admin/users", headers=headers)
+            if res.status_code == 200:
+                users = res.json()
+                if isinstance(users, list):
+                    return len(users)
+                elif isinstance(users, dict) and "users" in users:
+                    return len(users["users"])
+    except Exception as e:
+        logger.warning(f"[Tenant Stats] Failed to fetch Supabase user count for tenant {tenant_id}: {e}")
+        
+    return 0
 
 # ---------------------------------------------------------------------------
 # Endpoints
@@ -105,6 +199,38 @@ async def list_tenants(
         # Resolve projects count
         project_count = db.query(Project).filter(Project.tenant_id == t.id).count()
 
+        # Resolve active resources
+        pages_count = db.query(Page).join(Project).filter(Project.tenant_id == t.id).count()
+        workflows_count = db.query(AutomationDraft).join(Project).filter(Project.tenant_id == t.id).count()
+        app_users_count = await get_tenant_supabase_user_count(db, str(t.id))
+        
+        active_resources = ActiveResources(
+            pages=pages_count,
+            workflows=workflows_count,
+            app_users=app_users_count
+        )
+        
+        # Resolve usage stats (current month executions vs plan limits)
+        from datetime import datetime, timezone
+        now_dt = datetime.now(timezone.utc)
+        start_of_month = datetime(now_dt.year, now_dt.month, 1, tzinfo=timezone.utc)
+        executions_current = db.query(AutomationExecution).join(Project).filter(
+            Project.tenant_id == t.id,
+            AutomationExecution.started_at >= start_of_month
+        ).count()
+        
+        plan = str(t.plan).lower() if getattr(t, 'plan', None) is not None else "free"
+        limit_info = PLAN_QUOTAS.get(plan, PLAN_QUOTAS["free"])
+        executions_limit = limit_info["executions_limit"]
+        
+        executions_percentage = min(100.0, (executions_current / executions_limit) * 100.0) if executions_limit > 0 else 0.0
+        
+        usage_stats = UsageStats(
+            executions_current=executions_current,
+            executions_limit=executions_limit,
+            executions_percentage=executions_percentage
+        )
+
         result.append(TenantResponse(
             id=str(t.id),
             slug=str(t.slug),
@@ -116,6 +242,8 @@ async def list_tenants(
             owner_last_login_at=owner_last_login_at,
             owner_email=owner_email,
             project_count=project_count,
+            active_resources=active_resources,
+            usage_stats=usage_stats,
         ))
     return {"tenants": [r.model_dump() for r in result]}
 
@@ -163,6 +291,38 @@ async def get_tenant(
 
     project_count = db.query(Project).filter(Project.tenant_id == tenant_id).count()
 
+    # Resolve active resources
+    pages_count = db.query(Page).join(Project).filter(Project.tenant_id == tenant_id).count()
+    workflows_count = db.query(AutomationDraft).join(Project).filter(Project.tenant_id == tenant_id).count()
+    app_users_count = await get_tenant_supabase_user_count(db, tenant_id)
+    
+    active_resources = ActiveResources(
+        pages=pages_count,
+        workflows=workflows_count,
+        app_users=app_users_count
+    )
+    
+    # Resolve usage stats (current month executions vs plan limits)
+    from datetime import datetime, timezone
+    now_dt = datetime.now(timezone.utc)
+    start_of_month = datetime(now_dt.year, now_dt.month, 1, tzinfo=timezone.utc)
+    executions_current = db.query(AutomationExecution).join(Project).filter(
+        Project.tenant_id == tenant_id,
+        AutomationExecution.started_at >= start_of_month
+    ).count()
+    
+    plan = str(tenant.plan).lower() if getattr(tenant, 'plan', None) is not None else "free"
+    limit_info = PLAN_QUOTAS.get(plan, PLAN_QUOTAS["free"])
+    executions_limit = limit_info["executions_limit"]
+    
+    executions_percentage = min(100.0, (executions_current / executions_limit) * 100.0) if executions_limit > 0 else 0.0
+    
+    usage_stats = UsageStats(
+        executions_current=executions_current,
+        executions_limit=executions_limit,
+        executions_percentage=executions_percentage
+    )
+
     return {
         "tenant": {
             "id": str(tenant.id),
@@ -177,6 +337,8 @@ async def get_tenant(
             "owner_last_login_at": owner_last_login_at,
             "owner_email": owner_email,
             "project_count": project_count,
+            "active_resources": active_resources.model_dump(),
+            "usage_stats": usage_stats.model_dump(),
         }
     }
 

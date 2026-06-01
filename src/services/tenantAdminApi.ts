@@ -8,6 +8,18 @@ export interface TenantAdminUser {
     created_at: string;
 }
 
+export interface ActiveResources {
+    pages: number;
+    workflows: number;
+    app_users: number;
+}
+
+export interface UsageStats {
+    executions_current: number;
+    executions_limit: number;
+    executions_percentage: number;
+}
+
 export interface TenantAdminResponse {
     id: string;
     slug: string;
@@ -18,6 +30,8 @@ export interface TenantAdminResponse {
     created_at: string;
     owner_last_login_at?: string | null;
     project_count: number;
+    active_resources?: ActiveResources;
+    usage_stats?: UsageStats;
 }
 
 export interface TenantAdminDetailResponse extends TenantAdminResponse {

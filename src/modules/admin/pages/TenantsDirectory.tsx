@@ -364,6 +364,8 @@ export function TenantsDirectory() {
                                     <th className="px-6 py-4">Subdomain / Slug</th>
                                     <th className="px-6 py-4">Primary Owner</th>
                                     <th className="px-6 py-4 text-center">Projects</th>
+                                    <th className="px-6 py-4">Active Resources</th>
+                                    <th className="px-6 py-4">Usage Stats</th>
                                     <th className="px-6 py-4">Tier Plan</th>
                                     <th className="px-6 py-4">Status</th>
                                     <th className="px-6 py-4">Owner Last Login</th>
@@ -431,6 +433,54 @@ export function TenantsDirectory() {
                                             <span className="inline-flex items-center justify-center w-7 h-7 text-xs font-bold rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/25">
                                                 {tenant.project_count}
                                             </span>
+                                        </td>
+
+                                        {/* Active Resources */}
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                                                    <FileText className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                                                    <span>Pages:</span>
+                                                    <span className="font-bold text-slate-900 dark:text-white">{tenant.active_resources?.pages ?? 0}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                                                    <Activity className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                                                    <span>Workflows:</span>
+                                                    <span className="font-bold text-slate-900 dark:text-white">{tenant.active_resources?.workflows ?? 0}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+                                                    <Users className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                                                    <span>App Users:</span>
+                                                    <span className="font-bold text-slate-900 dark:text-white">{tenant.active_resources?.app_users ?? 0}</span>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        {/* Usage Stats */}
+                                        <td className="px-6 py-4">
+                                            {(() => {
+                                                const usage = tenant.usage_stats || { executions_current: 0, executions_limit: 1000, executions_percentage: 0 };
+                                                return (
+                                                    <div className="space-y-1.5 w-32">
+                                                        <div className="flex justify-between text-xs font-medium text-slate-600 dark:text-slate-400">
+                                                            <span className="font-bold text-slate-900 dark:text-white">{usage.executions_current.toLocaleString()}</span>
+                                                            <span className="text-slate-450 dark:text-slate-500">/ {usage.executions_limit.toLocaleString()}</span>
+                                                        </div>
+                                                        <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
+                                                            <div 
+                                                                className={`h-full rounded-full transition-all duration-300 ${
+                                                                    usage.executions_percentage > 90 
+                                                                        ? 'bg-red-500' 
+                                                                        : usage.executions_percentage > 70 
+                                                                            ? 'bg-amber-500' 
+                                                                            : 'bg-emerald-500'
+                                                                }`}
+                                                                style={{ width: `${Math.min(usage.executions_percentage, 100)}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
                                         </td>
 
                                         {/* Tier Plan */}

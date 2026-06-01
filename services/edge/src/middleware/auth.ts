@@ -92,8 +92,19 @@ export const systemKeyAuth = async (c: Context, next: Next) => {
     const systemKey = getApiKeysConfig().systemKey;
 
     if (!systemKey) {
-        // No system key configured — allow all (dev mode / local Docker)
-        return next();
+        const isDev = (process.env.NODE_ENV || 'development') === 'development';
+        if (isDev) {
+            // No system key configured — allow all (dev mode / local Docker)
+            return next();
+        }
+        // In production, fail closed to prevent open management access
+        return c.json({
+            error: {
+                message: 'System key is not configured on this engine.',
+                type: 'invalid_request_error',
+                code: 'system_key_not_configured',
+            },
+        }, 500);
     }
 
     // 1. Check x-system-key header (primary path — FastAPI M2M)
@@ -220,8 +231,19 @@ export const supabaseJwtAuth = (c: Context, next: Next) => {
     const secret = getAuthConfig(tenantSlug).jwtSecret;
 
     if (!secret) {
-        console.warn(`⚠️ No jwtSecret in FRONTBASE_AUTH for tenant "${tenantSlug || '_default'}" - JWT auth disabled`);
-        return next();
+        const isDev = (process.env.NODE_ENV || 'development') === 'development';
+        if (isDev) {
+            console.warn(`⚠️ No jwtSecret in FRONTBASE_AUTH for tenant "${tenantSlug || '_default'}" - JWT auth disabled in dev mode`);
+            return next();
+        }
+        console.error(`🚫 Missing jwtSecret in FRONTBASE_AUTH for tenant "${tenantSlug || '_default'}" - Request blocked in production`);
+        return c.json({
+            error: {
+                message: 'JWT authentication is not configured for this tenant.',
+                type: 'invalid_request_error',
+                code: 'jwt_secret_not_configured',
+            },
+        }, 500);
     }
 
     return createSupabaseJwtAuth(secret)(c, next);

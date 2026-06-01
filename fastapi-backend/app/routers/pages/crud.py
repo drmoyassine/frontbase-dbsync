@@ -430,17 +430,36 @@ async def update_page_layout(
 
 
 @router.delete("/{page_id}/")
-async def delete_page(page_id: str):
+async def delete_page(
+    page_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Soft delete a page - matches Express: { success, message }.
     Unpublishes from ALL active full-bundle Edge Engines.
     """
-    from ...database.config import SessionLocal
-    
-    db = SessionLocal()
     try:
+        # Cloud mode: verify ownership before mutating
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .scalar_subquery()
+            )
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id.in_(project_ids)
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+        elif ctx and ctx.is_master:
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id == None
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+
         page = db.query(Page).filter(Page.id == page_id).first()
         if not page:
-            db.close()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Page not found"
@@ -478,14 +497,35 @@ async def delete_page(page_id: str):
             "success": False,
             "error": str(e)
         }
-    finally:
-        db.close()
 
 
 @router.post("/{page_id}/restore/")
-async def restore_page(page_id: str, db: Session = Depends(get_db)):
+async def restore_page(
+    page_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Restore a deleted page - matches Express: { success, data: page, message }"""
     try:
+        # Cloud mode: verify ownership before mutating
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .scalar_subquery()
+            )
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id.in_(project_ids)
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+        elif ctx and ctx.is_master:
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id == None
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+
         page = db.query(Page).filter(Page.id == page_id).first()
         if not page:
             raise HTTPException(
@@ -523,17 +563,36 @@ async def restore_page(page_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/{page_id}/permanent/")
-async def permanent_delete_page(page_id: str):
+async def permanent_delete_page(
+    page_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Permanently delete a page - matches Express: { success, message }.
     Unpublishes from ALL active full-bundle Edge Engines, then hard-deletes.
     """
-    from ...database.config import SessionLocal
-    
-    db = SessionLocal()
     try:
+        # Cloud mode: verify ownership before mutating
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .scalar_subquery()
+            )
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id.in_(project_ids)
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+        elif ctx and ctx.is_master:
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id == None
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+
         page = db.query(Page).filter(Page.id == page_id).first()
         if not page:
-            db.close()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Page not found"
@@ -562,16 +621,38 @@ async def permanent_delete_page(page_id: str):
             "success": False,
             "error": str(e)
         }
-    finally:
-        db.close()
 
 
 @router.post("/{page_id}/unpublish/{engine_id}/")
-async def unpublish_page_from_target(page_id: str, engine_id: str, db: Session = Depends(get_db)):
+async def unpublish_page_from_target(
+    page_id: str,
+    engine_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Unpublish a page from a specific Edge Engine target.
     Page remains in the backend DB and on other targets.
     """
     try:
+        # Cloud mode: verify ownership before mutating
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .scalar_subquery()
+            )
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id.in_(project_ids)
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+        elif ctx and ctx.is_master:
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id == None
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+
         page = db.query(Page).filter(
             Page.id == page_id,
             Page.deleted_at == None

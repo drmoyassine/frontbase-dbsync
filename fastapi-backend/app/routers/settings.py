@@ -89,7 +89,10 @@ async def update_redis_settings(settings_update: RedisSettings, ctx: TenantConte
 
 
 @router.post("/redis/test/", response_model=RedisTestResult)
-async def test_redis_connection(settings_update: RedisSettings):
+async def test_redis_connection(
+    settings_update: RedisSettings,
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """
     Test Redis connection with provided settings.
     """

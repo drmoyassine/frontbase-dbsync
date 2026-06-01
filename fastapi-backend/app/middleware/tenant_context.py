@@ -84,7 +84,9 @@ async def get_tenant_context(request: Request) -> Optional[TenantContext]:
     from app.routers.auth import get_current_user
     user = get_current_user(request)
     if not user:
-        return None  # Not authenticated — let the route decide what to do
+        if is_cloud():
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return None
 
     return TenantContext(
         user_id=user.get("user_id", user.get("id", "")),

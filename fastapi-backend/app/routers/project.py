@@ -91,11 +91,11 @@ async def update_project_endpoint(
         return JSONResponse(content=resp)
 
     return response_data
-
 @router.post("/assets/upload/")
 async def upload_branding_asset(
     file: UploadFile = File(...),
     asset_type: str = Form(default="favicon"),
+    ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """
     Upload branding assets (favicon, logo) stored locally.
@@ -151,23 +151,32 @@ async def upload_branding_asset(
         "url": public_url,  # Alias for frontend compatibility
     })
 
+
 @router.get("/internal/creds/", include_in_schema=False)
-async def get_internal_creds(db: Session = Depends(get_db)):
+async def get_internal_creds(
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """
     Internal endpoint for Edge Service to get decrypted credentials.
     Standard API users should NOT access this.
     """
+    from app.config.edition import is_cloud
+    if is_cloud():
+        if not ctx or not ctx.is_master:
+            raise HTTPException(status_code=403, detail="Forbidden")
+
     from ..core.credential_resolver import get_supabase_context
     
     try:
-        ctx = get_supabase_context(db, mode="builder")
+        ctx_creds = get_supabase_context(db, mode="builder")
     except Exception:
         raise HTTPException(status_code=404, detail="Project not configured")
     
     return {
-        "supabaseUrl": ctx["url"],
-        "supabaseKey": ctx["anon_key"],
-        "supabaseServiceKey": ctx["auth_key"] if ctx.get("auth_method") == "service_role" else None
+        "supabaseUrl": ctx_creds["url"],
+        "supabaseKey": ctx_creds["anon_key"],
+        "supabaseServiceKey": ctx_creds["auth_key"] if ctx_creds.get("auth_method") == "service_role" else None
     }
 
 

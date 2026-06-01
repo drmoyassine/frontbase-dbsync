@@ -6,9 +6,69 @@
  */
 
 import { OpenAPIHono } from '@hono/zod-openapi';
+import type { Context } from 'hono';
 import { SupabaseAuthProvider } from '../ssr/lib/SupabaseAuthProvider.js';
 import { stateProvider } from '../storage/index.js';
 import { getAuthConfig } from '../config/env.js';
+import { rateLimit } from '../cache/redis.js';
+
+function isSafeRedirect(urlStr: string, requestUrl: string): boolean {
+    if (!urlStr) return false;
+    // Allow relative paths (starting with / but NOT //)
+    if (urlStr.startsWith('/') && !urlStr.startsWith('//')) {
+        return true;
+    }
+    try {
+        const parsedRedirect = new URL(urlStr);
+        const parsedRequest = new URL(requestUrl);
+        return parsedRedirect.host === parsedRequest.host;
+    } catch {
+        return false;
+    }
+}
+
+function safeScriptJson(val: any): string {
+    return JSON.stringify(val)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/\//g, '\\u002f')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
+
+function getTargetOrigin(redirectUrl: string, requestUrl: string): string {
+    if (redirectUrl.startsWith('/') && !redirectUrl.startsWith('//')) {
+        try {
+            return new URL(requestUrl).origin;
+        } catch {
+            return '*';
+        }
+    }
+    try {
+        return new URL(redirectUrl).origin;
+    } catch {
+        return '*';
+    }
+}
+
+function getClientIp(c: Context): string {
+    return c.req.header('cf-connecting-ip')
+        || c.req.header('x-real-ip')
+        || c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
+        || 'unknown';
+}
+
+async function checkRateLimit(c: Context, key: string, limit: number, windowSeconds: number): Promise<boolean> {
+    try {
+        const ip = getClientIp(c);
+        const rateLimitKey = `ratelimit:auth:${key}:${ip}`;
+        const res = await rateLimit(rateLimitKey, limit, windowSeconds);
+        return res.allowed;
+    } catch {
+        // Fallback to allow if Redis is not configured
+        return true;
+    }
+}
 
 async function resolveDynamicRedirect(
     client: Awaited<ReturnType<SupabaseAuthProvider['createClient']>>,
@@ -76,6 +136,21 @@ const authRoute = new OpenAPIHono();
 // =============================================================================
 
 authRoute.post('/login', async (c) => {
+    // 1. IP-based Rate Limiting (5 login requests per 60 seconds per IP)
+    const allowed = await checkRateLimit(c, 'login', 5, 60);
+    if (!allowed) {
+        const contentType = c.req.header('Content-Type') || '';
+        if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+            const form = await c.req.parseBody();
+            const redirectTo = (form['redirectTo'] as string) || '/';
+            const safeRedirect = isSafeRedirect(redirectTo, c.req.url) ? redirectTo : '/';
+            const errorUrl = new URL(safeRedirect, new URL(c.req.url).origin);
+            errorUrl.searchParams.set('auth_error', 'Too many attempts. Please try again later.');
+            return c.redirect(errorUrl.toString(), 303);
+        }
+        return c.json({ error: 'Too many attempts. Please try again later.' }, 429);
+    }
+
     const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
     const provider = new SupabaseAuthProvider(tenantSlug);
     const client = await provider.createClient(c.req.raw);
@@ -108,6 +183,11 @@ authRoute.post('/login', async (c) => {
         formId = body.formId;
     }
 
+    // Validate redirect URL to prevent open redirect vulnerabilities
+    if (!isSafeRedirect(redirectTo, c.req.url)) {
+        redirectTo = '/';
+    }
+
     if (!email || !password) {
         return c.json({ error: 'Email and password required' }, 400);
     }
@@ -134,22 +214,34 @@ authRoute.post('/login', async (c) => {
     let enrichedUser = null;
     if (data.user) {
         finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo, tenantSlug);
+        // Double-check the dynamically resolved redirect too
+        if (!isSafeRedirect(finalRedirect, c.req.url)) {
+            finalRedirect = '/';
+        }
         enrichedUser = await provider.enrichUserContext(data.user, data.session?.access_token);
     }
 
     if (contentType.includes('form')) {
         if (isEmbed) {
-            const userJson = enrichedUser ? JSON.stringify(enrichedUser) : 'null';
+            const safeRedirectJson = safeScriptJson(finalRedirect);
+            const safeUserJson = enrichedUser ? safeScriptJson(enrichedUser) : 'null';
+            const targetOrigin = getTargetOrigin(finalRedirect, c.req.url);
+            const safeTargetOriginJson = safeScriptJson(targetOrigin);
             return c.html(`
                 <!DOCTYPE html>
                 <html>
                 <body>
                     <script>
-                        if (window.parent && window.parent !== window) {
-                            window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: '${finalRedirect}', user: ${userJson} }, '*');
-                        } else {
-                            window.location.href = '${finalRedirect}';
-                        }
+                        (function() {
+                            const redirectUrl = ${safeRedirectJson};
+                            const user = ${safeUserJson};
+                            const targetOrigin = ${safeTargetOriginJson};
+                            if (window.parent && window.parent !== window) {
+                                window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: redirectUrl, user: user }, targetOrigin);
+                            } else {
+                                window.location.href = redirectUrl;
+                            }
+                        })();
                     </script>
                 </body>
                 </html>
@@ -182,6 +274,21 @@ authRoute.get('/me', async (c) => {
 // =============================================================================
 
 authRoute.post('/signup', async (c) => {
+    // IP-based Rate Limiting (3 signup requests per 60 seconds per IP)
+    const allowed = await checkRateLimit(c, 'signup', 3, 60);
+    if (!allowed) {
+        const contentType = c.req.header('Content-Type') || '';
+        if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+            const form = await c.req.parseBody();
+            const redirectTo = (form['redirectTo'] as string) || '/';
+            const safeRedirect = isSafeRedirect(redirectTo, c.req.url) ? redirectTo : '/';
+            const errorUrl = new URL(safeRedirect, new URL(c.req.url).origin);
+            errorUrl.searchParams.set('auth_error', 'Too many attempts. Please try again later.');
+            return c.redirect(errorUrl.toString(), 303);
+        }
+        return c.json({ error: 'Too many attempts. Please try again later.' }, 429);
+    }
+
     const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
     const provider = new SupabaseAuthProvider(tenantSlug);
     const client = await provider.createClient(c.req.raw);
@@ -213,6 +320,11 @@ authRoute.post('/signup', async (c) => {
         formId = body.formId;
     }
 
+    // Validate redirect URL to prevent open redirect vulnerabilities
+    if (!isSafeRedirect(redirectTo, c.req.url)) {
+        redirectTo = '/';
+    }
+
     if (!email || !password) {
         return c.json({ error: 'Email and password required' }, 400);
     }
@@ -234,16 +346,23 @@ authRoute.post('/signup', async (c) => {
             const successUrl = new URL(redirectTo, new URL(c.req.url).origin);
             successUrl.searchParams.set('auth_message', 'Check your email to confirm your account');
             if (isEmbed) {
+                const targetOrigin = getTargetOrigin(successUrl.toString(), c.req.url);
+                const safeSuccessUrlJson = safeScriptJson(successUrl.toString());
+                const safeTargetOriginJson = safeScriptJson(targetOrigin);
                 return c.html(`
                     <!DOCTYPE html>
                     <html>
                     <body>
                         <script>
-                            if (window.parent && window.parent !== window) {
-                                window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: '${successUrl.toString()}' }, '*');
-                            } else {
-                                window.location.href = '${successUrl.toString()}';
-                            }
+                            (function() {
+                                const redirectUrl = ${safeSuccessUrlJson};
+                                const targetOrigin = ${safeTargetOriginJson};
+                                if (window.parent && window.parent !== window) {
+                                    window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: redirectUrl }, targetOrigin);
+                                } else {
+                                    window.location.href = redirectUrl;
+                                }
+                            })();
                         </script>
                     </body>
                     </html>
@@ -264,22 +383,34 @@ authRoute.post('/signup', async (c) => {
     let enrichedUser = null;
     if (data.user) {
         finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo, tenantSlug);
+        // Double-check the dynamically resolved redirect too
+        if (!isSafeRedirect(finalRedirect, c.req.url)) {
+            finalRedirect = '/';
+        }
         enrichedUser = await provider.enrichUserContext(data.user, data.session?.access_token);
     }
 
     if (contentType.includes('form')) {
         if (isEmbed) {
-            const userJson = enrichedUser ? JSON.stringify(enrichedUser) : 'null';
+            const safeRedirectJson = safeScriptJson(finalRedirect);
+            const safeUserJson = enrichedUser ? safeScriptJson(enrichedUser) : 'null';
+            const targetOrigin = getTargetOrigin(finalRedirect, c.req.url);
+            const safeTargetOriginJson = safeScriptJson(targetOrigin);
             return c.html(`
                 <!DOCTYPE html>
                 <html>
                 <body>
                     <script>
-                        if (window.parent && window.parent !== window) {
-                            window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: '${finalRedirect}', user: ${userJson} }, '*');
-                        } else {
-                            window.location.href = '${finalRedirect}';
-                        }
+                        (function() {
+                            const redirectUrl = ${safeRedirectJson};
+                            const user = ${safeUserJson};
+                            const targetOrigin = ${safeTargetOriginJson};
+                            if (window.parent && window.parent !== window) {
+                                window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: redirectUrl, user: user }, targetOrigin);
+                            } else {
+                                window.location.href = redirectUrl;
+                            }
+                        })();
                     </script>
                 </body>
                 </html>
@@ -314,9 +445,10 @@ authRoute.post('/logout', async (c) => {
 
     const contentType = c.req.header('Content-Type') || '';
     const redirectTo = c.req.query('redirectTo') || '/';
+    const safeRedirect = isSafeRedirect(redirectTo, c.req.url) ? redirectTo : '/';
 
     if (contentType.includes('form')) {
-        return c.redirect(redirectTo, 303);
+        return c.redirect(safeRedirect, 303);
     }
 
     return c.json({ success: true });

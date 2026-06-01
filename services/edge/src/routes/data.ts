@@ -130,12 +130,52 @@ function buildProxyRequest(
 }
 
 /**
- * Resolve {{ENV_VAR}} placeholders in a string (legacy support for direct strategy)
+ * SSRF Mitigation: Checks if a URL points to a private, loopback, or local address.
  */
-function resolveEnvVars(template: string): string {
-    return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-        return process.env[key] || '';
-    });
+function isPrivateUrl(urlStr: string): boolean {
+    try {
+        const parsed = new URL(urlStr);
+        const hostname = parsed.hostname.toLowerCase();
+
+        // 1. Check exact names
+        if (
+            hostname === 'localhost' ||
+            hostname === 'localhost.localdomain' ||
+            hostname === '127.0.0.1' ||
+            hostname === '[::1]' ||
+            hostname === '0.0.0.0'
+        ) {
+            return true;
+        }
+
+        // 2. Check if host ends with local domains
+        if (hostname.endsWith('.local') || hostname.endsWith('.localhost') || hostname.endsWith('.internal')) {
+            return true;
+        }
+
+        // 3. IPv4 Regex checking for private ranges
+        // 10.x.x.x
+        if (/^10\./.test(hostname)) return true;
+        // 172.16.x.x - 172.31.x.x
+        if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)) return true;
+        // 192.168.x.x
+        if (/^192\.168\./.test(hostname)) return true;
+        // 169.254.x.x (link-local/metadata)
+        if (/^169\.254\./.test(hostname)) return true;
+        // 127.x.x.x (loopback)
+        if (/^127\./.test(hostname)) return true;
+        // 0.x.x.x
+        if (/^0\./.test(hostname)) return true;
+
+        // IPv6 Check
+        if (hostname.startsWith('[fc') || hostname.startsWith('[fd') || hostname.startsWith('[fe80')) {
+            return true;
+        }
+
+        return false;
+    } catch {
+        return true; // If invalid URL, block it by default
+    }
 }
 
 /**
@@ -211,11 +251,17 @@ export async function executeDataRequest(dataRequest: DataRequest): Promise<{ da
         headers = proxyReq.headers;
         body = proxyReq.body;
     } else {
-        // Direct: use URL/headers as-is (may contain env var templates for legacy)
-        url = resolveEnvVars(dataRequest.url);
+        // Direct: use URL/headers as-is (no environment variable resolution to prevent secrets leak)
+        url = dataRequest.url;
         for (const [key, value] of Object.entries(dataRequest.headers || {})) {
-            headers[key] = resolveEnvVars(value);
+            headers[key] = value;
         }
+    }
+
+    // SSRF Mitigation: Block private/local IP ranges and local hostnames
+    if (isPrivateUrl(url)) {
+        console.warn(`[Data Execute] Blocked private URL request to: ${url}`);
+        throw new Error(`Access to private URL is blocked: ${url}`);
     }
 
     console.log(`[Data Execute] ${isProxy ? 'Proxy' : 'Direct'}: ${url.substring(0, 100)}...`);

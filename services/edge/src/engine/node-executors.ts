@@ -213,6 +213,97 @@ async function executeHttpRequest(
     };
 }
 
+function normalizeExpression(expr: string): string {
+    return expr
+        .replace(/\[['"]([^'"]+)['"]\]/g, '.$1')
+        .replace(/\[(\d+)\]/g, '.$1');
+}
+
+function getPath(obj: any, path: string): any {
+    const parts = path.trim().split('.');
+    let current = obj;
+    for (const part of parts) {
+        if (current === null || current === undefined) return undefined;
+        current = current[part];
+    }
+    return current;
+}
+
+export function safeEval(expression: string, data: Record<string, any>): any {
+    expression = normalizeExpression(expression.trim());
+
+    if (expression === 'true') return true;
+    if (expression === 'false') return false;
+    if (expression === 'null') return null;
+    if (expression === 'undefined') return undefined;
+
+    if (/^\d+(\.\d+)?$/.test(expression)) {
+        return Number(expression);
+    }
+
+    const stringMatch = expression.match(/^['"](.*)['"]$/);
+    if (stringMatch) {
+        return stringMatch[1];
+    }
+
+    if (expression.startsWith('!')) {
+        return !safeEval(expression.substring(1), data);
+    }
+
+    if (expression.includes('||')) {
+        const parts = expression.split('||');
+        for (const part of parts) {
+            const val = safeEval(part, data);
+            if (val) return val;
+        }
+        return safeEval(parts[parts.length - 1], data);
+    }
+
+    if (expression.includes('&&')) {
+        const parts = expression.split('&&');
+        let val: any = true;
+        for (const part of parts) {
+            val = safeEval(part, data);
+            if (!val) return val;
+        }
+        return val;
+    }
+
+    const operators = ['===', '!==', '==', '!=', '>=', '<=', '>', '<'];
+    for (const op of operators) {
+        if (expression.includes(op)) {
+            const parts = expression.split(op).map(p => p.trim());
+            if (parts.length === 2) {
+                const left = safeEval(parts[0], data);
+                const right = safeEval(parts[1], data);
+                switch (op) {
+                    case '===':
+                    case '==':
+                        return left === right;
+                    case '!==':
+                    case '!=':
+                        return left !== right;
+                    case '>=':
+                        return left >= right;
+                    case '<=':
+                        return left <= right;
+                    case '>':
+                        return left > right;
+                    case '<':
+                        return left < right;
+                }
+            }
+        }
+    }
+
+    if (expression === 'data') return data;
+    if (expression.startsWith('data.')) {
+        return getPath({ data }, expression);
+    }
+
+    return getPath(data, expression);
+}
+
 /**
  * Transform Node
  */
@@ -224,9 +315,7 @@ function executeTransform(
 
     if (expression && typeof expression === 'string') {
         try {
-            // Simple expression evaluation (could use jmespath or similar)
-            const fn = new Function('data', `return ${expression}`);
-            return { result: fn(inputs) };
+            return { result: safeEval(expression, inputs) };
         } catch (e) {
             return { result: inputs, error: 'Transform expression failed' };
         }
@@ -247,8 +336,7 @@ function executeCondition(
 
     if (condition && typeof condition === 'string') {
         try {
-            const fn = new Function('data', `return !!(${condition})`);
-            result = fn(inputs);
+            result = !!safeEval(condition, inputs);
         } catch (e) {
             result = false;
         }

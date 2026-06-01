@@ -192,6 +192,15 @@ async def login(request: Request, body: LoginRequest, response: Response):
     # ── Path 1: Master Admin ────────────────────────────────────────────
     admin = ADMIN_USERS.get(body.email)
     if admin:
+        if is_cloud():
+            default_email = "admin@frontbase.dev"
+            default_password_hash = hashlib.sha256(b"admin123").hexdigest()
+            is_using_default_email = body.email == default_email and os.getenv("ADMIN_EMAIL") is None
+            is_using_default_password = admin["password_hash"] == default_password_hash and os.getenv("ADMIN_PASSWORD") is None
+            if is_using_default_email or is_using_default_password:
+                logger.warning("[Auth] Master admin login rejected: default credentials are not allowed in cloud mode.")
+                raise HTTPException(status_code=401, detail="Invalid email or password")
+
         if admin["password_hash"] != hash_password(body.password):
             raise HTTPException(status_code=401, detail="Invalid email or password")
 

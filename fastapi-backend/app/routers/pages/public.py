@@ -5,6 +5,7 @@ Handles unauthenticated endpoints for Edge Engine SSR and pull-publish.
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from app.config.edition import is_cloud
 
 from .crud import serialize_page
 from app.services.publish_serializer import get_datasources_for_publish, convert_component
@@ -22,6 +23,11 @@ async def get_public_page(slug: str, db: Session = Depends(get_db)):
     No authentication required - used by Edge Engine.
     Returns page data if page exists and is public (or all for now during dev).
     """
+    if is_cloud():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Page not found"
+        )
     try:
         page = db.query(Page).filter(
             Page.slug == slug, 
@@ -77,6 +83,11 @@ async def get_homepage(db: Session = Depends(get_db)):
     Get the homepage for Edge pull-publish.
     Edge calls this when it has no homepage in its local DB.
     """
+    if is_cloud():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Homepage not found"
+        )
     try:
         homepage = db.query(Page).filter(
             Page.is_homepage == True,

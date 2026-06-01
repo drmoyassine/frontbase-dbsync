@@ -11,7 +11,8 @@ No Edge Engine involvement, no JWT tokens, no Zod.
 """
 
 import logging
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
+from app.middleware.tenant_context import TenantContext, get_tenant_context
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -34,7 +35,10 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/chat")
-async def agent_chat(request: Request):
+async def agent_chat(
+    request: Request,
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Streaming chat endpoint for the Master Admin Workspace Agent.
 
     Accepts:
@@ -46,24 +50,17 @@ async def agent_chat(request: Request):
       data: {"type":"tool_call","name":"fn","args":{}}
       data: {"type":"done"}
     """
-    # Authenticate — skip in test mode for development
-    # The TestModeMiddleware adds X-Test-Mode header, and we check the
-    # request state or simply allow unauthenticated access in dev.
-    # In production, uncomment the auth check below.
-    try:
-        from ..routers.auth import get_current_user
-        user = get_current_user(request)
-        if not user:
-            # In test mode, allow without auth for development
-            test_mode = request.headers.get("X-Test-Mode", "false").lower() == "true"
-            if not test_mode:
-                # Check if test mode is enabled via middleware
-                import os
-                is_dev = os.getenv("ENVIRONMENT", "development") != "production"
-                if not is_dev:
-                    raise HTTPException(status_code=401, detail="Authentication required. Please log in.")
-    except ImportError:
-        pass  # Auth module not available — allow in dev
+    # In cloud mode, require_tenant_context/get_tenant_context will raise 401 if unauthenticated.
+    # In self-host, get_tenant_context returns None, so we verify using get_current_user in production
+    from app.config.edition import is_cloud
+    if not is_cloud():
+        import os
+        is_dev = os.getenv("ENVIRONMENT", "development") != "production"
+        if not is_dev:
+            from ..routers.auth import get_current_user
+            user = get_current_user(request)
+            if not user:
+                raise HTTPException(status_code=401, detail="Authentication required. Please log in.")
 
     # Parse the request body
     try:

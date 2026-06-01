@@ -5,7 +5,7 @@ Extracted: compute_page_hash → services/page_hash.py
 Extracted: convert_component, convert_to_publish_schema → services/publish_serializer.py
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Any
@@ -86,7 +86,11 @@ async def _sync_settings_to_engine(
 
 
 @router.post("/{page_id}/publish/{engine_id}/")
-async def publish_to_target(page_id: str, engine_id: str):
+async def publish_to_target(
+    page_id: str,
+    engine_id: str,
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """
     Publish a page to a specific Edge Engine target.
     """
@@ -97,6 +101,25 @@ async def publish_to_target(page_id: str, engine_id: str):
     engine = None
     datasources = []
     try:
+        # Cloud mode: verify page ownership
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .scalar_subquery()
+            )
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id.in_(project_ids)
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+        elif ctx and ctx.is_master:
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id == None
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+
         page = db.query(Page).options(
             joinedload(Page.project).joinedload(Project.tenant)
         ).filter(
@@ -262,7 +285,11 @@ class BatchPublishRequest(BaseModel):
 
 
 @router.post("/{page_id}/publish-batch/")
-async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
+async def publish_to_targets_batch(
+    page_id: str,
+    body: BatchPublishRequest,
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """
     Publish a page to multiple Edge Engines in one request.
     Serializes the page ONCE, then fans out to all engines in parallel.
@@ -275,6 +302,25 @@ async def publish_to_targets_batch(page_id: str, body: BatchPublishRequest):
     db = SessionLocal()
     db.expire_on_commit = False
     try:
+        # Cloud mode: verify page ownership
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            project_ids = (
+                db.query(Project.id)
+                .filter(Project.tenant_id == ctx.tenant_id)
+                .scalar_subquery()
+            )
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id.in_(project_ids)
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+        elif ctx and ctx.is_master:
+            owned = db.query(Page.id).filter(
+                Page.id == page_id, Page.project_id == None
+            ).first()
+            if not owned:
+                raise HTTPException(status_code=404, detail="Page not found")
+
         page = db.query(Page).options(
             joinedload(Page.project).joinedload(Project.tenant)
         ).filter(

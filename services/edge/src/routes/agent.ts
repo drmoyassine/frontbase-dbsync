@@ -46,6 +46,23 @@ function convertOpenAIMessages(messages: any[]): any[] {
 // Fetch session history
 agentRoute.get('/chat/:profileSlug', async (c) => {
     const profileSlug = c.req.param('profileSlug');
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return c.json({ error: { message: "Unauthorized: Missing Authorization header" } }, 401);
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        const secret = (c.env as any)?.FRONTBASE_JWT_SECRET;
+        if (!secret) {
+            console.error('[Agent Chat] FRONTBASE_JWT_SECRET is not configured.');
+            return c.json({ error: { message: "Internal server error: JWT secret not configured." } }, 500);
+        }
+        await verify(token, secret, 'HS256');
+    } catch (e) {
+        console.error('[Agent Chat] JWT verification failed:', e);
+        return c.json({ error: { message: "Unauthorized: Invalid JWT token" } }, 401);
+    }
+
     try {
         const history = await cacheProvider.get<any[]>(`agent:session:${profileSlug}`);
         return c.json(history || []);
@@ -116,28 +133,34 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
 
     // Check for Stateless JWT Injection (Multi-tenant Mega-Shared approach)
     const authHeader = c.req.header('Authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.split(' ')[1];
-        try {
-            const secret = (c.env as any)?.FRONTBASE_JWT_SECRET || 'supersecret';
-            const payload = await verify(token, secret, 'HS256');
-            const providerStr = String(payload.provider || 'openai');
-            
-            modelRecord = {
-                 slug: 'workspace-injected-model',
-                 provider: providerStr,
-                 model_type: 'chat-completion',
-                 model_id: providerStr === 'anthropic' ? 'claude-3-5-sonnet-latest' 
-                         : providerStr === 'workers_ai' ? '@cf/meta/llama-3.1-8b-instruct'
-                         : 'gpt-4o',
-                 api_key: ((payload.credentials || {}) as any).api_key || ((payload.credentials || {}) as any).apiKey,
-                 base_url: ((payload.credentials || {}) as any).base_url || ((payload.credentials || {}) as any).baseUrl,
-                 provider_config: payload.credentials || {},
-                 endpoint_url: providerStr === 'openai' ? 'https://api.openai.com/v1/chat/completions' : undefined
-            };
-        } catch (e) {
-            console.error('[Agent Chat] JWT verification failed:', e);
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return c.json({ error: { message: "Unauthorized: Missing Authorization header" } }, 401);
+    }
+    const token = authHeader.split(' ')[1];
+    try {
+        const secret = (c.env as any)?.FRONTBASE_JWT_SECRET;
+        if (!secret) {
+            console.error('[Agent Chat] FRONTBASE_JWT_SECRET is not configured.');
+            return c.json({ error: { message: "Internal server error: JWT secret not configured." } }, 500);
         }
+        const payload = await verify(token, secret, 'HS256');
+        const providerStr = String(payload.provider || 'openai');
+        
+        modelRecord = {
+             slug: 'workspace-injected-model',
+             provider: providerStr,
+             model_type: 'chat-completion',
+             model_id: providerStr === 'anthropic' ? 'claude-3-5-sonnet-latest' 
+                     : providerStr === 'workers_ai' ? '@cf/meta/llama-3.1-8b-instruct'
+                     : 'gpt-4o',
+             api_key: ((payload.credentials || {}) as any).api_key || ((payload.credentials || {}) as any).apiKey,
+             base_url: ((payload.credentials || {}) as any).base_url || ((payload.credentials || {}) as any).baseUrl,
+             provider_config: payload.credentials || {},
+             endpoint_url: providerStr === 'openai' ? 'https://api.openai.com/v1/chat/completions' : undefined
+        };
+    } catch (e) {
+        console.error('[Agent Chat] JWT verification failed:', e);
+        return c.json({ error: { message: "Unauthorized: Invalid JWT token" } }, 401);
     }
 
     // Fallback to legacy static engine `.env` models if no JWT is provided or valid

@@ -11,8 +11,29 @@ import json
 import uuid
 
 from ...database.utils import get_db, get_current_timestamp
-from ...models.models import Page, PageVersion
+from ...models.models import Page, PageVersion, Project
 from app.services.page_hash import compute_page_hash
+from app.middleware.tenant_context import TenantContext, get_tenant_context
+
+
+def check_page_ownership(db: Session, page_id: str, ctx: TenantContext | None):
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        project_ids = (
+            db.query(Project.id)
+            .filter(Project.tenant_id == ctx.tenant_id)
+            .scalar_subquery()
+        )
+        owned = db.query(Page.id).filter(
+            Page.id == page_id, Page.project_id.in_(project_ids)
+        ).first()
+        if not owned:
+            raise HTTPException(status_code=404, detail="Page not found")
+    elif ctx and ctx.is_master:
+        owned = db.query(Page.id).filter(
+            Page.id == page_id, Page.project_id == None
+        ).first()
+        if not owned:
+            raise HTTPException(status_code=404, detail="Page not found")
 
 
 router = APIRouter()
@@ -74,8 +95,13 @@ def create_version_snapshot(db: Session, page: Page) -> PageVersion:
 # ---------- Endpoints ----------
 
 @router.get("/{page_id}/versions/")
-async def list_versions(page_id: str, db: Session = Depends(get_db)):
+async def list_versions(
+    page_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """List all version snapshots for a page, newest first."""
+    check_page_ownership(db, page_id, ctx)
     page = db.query(Page).filter(Page.id == page_id).first()
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
@@ -91,8 +117,14 @@ async def list_versions(page_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{page_id}/versions/{version_id}/")
-async def get_version_detail(page_id: str, version_id: str, db: Session = Depends(get_db)):
+async def get_version_detail(
+    page_id: str,
+    version_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Get a specific version including its full layout_data snapshot."""
+    check_page_ownership(db, page_id, ctx)
     version = db.query(PageVersion).filter(
         PageVersion.id == version_id,
         PageVersion.page_id == page_id,
@@ -116,8 +148,14 @@ async def get_version_detail(page_id: str, version_id: str, db: Session = Depend
 
 
 @router.post("/{page_id}/versions/")
-async def create_manual_version(page_id: str, request: VersionLabelRequest, db: Session = Depends(get_db)):
+async def create_manual_version(
+    page_id: str,
+    request: VersionLabelRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """Manually create a named version snapshot (e.g., "Pre-launch backup")."""
+    check_page_ownership(db, page_id, ctx)
     page = db.query(Page).filter(Page.id == page_id).first()
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
@@ -137,12 +175,18 @@ async def create_manual_version(page_id: str, request: VersionLabelRequest, db: 
 
 
 @router.post("/{page_id}/rollback/")
-async def rollback_to_version(page_id: str, request: RollbackRequest, db: Session = Depends(get_db)):
+async def rollback_to_version(
+    page_id: str,
+    request: RollbackRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
     """
     Roll back a page to a previous version.
     Creates a NEW version snapshot of the current state BEFORE overwriting,
     so the rollback itself can be undone.
     """
+    check_page_ownership(db, page_id, ctx)
     page = db.query(Page).filter(Page.id == page_id).first()
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")

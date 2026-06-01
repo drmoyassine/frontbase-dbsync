@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Cloud, Server, Loader2, Search, Trash2, Power, RefreshCw, Upload, Cpu, Brain, Shield } from 'lucide-react';
+import { Cloud, Server, Loader2, Search, Trash2, Power, RefreshCw, Upload, Cpu, Brain, Shield, Globe } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     useEdgeEngines,
@@ -29,6 +29,12 @@ import { EdgeResourceRow } from './EdgeResourceRow';
 import { HealthCheckPopover } from './HealthCheckPopover';
 import { toast } from 'sonner';
 
+import { isCloud } from '@/lib/edition';
+import { useAuthStore } from '@/stores/auth';
+import api from '@/services/api-service';
+import { datasourcesApi } from '@/modules/dbsync/api/datasources';
+import { useStorageEnabled } from '@/hooks/useStorageEnabled';
+
 
 const Info = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></svg>
@@ -38,6 +44,34 @@ export function EdgeEnginesSection() {
     const { data: engines = [], isLoading: loadingEngines, refetch: refetchEngines } = useEdgeEngines();
     const { data: providers = [] } = useEdgeProviders();
     const queryClient = useQueryClient();
+
+    const user = useAuthStore((s) => s.user);
+    const _realUser = useAuthStore((s) => s._realUser);
+    const isMaster = user?.is_master || _realUser?.is_master;
+
+    // Fetch project settings (for auth binding detection)
+    const { data: project } = useQuery({
+        queryKey: ['project-settings'],
+        queryFn: async () => {
+            const res = await api.get('/api/project/');
+            return res.data;
+        },
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    // Fetch datasources (for datasource binding detection)
+    const { data: datasources = [] } = useQuery({
+        queryKey: ['datasources-list'],
+        queryFn: () => datasourcesApi.list().then(r => r.data),
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    // Storage bindings hook
+    const { isStorageEnabled, storageType } = useStorageEnabled();
 
     // Memoize to avoid new array ref on every render (AGENTS.md: no unstable deps in useEffect)
     const validProviders = useMemo(
@@ -225,20 +259,35 @@ export function EdgeEnginesSection() {
                                     const engineUrl = engine.url?.startsWith('http') ? engine.url : `https://${engine.url}`;
                                     const Icon = engine.provider ? (PROVIDER_ICONS[engine.provider] || Server) : Server;
                                     const isRedeploying = redeployingIds.has(engine.id);
+
+                                    // Point 1: Read-only check for community engine
+                                    const isCommunityShared = !!engine.is_shared;
+                                    const isReadOnlyForTenant = isCloud() && !isMaster && isCommunityShared;
+                                    const canManage = !engine.is_system && !isReadOnlyForTenant;
+
+                                    // Point 2: Dynamic binding checks
+                                    const hasAuth = !!(project?.supabaseUrl || project?.supabase_url);
+                                    const authProvider = hasAuth ? 'Supabase' : 'None';
+
                                     return (
                                         <EdgeResourceRow
                                             key={engine.id}
                                             icon={<Icon className="w-5 h-5" />}
                                             name={engine.name.includes(': ') ? engine.name.split(': ').slice(1).join(': ') : engine.name}
                                             subtitle={engine.provider ? (ENGINE_PROVIDER_LABELS[engine.provider] || engine.provider) : undefined}
-                                            selectable={!engine.is_system}
+                                            selectable={canManage}
                                             selected={isSelected}
                                             onSelectChange={() => toggleSelect(engine.id)}
-                                            showSelectSpacer={engine.is_system}
+                                            showSelectSpacer={!canManage}
                                             badges={<>
                                                 {engine.is_system && (
                                                     <Badge variant="outline" className="text-[10px] h-5 py-0 bg-amber-500/5 text-amber-500 border-amber-500/20">
                                                         <Shield className="h-3 w-3 mr-1" /> System
+                                                    </Badge>
+                                                )}
+                                                {isCommunityShared && (
+                                                    <Badge variant="outline" className="text-[10px] h-5 py-0 bg-emerald-500/5 text-emerald-500 border-emerald-500/20">
+                                                        <Globe className="h-3 w-3 mr-1" /> Community
                                                     </Badge>
                                                 )}
                                                 {!engine.is_active && (
@@ -286,7 +335,7 @@ export function EdgeEnginesSection() {
                                             }
                                             actions={
                                                 <div className="flex items-center space-x-2">
-                                                    {!engine.is_system && (
+                                                    {canManage && (
                                                         <>
                                                             <Switch
                                                                 title={engine.is_active ? "Pause Engine" : "Activate Engine"}
@@ -313,8 +362,6 @@ export function EdgeEnginesSection() {
                                                                             next.delete(engine.id);
                                                                             return next;
                                                                         });
-                                                                        // Invalidate instead of refetch — avoids React Query deduplication
-                                                                        // when multiple engines redeploy concurrently
                                                                         queryClient.invalidateQueries({ queryKey: ['edge-engines'] });
                                                                     }
                                                                 }}
@@ -349,6 +396,17 @@ export function EdgeEnginesSection() {
                                                 <Badge variant="outline" className="text-[10px] h-5 py-0 bg-muted/50 border-border text-muted-foreground">
                                                     Queue: {engine.edge_queue_name || 'None'}
                                                 </Badge>
+                                                <Badge variant="outline" className={`text-[10px] h-5 py-0 border-border ${hasAuth ? 'bg-green-500/5 text-green-400 border-green-500/20' : 'bg-muted/50 text-muted-foreground'}`}>
+                                                    Auth: {authProvider}
+                                                </Badge>
+                                                <Badge variant="outline" className={`text-[10px] h-5 py-0 border-border ${isStorageEnabled ? 'bg-green-500/5 text-green-400 border-green-500/20' : 'bg-muted/50 text-muted-foreground'}`}>
+                                                    Storage: {isStorageEnabled ? (storageType === 'supabase' ? 'Supabase' : (storageType || 'Configured')) : 'None'}
+                                                </Badge>
+                                                {datasources.length > 0 && (
+                                                    <Badge variant="outline" className="text-[10px] h-5 py-0 bg-blue-500/5 border-blue-500/20 text-blue-400">
+                                                        DataSources: {datasources.map((d: any) => d.name).join(', ')}
+                                                    </Badge>
+                                                )}
                                                 {engine.gpu_models && engine.gpu_models.length > 0 && (!engine.edge_cache_name || !engine.edge_queue_name) && (
                                                     <span className="text-[10px] text-amber-500/80 ml-1 font-medium flex items-center">
                                                         ⚠ Attach cache & queue for long multi-turn AI

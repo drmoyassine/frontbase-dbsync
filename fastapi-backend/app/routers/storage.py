@@ -10,6 +10,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 import uuid
 import json
+from sqlalchemy.orm import Session
 
 from app.database.config import SessionLocal
 from app.models.storage_provider import StorageProvider
@@ -18,6 +19,20 @@ from app.middleware.tenant_context import TenantContext, get_tenant_context
 from app.database.utils import get_project
 
 router = APIRouter(prefix="/api/storage", tags=["storage"])
+
+
+def _scoped_storage_provider_query(db: Session, ctx: TenantContext | None):
+    query = db.query(StorageProvider)
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(StorageProvider.project_id == project.id)
+        else:
+            query = query.filter(StorageProvider.id == "not-found")
+    elif ctx and ctx.is_master:
+        # Master admin: only their own (unassigned) storage providers
+        query = query.filter(StorageProvider.project_id == None)  # noqa: E711
+    return query
 
 
 # ============================================================================
@@ -29,14 +44,7 @@ async def list_storage_providers(ctx: TenantContext | None = Depends(get_tenant_
     """List all explicitly-added storage providers."""
     db = SessionLocal()
     try:
-        query = db.query(StorageProvider)
-        if ctx and ctx.tenant_id:
-            project = get_project(db, ctx)
-            if project:
-                query = query.filter(StorageProvider.project_id == project.id)
-            else:
-                return []
-                
+        query = _scoped_storage_provider_query(db, ctx)
         providers = query.order_by(StorageProvider.created_at.desc()).all()
         result = []
         for sp in providers:
@@ -118,14 +126,7 @@ async def delete_storage_provider(provider_id: str, ctx: TenantContext | None = 
     """Remove a storage provider."""
     db = SessionLocal()
     try:
-        query = db.query(StorageProvider).filter(StorageProvider.id == provider_id)
-        if ctx and ctx.tenant_id:
-            project = get_project(db, ctx)
-            if project:
-                query = query.filter(StorageProvider.project_id == project.id)
-            else:
-                raise HTTPException(404, "Storage provider not found")
-        
+        query = _scoped_storage_provider_query(db, ctx).filter(StorageProvider.id == provider_id)
         sp = query.first()
         if not sp:
             raise HTTPException(404, "Storage provider not found")
@@ -325,13 +326,7 @@ def _resolve_adapter(provider_id: str, ctx: TenantContext | None = None):
     db = SessionLocal()
     try:
         # Check tenant scoping first
-        query = db.query(StorageProvider).filter(StorageProvider.id == provider_id)
-        if ctx and ctx.tenant_id:
-            project = get_project(db, ctx)
-            if project:
-                query = query.filter(StorageProvider.project_id == project.id)
-            else:
-                raise HTTPException(404, "Storage provider not found")
+        query = _scoped_storage_provider_query(db, ctx).filter(StorageProvider.id == provider_id)
         if not query.first():
             raise HTTPException(404, "Storage provider not found")
             
@@ -352,14 +347,7 @@ async def list_buckets(provider_id: str = Query(..., description="StorageProvide
         # Resolve the adapter AND provider metadata
         db = SessionLocal()
         try:
-            query = db.query(StorageProvider).filter(StorageProvider.id == provider_id)
-            if ctx and ctx.tenant_id:
-                project = get_project(db, ctx)
-                if project:
-                    query = query.filter(StorageProvider.project_id == project.id)
-                else:
-                    raise HTTPException(404, "Storage provider not found")
-                    
+            query = _scoped_storage_provider_query(db, ctx).filter(StorageProvider.id == provider_id)
             sp = query.first()
             if not sp:
                 raise HTTPException(404, "Storage provider not found")

@@ -40,7 +40,10 @@ interface FileListViewProps {
     // Sort
     sortConfig: SortConfig;
     handleSort: (key: SortConfig['key']) => void;
-    getSortedFiles: (files: StorageFile[]) => StorageFile[];
+    getSortedFiles: (
+        files: StorageFile[],
+        folderSizes?: Record<string, { size?: number; isLoading?: boolean; isError?: boolean }>
+    ) => StorageFile[];
     // Search / selection
     fileSearch: string;
     setFileSearch: (v: string) => void;
@@ -171,7 +174,7 @@ export function FileListView({
     }, [folderFiles, folderSizeQueries]);
 
     // ── Computed ──
-    const sortedFiles = files ? getSortedFiles(files) : [];
+    const sortedFiles = files ? getSortedFiles(files, folderSizes) : [];
     const filteredFiles = sortedFiles.filter((f) => fileSearch === '' || f.name.toLowerCase().includes(fileSearch.toLowerCase()));
     const currentBucketData = buckets?.find(b => b.name === currentBucket);
 

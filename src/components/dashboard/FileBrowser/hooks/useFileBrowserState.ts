@@ -109,22 +109,32 @@ export function useFileBrowserState() {
     };
 
     // File sorting
-    const getSortedFiles = (files: StorageFile[]) => {
+    const getSortedFiles = (
+        files: StorageFile[],
+        folderSizes?: Record<string, { size?: number; isLoading?: boolean; isError?: boolean }>
+    ) => {
         return [...files].sort((a, b) => {
             // Always keep folders on top
             if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
 
-            let aValue: any = a[sortConfig.key === 'type' ? 'mimetype' : sortConfig.key];
-            let bValue: any = b[sortConfig.key === 'type' ? 'mimetype' : sortConfig.key];
+            let aValue: any;
+            let bValue: any;
 
-            // Handle undefined/null
-            if (!aValue) aValue = '';
-            if (!bValue) bValue = '';
-
-            // Handle type sorting specifically
-            if (sortConfig.key === 'type') {
+            if (sortConfig.key === 'size') {
+                aValue = a.isFolder ? (folderSizes?.[a.name]?.size ?? 0) : (a.size ?? 0);
+                bValue = b.isFolder ? (folderSizes?.[b.name]?.size ?? 0) : (b.size ?? 0);
+            } else if (sortConfig.key === 'type') {
                 aValue = a.isFolder ? 'Folder' : a.mimetype || a.name.split('.').pop() || '';
                 bValue = b.isFolder ? 'Folder' : b.mimetype || b.name.split('.').pop() || '';
+            } else {
+                aValue = a[sortConfig.key];
+                bValue = b[sortConfig.key];
+            }
+
+            // Handle undefined/null
+            if (sortConfig.key !== 'size') {
+                if (aValue === undefined || aValue === null) aValue = '';
+                if (bValue === undefined || bValue === null) bValue = '';
             }
 
             if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;

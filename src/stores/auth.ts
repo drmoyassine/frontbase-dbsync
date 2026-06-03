@@ -48,7 +48,7 @@ interface AuthState {
   clearImpersonation: () => void;
 
   // Auth actions
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string, website?: string, turnstileToken?: string) => Promise<{ success: boolean; error?: string }>;
   signup: (email: string, password: string, workspaceName: string, slug: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -142,14 +142,14 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      login: async (email, password) => {
+      login: async (email, password, website, turnstileToken) => {
         set({ isLoading: true, error: null });
         try {
           const response = await fetch(
             `${API_BASE}/api/auth/login`,
             {
               method: 'POST',
-              ...fetchOpts(null, { body: JSON.stringify({ email, password }) }),
+              ...fetchOpts(null, { body: JSON.stringify({ email, password, website, turnstile_token: turnstileToken }) }),
             }
           );
 

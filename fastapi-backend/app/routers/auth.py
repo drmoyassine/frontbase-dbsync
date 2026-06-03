@@ -53,6 +53,8 @@ ADMIN_USERS = {
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    website: Optional[str] = None
+    turnstile_token: Optional[str] = None
 
 
 class SignupRequest(BaseModel):
@@ -64,12 +66,16 @@ class SignupRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+    website: Optional[str] = None
+    turnstile_token: Optional[str] = None
 
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
     token: str
     password: str
+    website: Optional[str] = None
+    turnstile_token: Optional[str] = None
 
 
 class UserResponse(BaseModel):
@@ -87,6 +93,107 @@ class UserResponse(BaseModel):
 class AuthResponse(BaseModel):
     user: UserResponse
     message: str
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SPA Protection & Bot Prevention Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+# In-memory registry to track failed attempts per (IP + email)
+# Format: { "ip:email": { "attempts": int, "locked_until": datetime } }
+FAILED_LOGIN_ATTEMPTS: dict[str, dict] = {}
+
+MAX_FAILED_ATTEMPTS = 5
+LOCKOUT_DURATION_MINUTES = 15
+
+
+def get_lockout_key(request: Request, email: str) -> str:
+    """Generate a unique tracking key for IP + email combination."""
+    ip = request.client.host if request.client else "unknown"
+    return f"{ip}:{email.strip().lower()}"
+
+
+def check_lockout(request: Request, email: str) -> None:
+    """Check if the client is currently locked out."""
+    key = get_lockout_key(request, email)
+    entry = FAILED_LOGIN_ATTEMPTS.get(key)
+    if entry:
+        locked_until = entry.get("locked_until")
+        if locked_until and datetime.utcnow() < locked_until:
+            remaining_seconds = int((locked_until - datetime.utcnow()).total_seconds())
+            remaining_minutes = max(1, remaining_seconds // 60)
+            logger.warning(f"[Auth] Blocked locked out client {key} for {remaining_minutes} more minutes.")
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many failed attempts. Please try again in {remaining_minutes} minutes."
+            )
+
+
+def record_failed_attempt(request: Request, email: str) -> None:
+    """Record a failed login/reset attempt and lock out if threshold is reached."""
+    key = get_lockout_key(request, email)
+    entry = FAILED_LOGIN_ATTEMPTS.setdefault(key, {"attempts": 0, "locked_until": None})
+    entry["attempts"] += 1
+    
+    if entry["attempts"] >= MAX_FAILED_ATTEMPTS:
+        entry["locked_until"] = datetime.utcnow() + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+        logger.warning(f"[Auth] Client {key} reached max failed attempts. Locked out for {LOCKOUT_DURATION_MINUTES} minutes.")
+    else:
+        attempts_left = MAX_FAILED_ATTEMPTS - entry["attempts"]
+        logger.info(f"[Auth] Failed attempt {entry['attempts']} for client {key}. {attempts_left} attempts remaining.")
+
+
+def clear_failed_attempts(request: Request, email: str) -> None:
+    """Clear failed attempts upon successful login/reset."""
+    key = get_lockout_key(request, email)
+    FAILED_LOGIN_ATTEMPTS.pop(key, None)
+
+
+def check_honeypot(website: Optional[str]) -> None:
+    """Verify that the honeypot field is empty."""
+    if website:
+        logger.warning("[Auth] Honeypot field filled. Silently rejecting bot request.")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid request details."
+        )
+
+
+async def verify_turnstile_token(token: Optional[str], ip_address: str) -> None:
+    """Verify Turnstile token if Turnstile is configured."""
+    secret_key = os.getenv("TURNSTILE_SECRET_KEY")
+    if not secret_key:
+        return
+        
+    if not token:
+        raise HTTPException(
+            status_code=400,
+            detail="Bot verification token is missing. Please refresh and try again."
+        )
+        
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={
+                    "secret": secret_key,
+                    "response": token,
+                    "remoteip": ip_address
+                },
+                timeout=5.0
+            )
+            data = resp.json()
+            if not data.get("success"):
+                logger.warning(f"[Auth] Turnstile verification failed: {data}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Bot verification failed. Please try again."
+                )
+    except httpx.RequestError as e:
+        logger.error(f"[Auth] Turnstile API request failed: {e}. Bypassing verification (fail-safe).")
+    except Exception as e:
+        logger.error(f"[Auth] Turnstile verification exception: {e}. Bypassing verification (fail-safe).")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -199,6 +306,13 @@ async def login(request: Request, body: LoginRequest, response: Response):
     Path 1: Master admin (env-var) — always checked first.
     Path 2: SuperTokens emailpassword (cloud mode) — tenant users.
     """
+    # ── Security Checks: Lockout, Honeypot & Turnstile ───────────────────
+    if not is_cloud():
+        check_lockout(request, body.email)
+        
+    check_honeypot(body.website)
+    await verify_turnstile_token(body.turnstile_token, request.client.host if request.client else "unknown")
+
     # ── Path 1: Master Admin ────────────────────────────────────────────
     admin = ADMIN_USERS.get(body.email)
     if admin:
@@ -212,7 +326,12 @@ async def login(request: Request, body: LoginRequest, response: Response):
                 raise HTTPException(status_code=401, detail="Invalid email or password")
 
         if admin["password_hash"] != hash_password(body.password):
+            if not is_cloud():
+                record_failed_attempt(request, body.email)
             raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        if not is_cloud():
+            clear_failed_attempts(request, body.email)
 
         token = create_session(
             admin["id"], admin["email"],
@@ -232,6 +351,7 @@ async def login(request: Request, body: LoginRequest, response: Response):
 
     # ── Path 2: SuperTokens (cloud mode) ────────────────────────────────
     if not is_cloud():
+        record_failed_attempt(request, body.email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     from supertokens_python.recipe.emailpassword.asyncio import sign_in as st_sign_in
@@ -572,6 +692,17 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest):
             detail="Forgot password endpoint is managed via SuperTokens in cloud mode."
         )
 
+    # ── Security Checks: Lockout, Honeypot & Turnstile ───────────────────
+    if not is_cloud():
+        check_lockout(request, body.email)
+        
+    check_honeypot(body.website)
+    await verify_turnstile_token(body.turnstile_token, request.client.host if request.client else "unknown")
+
+    # Record the attempt to rate-limit password resets (protect against email spam)
+    if not is_cloud():
+        record_failed_attempt(request, body.email)
+
     email = body.email.strip().lower()
     
     # Check if the user is the master admin
@@ -648,7 +779,7 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest):
 
 
 @router.post("/reset-password")
-async def reset_password(body: ResetPasswordRequest):
+async def reset_password(request: Request, body: ResetPasswordRequest):
     """Reset password using the reset token (Self-hosted only)."""
     if is_cloud():
         raise HTTPException(
@@ -658,9 +789,18 @@ async def reset_password(body: ResetPasswordRequest):
 
     email = body.email.strip().lower()
     
+    # ── Security Checks: Lockout, Honeypot & Turnstile ───────────────────
+    if not is_cloud():
+        check_lockout(request, email)
+        
+    check_honeypot(body.website)
+    await verify_turnstile_token(body.turnstile_token, request.client.host if request.client else "unknown")
+    
     # Check if the user is the master admin
     admin = ADMIN_USERS.get(email)
     if not admin:
+        if not is_cloud():
+            record_failed_attempt(request, email)
         raise HTTPException(status_code=400, detail="Invalid email or token.")
         
     # Verify token exists and matches
@@ -668,6 +808,8 @@ async def reset_password(body: ResetPasswordRequest):
     stored_expiry = admin.get("reset_token_expires_at")
     
     if not stored_token or stored_token != body.token:
+        if not is_cloud():
+            record_failed_attempt(request, email)
         raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
         
     # Verify expiry
@@ -677,8 +819,14 @@ async def reset_password(body: ResetPasswordRequest):
             expiry_str = stored_expiry[:-1] if stored_expiry.endswith("Z") else stored_expiry
             expiry_dt = datetime.fromisoformat(expiry_str)
             if datetime.utcnow() > expiry_dt:
+                if not is_cloud():
+                    record_failed_attempt(request, email)
                 raise HTTPException(status_code=400, detail="Reset token has expired.")
+        except HTTPException:
+            raise
         except Exception:
+            if not is_cloud():
+                record_failed_attempt(request, email)
             raise HTTPException(status_code=400, detail="Reset token verification failed.")
             
     # Update password
@@ -687,6 +835,8 @@ async def reset_password(body: ResetPasswordRequest):
     # Clear token
     admin.pop("reset_token", None)
     admin.pop("reset_token_expires_at", None)
+    if not is_cloud():
+        clear_failed_attempts(request, email)
     
     return {
         "success": True,

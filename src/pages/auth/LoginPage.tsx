@@ -5,7 +5,7 @@
  * Uses session-based auth via FastAPI backend.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth';
 import { isCloud } from '@/lib/edition';
@@ -18,18 +18,60 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 export default function LoginPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [website, setWebsite] = useState('');
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const { login, isLoading, error, clearError } = useAuthStore();
     const navigate = useNavigate();
     const location = useLocation();
 
+    const siteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string) || '';
+
     // Get redirect destination (default to dashboard, not landing page)
     const from = (location.state as { from?: Location })?.from?.pathname || '/dashboard';
+
+    useEffect(() => {
+        if (!siteKey) return;
+
+        const scriptId = 'cloudflare-turnstile-script';
+        if (!document.getElementById(scriptId)) {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback';
+            script.async = true;
+            script.defer = true;
+            document.body.appendChild(script);
+
+            (window as any).onloadTurnstileCallback = () => {
+                try {
+                    (window as any).turnstile.render('#turnstile-container', {
+                        sitekey: siteKey,
+                        callback: (token: string) => {
+                            setTurnstileToken(token);
+                        },
+                    });
+                } catch (e) {
+                    console.error('Turnstile render error', e);
+                }
+            };
+        } else if ((window as any).turnstile) {
+            try {
+                (window as any).turnstile.render('#turnstile-container', {
+                    sitekey: siteKey,
+                    callback: (token: string) => {
+                        setTurnstileToken(token);
+                    },
+                });
+            } catch (e) {
+                // Ignore fast re-render conflicts
+            }
+        }
+    }, [siteKey]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         clearError();
 
-        const result = await login(email, password);
+        const result = await login(email, password, website, turnstileToken || undefined);
         if (result.success) {
             navigate(from, { replace: true });
         }
@@ -81,6 +123,24 @@ export default function LoginPage() {
                                 autoComplete="current-password"
                             />
                         </div>
+
+                        {/* Honeypot field - invisible to users, auto-filled by bots */}
+                        <div style={{ position: 'absolute', left: '-9999px', opacity: 0, height: 0, width: 0, overflow: 'hidden' }} aria-hidden="true">
+                            <label htmlFor="website">Leave this field blank</label>
+                            <input
+                                id="website"
+                                type="text"
+                                name="website"
+                                tabIndex={-1}
+                                autoComplete="off"
+                                value={website}
+                                onChange={(e) => setWebsite(e.target.value)}
+                            />
+                        </div>
+
+                        {siteKey && (
+                            <div id="turnstile-container" className="flex justify-center py-2" />
+                        )}
 
                         <Button type="submit" className="w-full" disabled={isLoading}>
                             {isLoading ? 'Signing in...' : 'Sign In'}

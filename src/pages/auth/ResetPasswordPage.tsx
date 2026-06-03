@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { isCloud } from '@/lib/edition';
 import { Button } from '@/components/ui/button';
@@ -17,9 +17,51 @@ export default function ResetPasswordPage() {
 
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
+    const [website, setWebsite] = useState('');
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    const siteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string) || '';
+
+    useEffect(() => {
+        if (!siteKey || !token) return;
+
+        const scriptId = 'cloudflare-turnstile-script';
+        if (!document.getElementById(scriptId)) {
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback';
+            script.async = true;
+            script.defer = true;
+            document.body.appendChild(script);
+
+            (window as any).onloadTurnstileCallback = () => {
+                try {
+                    (window as any).turnstile.render('#turnstile-container', {
+                        sitekey: siteKey,
+                        callback: (token: string) => {
+                            setTurnstileToken(token);
+                        },
+                    });
+                } catch (e) {
+                    console.error('Turnstile render error', e);
+                }
+            };
+        } else if ((window as any).turnstile) {
+            try {
+                (window as any).turnstile.render('#turnstile-container', {
+                    sitekey: siteKey,
+                    callback: (token: string) => {
+                        setTurnstileToken(token);
+                    },
+                });
+            } catch (e) {
+                // Ignore fast re-render conflicts
+            }
+        }
+    }, [siteKey, token]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -51,7 +93,9 @@ export default function ResetPasswordPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         formFields: [{ id: 'password', value: password }],
-                        token: token
+                        token: token,
+                        website,
+                        turnstile_token: turnstileToken || undefined
                     })
                 });
 
@@ -72,7 +116,9 @@ export default function ResetPasswordPage() {
                     body: JSON.stringify({
                         email,
                         token,
-                        password
+                        password,
+                        website,
+                        turnstile_token: turnstileToken || undefined
                     })
                 });
 
@@ -162,6 +208,24 @@ export default function ResetPasswordPage() {
                                             disabled={isLoading}
                                         />
                                     </div>
+
+                                    {/* Honeypot field - invisible to users, auto-filled by bots */}
+                                    <div style={{ position: 'absolute', left: '-9999px', opacity: 0, height: 0, width: 0, overflow: 'hidden' }} aria-hidden="true">
+                                        <label htmlFor="website">Leave this field blank</label>
+                                        <input
+                                            id="website"
+                                            type="text"
+                                            name="website"
+                                            tabIndex={-1}
+                                            autoComplete="off"
+                                            value={website}
+                                            onChange={(e) => setWebsite(e.target.value)}
+                                        />
+                                    </div>
+
+                                    {siteKey && !successMessage && (
+                                        <div id="turnstile-container" className="flex justify-center py-2" />
+                                    )}
 
                                     <Button type="submit" className="w-full" disabled={isLoading}>
                                         {isLoading ? 'Resetting Password...' : 'Reset Password'}

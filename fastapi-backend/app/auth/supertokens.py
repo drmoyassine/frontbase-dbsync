@@ -73,6 +73,47 @@ def init_supertokens():
         original.create_new_session = create_new_session
         return original
 
+    # ── Custom Email Delivery (Dynamic fallback) ─────────────────────────
+    # If platform email configuration is present, use our email_service.
+    # Otherwise, do not set email_delivery so SuperTokens falls back to its 
+    # default managed service out of the box.
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    mailgun_api_key = os.getenv("MAILGUN_API_KEY")
+    has_platform_email = bool(resend_api_key or (mailgun_api_key and os.getenv("MAILGUN_DOMAIN")))
+
+    email_delivery_config = None
+    if has_platform_email:
+        from supertokens_python.ingredients.emaildelivery.types import EmailDeliveryConfig, EmailDeliveryInterface
+        from supertokens_python.recipe.emailpassword.types import PasswordResetEmailTemplateVars
+        from typing import Dict, Any
+        
+        class CustomEmailpasswordDelivery(EmailDeliveryInterface[PasswordResetEmailTemplateVars]):
+            async def send_email(self, template_vars: PasswordResetEmailTemplateVars, user_context: Dict[str, Any]) -> None:
+                from app.services.email_service import send_email
+                to_email = template_vars.user.email
+                reset_link = template_vars.password_reset_link
+                
+                subject = "Reset your Frontbase password"
+                html = f"""
+                <p>Hello,</p>
+                <p>We received a request to reset your password for Frontbase.</p>
+                <p>Click the link below to set a new password:</p>
+                <p><a href="{reset_link}">{reset_link}</a></p>
+                <p>If you didn't request this, you can safely ignore this email.</p>
+                """
+                
+                res = await send_email(
+                    to=to_email,
+                    subject=subject,
+                    html=html
+                )
+                if not res.success:
+                    raise Exception(f"Failed to send password reset email: {res.error}")
+                    
+        email_delivery_config = EmailDeliveryConfig(
+            service=CustomEmailpasswordDelivery()
+        )
+
     init(
         app_info=InputAppInfo(
             app_name="Frontbase Cloud",
@@ -96,6 +137,7 @@ def init_supertokens():
                 override=emailpassword.InputOverrideConfig(
                     apis=override_emailpassword_apis,
                 ),
+                email_delivery=email_delivery_config,
             ),
             thirdparty.init(
                 sign_in_and_up_feature=thirdparty.SignInAndUpFeature(providers=[

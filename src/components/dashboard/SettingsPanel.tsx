@@ -19,7 +19,6 @@ import { Separator } from '@/components/ui/separator';
 import { Users } from 'lucide-react';
 import { PrivacySettingsForm } from './settings/shared/PrivacySettingsForm';
 import { ProjectDetailsForm } from './settings/shared/ProjectDetailsForm';
-import { EmailProviderSettingsForm } from './settings/shared/EmailProviderSettingsForm';
 import { AdminInviteForm } from './settings/shared/AdminInviteForm';
 import { EdgeAPIKeysForm } from './settings/shared/EdgeAPIKeysForm';
 import { EdgeProvidersSection } from './settings/shared/EdgeProvidersSection';
@@ -50,7 +49,7 @@ export const SettingsPanel: React.FC = () => {
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-5 lg:w-[750px]">
           <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="team">Team & Emails</TabsTrigger>
+          <TabsTrigger value="team">Team</TabsTrigger>
           <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
           <TabsTrigger value="keys">API Keys</TabsTrigger>
           <TabsTrigger value="accounts">Connected Accounts</TabsTrigger>
@@ -77,7 +76,7 @@ export const SettingsPanel: React.FC = () => {
           </Card>
         </TabsContent>
 
-        {/* Team & Emails Tab */}
+        {/* Team Tab */}
         <TabsContent value="team" className="space-y-6 mt-6">
           <Card>
             <CardHeader>
@@ -91,10 +90,6 @@ export const SettingsPanel: React.FC = () => {
             </CardHeader>
             <CardContent className="space-y-6">
               <AdminInviteForm />
-
-              <Separator className="my-6" />
-
-              <EmailProviderSettingsForm />
             </CardContent>
           </Card>
         </TabsContent>

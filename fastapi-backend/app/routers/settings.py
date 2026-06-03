@@ -386,40 +386,6 @@ async def validate_license(data: LicenseValidationRequest):
 
 
 # =============================================================================
-# Email Provider Settings
-# =============================================================================
-
-class EmailProviderSettings(BaseModel):
-    provider: Literal["smtp", "resend", "mailgun"] = "smtp"
-    # SMTP
-    smtp_host: Optional[str] = None
-    smtp_port: Optional[int] = 587
-    smtp_user: Optional[str] = None
-    smtp_password: Optional[str] = None
-    smtp_secure: bool = True
-    # Global
-    from_email: Optional[str] = None
-    from_name: Optional[str] = None
-
-@router.get("/email", response_model=EmailProviderSettings)
-async def get_email_settings(ctx: TenantContext | None = Depends(get_tenant_context)):
-    """Get email provider settings"""
-    tenant_slug = ctx.tenant_slug if ctx else None
-    settings = load_settings(tenant_slug)
-    email_config = settings.get("email_provider", {})
-    return EmailProviderSettings(**email_config)
-
-@router.put("/email", response_model=EmailProviderSettings)
-async def update_email_settings(settings_update: EmailProviderSettings, ctx: TenantContext | None = Depends(get_tenant_context)):
-    """Update email provider settings"""
-    tenant_slug = ctx.tenant_slug if ctx else None
-    settings = load_settings(tenant_slug)
-    settings["email_provider"] = settings_update.dict()
-    save_settings(settings, tenant_slug)
-    return settings_update
-
-
-# =============================================================================
 # Admin Invites (SaaS Architecture)
 # =============================================================================
 
@@ -461,7 +427,25 @@ async def send_admin_invite(request: AdminInviteRequest):
         "updated_at": now,
     }
     
-    # In production, we would use settings["email_provider"] to send the email
-    print(f"[Email Provider] Sending invite to {request.email} with temporary password: {random_pass}")
+    # Send invite email via email_service
+    from app.services.email_service import send_email
+    
+    subject = "You have been invited to join Frontbase"
+    html = f"""
+    <p>Hello,</p>
+    <p>You have been invited to join Frontbase as an <strong>{request.role}</strong>.</p>
+    <p>Your temporary password is: <code>{random_pass}</code></p>
+    <p>Please log in and change your password immediately.</p>
+    """
+    
+    email_result = await send_email(
+        to=request.email,
+        subject=subject,
+        html=html
+    )
+    if not email_result.success:
+        print(f"[Email Provider] Failed to send invite email to {request.email}: {email_result.error}")
+    else:
+        print(f"[Email Provider] Invite email sent to {request.email} (Message ID: {email_result.message_id})")
     
     return AdminInviteResponse(success=True, message=f"Invitation sent to {request.email}")

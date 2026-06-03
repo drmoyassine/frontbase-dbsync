@@ -178,6 +178,9 @@ PROVIDER_SECRET_KEYS: dict[str, set[str]] = {
     "turso":         {"databases"},     # manual registry: JSON blob of DB entries
     "upstash_redis": {"cache_token"},
     "qstash":        {"queue_token", "signing_key", "next_signing_key"},
+    # ── Email Providers ──
+    "resend":        {"api_key"},
+    "mailgun":       {"api_key"},
 }
 
 PROVIDER_METADATA_KEYS: dict[str, set[str]] = {
@@ -199,6 +202,9 @@ PROVIDER_METADATA_KEYS: dict[str, set[str]] = {
     "turso":         set(),             # all data in encrypted blob
     "upstash_redis": {"cache_url"},
     "qstash":        {"queue_url"},
+    # ── Email Providers ──
+    "resend":        set(),
+    "mailgun":       {"domain", "region"},
 }
 
 

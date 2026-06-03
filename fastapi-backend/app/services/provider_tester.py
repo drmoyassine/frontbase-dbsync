@@ -349,6 +349,48 @@ async def _test_ollama(creds: dict) -> dict:
     return {"success": True, "detail": f"Connected to Ollama — {count} local models found"}
 
 
+async def _test_resend(creds: dict) -> dict:
+    api_key = creds.get("api_key", "")
+    if not api_key:
+        return {"success": False, "detail": "API key is required"}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            "https://api.resend.com/domains",
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+    if resp.status_code == 401:
+        return {"success": False, "detail": "Invalid Resend API key"}
+    if resp.status_code != 200:
+        return {"success": False, "detail": f"Resend API error: {resp.status_code}"}
+    return {"success": True, "detail": "Connected to Resend successfully"}
+
+
+async def _test_mailgun(creds: dict) -> dict:
+    api_key = creds.get("api_key", "")
+    domain = creds.get("domain", "")
+    region = creds.get("region", "us")
+    if not api_key:
+        return {"success": False, "detail": "API key is required"}
+    if not domain:
+        return {"success": False, "detail": "Domain is required"}
+    
+    base_url = "https://api.eu.mailgun.net" if region == "eu" else "https://api.mailgun.net"
+    url = f"{base_url}/v3/domains/{domain}"
+    
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            url,
+            auth=("api", api_key),
+        )
+    if resp.status_code == 401:
+        return {"success": False, "detail": "Invalid Mailgun API key"}
+    if resp.status_code == 404:
+        return {"success": False, "detail": f"Domain {domain} not found in this Mailgun account/region"}
+    if resp.status_code != 200:
+        return {"success": False, "detail": f"Mailgun API error: {resp.status_code}"}
+    return {"success": True, "detail": f"Connected to Mailgun. Domain {domain} found."}
+
+
 # =============================================================================
 # Registry — add new providers here
 # =============================================================================
@@ -368,4 +410,6 @@ _TESTERS: dict[str, object] = {
     "openai":         _test_openai,
     "anthropic":      _test_anthropic,
     "ollama":         _test_ollama,
+    "resend":         _test_resend,
+    "mailgun":        _test_mailgun,
 }

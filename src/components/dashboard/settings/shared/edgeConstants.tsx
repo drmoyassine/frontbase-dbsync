@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive, Bot, Cpu } from 'lucide-react';
+import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive, Bot, Cpu, Mail } from 'lucide-react';
 import { BRAND_ICONS } from '@/components/icons/providers';
 import { Badge } from '@/components/ui/badge';
 
@@ -46,6 +46,8 @@ const LUCIDE_FALLBACKS: Record<string, React.FC<any>> = {
     openai: Bot,
     anthropic: Cpu,
     ollama: Server,
+    resend: Mail,
+    mailgun: Mail,
 };
 
 /** Brand SVGs override Lucide fallbacks when a matching .svg exists */
@@ -314,6 +316,26 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         ],
         helpText: <>Ensure your local Ollama instance is running and accessible from the server.</>,
     },
+    resend: {
+        label: 'Resend',
+        defaultName: 'Resend Account',
+        capabilities: ['email'],
+        fields: [
+            { key: 'api_key', label: 'API Key', placeholder: 're_...', type: 'password', required: true },
+        ],
+        helpText: <>Get your API key from the <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Resend dashboard</a>.</>,
+    },
+    mailgun: {
+        label: 'Mailgun',
+        defaultName: 'Mailgun Account',
+        capabilities: ['email'],
+        fields: [
+            { key: 'api_key', label: 'API Key', placeholder: 'key-...', type: 'password', required: true },
+            { key: 'domain', label: 'Domain', placeholder: 'mg.example.com', required: true },
+            { key: 'region', label: 'Region', placeholder: 'us', required: false },
+        ],
+        helpText: <>Found in Mailgun → API Security. US = api.mailgun.net, EU = api.eu.mailgun.net.</>,
+    },
 };
 
 // Derived: providers that support GPU inference (used to filter deploy wizard)
@@ -344,6 +366,11 @@ export const CACHE_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
 // Derived: providers that support queue (used by EdgeQueuesForm)
 export const QUEUE_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
     .filter(([, c]) => c.capabilities?.includes('queue'))
+    .map(([k]) => k);
+
+// Derived: providers that support email
+export const EMAIL_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
+    .filter(([, c]) => c.capabilities?.includes('email'))
     .map(([k]) => k);
 
 // ============================================================================

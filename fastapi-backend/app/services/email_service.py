@@ -12,6 +12,7 @@ import logging
 from typing import Optional, Union, List
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from app.middleware.tenant_context import TenantContext
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ async def send_email(
     project_id: Optional[str] = None,
     provider_account_id: Optional[str] = None,
     db: Optional[Session] = None,
+    ctx: Optional[TenantContext] = None,
 ) -> EmailSendResult:
     """Send email.
     
@@ -75,9 +77,15 @@ async def send_email(
     if not active_api_key and provider_account_id and db:
         from app.core.security import get_provider_creds
         from app.models.models import EdgeProviderAccount
-        provider_account = db.query(EdgeProviderAccount).filter(
-            EdgeProviderAccount.id == provider_account_id
-        ).first()
+        from app.middleware.tenant_filter import _scoped_provider_query
+        
+        # Scope the query using TenantContext to prevent cross-tenant access in cloud mode
+        query = _scoped_provider_query(db, ctx) if ctx else db.query(EdgeProviderAccount)
+        query = query.filter(EdgeProviderAccount.id == provider_account_id)
+        if project_id:
+            query = query.filter(EdgeProviderAccount.project_id == project_id)
+            
+        provider_account = query.first()
         if provider_account:
             active_provider = str(provider_account.provider)
             creds = get_provider_creds(str(provider_account.id), db)
@@ -89,7 +97,11 @@ async def send_email(
     if not active_api_key and project_id and db:
         from app.core.security import get_provider_creds
         from app.models.models import EdgeProviderAccount
-        provider_account = db.query(EdgeProviderAccount).filter(
+        from app.middleware.tenant_filter import _scoped_provider_query
+        
+        # Scope the query using TenantContext to prevent cross-tenant access in cloud mode
+        query = _scoped_provider_query(db, ctx) if ctx else db.query(EdgeProviderAccount)
+        provider_account = query.filter(
             EdgeProviderAccount.project_id == project_id,
             EdgeProviderAccount.provider.in_(["resend", "mailgun"]),
             EdgeProviderAccount.is_active == True

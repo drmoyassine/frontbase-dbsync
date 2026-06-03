@@ -16,6 +16,8 @@ class User(Base):
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     last_login_at = Column(String, nullable=True)
+    reset_token = Column(String, nullable=True)
+    reset_token_expires_at = Column(String, nullable=True)
     
     # Relationships
     sessions = relationship("UserSession", back_populates="user")

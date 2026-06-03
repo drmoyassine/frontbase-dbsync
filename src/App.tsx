@@ -34,6 +34,8 @@ import { EdgeInfrastructurePanel } from "@/components/dashboard/EdgeInfrastructu
 // Auth Pages
 import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
+import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 
 // Other Pages
 import BuilderPage from "./pages/BuilderPage";
@@ -135,6 +137,8 @@ const App = () => {
               {/* Admin root redirects to dashboard */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               {isCloud() && <Route path="/signup" element={<SignupPage />} />}
               <Route path="/embed/auth/:formId" element={<EmbedAuthPage />} />
 

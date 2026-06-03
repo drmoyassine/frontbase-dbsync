@@ -62,6 +62,16 @@ class SignupRequest(BaseModel):
     slug: str
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    token: str
+    password: str
+
+
 class UserResponse(BaseModel):
     id: str
     email: str
@@ -547,3 +557,138 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(SESSION_COOKIE_NAME)
 
     return {"message": "Logged out successfully"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Password Reset Endpoints (Self-Hosted Only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/forgot-password")
+async def forgot_password(request: Request, body: ForgotPasswordRequest):
+    """Request a password reset link (Self-hosted only)."""
+    if is_cloud():
+        raise HTTPException(
+            status_code=400,
+            detail="Forgot password endpoint is managed via SuperTokens in cloud mode."
+        )
+
+    email = body.email.strip().lower()
+    
+    # Check if the user is the master admin
+    admin = ADMIN_USERS.get(email)
+    if not admin:
+        # Return a generic success to avoid user enumeration
+        return {
+            "success": True,
+            "message": "If the email is registered, a password reset link has been sent."
+        }
+        
+    # Generate token and expiry
+    token = secrets.token_urlsafe(32)
+    expiry = (datetime.utcnow() + timedelta(hours=1)).isoformat() + "Z"
+    
+    # Store token in-memory on the admin dict
+    admin["reset_token"] = token
+    admin["reset_token_expires_at"] = expiry
+    
+    # Determine base URL for reset link
+    public_url = os.getenv("PUBLIC_URL")
+    if not public_url:
+        public_url = str(request.base_url).rstrip("/")
+        
+    reset_link = f"{public_url}/reset-password?token={token}&email={email}"
+    
+    # Check if email configuration is present
+    resend_api_key = os.getenv("RESEND_API_KEY")
+    mailgun_api_key = os.getenv("MAILGUN_API_KEY")
+    has_email_config = bool(resend_api_key or (mailgun_api_key and os.getenv("MAILGUN_DOMAIN")))
+    
+    if not has_email_config:
+        # No email provider configured! Print to console and return dev_link
+        print(f"\n[PASSWORD RESET LINK (NO EMAIL CONFIG)]:\n{reset_link}\n")
+        return {
+            "success": False,
+            "error_code": "NO_EMAIL_PROVIDER",
+            "message": "No email provider is configured on this instance.",
+            "dev_link": reset_link
+        }
+        
+    # If configured, send email via email_service
+    from app.services.email_service import send_email
+    subject = "Reset your Frontbase password"
+    html = f"""
+    <p>Hello,</p>
+    <p>We received a request to reset your password for Frontbase.</p>
+    <p>Click the link below to set a new password:</p>
+    <p><a href="{reset_link}">{reset_link}</a></p>
+    <p>This link is valid for 1 hour.</p>
+    <p>If you didn't request this, you can safely ignore this email.</p>
+    """
+    
+    email_result = await send_email(
+        to=email,
+        subject=subject,
+        html=html
+    )
+    
+    if not email_result.success:
+        # If sending failed, print to console as fallback and return warning
+        print(f"\n[PASSWORD RESET LINK (SEND FAILURE - {email_result.error})]:\n{reset_link}\n")
+        return {
+            "success": False,
+            "error_code": "NO_EMAIL_PROVIDER",
+            "message": f"Failed to send email: {email_result.error}",
+            "dev_link": reset_link
+        }
+        
+    return {
+        "success": True,
+        "message": "If the email is registered, a password reset link has been sent."
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest):
+    """Reset password using the reset token (Self-hosted only)."""
+    if is_cloud():
+        raise HTTPException(
+            status_code=400,
+            detail="Reset password endpoint is managed via SuperTokens in cloud mode."
+        )
+
+    email = body.email.strip().lower()
+    
+    # Check if the user is the master admin
+    admin = ADMIN_USERS.get(email)
+    if not admin:
+        raise HTTPException(status_code=400, detail="Invalid email or token.")
+        
+    # Verify token exists and matches
+    stored_token = admin.get("reset_token")
+    stored_expiry = admin.get("reset_token_expires_at")
+    
+    if not stored_token or stored_token != body.token:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+        
+    # Verify expiry
+    if stored_expiry:
+        try:
+            # strip 'Z' for parsing if present
+            expiry_str = stored_expiry[:-1] if stored_expiry.endswith("Z") else stored_expiry
+            expiry_dt = datetime.fromisoformat(expiry_str)
+            if datetime.utcnow() > expiry_dt:
+                raise HTTPException(status_code=400, detail="Reset token has expired.")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Reset token verification failed.")
+            
+    # Update password
+    admin["password_hash"] = hash_password(body.password)
+    
+    # Clear token
+    admin.pop("reset_token", None)
+    admin.pop("reset_token_expires_at", None)
+    
+    return {
+        "success": True,
+        "message": "Password has been successfully reset. You can now log in."
+    }

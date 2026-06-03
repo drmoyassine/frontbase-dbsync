@@ -1,0 +1,184 @@
+import { useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { isCloud } from '@/lib/edition';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { CheckCircle2 } from 'lucide-react';
+
+
+
+export default function ResetPasswordPage() {
+    const [searchParams] = useSearchParams();
+    const token = searchParams.get('token') || '';
+    const email = searchParams.get('email') || '';
+
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        if (!token) {
+            setErrorMessage('Reset token is missing from the link.');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            setErrorMessage('Passwords do not match.');
+            return;
+        }
+
+        if (password.length < 8) {
+            setErrorMessage('Password must be at least 8 characters long.');
+            return;
+        }
+
+        setIsLoading(true);
+        setSuccessMessage(null);
+        setErrorMessage(null);
+
+        try {
+            if (isCloud()) {
+                // Cloud mode: SuperTokens reset password API
+                const response = await fetch(`/api/auth/user/password/reset`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        formFields: [{ id: 'password', value: password }],
+                        token: token
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok || data.status !== 'OK') {
+                    const detail = data.status === 'RESET_PASSWORD_INVALID_TOKEN_ERROR' 
+                        ? 'The reset link has expired or is invalid.' 
+                        : (data.formFields?.[0]?.error || 'Failed to reset password.');
+                    setErrorMessage(detail);
+                } else {
+                    setSuccessMessage('Your password has been successfully reset.');
+                }
+            } else {
+                // Self-Hosted mode: custom reset-password API
+                const response = await fetch(`/api/auth/reset-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        token,
+                        password
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    setErrorMessage(data.detail || 'Failed to reset password.');
+                } else {
+                    setSuccessMessage(data.message || 'Your password has been successfully reset.');
+                }
+            }
+        } catch (err) {
+            setErrorMessage(err instanceof Error ? err.message : 'Network error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-background p-4">
+            <Card className="w-full max-w-md">
+                <CardHeader className="space-y-1">
+                    <CardTitle className="text-2xl font-bold">New Password</CardTitle>
+                    <CardDescription>
+                        Set a new password for your account
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {!token ? (
+                        <div className="space-y-4">
+                            <Alert variant="destructive">
+                                <AlertDescription>
+                                    This password reset link is invalid or has expired. Please request a new reset link.
+                                </AlertDescription>
+                            </Alert>
+                            <p className="text-center text-sm text-muted-foreground pt-2">
+                                Go to{' '}
+                                <Link to="/forgot-password" className="text-primary hover:underline font-medium">
+                                    Request Reset Link
+                                </Link>
+                            </p>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            {errorMessage && (
+                                <Alert variant="destructive">
+                                    <AlertDescription>{errorMessage}</AlertDescription>
+                                </Alert>
+                            )}
+
+                            {successMessage && (
+                                <div className="space-y-4">
+                                    <Alert variant="default" className="border-green-500/20 bg-green-500/5 text-green-600 dark:text-green-400">
+                                        <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                        <AlertTitle>Success</AlertTitle>
+                                        <AlertDescription>{successMessage}</AlertDescription>
+                                    </Alert>
+                                    <Button asChild className="w-full">
+                                        <Link to="/login">Sign In</Link>
+                                    </Button>
+                                </div>
+                            )}
+
+                            {!successMessage && (
+                                <>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="password">New Password</Label>
+                                        <Input
+                                            id="password"
+                                            type="password"
+                                            placeholder="••••••••"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            required
+                                            disabled={isLoading}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label htmlFor="confirmPassword">Confirm Password</Label>
+                                        <Input
+                                            id="confirmPassword"
+                                            type="password"
+                                            placeholder="••••••••"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            required
+                                            disabled={isLoading}
+                                        />
+                                    </div>
+
+                                    <Button type="submit" className="w-full" disabled={isLoading}>
+                                        {isLoading ? 'Resetting Password...' : 'Reset Password'}
+                                    </Button>
+
+                                    <p className="text-center text-sm text-muted-foreground pt-2">
+                                        Back to{' '}
+                                        <Link to="/login" className="text-primary hover:underline font-medium">
+                                            Sign In
+                                        </Link>
+                                    </p>
+                                </>
+                            )}
+                        </form>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    );
+}

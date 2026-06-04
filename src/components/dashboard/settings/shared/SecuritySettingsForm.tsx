@@ -199,6 +199,8 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
             'IP_BANNED': 'bg-red-500/10 text-red-600 border-red-200 dark:border-red-800',
             'IP_UNBANNED': 'bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800',
             'WAF_TOGGLED': 'bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-800',
+            'WAF_BLOCKED': 'bg-red-500/10 text-red-600 border-red-200 dark:border-red-800 font-bold',
+            'WAF_AUDIT_ADMIN': 'bg-orange-500/10 text-orange-600 border-orange-200 dark:border-orange-800',
         };
         
         const className = styleMap[action] || 'bg-muted text-muted-foreground';
@@ -318,19 +320,22 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                         <CardTitle className="flex items-center gap-2 text-base font-semibold">
                             <Bot className="h-5 w-5 text-primary" />
                             Web Application Firewall (WAF)
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 rounded font-normal">
+                                Anomaly Engine
+                            </Badge>
                         </CardTitle>
                         <CardDescription>
-                            Scan incoming POST/PUT/DELETE write payloads for XSS scripts and SQL Injection vectors.
+                            Scan incoming write payloads for SQL Injection and Cross-Site Scripting (XSS) using recursive decoding and weighted anomaly scoring.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
                             <div className="space-y-1">
                                 <Label htmlFor="waf-toggle" className="font-semibold block cursor-pointer">
-                                    Local Request Inspector
+                                    Local Anomaly Inspector
                                 </Label>
                                 <span className="text-xs text-muted-foreground block">
-                                    {wafEnabled ? 'WAF is scanning JSON payloads in real-time.' : 'Activate payload inspection rules.'}
+                                    {wafEnabled ? 'Scanning JSON fields recursively (block threshold: 5).' : 'Activate payload inspection rules.'}
                                 </span>
                             </div>
                             <Switch
@@ -341,11 +346,11 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                             />
                         </div>
                         <div className="text-xs space-y-1.5 text-muted-foreground p-3 border rounded border-dashed">
-                            <p className="font-semibold text-primary">Rules Active Natively:</p>
+                            <p className="font-semibold text-primary">Advanced Protections:</p>
                             <ul className="list-disc pl-4 space-y-1">
-                                <li>Blocks scripts tags, iframe elements, and javascript handler injections.</li>
-                                <li>Rejects common boolean SQL bypass and Union queries.</li>
-                                <li>Zero latency impact for standard database read operations.</li>
+                                <li><strong>Obfuscation Resilient:</strong> Decodes double URL encoding, HTML entities, and comment tricks.</li>
+                                <li><strong>Weighted Scoring:</strong> Isolated terms are allowed; combined malicious signals trigger block.</li>
+                                <li><strong>Admin Exemption:</strong> Design actions are logged but never blocked for authenticated admins.</li>
                             </ul>
                         </div>
                     </CardContent>
@@ -450,7 +455,16 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                                 ) : (
                                     blocklist.map((ban) => (
                                         <TableRow key={ban.id} className="transition-all hover:bg-muted/10">
-                                            <TableCell className="font-mono text-xs font-semibold">{ban.ip_or_range}</TableCell>
+                                            <TableCell className="font-mono text-xs font-semibold">
+                                                <div className="flex items-center gap-2">
+                                                    {ban.ip_or_range}
+                                                    {ban.reason?.includes('WAF Auto-Ban') && (
+                                                        <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-200 dark:border-red-800 text-[9px] px-1 py-0.5 rounded font-normal">
+                                                            Auto
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </TableCell>
                                             <TableCell className="text-sm text-muted-foreground">{ban.reason || 'None specified'}</TableCell>
                                             <TableCell className="text-xs text-muted-foreground">{formatDate(ban.created_at)}</TableCell>
                                             <TableCell className="text-center">

@@ -127,39 +127,128 @@ def get_lockout_key(request: Request, email: str) -> str:
     return f"{ip}:{email.strip().lower()}"
 
 
-def check_lockout(request: Request, email: str) -> None:
+async def check_lockout(request: Request, email: str) -> None:
     """Check if the client is currently locked out."""
     key = get_lockout_key(request, email)
+    
+    # 1. Try Redis first
+    redis_url = None
+    cache_get_fn = None
+    try:
+        from app.services.sync.redis_client import cache_get, get_configured_redis_settings
+        cache_get_fn = cache_get
+        redis_settings = await get_configured_redis_settings()
+        redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+    except Exception:
+        pass
+        
+    if redis_url and cache_get_fn is not None:
+        try:
+            locked_until_str = await cache_get_fn(redis_url, f"security:lockout:{key}")
+            if locked_until_str:
+                locked_until = datetime.fromisoformat(locked_until_str)
+                if datetime.utcnow() < locked_until:
+                    remaining_seconds = int((locked_until - datetime.utcnow()).total_seconds())
+                    remaining_minutes = max(1, remaining_seconds // 60)
+                    logger.warning(f"[Auth] Blocked locked out client {key} via Redis for {remaining_minutes} more minutes.")
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Too many failed attempts. Please try again in {remaining_minutes} minutes."
+                    )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"[Auth] Redis check_lockout failed, falling back: {e}")
+
+    # 2. Local Fallback
     entry = FAILED_LOGIN_ATTEMPTS.get(key)
     if entry:
         locked_until = entry.get("locked_until")
         if locked_until and datetime.utcnow() < locked_until:
             remaining_seconds = int((locked_until - datetime.utcnow()).total_seconds())
             remaining_minutes = max(1, remaining_seconds // 60)
-            logger.warning(f"[Auth] Blocked locked out client {key} for {remaining_minutes} more minutes.")
+            logger.warning(f"[Auth] Blocked locked out client {key} via L1 memory for {remaining_minutes} more minutes.")
             raise HTTPException(
                 status_code=429,
                 detail=f"Too many failed attempts. Please try again in {remaining_minutes} minutes."
             )
 
 
-def record_failed_attempt(request: Request, email: str) -> None:
+async def record_failed_attempt(request: Request, email: str) -> None:
     """Record a failed login/reset attempt and lock out if threshold is reached."""
     key = get_lockout_key(request, email)
+    
+    # 1. Try Redis first
+    redis_url = None
+    cache_get_fn = None
+    cache_set_fn = None
+    try:
+        from app.services.sync.redis_client import cache_get, cache_set, get_configured_redis_settings
+        cache_get_fn = cache_get
+        cache_set_fn = cache_set
+        redis_settings = await get_configured_redis_settings()
+        redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+    except Exception:
+        pass
+        
+    if redis_url and cache_get_fn is not None and cache_set_fn is not None:
+        try:
+            fail_key = f"security:login_fail:{key}"
+            attempts_str = await cache_get_fn(redis_url, fail_key)
+            attempts = int(attempts_str) if attempts_str is not None else 0
+            attempts += 1
+            
+            if attempts >= MAX_FAILED_ATTEMPTS:
+                lockout_until = datetime.utcnow() + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+                lockout_key = f"security:lockout:{key}"
+                await cache_set_fn(redis_url, lockout_key, lockout_until.isoformat(), ttl=LOCKOUT_DURATION_MINUTES * 60)
+                await cache_set_fn(redis_url, fail_key, None, ttl=1)
+                logger.warning(f"[Auth] Client {key} reached max failed attempts. Locked out for {LOCKOUT_DURATION_MINUTES} minutes (Redis).")
+                return
+            else:
+                attempts_left = MAX_FAILED_ATTEMPTS - attempts
+                await cache_set_fn(redis_url, fail_key, attempts, ttl=900)
+                logger.info(f"[Auth] Failed attempt {attempts} for client {key}. {attempts_left} attempts remaining (Redis).")
+                return
+        except Exception as e:
+            logger.warning(f"[Auth] Redis record_failed_attempt failed, falling back: {e}")
+
+    # 2. Local Fallback
     entry = FAILED_LOGIN_ATTEMPTS.setdefault(key, {"attempts": 0, "locked_until": None})
     entry["attempts"] += 1
     
     if entry["attempts"] >= MAX_FAILED_ATTEMPTS:
         entry["locked_until"] = datetime.utcnow() + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
-        logger.warning(f"[Auth] Client {key} reached max failed attempts. Locked out for {LOCKOUT_DURATION_MINUTES} minutes.")
+        logger.warning(f"[Auth] Client {key} reached max failed attempts. Locked out for {LOCKOUT_DURATION_MINUTES} minutes (L1 memory).")
     else:
         attempts_left = MAX_FAILED_ATTEMPTS - entry["attempts"]
-        logger.info(f"[Auth] Failed attempt {entry['attempts']} for client {key}. {attempts_left} attempts remaining.")
+        logger.info(f"[Auth] Failed attempt {entry['attempts']} for client {key}. {attempts_left} attempts remaining (L1 memory).")
 
 
-def clear_failed_attempts(request: Request, email: str) -> None:
+async def clear_failed_attempts(request: Request, email: str) -> None:
     """Clear failed attempts upon successful login/reset."""
     key = get_lockout_key(request, email)
+    
+    # 1. Try Redis first
+    redis_url = None
+    cache_set_fn = None
+    try:
+        from app.services.sync.redis_client import cache_set, get_configured_redis_settings
+        cache_set_fn = cache_set
+        redis_settings = await get_configured_redis_settings()
+        redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+    except Exception:
+        pass
+        
+    if redis_url and cache_set_fn is not None:
+        try:
+            await cache_set_fn(redis_url, f"security:login_fail:{key}", None, ttl=1)
+            await cache_set_fn(redis_url, f"security:lockout:{key}", None, ttl=1)
+            logger.info(f"[Auth] Cleared failed login attempts for client {key} (Redis).")
+        except Exception as e:
+            logger.warning(f"[Auth] Redis clear_failed_attempts failed: {e}")
+
+    # 2. Local Fallback
     FAILED_LOGIN_ATTEMPTS.pop(key, None)
 
 
@@ -373,7 +462,7 @@ async def login(request: Request, body: LoginRequest, response: Response):
     """
     # ── Security Checks: Lockout, Honeypot & Turnstile ───────────────────
     if not is_cloud():
-        check_lockout(request, body.email)
+        await check_lockout(request, body.email)
         
     check_honeypot(body.website)
     await verify_turnstile_token(body.turnstile_token, request.client.host if request.client else "unknown")
@@ -392,11 +481,16 @@ async def login(request: Request, body: LoginRequest, response: Response):
 
         if admin["password_hash"] != hash_password(body.password):
             if not is_cloud():
-                record_failed_attempt(request, body.email)
+                await record_failed_attempt(request, body.email)
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         if not is_cloud():
-            clear_failed_attempts(request, body.email)
+            await clear_failed_attempts(request, body.email)
+
+        # Session rotation: invalidate any existing session
+        old_token = request.cookies.get(SESSION_COOKIE_NAME)
+        if old_token and old_token in sessions:
+            sessions.pop(old_token, None)
 
         token = create_session(
             admin["id"], admin["email"],
@@ -434,7 +528,7 @@ async def login(request: Request, body: LoginRequest, response: Response):
 
     # ── Path 2: SuperTokens (cloud mode) ────────────────────────────────
     if not is_cloud():
-        record_failed_attempt(request, body.email)
+        await record_failed_attempt(request, body.email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     from supertokens_python.recipe.emailpassword.asyncio import sign_in as st_sign_in
@@ -787,14 +881,14 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest):
 
     # ── Security Checks: Lockout, Honeypot & Turnstile ───────────────────
     if not is_cloud():
-        check_lockout(request, body.email)
+        await check_lockout(request, body.email)
         
     check_honeypot(body.website)
     await verify_turnstile_token(body.turnstile_token, request.client.host if request.client else "unknown")
 
     # Record the attempt to rate-limit password resets (protect against email spam)
     if not is_cloud():
-        record_failed_attempt(request, body.email)
+        await record_failed_attempt(request, body.email)
 
     email = body.email.strip().lower()
     
@@ -884,7 +978,7 @@ async def reset_password(request: Request, body: ResetPasswordRequest):
     
     # ── Security Checks: Lockout, Honeypot & Turnstile ───────────────────
     if not is_cloud():
-        check_lockout(request, email)
+        await check_lockout(request, email)
         
     check_honeypot(body.website)
     await verify_turnstile_token(body.turnstile_token, request.client.host if request.client else "unknown")
@@ -893,7 +987,7 @@ async def reset_password(request: Request, body: ResetPasswordRequest):
     admin = ADMIN_USERS.get(email)
     if not admin:
         if not is_cloud():
-            record_failed_attempt(request, email)
+            await record_failed_attempt(request, email)
         raise HTTPException(status_code=400, detail="Invalid email or token.")
         
     # Verify token exists and matches
@@ -902,7 +996,7 @@ async def reset_password(request: Request, body: ResetPasswordRequest):
     
     if not stored_token or stored_token != body.token:
         if not is_cloud():
-            record_failed_attempt(request, email)
+            await record_failed_attempt(request, email)
         raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
         
     # Verify expiry
@@ -913,13 +1007,13 @@ async def reset_password(request: Request, body: ResetPasswordRequest):
             expiry_dt = datetime.fromisoformat(expiry_str)
             if datetime.utcnow() > expiry_dt:
                 if not is_cloud():
-                    record_failed_attempt(request, email)
+                    await record_failed_attempt(request, email)
                 raise HTTPException(status_code=400, detail="Reset token has expired.")
         except HTTPException:
             raise
         except Exception:
             if not is_cloud():
-                record_failed_attempt(request, email)
+                await record_failed_attempt(request, email)
             raise HTTPException(status_code=400, detail="Reset token verification failed.")
             
     # Update password
@@ -929,7 +1023,7 @@ async def reset_password(request: Request, body: ResetPasswordRequest):
     admin.pop("reset_token", None)
     admin.pop("reset_token_expires_at", None)
     if not is_cloud():
-        clear_failed_attempts(request, email)
+        await clear_failed_attempts(request, email)
     
     return {
         "success": True,

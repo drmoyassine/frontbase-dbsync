@@ -315,22 +315,119 @@ def is_waf_enabled() -> bool:
     except Exception:
         return False
 
-# --- WAF Patterns ---
-SQLI_PATTERN = re.compile(
-    r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|TRUNCATE)\b)|"
-    r"('\s*OR\s*'?\w+'?\s*=\s*'?\w+'?)|"
-    r"(UNION\s+ALL\s+SELECT)",
-    re.IGNORECASE
-)
 
-XSS_PATTERN = re.compile(
-    r"(<script\b[^>]*>)|"
-    r"(javascript:)|"
-    r"(onerror\s*=)|"
-    r"(onload\s*=)|"
-    r"(<iframe\b[^>]*>)",
-    re.IGNORECASE
-)
+# --- Smart Anomaly WAF Engine ---
+import html
+import urllib.parse
+from typing import Dict, Any
+
+def _waf_decode(payload: str) -> str:
+    """Recursively decode URL encoding and HTML entities, clean comments, and normalize spaces."""
+    if not payload:
+        return ""
+    
+    # 1. URL decoding loop (up to 3 passes to prevent evasion via multi-encoding)
+    current = payload
+    for _ in range(3):
+        decoded = urllib.parse.unquote(current)
+        if decoded == current:
+            break
+        current = decoded
+        
+    # 2. HTML Entity decoding
+    current = html.unescape(current)
+    
+    # 3. Strip SQL inline comments (e.g. SEL/**/ECT -> SELECT)
+    # We replace comment patterns with spaces so keywords don't accidentally concatenate
+    # e.g., UNION/*...*/SELECT -> UNION SELECT
+    current = re.sub(r'/\*.*?\*/', ' ', current, flags=re.DOTALL)
+    
+    # Also strip SQL single-line comment markers -- and #
+    current = re.sub(r'--.*$', ' ', current, flags=re.MULTILINE)
+    current = re.sub(r'#.*$', ' ', current, flags=re.MULTILINE)
+    
+    # 4. Null-byte removal
+    current = current.replace("\x00", "")
+    
+    # 5. Normalize multiple spaces / tabs / newlines into a single space
+    current = re.sub(r'\s+', ' ', current).strip()
+    
+    return current
+
+
+def _extract_string_values(data: Any) -> List[str]:
+    """Recursively extract only string values from any JSON structure."""
+    strings: List[str] = []
+    if isinstance(data, dict):
+        for val in data.values():
+            strings.extend(_extract_string_values(val))
+    elif isinstance(data, list):
+        for val in data:
+            strings.extend(_extract_string_values(val))
+    elif isinstance(data, str):
+        strings.append(data)
+    return strings
+
+
+WAF_RULES = [
+    # (weight, compiled_regex, description)
+    (5, re.compile(r"('\s*OR\s*'?\w+'?\s*=\s*'?\w+'?)|(true\s*=\s*true)", re.IGNORECASE), "SQLi tautology"),
+    (5, re.compile(r"UNION\s+(ALL\s+)?SELECT", re.IGNORECASE), "SQLi union query"),
+    (5, re.compile(r"<script\b[^>]*>", re.IGNORECASE), "XSS script tag"),
+    (3, re.compile(r"SELECT\s+.*\s+FROM", re.IGNORECASE), "SQLi select query"),
+    (3, re.compile(r"\b(DROP|ALTER|TRUNCATE)\s+TABLE\b", re.IGNORECASE), "SQL DDL query"),
+    (3, re.compile(r"javascript:", re.IGNORECASE), "XSS javascript scheme"),
+    (3, re.compile(r"<iframe\b[^>]*>", re.IGNORECASE), "XSS iframe tag"),
+    (2, re.compile(r"\bon(error|load|click|mouseover)\s*=", re.IGNORECASE), "XSS event listener"),
+    (1, re.compile(r"\b(INSERT|UPDATE|DELETE)\s+INTO?\b", re.IGNORECASE), "SQL DML keyword"),
+]
+
+WAF_BLOCK_THRESHOLD = 5
+
+_WAF_STRIKES: Dict[str, List[float]] = {}
+WAF_STRIKE_WINDOW = 600.0  # 10 minutes
+WAF_MAX_STRIKES = 3
+
+async def record_waf_strike(client_ip: str) -> bool:
+    """Record a WAF block strike for an IP. Auto-ban if strikes exceed limit within window.
+    Returns True if IP was banned, False otherwise.
+    """
+    now = time.time()
+    strikes = _WAF_STRIKES.setdefault(client_ip, [])
+    # Filter out strikes older than the window
+    strikes = [t for t in strikes if now - t < WAF_STRIKE_WINDOW]
+    strikes.append(now)
+    _WAF_STRIKES[client_ip] = strikes
+    
+    if len(strikes) >= WAF_MAX_STRIKES:
+        # Clear strikes for this IP
+        _WAF_STRIKES[client_ip] = []
+        try:
+            from app.models.models import IPBlocklist
+            from app.database.config import SessionLocal
+            db = SessionLocal()
+            try:
+                # Check if already blocked in DB
+                exists = db.query(IPBlocklist).filter(IPBlocklist.ip_or_range == client_ip).first()
+                if not exists:
+                    import uuid
+                    from datetime import datetime
+                    new_ban = IPBlocklist(
+                        id=str(uuid.uuid4()),
+                        ip_or_range=client_ip,
+                        reason="WAF Auto-Ban (3 strikes)",
+                        created_at=datetime.utcnow().isoformat() + "Z"
+                    )
+                    db.add(new_ban)
+                    db.commit()
+                    invalidate_blocklist_cache()
+                    logger.warning(f"[Security] IP {client_ip} auto-banned after {WAF_MAX_STRIKES} WAF strikes.")
+                    return True
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"[Security] Failed to auto-ban IP {client_ip}: {e}")
+    return False
 
 
 if is_cloud():
@@ -390,6 +487,18 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     if os.getenv("DEPLOYMENT_MODE") == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        
+    # Content Security Policy for non-API requests (HTML content)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob: https:; "
+            "font-src 'self' data: https:; "
+            "connect-src 'self' https:; "
+            "frame-ancestors 'self'"
+        )
     return response
 
 
@@ -398,6 +507,22 @@ async def add_security_headers(request: Request, call_next):
 async def waf_middleware(request: Request, call_next):
     if request.method in ("POST", "PUT", "DELETE"):
         if is_waf_enabled():
+            client_ip = request.client.host if request.client else "unknown"
+            
+            # Check Admin Exemption first
+            is_admin = False
+            admin_user_id = None
+            try:
+                from app.routers.auth import get_session, SESSION_COOKIE_NAME
+                token = request.cookies.get(SESSION_COOKIE_NAME)
+                if token:
+                    session = get_session(token)
+                    if session:
+                        is_admin = True
+                        admin_user_id = session.get("user_id", "admin-1")
+            except Exception:
+                pass
+                
             content_type = request.headers.get("content-type", "")
             if "application/json" in content_type:
                 body_bytes = await request.body()
@@ -408,14 +533,81 @@ async def waf_middleware(request: Request, call_next):
                 
                 try:
                     body_str = body_bytes.decode("utf-8")
-                    if SQLI_PATTERN.search(body_str) or XSS_PATTERN.search(body_str):
-                        logger.warning(f"WAF blocked suspicious request from {request.client.host if request.client else 'unknown'}: {request.method} {request.url.path}")
-                        return JSONResponse(
-                            status_code=400,
-                            content={"detail": "Request blocked by Web Application Firewall (WAF) due to suspicious patterns."}
-                        )
+                    
+                    # 1. Parse JSON or fall back to raw string
+                    import json
+                    try:
+                        body_data = json.loads(body_str)
+                        string_values = _extract_string_values(body_data)
+                    except Exception:
+                        string_values = [body_str]
+                        
+                    # 2. Score strings
+                    matched_rules = set()
+                    for val in string_values:
+                        cleaned = _waf_decode(val)
+                        if not cleaned:
+                            continue
+                        for idx, (weight, regex, desc) in enumerate(WAF_RULES):
+                            if idx not in matched_rules and regex.search(cleaned):
+                                matched_rules.add(idx)
+                                
+                    total_score = sum(WAF_RULES[idx][0] for idx in matched_rules)
+                    
+                    # 3. If score triggers threshold
+                    if total_score >= WAF_BLOCK_THRESHOLD:
+                        triggered_descs = [WAF_RULES[idx][2] for idx in matched_rules]
+                        details_str = f"Triggered Rules: {', '.join(triggered_descs)} (score={total_score})"
+                        
+                        if is_admin and admin_user_id:
+                            # Log audit warnings for admin, but allow the request to proceed
+                            logger.warning(f"WAF detected suspicious admin payload ({client_ip}): {details_str}. EXEMPTED.")
+                            try:
+                                from app.routers.auth import log_security_event
+                                from app.database.config import SessionLocal
+                                db = SessionLocal()
+                                try:
+                                    await log_security_event(
+                                        db=db,
+                                        user_id=admin_user_id,
+                                        action="WAF_AUDIT_ADMIN",
+                                        ip_address=client_ip,
+                                        user_agent=request.headers.get("user-agent"),
+                                        details=details_str
+                                    )
+                                finally:
+                                    db.close()
+                            except Exception as audit_err:
+                                logger.error(f"Failed to log admin WAF event: {audit_err}")
+                        else:
+                            # Non-admin: BLOCK the request and log/record strike
+                            logger.warning(f"WAF blocked suspicious request from {client_ip}: {request.method} {request.url.path} (score={total_score}, threshold={WAF_BLOCK_THRESHOLD})")
+                            try:
+                                from app.routers.auth import log_security_event
+                                from app.database.config import SessionLocal
+                                db = SessionLocal()
+                                try:
+                                    await log_security_event(
+                                        db=db,
+                                        user_id="anonymous",
+                                        action="WAF_BLOCKED",
+                                        ip_address=client_ip,
+                                        user_agent=request.headers.get("user-agent"),
+                                        details=details_str
+                                    )
+                                    # Record strike & check for auto-ban
+                                    await record_waf_strike(client_ip)
+                                finally:
+                                    db.close()
+                            except Exception as audit_err:
+                                logger.error(f"Failed to log blocked WAF event: {audit_err}")
+                                
+                            return JSONResponse(
+                                status_code=400,
+                                content={"detail": "Request blocked by Web Application Firewall (WAF) due to suspicious patterns."}
+                            )
                 except Exception as e:
-                    logger.error(f"WAF body parsing error: {e}")
+                    logger.error(f"WAF evaluation error: {e}")
                     
     return await call_next(request)
 

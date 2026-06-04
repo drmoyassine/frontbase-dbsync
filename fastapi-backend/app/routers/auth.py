@@ -15,9 +15,14 @@ import os
 import hashlib
 import secrets
 import logging
+import uuid
+import ipaddress
 from datetime import datetime, timedelta
 
 from app.config.edition import is_cloud
+from app.database.config import get_db, SessionLocal
+from app.models.models import IPBlocklist, AuditLog
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +98,15 @@ class UserResponse(BaseModel):
 class AuthResponse(BaseModel):
     user: UserResponse
     message: str
+
+
+class IPBlockRequest(BaseModel):
+    ip_or_range: str
+    reason: Optional[str] = None
+
+
+class WafUpdateRequest(BaseModel):
+    enabled: bool
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -243,6 +257,57 @@ def get_session(token: str) -> Optional[dict]:
     return session
 
 
+async def log_security_event(db: Session, user_id: str, action: str, ip_address: Optional[str], user_agent: Optional[str], details: Optional[str] = None, email_alert_recipient: Optional[str] = None):
+    """Log a security event, and send new-IP login warning email if required."""
+    audit_log = AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        action=action,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        details=details,
+        created_at=datetime.utcnow().isoformat() + "Z"
+    )
+    db.add(audit_log)
+    db.commit()
+    
+    # If this is a login success and we have an email recipient to notify:
+    if action == "LOGIN_SUCCESS" and email_alert_recipient and ip_address and ip_address != "unknown":
+        try:
+            # Query last 3 login IPs before this one
+            history = db.query(AuditLog).filter(
+                AuditLog.user_id == user_id,
+                AuditLog.action == "LOGIN_SUCCESS"
+            ).order_by(AuditLog.created_at.desc()).limit(4).all()
+            
+            # The first one in history is the current login.
+            # Compare current IP with previous ones in the history.
+            previous_ips = [str(log.ip_address) for log in history[1:] if log.ip_address is not None]
+            
+            if previous_ips and str(ip_address) not in previous_ips:
+                # Trigger async email alert
+                from app.services.email_service import send_email
+                import asyncio
+                
+                subject = "Security Alert: New Login to Frontbase"
+                html = f"""
+                <p>Hello,</p>
+                <p>We detected a new login to your Frontbase account from an unrecognized IP address.</p>
+                <p><strong>Account:</strong> {email_alert_recipient}</p>
+                <p><strong>IP Address:</strong> {ip_address}</p>
+                <p><strong>Time:</strong> {datetime.utcnow().isoformat()}Z</p>
+                <p><strong>User Agent:</strong> {user_agent or 'Unknown'}</p>
+                <br>
+                <p>If this was you, no action is needed. If you do not recognize this login, please change your password immediately.</p>
+                """
+                
+                # Run the sending function in the background
+                asyncio.create_task(send_email(to=email_alert_recipient, subject=subject, html=html))
+                logger.warning(f"[Security] New IP login detected for user {user_id} (IP: {ip_address}). Warning email queued.")
+        except Exception as e:
+            logger.error(f"[Security] Failed to check new IP / send email alert: {e}")
+
+
 def get_current_user(request: Request) -> Optional[dict]:
     """Get current user from master admin session cookie.
 
@@ -339,6 +404,24 @@ async def login(request: Request, body: LoginRequest, response: Response):
         )
         _set_session_cookie(response, token)
 
+        # Audit log and email alert check
+        from app.database.config import SessionLocal
+        db = SessionLocal()
+        try:
+            await log_security_event(
+                db=db,
+                user_id=admin["id"],
+                action="LOGIN_SUCCESS",
+                ip_address=request.client.host if request.client else "unknown",
+                user_agent=request.headers.get("user-agent"),
+                details=f"Master admin login: {admin['email']}",
+                email_alert_recipient=admin["email"]
+            )
+        except Exception as e:
+            logger.error(f"[Security] Master admin login audit failed: {e}")
+        finally:
+            db.close()
+
         return AuthResponse(
             user=UserResponse(
                 id=admin["id"],
@@ -403,9 +486,19 @@ async def login(request: Request, body: LoginRequest, response: Response):
         user_record = db.query(DBUser).filter(DBUser.id == st_user_id).first()
         if user_record:
             user_record.last_login_at = now  # type: ignore[assignment]
-            db.commit()
+        
+        await log_security_event(
+            db=db,
+            user_id=st_user_id,
+            action="LOGIN_SUCCESS",
+            ip_address=request.client.host if request.client else "unknown",
+            user_agent=request.headers.get("user-agent"),
+            details=f"Tenant user login: {body.email} (tenant={tenant_slug})",
+            email_alert_recipient=body.email
+        )
+        db.commit()
     except Exception as e:
-        logger.error(f"[Auth] Failed to update last_login_at for user {st_user_id}: {e}")
+        logger.error(f"[Auth] Failed to update last_login_at / audit log for user {st_user_id}: {e}")
         db.rollback()
     finally:
         db.close()
@@ -842,3 +935,185 @@ async def reset_password(request: Request, body: ResetPasswordRequest):
         "success": True,
         "message": "Password has been successfully reset. You can now log in."
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Advanced Security Endpoints (IP Blocklist, WAF, Audit Logs)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/security/blocklist")
+async def get_blocklist(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    bans = db.query(IPBlocklist).order_by(IPBlocklist.created_at.desc()).all()
+    return [{"id": ban.id, "ip_or_range": ban.ip_or_range, "reason": ban.reason, "created_at": ban.created_at} for ban in bans]
+
+
+@router.post("/security/blocklist")
+async def add_ip_ban(
+    body: IPBlockRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    ip_str = body.ip_or_range.strip()
+    try:
+        if '/' in ip_str:
+            ipaddress.ip_network(ip_str, strict=False)
+        else:
+            ipaddress.ip_address(ip_str)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid IP address or CIDR range format: {e}")
+        
+    existing = db.query(IPBlocklist).filter(IPBlocklist.ip_or_range == ip_str).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="IP address or range is already blocked.")
+        
+    new_ban = IPBlocklist(
+        id=str(uuid.uuid4()),
+        ip_or_range=ip_str,
+        reason=body.reason,
+        created_at=datetime.utcnow().isoformat() + "Z"
+    )
+    db.add(new_ban)
+    
+    # Audit log
+    audit_log = AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=user["id"] if "id" in user else user.get("user_id", "admin"),
+        action="IP_BANNED",
+        ip_address=request.client.host if request.client else "unknown",
+        user_agent=request.headers.get("user-agent"),
+        details=f"Banned IP/Range: {ip_str}. Reason: {body.reason}",
+        created_at=datetime.utcnow().isoformat() + "Z"
+    )
+    db.add(audit_log)
+    db.commit()
+    
+    # Invalidate cache
+    try:
+        from main import invalidate_blocklist_cache
+        invalidate_blocklist_cache()
+    except Exception:
+        pass
+            
+    return {"success": True, "message": f"Successfully blocked {ip_str}"}
+
+
+@router.delete("/security/blocklist/{ban_id}")
+async def delete_ip_ban(
+    ban_id: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    ban = db.query(IPBlocklist).filter(IPBlocklist.id == ban_id).first()
+    if not ban:
+        raise HTTPException(status_code=404, detail="IP block record not found.")
+        
+    ip_str = ban.ip_or_range
+    db.delete(ban)
+    
+    # Audit log
+    audit_log = AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=user["id"] if "id" in user else user.get("user_id", "admin"),
+        action="IP_UNBANNED",
+        ip_address=request.client.host if request.client else "unknown",
+        user_agent=request.headers.get("user-agent"),
+        details=f"Unbanned IP/Range: {ip_str}",
+        created_at=datetime.utcnow().isoformat() + "Z"
+    )
+    db.add(audit_log)
+    db.commit()
+    
+    # Invalidate cache
+    try:
+        from main import invalidate_blocklist_cache
+        invalidate_blocklist_cache()
+    except Exception:
+        pass
+            
+    return {"success": True, "message": f"Successfully unblocked {ip_str}"}
+
+
+@router.get("/security/waf")
+async def get_waf_settings(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    from app.routers.settings import load_settings
+    settings_dict = load_settings()
+    enabled = settings_dict.get("security", {}).get("waf_enabled", False)
+    return {"enabled": enabled}
+
+
+@router.post("/security/waf")
+async def update_waf_settings(
+    body: WafUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    from app.routers.settings import load_settings, save_settings
+    settings_dict = load_settings()
+    if "security" not in settings_dict:
+        settings_dict["security"] = {}
+    settings_dict["security"]["waf_enabled"] = body.enabled
+    save_settings(settings_dict)
+    
+    # Audit log
+    audit_log = AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=user["id"] if "id" in user else user.get("user_id", "admin"),
+        action="WAF_TOGGLED",
+        ip_address=request.client.host if request.client else "unknown",
+        user_agent=request.headers.get("user-agent"),
+        details=f"WAF toggled to {'ENABLED' if body.enabled else 'DISABLED'}",
+        created_at=datetime.utcnow().isoformat() + "Z"
+    )
+    db.add(audit_log)
+    db.commit()
+    
+    return {"success": True, "enabled": body.enabled}
+
+
+@router.get("/security/audit-logs")
+async def get_audit_logs(
+    request: Request,
+    db: Session = Depends(get_db),
+    limit: int = 50
+):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit).all()
+    return [
+        {
+            "id": log.id,
+            "user_id": log.user_id,
+            "action": log.action,
+            "ip_address": log.ip_address,
+            "user_agent": log.user_agent,
+            "details": log.details,
+            "created_at": log.created_at
+        }
+        for log in logs
+    ]
+

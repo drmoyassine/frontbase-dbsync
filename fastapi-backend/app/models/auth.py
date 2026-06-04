@@ -82,3 +82,25 @@ class AppVariable(Base):
     description = Column(Text)
     project_id = Column(String, ForeignKey('project.id'), nullable=True)
     created_at = Column(String, nullable=False)
+
+
+class IPBlocklist(Base):
+    __tablename__ = 'ip_blocklist'
+    
+    id = Column(String, primary_key=True)
+    ip_or_range = Column(String(100), unique=True, nullable=False)
+    reason = Column(String(255), nullable=True)
+    created_at = Column(String, nullable=False)
+
+
+class AuditLog(Base):
+    __tablename__ = 'audit_logs'
+    
+    id = Column(String, primary_key=True)
+    user_id = Column(String, nullable=False)
+    action = Column(String(100), nullable=False)
+    ip_address = Column(String(50), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    details = Column(Text, nullable=True)
+    created_at = Column(String, nullable=False)
+

@@ -18,8 +18,10 @@ import { stateProvider } from '../storage/index.js';
 import { isMultiTenantSlug } from '../storage/IStateProvider.js';
 import { getRedis, cached } from '../cache/redis.js';
 import type { DatasourceConfig, DataRequest } from '../schemas/publish';
+import { ipRateLimiter } from '../middleware/rateLimit.js';
 
 export const dataRoute = new Hono();
+dataRoute.use('*', ipRateLimiter);
 
 // Cache the first datasource from any published page
 let cachedDatasource: DatasourceConfig | null = null;

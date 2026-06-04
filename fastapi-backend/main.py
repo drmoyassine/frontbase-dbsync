@@ -78,7 +78,7 @@ def _ensure_local_edge():
             db.flush()
             logger.info("[Startup] ✅ Local Redis cache seeded")
         else:
-            if sys_cache.cache_url == "redis://localhost:6379":
+            if str(sys_cache.cache_url) == "redis://localhost:6379":
                 sys_cache.cache_url = redis_url  # type: ignore[assignment]
                 logger.info("[Startup] Patched sys_cache URL to external container reference")
             if bool(sys_cache.is_default):
@@ -103,7 +103,7 @@ def _ensure_local_edge():
             db.flush()
             logger.info("[Startup] ✅ Local BullMQ queue seeded")
         else:
-            if sys_queue.queue_url == "redis://localhost:6379":
+            if str(sys_queue.queue_url) == "redis://localhost:6379":
                 sys_queue.queue_url = redis_url  # type: ignore[assignment]
                 logger.info("[Startup] Patched sys_queue URL to external container reference")
             if bool(sys_queue.is_default):
@@ -155,7 +155,7 @@ def _ensure_local_edge():
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(fastapi_app: FastAPI):
     """Application lifespan handler - initializes ALL databases on startup."""
     import asyncio
     
@@ -218,6 +218,121 @@ async def lifespan(app: FastAPI):
     logger.info("[Main App Shutdown] Shutting down...")
 
 
+import ipaddress
+import time
+import re
+from typing import Union, List
+from fastapi import Request, Response
+from fastapi.responses import JSONResponse
+
+# --- L1/L2 IP Blocklist Cache ---
+_L1_BLOCKLIST: List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]] = []
+_L1_LAST_LOADED: float = 0.0
+_L1_TTL: float = 10.0  # seconds
+
+async def load_blocklist_async() -> List[str]:
+    """Asynchronously load the blocklist from Redis (L2) or DB (fallback) and compile it into L1."""
+    global _L1_BLOCKLIST, _L1_LAST_LOADED
+    
+    cache_get_fn = None
+    cache_set_fn = None
+    redis_url = None
+    try:
+        from app.services.sync.redis_client import cache_get, cache_set, get_configured_redis_settings
+        cache_get_fn = cache_get
+        cache_set_fn = cache_set
+        redis_settings = await get_configured_redis_settings()
+        redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+    except Exception:
+        pass
+
+    redis_key = "security:ip_blocklist"
+    ip_strings = None
+    
+    if redis_url and cache_get_fn:
+        try:
+            ip_strings = await cache_get_fn(redis_url, redis_key)
+        except Exception as e:
+            logger.warning(f"Failed to load blocklist from Redis: {e}")
+            
+    if ip_strings is None:
+        # DB Fallback
+        from app.database.config import SessionLocal
+        from app.models.models import IPBlocklist
+        db = SessionLocal()
+        try:
+            items = db.query(IPBlocklist).all()
+            ip_strings = [item.ip_or_range.strip() for item in items]
+            if redis_url and cache_set_fn:
+                try:
+                    await cache_set_fn(redis_url, redis_key, ip_strings, ttl=300)
+                except Exception as e:
+                    logger.warning(f"Failed to cache blocklist in Redis: {e}")
+        except Exception as e:
+            logger.error(f"Failed to load blocklist from DB: {e}")
+            ip_strings = []
+        finally:
+            db.close()
+            
+    # Compile into L1 network objects
+    networks = []
+    for ip_str in ip_strings:
+        try:
+            if '/' not in ip_str:
+                network = ipaddress.ip_network(ip_str)
+            else:
+                network = ipaddress.ip_network(ip_str, strict=False)
+            networks.append(network)
+        except Exception as e:
+            logger.warning(f"Failed to parse IP range '{ip_str}': {e}")
+            
+    _L1_BLOCKLIST = networks
+    _L1_LAST_LOADED = time.time()
+    return ip_strings
+
+def invalidate_blocklist_cache():
+    """Force local cache reload and invalidate Redis L2 cache."""
+    global _L1_LAST_LOADED
+    _L1_LAST_LOADED = 0.0
+    try:
+        import asyncio
+        from app.services.sync.redis_client import cache_set, get_configured_redis_settings
+        async def invalidate():
+            redis_settings = await get_configured_redis_settings()
+            redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+            if redis_url:
+                await cache_set(redis_url, "security:ip_blocklist", None, ttl=1)
+        asyncio.create_task(invalidate())
+    except Exception:
+        pass
+
+# --- WAF Config Checker ---
+def is_waf_enabled() -> bool:
+    try:
+        from app.routers.settings import load_settings
+        settings_dict = load_settings()
+        return settings_dict.get("security", {}).get("waf_enabled", False)
+    except Exception:
+        return False
+
+# --- WAF Patterns ---
+SQLI_PATTERN = re.compile(
+    r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|TRUNCATE)\b)|"
+    r"('\s*OR\s*'?\w+'?\s*=\s*'?\w+'?)|"
+    r"(UNION\s+ALL\s+SELECT)",
+    re.IGNORECASE
+)
+
+XSS_PATTERN = re.compile(
+    r"(<script\b[^>]*>)|"
+    r"(javascript:)|"
+    r"(onerror\s*=)|"
+    r"(onload\s*=)|"
+    r"(<iframe\b[^>]*>)",
+    re.IGNORECASE
+)
+
+
 if is_cloud():
     from app.auth.supertokens import init_supertokens
     init_supertokens()
@@ -232,6 +347,78 @@ app = FastAPI(
 if is_cloud():
     from supertokens_python.framework.fastapi import get_middleware
     app.add_middleware(get_middleware())
+
+# --- Register Advanced Security Middlewares ---
+
+# 1. IP Blocklist Middleware (checks blocked ranges early)
+@app.middleware("http")
+async def ip_blocklist_middleware(request: Request, call_next):
+    if request.url.path in ("/health", "/"):
+        return await call_next(request)
+        
+    client_ip = request.client.host if request.client else None
+    if client_ip:
+        global _L1_LAST_LOADED
+        if not _L1_BLOCKLIST or (time.time() - _L1_LAST_LOADED > 10.0):
+            try:
+                await load_blocklist_async()
+            except Exception as e:
+                logger.error(f"Error loading blocklist: {e}")
+                
+        is_blocked = False
+        try:
+            ip_obj = ipaddress.ip_address(client_ip)
+            for network in _L1_BLOCKLIST:
+                if ip_obj in network:
+                    is_blocked = True
+                    break
+        except Exception:
+            pass
+            
+        if is_blocked:
+            logger.warning(f"Blocked connection from banned client IP: {client_ip}")
+            return JSONResponse(status_code=403, content={"detail": "Forbidden: Access denied."})
+            
+    return await call_next(request)
+
+
+# 2. Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    if os.getenv("DEPLOYMENT_MODE") == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+# 3. WAF Middleware (scans write payload requests)
+@app.middleware("http")
+async def waf_middleware(request: Request, call_next):
+    if request.method in ("POST", "PUT", "DELETE"):
+        if is_waf_enabled():
+            content_type = request.headers.get("content-type", "")
+            if "application/json" in content_type:
+                body_bytes = await request.body()
+                
+                async def receive():
+                    return {"type": "http.request", "body": body_bytes, "more_body": False}
+                request._receive = receive
+                
+                try:
+                    body_str = body_bytes.decode("utf-8")
+                    if SQLI_PATTERN.search(body_str) or XSS_PATTERN.search(body_str):
+                        logger.warning(f"WAF blocked suspicious request from {request.client.host if request.client else 'unknown'}: {request.method} {request.url.path}")
+                        return JSONResponse(
+                            status_code=400,
+                            content={"detail": "Request blocked by Web Application Firewall (WAF) due to suspicious patterns."}
+                        )
+                except Exception as e:
+                    logger.error(f"WAF body parsing error: {e}")
+                    
+    return await call_next(request)
+
 
 # Global exception handler — catch hidden 500s and log full tracebacks
 from starlette.requests import Request as StarletteRequest
@@ -286,7 +473,7 @@ app.add_middleware(
 # ProxyHeadersMiddleware: trust X-Forwarded-Proto from reverse proxy
 # so FastAPI constructs redirects with https:// instead of http://
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])  # type: ignore[arg-type]
 
 
 # Custom middleware to internally add trailing slash to paths

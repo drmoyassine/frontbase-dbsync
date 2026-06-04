@@ -23,8 +23,10 @@ import { shouldDebounce } from '../engine/debounce.js';
 import { isQStashEnabled, publishExecution } from '../engine/queue.js';
 import { acquireConcurrency, releaseConcurrency } from '../engine/concurrency.js';
 import { cacheProvider } from '../cache/index.js';
+import { ipRateLimiter } from '../middleware/rateLimit.js';
 
 const webhookRoute = new OpenAPIHono();
+webhookRoute.use('*', ipRateLimiter);
 
 const route = createRoute({
     method: 'post',

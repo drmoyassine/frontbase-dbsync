@@ -12,7 +12,7 @@ continue to work without modification.
 """
 
 # Auth & Settings
-from .auth import User, UserSession, UserSetting, Project, AppVariable  # noqa: F401
+from .auth import User, UserSession, UserSetting, Project, AppVariable, IPBlocklist, AuditLog  # noqa: F401
 
 # Tenants (cloud multi-tenancy)
 from .tenant import Tenant, TenantMember  # noqa: F401

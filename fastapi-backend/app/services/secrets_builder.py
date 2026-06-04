@@ -28,6 +28,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_GPU',
     'FRONTBASE_DATASOURCES',
     'FRONTBASE_AGENT_PROFILES',
+    'FRONTBASE_SECURITY',
 ])
 
 
@@ -441,6 +442,60 @@ def _build_datasources_config(db: Session) -> dict:
     return datasources
 
 
+def _build_security_config(db: Session, engine_id: str | None = None) -> dict:
+    """Build FRONTBASE_SECURITY JSON blob.
+    
+    Contains:
+      - ipBlocklist: dict of { tenant_slug: [ip_strings] }
+      - botProtection: { enabled, provider, siteKey, secretKey, ... }
+    """
+    from app.routers.settings import load_settings
+    from app.models.models import IPBlocklist
+    from app.models.edge import EdgeEngine
+    from app.models.models import Project
+    from app.models.tenant import Tenant
+    
+    config = {}
+    
+    # 1. Resolve the current engine's tenant_slug
+    engine_tenant_slug = None
+    if engine_id:
+        engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+        if engine is not None and engine.project_id is not None:
+            project = db.query(Project).filter(Project.id == engine.project_id).first()
+            if project is not None and project.tenant_id is not None:
+                tenant = db.query(Tenant).filter(Tenant.id == project.tenant_id).first()
+                if tenant is not None:
+                    engine_tenant_slug = str(tenant.slug)
+    
+    # 2. Get IP Blocklist
+    items = db.query(IPBlocklist).all()
+    blocklist_map = {}  # { tenant_slug: [ips] }
+    for item in items:
+        slug = str(item.tenant_slug) if (getattr(item, 'tenant_slug', None) is not None) else '_default'
+        if engine_tenant_slug and slug != engine_tenant_slug:
+            continue
+        if slug not in blocklist_map:
+            blocklist_map[slug] = []
+        blocklist_map[slug].append(str(item.ip_or_range).strip())
+    config['ipBlocklist'] = blocklist_map
+    
+    # 3. Bot Protection Settings
+    settings_dict = load_settings(engine_tenant_slug)
+    bot_settings = settings_dict.get("security", {}).get("bot_protection", {})
+    if bot_settings.get("enabled"):
+        config['botProtection'] = {
+            'enabled': True,
+            'provider': bot_settings.get('provider', 'cloudflare'),
+            'siteKey': bot_settings.get('site_key', ''),
+            'secretKey': bot_settings.get('secret_key', ''),
+            'protectLogin': bot_settings.get('protect_login', True),
+            'protectForgotPassword': bot_settings.get('protect_forgot_password', True),
+        }
+    
+    return config
+
+
 def build_engine_secrets(
     db: Session,
     edge_db_id: str | None,
@@ -615,5 +670,10 @@ def build_engine_secrets(
     agent_profiles = _build_agent_profiles_config(db, engine_id)
     if agent_profiles:
         secrets['FRONTBASE_AGENT_PROFILES'] = json.dumps(agent_profiles)
+
+    # ─── FRONTBASE_SECURITY ──────────────────────────────────────────────
+    security = _build_security_config(db, engine_id)
+    if security:
+        secrets['FRONTBASE_SECURITY'] = json.dumps(security)
 
     return secrets

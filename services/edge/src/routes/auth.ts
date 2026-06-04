@@ -11,6 +11,8 @@ import { SupabaseAuthProvider } from '../ssr/lib/SupabaseAuthProvider.js';
 import { stateProvider } from '../storage/index.js';
 import { getAuthConfig } from '../config/env.js';
 import { rateLimit } from '../cache/redis.js';
+import { getBotProtection } from '../config/securityConfig.js';
+import { verifyCaptchaToken } from '../middleware/captchaVerify.js';
 
 function isSafeRedirect(urlStr: string, requestUrl: string): boolean {
     if (!urlStr) return false;
@@ -136,36 +138,13 @@ const authRoute = new OpenAPIHono();
 // =============================================================================
 
 authRoute.post('/login', async (c) => {
-    // 1. IP-based Rate Limiting (5 login requests per 60 seconds per IP)
-    const allowed = await checkRateLimit(c, 'login', 5, 60);
-    if (!allowed) {
-        const contentType = c.req.header('Content-Type') || '';
-        if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
-            const form = await c.req.parseBody();
-            const redirectTo = (form['redirectTo'] as string) || '/';
-            const safeRedirect = isSafeRedirect(redirectTo, c.req.url) ? redirectTo : '/';
-            const errorUrl = new URL(safeRedirect, new URL(c.req.url).origin);
-            errorUrl.searchParams.set('auth_error', 'Too many attempts. Please try again later.');
-            return c.redirect(errorUrl.toString(), 303);
-        }
-        return c.json({ error: 'Too many attempts. Please try again later.' }, 429);
-    }
-
-    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
-    const provider = new SupabaseAuthProvider(tenantSlug);
-    const client = await provider.createClient(c.req.raw);
-
-    if (!client) {
-        return c.json({ error: 'Supabase not configured' }, 503);
-    }
-
-    let email: string;
-    let password: string;
-    let redirectTo: string;
-    let isEmbed: boolean = false;
+    let email = '';
+    let password = '';
+    let redirectTo = '/';
+    let isEmbed = false;
     let formId: string | undefined;
+    let captchaToken = '';
 
-    // Support both form-encoded and JSON
     const contentType = c.req.header('Content-Type') || '';
     if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
         const form = await c.req.parseBody();
@@ -174,18 +153,58 @@ authRoute.post('/login', async (c) => {
         redirectTo = (form['redirectTo'] as string) || '/';
         isEmbed = form['isEmbed'] === 'true';
         formId = form['formId'] as string;
+        captchaToken = (form['cf-turnstile-response'] as string) || 
+                       (form['g-recaptcha-response'] as string) || 
+                       (form['captchaToken'] as string) || '';
     } else {
-        const body = await c.req.json<{ email?: string; password?: string; redirectTo?: string; isEmbed?: boolean; formId?: string }>();
-        email = body.email || '';
-        password = body.password || '';
-        redirectTo = body.redirectTo || '/';
-        isEmbed = !!body.isEmbed;
-        formId = body.formId;
+        const body = await c.req.json<{ email?: string; password?: string; redirectTo?: string; isEmbed?: boolean; formId?: string; captchaToken?: string; 'cf-turnstile-response'?: string; 'g-recaptcha-response'?: string }>().catch(() => null);
+        if (body) {
+            email = body.email || '';
+            password = body.password || '';
+            redirectTo = body.redirectTo || '/';
+            isEmbed = !!body.isEmbed;
+            formId = body.formId;
+            captchaToken = body.captchaToken || body['cf-turnstile-response'] || body['g-recaptcha-response'] || '';
+        }
     }
 
-    // Validate redirect URL to prevent open redirect vulnerabilities
     if (!isSafeRedirect(redirectTo, c.req.url)) {
         redirectTo = '/';
+    }
+
+    // 1. IP-based Rate Limiting (10 requests per 60 seconds per IP)
+    const allowed = await checkRateLimit(c, 'login', 10, 60);
+    if (!allowed) {
+        if (contentType.includes('form')) {
+            const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+            errorUrl.searchParams.set('auth_error', 'Too many attempts. Please try again later.');
+            return c.redirect(errorUrl.toString(), 303);
+        }
+        return c.json({ error: 'Too many attempts. Please try again later.' }, 429);
+    }
+
+    // 2. CAPTCHA Verification
+    const botConfig = getBotProtection();
+    if (botConfig && botConfig.enabled && botConfig.protectLogin) {
+        const clientIp = getClientIp(c);
+        const verifyResult = await verifyCaptchaToken(captchaToken, clientIp);
+        if (!verifyResult.success) {
+            const errorMsg = verifyResult.error || 'CAPTCHA verification failed';
+            if (contentType.includes('form')) {
+                const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+                errorUrl.searchParams.set('auth_error', errorMsg);
+                return c.redirect(errorUrl.toString(), 303);
+            }
+            return c.json({ error: errorMsg }, 403);
+        }
+    }
+
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const provider = new SupabaseAuthProvider(tenantSlug);
+    const client = await provider.createClient(c.req.raw);
+
+    if (!client) {
+        return c.json({ error: 'Supabase not configured' }, 503);
     }
 
     if (!email || !password) {
@@ -274,34 +293,12 @@ authRoute.get('/me', async (c) => {
 // =============================================================================
 
 authRoute.post('/signup', async (c) => {
-    // IP-based Rate Limiting (3 signup requests per 60 seconds per IP)
-    const allowed = await checkRateLimit(c, 'signup', 3, 60);
-    if (!allowed) {
-        const contentType = c.req.header('Content-Type') || '';
-        if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
-            const form = await c.req.parseBody();
-            const redirectTo = (form['redirectTo'] as string) || '/';
-            const safeRedirect = isSafeRedirect(redirectTo, c.req.url) ? redirectTo : '/';
-            const errorUrl = new URL(safeRedirect, new URL(c.req.url).origin);
-            errorUrl.searchParams.set('auth_error', 'Too many attempts. Please try again later.');
-            return c.redirect(errorUrl.toString(), 303);
-        }
-        return c.json({ error: 'Too many attempts. Please try again later.' }, 429);
-    }
-
-    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
-    const provider = new SupabaseAuthProvider(tenantSlug);
-    const client = await provider.createClient(c.req.raw);
-
-    if (!client) {
-        return c.json({ error: 'Supabase not configured' }, 503);
-    }
-
-    let email: string;
-    let password: string;
-    let redirectTo: string;
-    let isEmbed: boolean = false;
+    let email = '';
+    let password = '';
+    let redirectTo = '/';
+    let isEmbed = false;
     let formId: string | undefined;
+    let captchaToken = '';
 
     const contentType = c.req.header('Content-Type') || '';
     if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
@@ -311,18 +308,58 @@ authRoute.post('/signup', async (c) => {
         redirectTo = (form['redirectTo'] as string) || '/';
         isEmbed = form['isEmbed'] === 'true';
         formId = form['formId'] as string;
+        captchaToken = (form['cf-turnstile-response'] as string) || 
+                       (form['g-recaptcha-response'] as string) || 
+                       (form['captchaToken'] as string) || '';
     } else {
-        const body = await c.req.json<{ email?: string; password?: string; redirectTo?: string; isEmbed?: boolean; formId?: string }>();
-        email = body.email || '';
-        password = body.password || '';
-        redirectTo = body.redirectTo || '/';
-        isEmbed = !!body.isEmbed;
-        formId = body.formId;
+        const body = await c.req.json<{ email?: string; password?: string; redirectTo?: string; isEmbed?: boolean; formId?: string; captchaToken?: string; 'cf-turnstile-response'?: string; 'g-recaptcha-response'?: string }>().catch(() => null);
+        if (body) {
+            email = body.email || '';
+            password = body.password || '';
+            redirectTo = body.redirectTo || '/';
+            isEmbed = !!body.isEmbed;
+            formId = body.formId;
+            captchaToken = body.captchaToken || body['cf-turnstile-response'] || body['g-recaptcha-response'] || '';
+        }
     }
 
-    // Validate redirect URL to prevent open redirect vulnerabilities
     if (!isSafeRedirect(redirectTo, c.req.url)) {
         redirectTo = '/';
+    }
+
+    // 1. IP-based Rate Limiting (10 requests per 60 seconds per IP)
+    const allowed = await checkRateLimit(c, 'signup', 10, 60);
+    if (!allowed) {
+        if (contentType.includes('form')) {
+            const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+            errorUrl.searchParams.set('auth_error', 'Too many attempts. Please try again later.');
+            return c.redirect(errorUrl.toString(), 303);
+        }
+        return c.json({ error: 'Too many attempts. Please try again later.' }, 429);
+    }
+
+    // 2. CAPTCHA Verification
+    const botConfig = getBotProtection();
+    if (botConfig && botConfig.enabled && botConfig.protectLogin) {
+        const clientIp = getClientIp(c);
+        const verifyResult = await verifyCaptchaToken(captchaToken, clientIp);
+        if (!verifyResult.success) {
+            const errorMsg = verifyResult.error || 'CAPTCHA verification failed';
+            if (contentType.includes('form')) {
+                const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+                errorUrl.searchParams.set('auth_error', errorMsg);
+                return c.redirect(errorUrl.toString(), 303);
+            }
+            return c.json({ error: errorMsg }, 403);
+        }
+    }
+
+    const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
+    const provider = new SupabaseAuthProvider(tenantSlug);
+    const client = await provider.createClient(c.req.raw);
+
+    if (!client) {
+        return c.json({ error: 'Supabase not configured' }, 503);
     }
 
     if (!email || !password) {

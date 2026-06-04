@@ -88,8 +88,10 @@ class IPBlocklist(Base):
     __tablename__ = 'ip_blocklist'
     
     id = Column(String, primary_key=True)
-    ip_or_range = Column(String(100), unique=True, nullable=False)
+    ip_or_range = Column(String(100), nullable=False)
     reason = Column(String(255), nullable=True)
+    tenant_id = Column(String(50), nullable=True)
+    tenant_slug = Column(String(100), nullable=True)
     created_at = Column(String, nullable=False)
 
 

@@ -16,6 +16,7 @@ import { refreshSession } from '../ssr/lib/auth.js';
 import { getAuthConfig } from '../config/env.js';
 import type { AuthConfig } from '../ssr/htmlDocument.js';
 import { getRedis } from '../cache/redis.js';
+import { ipBlocklist } from '../middleware/ipBlocklist.js';
 
 // ---- Cloud Fast-Fail Guards ----
 function isCloudEnv(): boolean {
@@ -163,6 +164,8 @@ interface PageData {
 
 // Create the pages route
 const pagesRoute = new OpenAPIHono();
+
+pagesRoute.use('*', ipBlocklist);
 
 // Middleware: Copy Content-Type → X-Content-Type on every response.
 // Supabase Edge Functions strip text/html → text/plain. This header

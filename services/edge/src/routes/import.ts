@@ -235,6 +235,12 @@ importRoute.post('/settings', async (c) => {
         if (body.appUrl !== undefined) updates.appUrl = body.appUrl || null;
         if (body.authForms !== undefined) updates.authForms = body.authForms || null;
 
+        if (body.securityConfig !== undefined) {
+            const { updateSecurityConfig } = await import('../config/securityConfig.js');
+            updateSecurityConfig(body.securityConfig);
+            console.log('[Import Settings] Security config updated');
+        }
+
         // Update project settings in local store (tenant-scoped)
         await stateProvider.updateProjectSettings(updates, tenantSlug);
 

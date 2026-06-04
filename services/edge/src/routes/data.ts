@@ -19,6 +19,8 @@ import { isMultiTenantSlug } from '../storage/IStateProvider.js';
 import { getRedis, cached } from '../cache/redis.js';
 import type { DatasourceConfig, DataRequest } from '../schemas/publish';
 import { ipRateLimiter } from '../middleware/rateLimit.js';
+import { getBotProtection } from '../config/securityConfig.js';
+import { verifyCaptchaToken } from '../middleware/captchaVerify.js';
 
 export const dataRoute = new Hono();
 dataRoute.use('*', ipRateLimiter);
@@ -510,6 +512,22 @@ dataRoute.post('/execute', async (c) => {
                     success: false,
                     error: 'Unauthorized access to this datasource',
                 }, 403);
+            }
+        }
+
+        // CAPTCHA Enforcement for write (POST) requests
+        const botConfig = getBotProtection();
+        if (botConfig && botConfig.enabled && dataRequest.method === 'POST') {
+            const captchaToken = body.captchaToken || c.req.header('x-captcha-token') || '';
+            if (!captchaToken) {
+                return c.json({ success: false, error: 'CAPTCHA required for write operations' }, 403);
+            }
+            const clientIp = c.req.header('cf-connecting-ip') || 
+                             c.req.header('x-forwarded-for')?.split(',')[0].trim() || 
+                             c.req.header('x-real-ip') || 'unknown';
+            const result = await verifyCaptchaToken(captchaToken, clientIp);
+            if (!result.success) {
+                return c.json({ success: false, error: result.error || 'CAPTCHA verification failed' }, 403);
             }
         }
 

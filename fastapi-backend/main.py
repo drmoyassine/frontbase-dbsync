@@ -261,8 +261,53 @@ async def load_blocklist_async() -> List[str]:
         from app.models.models import IPBlocklist
         db = SessionLocal()
         try:
+            from datetime import datetime
+            from app.routers.settings import load_settings
+            settings_dict = load_settings()
+            bot_settings = settings_dict.get("security", {}).get("bot_protection", {})
+            lockout_hours = int(bot_settings.get("auto_ban_lockout_hours", 24))
+            
             items = db.query(IPBlocklist).all()
-            ip_strings = [item.ip_or_range.strip() for item in items]
+            ip_strings = []
+            now_dt = datetime.utcnow()
+            dirty = False
+            for item in items:
+                is_temp_ban = False
+                hours_limit = 24
+                reason_str = str(item.reason) if item.reason is not None else ""
+                ip_str = str(item.ip_or_range).strip()
+                
+                if reason_str == "Bot Protection Auto-Ban (Repeated Failures)":
+                    is_temp_ban = True
+                    hours_limit = lockout_hours
+                elif reason_str == "WAF Auto-Ban (3 strikes)":
+                    is_temp_ban = True
+                    hours_limit = 24
+                    
+                if is_temp_ban:
+                    try:
+                        ts_str = str(item.created_at)
+                        if ts_str.endswith("Z"):
+                            ts_str = ts_str[:-1]
+                        if "." in ts_str:
+                            created_dt = datetime.fromisoformat(ts_str)
+                        else:
+                            created_dt = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%S")
+                            
+                        elapsed = now_dt - created_dt
+                        if elapsed.total_seconds() > (hours_limit * 3600):
+                            logger.warning(f"[Security] Temporary IP ban on {ip_str} expired ({elapsed.total_seconds() / 3600:.1f}h elapsed). Pruning from DB.")
+                            db.delete(item)
+                            dirty = True
+                            continue
+                    except Exception as pe:
+                        logger.error(f"[Security] Failed to parse created_at for IP {ip_str}: {pe}")
+                        
+                ip_strings.append(ip_str)
+                
+            if dirty:
+                db.commit()
+                
             if redis_url and cache_set_fn:
                 try:
                     await cache_set_fn(redis_url, redis_key, ip_strings, ttl=300)

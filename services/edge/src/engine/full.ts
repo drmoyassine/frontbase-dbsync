@@ -1,6 +1,7 @@
 import { createLiteApp } from './lite.js';
 import { systemKeyAuth } from '../middleware/auth.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
+import { ipBlocklist } from '../middleware/ipBlocklist.js';
 import { HYDRATE_JS, HYDRATE_CSS, FAVICON_PNG_B64 } from '../ssr/staticAssets.js';
 
 // Page-specific routes (these pull in React, LiquidJS, SSR, etc.)
@@ -58,6 +59,11 @@ app.use('/api/manage/*', systemKeyAuth);
 
 // ── Tenant middleware (cloud mode: extract slug from Host subdomain) ───
 app.use('*', tenantMiddleware);
+
+// ── IP Blocklist — public routes only ──────────────────────────────────
+app.use('/api/data/execute', ipBlocklist);
+app.use('/api/embed/*', ipBlocklist);
+app.use('/api/auth/*', ipBlocklist);
 
 // ── Page / SSR Routes ──────────────────────────────────────────────────
 app.route('/api/import', importRoute);

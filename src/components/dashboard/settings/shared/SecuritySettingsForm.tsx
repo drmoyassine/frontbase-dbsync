@@ -59,6 +59,26 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
     const [isSavingWaf, setIsSavingWaf] = React.useState(false);
     const [isRefreshing, setIsRefreshing] = React.useState(false);
     
+    // Bot protection states
+    const [botEnabled, setBotEnabled] = React.useState(false);
+    const [botProvider, setBotProvider] = React.useState<'cloudflare' | 'recaptcha_v2' | 'recaptcha_v3'>('cloudflare');
+    const [botSiteKey, setBotSiteKey] = React.useState('');
+    const [botSecretKey, setBotSecretKey] = React.useState('');
+    const [botProtectLogin, setBotProtectLogin] = React.useState(true);
+    const [botProtectForgotPassword, setBotProtectForgotPassword] = React.useState(true);
+    const [botRecaptchaV3Threshold, setBotRecaptchaV3Threshold] = React.useState(0.5);
+    const [botWidgetTheme, setBotWidgetTheme] = React.useState<'light' | 'dark' | 'auto'>('auto');
+    const [botWidgetSize, setBotWidgetSize] = React.useState<'normal' | 'compact' | 'invisible'>('normal');
+    const [botAutoBanLockoutHours, setBotAutoBanLockoutHours] = React.useState(24);
+    
+    const [botMetrics, setBotMetrics] = React.useState({
+        solve_rate: 0.0,
+        total_challenges: 0,
+        blocked_solves: 0,
+        banned_ips: 0
+    });
+    const [isSavingBot, setIsSavingBot] = React.useState(false);
+    
     // New ban form states
     const [newIpOrRange, setNewIpOrRange] = React.useState('');
     const [newReason, setNewReason] = React.useState('');
@@ -69,7 +89,7 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     
     const turnstileSiteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string) || '';
-    const hasTurnstile = turnstileSiteKey !== '';
+    const hasTurnstile = turnstileSiteKey !== '' || (botEnabled && botSiteKey !== '');
 
     // Fetch data
     const fetchSecurityData = async (silent = false) => {
@@ -77,15 +97,32 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
         else setIsRefreshing(true);
         
         try {
-            const [wafRes, blockRes, auditRes] = await Promise.all([
+            const [wafRes, blockRes, auditRes, botSettingsRes, botMetricsRes] = await Promise.all([
                 api.get('/api/auth/security/waf'),
                 api.get('/api/auth/security/blocklist'),
-                api.get('/api/auth/security/audit-logs')
+                api.get('/api/auth/security/audit-logs'),
+                api.get('/api/auth/security/bot-protection'),
+                api.get('/api/auth/security/bot-protection/metrics')
             ]);
             
             setWafEnabled(wafRes.data.enabled);
             setBlocklist(blockRes.data);
             setAuditLogs(auditRes.data);
+            
+            // Bot settings
+            setBotEnabled(botSettingsRes.data.enabled);
+            setBotProvider(botSettingsRes.data.provider);
+            setBotSiteKey(botSettingsRes.data.site_key);
+            setBotSecretKey(botSettingsRes.data.secret_key);
+            setBotProtectLogin(botSettingsRes.data.protect_login);
+            setBotProtectForgotPassword(botSettingsRes.data.protect_forgot_password);
+            setBotRecaptchaV3Threshold(botSettingsRes.data.recaptcha_v3_threshold);
+            setBotWidgetTheme(botSettingsRes.data.widget_theme);
+            setBotWidgetSize(botSettingsRes.data.widget_size);
+            setBotAutoBanLockoutHours(botSettingsRes.data.auto_ban_lockout_hours);
+            
+            // Bot metrics
+            setBotMetrics(botMetricsRes.data);
         } catch (err: any) {
             console.error('Failed to load security settings:', err);
             toast({
@@ -102,6 +139,38 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
     React.useEffect(() => {
         fetchSecurityData();
     }, []);
+
+    const handleSaveBotSettings = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSavingBot(true);
+        try {
+            await api.post('/api/auth/security/bot-protection', {
+                enabled: botEnabled,
+                provider: botProvider,
+                site_key: botSiteKey,
+                secret_key: botSecretKey,
+                protect_login: botProtectLogin,
+                protect_forgot_password: botProtectForgotPassword,
+                recaptcha_v3_threshold: botRecaptchaV3Threshold,
+                widget_theme: botWidgetTheme,
+                widget_size: botWidgetSize,
+                auto_ban_lockout_hours: botAutoBanLockoutHours
+            });
+            toast({
+                title: 'Bot Protection Updated',
+                description: 'Bot protection settings have been saved successfully.',
+            });
+            await fetchSecurityData(true);
+        } catch (err: any) {
+            toast({
+                title: 'Update Failed',
+                description: err.response?.data?.detail || 'Failed to save bot protection settings.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsSavingBot(false);
+        }
+    };
 
     // Toggle WAF handler
     const handleWafToggle = async (checked: boolean) => {
@@ -202,6 +271,10 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
             'WAF_TOGGLED': 'bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-800',
             'WAF_BLOCKED': 'bg-red-500/10 text-red-600 border-red-200 dark:border-red-800 font-bold',
             'WAF_AUDIT_ADMIN': 'bg-orange-500/10 text-orange-600 border-orange-200 dark:border-orange-800',
+            'BOT_CHALLENGE_SUCCESS': 'bg-green-500/10 text-green-600 border-green-200 dark:border-green-800',
+            'BOT_CHALLENGE_FAILED': 'bg-red-500/10 text-red-600 border-red-200 dark:border-red-800 font-bold',
+            'BOT_PROTECTION_UPDATED': 'bg-indigo-500/10 text-indigo-600 border-indigo-200 dark:border-indigo-800',
+            'IP_AUTO_BANNED': 'bg-red-500/10 text-red-600 border-red-200 dark:border-red-800 font-bold',
         };
         
         const className = styleMap[action] || 'bg-muted text-muted-foreground';
@@ -240,10 +313,14 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
     const content = (
         <div className="space-y-6">
             <Tabs defaultValue="firewall" className="w-full space-y-6">
-                <TabsList className="grid grid-cols-3 w-full max-w-[450px]">
+                <TabsList className="grid grid-cols-4 w-full max-w-[600px]">
                     <TabsTrigger value="firewall" className="gap-1.5">
-                        <Bot className="h-4 w-4" />
+                        <Shield className="h-4 w-4" />
                         Firewall & Headers
+                    </TabsTrigger>
+                    <TabsTrigger value="bot" className="gap-1.5">
+                        <Bot className="h-4 w-4" />
+                        Bot Protection
                     </TabsTrigger>
                     <TabsTrigger value="access" className="gap-1.5">
                         <Globe className="h-4 w-4" />
@@ -306,10 +383,10 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                         </Card>
 
                         {/* Bot Protection status */}
-                        <Card className={`border-l-4 transition-all duration-200 hover:shadow-md ${hasTurnstile ? 'border-l-green-500 bg-green-500/5' : 'border-l-blue-500 bg-blue-500/5'}`}>
+                        <Card className={`border-l-4 transition-all duration-200 hover:shadow-md ${botEnabled ? 'border-l-green-500 bg-green-500/5' : hasTurnstile ? 'border-l-green-500 bg-green-500/5' : 'border-l-blue-500 bg-blue-500/5'}`}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Bot Protection Sitekey</CardTitle>
-                                {hasTurnstile ? (
+                                <CardTitle className="text-sm font-medium">Bot Protection Status</CardTitle>
+                                {(botEnabled || hasTurnstile) ? (
                                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                                 ) : (
                                     <Info className="h-4 w-4 text-blue-500" />
@@ -317,13 +394,20 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                             </CardHeader>
                             <CardContent>
                                 <div className="text-lg font-bold">
-                                    {hasTurnstile ? 'Cloudflare Turnstile Active' : 'Honeypot Shield Only'}
+                                    {botEnabled 
+                                        ? botProvider === 'cloudflare' 
+                                            ? 'Cloudflare Turnstile Active' 
+                                            : botProvider === 'recaptcha_v2'
+                                                ? 'reCAPTCHA v2 Active'
+                                                : 'reCAPTCHA v3 Active'
+                                        : hasTurnstile 
+                                            ? 'Cloudflare Turnstile Active (Env)' 
+                                            : 'Honeypot Shield Only'}
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    {hasTurnstile 
-                                        ? 'Turnstile verification is active on login and reset requests.' 
-                                        : 'Default invisible honeypot shield is active. Configure Turnstile sitekeys for CAPTCHAs.'
-                                    }
+                                    {(botEnabled || hasTurnstile)
+                                        ? 'CAPTCHA verification is actively protecting authentication endpoints.' 
+                                        : 'Default invisible honeypot shield is active. Configure bot protection settings for CAPTCHAs.'}
                                 </p>
                             </CardContent>
                         </Card>
@@ -409,6 +493,239 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                             </CardContent>
                         </Card>
                     </div>
+                </TabsContent>
+
+                {/* Tab 1.5: Bot Protection Configuration */}
+                <TabsContent value="bot" className="space-y-6 outline-none">
+                    {/* Metrics Dashboard Grid */}
+                    <div className="grid gap-4 md:grid-cols-4">
+                        <Card className="transition-all duration-200 hover:shadow-sm">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Solve Success Rate</CardTitle>
+                                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{botMetrics.solve_rate}%</div>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">Percentage of solved checks</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="transition-all duration-200 hover:shadow-sm">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Challenges</CardTitle>
+                                <Sliders className="h-4 w-4 text-blue-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{botMetrics.total_challenges}</div>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">Presented CAPTCHA tokens</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="transition-all duration-200 hover:shadow-sm">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Blocked Bots</CardTitle>
+                                <AlertTriangle className="h-4 w-4 text-red-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{botMetrics.blocked_solves}</div>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">Failed verification tokens</p>
+                            </CardContent>
+                        </Card>
+                        <Card className="transition-all duration-200 hover:shadow-sm">
+                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Auto-Banned IPs</CardTitle>
+                                <Lock className="h-4 w-4 text-orange-500" />
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-2xl font-bold">{botMetrics.banned_ips}</div>
+                                <p className="text-[10px] text-muted-foreground mt-0.5">Banned on repeated failures</p>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Settings Form */}
+                    <Card className="transition-all duration-200 hover:shadow-md">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                                <Bot className="h-5 w-5 text-primary" />
+                                Bot Protection Settings
+                            </CardTitle>
+                            <CardDescription>
+                                Secure your administration panel endpoints using Cloudflare Turnstile or Google reCAPTCHA.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <form onSubmit={handleSaveBotSettings} className="space-y-6">
+                                {/* Toggle Switch to Enable/Disable */}
+                                <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="bot-toggle" className="font-semibold block cursor-pointer">
+                                            Enable Bot Protection
+                                        </Label>
+                                        <span className="text-xs text-muted-foreground block">
+                                            {botEnabled ? 'Verification is actively enforced.' : 'Allow logins without interactive CAPTCHA widgets.'}
+                                        </span>
+                                    </div>
+                                    <Switch
+                                        id="bot-toggle"
+                                        checked={botEnabled}
+                                        onCheckedChange={setBotEnabled}
+                                    />
+                                </div>
+
+                                {botEnabled && (
+                                    <div className="grid gap-6 md:grid-cols-2 p-4 border rounded-lg bg-muted/5">
+                                        <div className="space-y-4">
+                                            <h3 className="text-xs font-bold text-primary uppercase tracking-wider">General Configurations</h3>
+                                            
+                                            {/* Provider */}
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="bot-provider" className="text-xs font-semibold">CAPTCHA Provider</Label>
+                                                <select
+                                                    id="bot-provider"
+                                                    value={botProvider}
+                                                    onChange={(e) => setBotProvider(e.target.value as any)}
+                                                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                                >
+                                                    <option value="cloudflare">Cloudflare Turnstile</option>
+                                                    <option value="recaptcha_v2">Google reCAPTCHA v2 (Checkbox)</option>
+                                                    <option value="recaptcha_v3">Google reCAPTCHA v3 (Score-based)</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Site Key */}
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="bot-sitekey" className="text-xs font-semibold">Site Key</Label>
+                                                <Input
+                                                    id="bot-sitekey"
+                                                    value={botSiteKey}
+                                                    onChange={(e) => setBotSiteKey(e.target.value)}
+                                                    placeholder="e.g. 0x4AAAAAA..."
+                                                    required
+                                                />
+                                            </div>
+
+                                            {/* Secret Key */}
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="bot-secretkey" className="text-xs font-semibold">Secret Key</Label>
+                                                <Input
+                                                    id="bot-secretkey"
+                                                    type="password"
+                                                    value={botSecretKey}
+                                                    onChange={(e) => setBotSecretKey(e.target.value)}
+                                                    placeholder="••••••••"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <h3 className="text-xs font-bold text-primary uppercase tracking-wider">Enforcement & Layout</h3>
+
+                                            {/* Protected Routes */}
+                                            <div className="space-y-2">
+                                                <Label className="text-xs font-semibold block">Protected Control Plane Routes</Label>
+                                                <div className="space-y-2">
+                                                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={botProtectLogin}
+                                                            onChange={(e) => setBotProtectLogin(e.target.checked)}
+                                                            className="rounded border-input text-primary focus:ring-primary"
+                                                        />
+                                                        Protect Login Route (`/api/auth/login`)
+                                                    </label>
+                                                    <label className="flex items-center gap-2 text-xs font-medium cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={botProtectForgotPassword}
+                                                            onChange={(e) => setBotProtectForgotPassword(e.target.checked)}
+                                                            className="rounded border-input text-primary focus:ring-primary"
+                                                        />
+                                                        Protect Password Recovery Routes (`/forgot-password`, `/reset-password`)
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            {/* reCAPTCHA v3 Threshold Slider */}
+                                            {botProvider === 'recaptcha_v3' && (
+                                                <div className="space-y-2">
+                                                    <div className="flex justify-between text-xs">
+                                                        <Label htmlFor="v3-slider" className="font-semibold">reCAPTCHA v3 Pass Threshold</Label>
+                                                        <span className="font-mono font-bold text-primary">{botRecaptchaV3Threshold}</span>
+                                                    </div>
+                                                    <input
+                                                        id="v3-slider"
+                                                        type="range"
+                                                        min="0.1"
+                                                        max="1.0"
+                                                        step="0.1"
+                                                        value={botRecaptchaV3Threshold}
+                                                        onChange={(e) => setBotRecaptchaV3Threshold(parseFloat(e.target.value))}
+                                                        className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
+                                                    />
+                                                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                        Scores below this threshold are blocked as bots. Default is 0.5.
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {/* Auto-Ban Lockout Hours */}
+                                            <div className="space-y-1.5">
+                                                <Label htmlFor="bot-lockout" className="text-xs font-semibold">Auto-Ban Lockout Duration (Hours)</Label>
+                                                <Input
+                                                    id="bot-lockout"
+                                                    type="number"
+                                                    min="1"
+                                                    max="720"
+                                                    value={botAutoBanLockoutHours}
+                                                    onChange={(e) => setBotAutoBanLockoutHours(parseInt(e.target.value) || 24)}
+                                                />
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    IP addresses failing verification 5 times in 10 minutes are locked out for this period.
+                                                </p>
+                                            </div>
+
+                                            {/* Appearance options */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1.5">
+                                                    <Label htmlFor="widget-theme" className="text-xs font-semibold">Widget Theme</Label>
+                                                    <select
+                                                        id="widget-theme"
+                                                        value={botWidgetTheme}
+                                                        onChange={(e) => setBotWidgetTheme(e.target.value as any)}
+                                                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none"
+                                                    >
+                                                        <option value="auto">Auto</option>
+                                                        <option value="light">Light</option>
+                                                        <option value="dark">Dark</option>
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <Label htmlFor="widget-size" className="text-xs font-semibold">Widget Size</Label>
+                                                    <select
+                                                        id="widget-size"
+                                                        value={botWidgetSize}
+                                                        onChange={(e) => setBotWidgetSize(e.target.value as any)}
+                                                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none"
+                                                    >
+                                                        <option value="normal">Normal</option>
+                                                        <option value="compact">Compact</option>
+                                                        <option value="invisible">Invisible</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-end pt-2">
+                                    <Button type="submit" disabled={isSavingBot} className="flex items-center gap-1.5">
+                                        {isSavingBot ? <RefreshCw className="h-4 w-4 animate-spin" /> : null}
+                                        Save Bot Protection Settings
+                                    </Button>
+                                </div>
+                            </form>
+                        </CardContent>
+                    </Card>
                 </TabsContent>
 
                 {/* Tab 2: IP Blocklist Access Control */}

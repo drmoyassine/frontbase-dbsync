@@ -8,9 +8,10 @@ Both modes share the same routes — the login endpoint checks master admin
 first (env-var), then falls through to SuperTokens (cloud only).
 """
 
-from fastapi import APIRouter, HTTPException, Response, Request, Depends
+from fastapi import APIRouter, HTTPException, Response, Request, Depends, BackgroundTasks
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from app.middleware.tenant_context import TenantContext, get_tenant_context
+from typing import Optional, Literal, cast
 import os
 import hashlib
 import secrets
@@ -107,6 +108,31 @@ class IPBlockRequest(BaseModel):
 
 class WafUpdateRequest(BaseModel):
     enabled: bool
+
+
+class BotProtectionSettings(BaseModel):
+    enabled: bool = False
+    provider: Literal["cloudflare", "recaptcha_v2", "recaptcha_v3"] = "cloudflare"
+    site_key: str = ""
+    secret_key: str = ""
+    protect_login: bool = True
+    protect_forgot_password: bool = True
+    recaptcha_v3_threshold: float = 0.5
+    widget_theme: Literal["light", "dark", "auto"] = "auto"
+    widget_size: Literal["normal", "compact", "invisible"] = "normal"
+    auto_ban_lockout_hours: int = 24
+
+class BotProtectionUpdateRequest(BaseModel):
+    enabled: bool
+    provider: Literal["cloudflare", "recaptcha_v2", "recaptcha_v3"]
+    site_key: str
+    secret_key: str
+    protect_login: bool
+    protect_forgot_password: bool
+    recaptcha_v3_threshold: float
+    widget_theme: Literal["light", "dark", "auto"]
+    widget_size: Literal["normal", "compact", "invisible"]
+    auto_ban_lockout_hours: int
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -262,23 +288,61 @@ def check_honeypot(website: Optional[str]) -> None:
         )
 
 
-async def verify_turnstile_token(token: Optional[str], ip_address: str) -> None:
-    """Verify Turnstile token if Turnstile is configured."""
-    secret_key = os.getenv("TURNSTILE_SECRET_KEY")
-    if not secret_key:
-        return
+_BOT_STRIKES: dict[str, list[float]] = {}
+
+
+async def verify_bot_token(token: Optional[str], ip_address: str, route: Literal["login", "forgot_password"]) -> None:
+    """Verify Turnstile or reCAPTCHA token using DB settings or fallback env vars."""
+    from app.routers.settings import load_settings
+    settings_dict = load_settings()
+    bot_settings = settings_dict.get("security", {}).get("bot_protection", {})
+    
+    enabled = bool(bot_settings.get("enabled", False))
+    provider = str(bot_settings.get("provider", "cloudflare"))
+    site_key = str(bot_settings.get("site_key", ""))
+    secret_key = str(bot_settings.get("secret_key", ""))
+    protect_login = bool(bot_settings.get("protect_login", True))
+    protect_forgot_password = bool(bot_settings.get("protect_forgot_password", True))
+    recaptcha_v3_threshold = float(bot_settings.get("recaptcha_v3_threshold", 0.5))
+    
+    # Fallback to Env vars if database config is not enabled/configured
+    if not enabled:
+        env_secret = os.getenv("TURNSTILE_SECRET_KEY")
+        if not env_secret:
+            # If nothing is configured or enabled, bypass (fail-safe)
+            return
+        provider = "cloudflare"
+        secret_key = env_secret
+        protect_login = True
+        protect_forgot_password = True
         
+    # Check if protection is enabled for this specific route
+    if route == "login" and not protect_login:
+        return
+    if route == "forgot_password" and not protect_forgot_password:
+        return
+
+    # If enabled, token must be provided
     if not token:
         raise HTTPException(
             status_code=400,
             detail="Bot verification token is missing. Please refresh and try again."
         )
-        
+
+    # Resolve Verification URL
+    if provider == "cloudflare":
+        verify_url = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+    else:
+        verify_url = "https://www.google.com/recaptcha/api/siteverify"
+
     import httpx
+    import time
+    success = False
+    details_str = ""
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
-                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                verify_url,
                 data={
                     "secret": secret_key,
                     "response": token,
@@ -287,16 +351,93 @@ async def verify_turnstile_token(token: Optional[str], ip_address: str) -> None:
                 timeout=5.0
             )
             data = resp.json()
-            if not data.get("success"):
-                logger.warning(f"[Auth] Turnstile verification failed: {data}")
-                raise HTTPException(
-                    status_code=400,
-                    detail="Bot verification failed. Please try again."
-                )
+            
+            if data.get("success"):
+                if provider == "recaptcha_v3":
+                    score = float(data.get("score", 1.0))
+                    if score < recaptcha_v3_threshold:
+                        details_str = f"reCAPTCHA v3 blocked: score {score} < threshold {recaptcha_v3_threshold}"
+                    else:
+                        success = True
+                else:
+                    success = True
+            else:
+                error_codes = data.get("error-codes", [])
+                details_str = f"Verification failed: {error_codes}"
     except httpx.RequestError as e:
-        logger.error(f"[Auth] Turnstile API request failed: {e}. Bypassing verification (fail-safe).")
+        logger.error(f"[Auth] Bot verification API request failed: {e}. Bypassing verification (fail-safe).")
+        return
     except Exception as e:
-        logger.error(f"[Auth] Turnstile verification exception: {e}. Bypassing verification (fail-safe).")
+        logger.error(f"[Auth] Bot verification exception: {e}. Bypassing verification (fail-safe).")
+        return
+
+    # Handle Outcomes and Logging
+    db = SessionLocal()
+    try:
+        if success:
+            audit_log = AuditLog(
+                id=str(uuid.uuid4()),
+                user_id="anonymous",
+                action="BOT_CHALLENGE_SUCCESS",
+                ip_address=ip_address,
+                details=f"Bot challenge passed using {provider} for {route}",
+                created_at=datetime.utcnow().isoformat() + "Z"
+            )
+            db.add(audit_log)
+            db.commit()
+        else:
+            audit_log = AuditLog(
+                id=str(uuid.uuid4()),
+                user_id="anonymous",
+                action="BOT_CHALLENGE_FAILED",
+                ip_address=ip_address,
+                details=f"Bot challenge failed using {provider} for {route}. Details: {details_str}",
+                created_at=datetime.utcnow().isoformat() + "Z"
+            )
+            db.add(audit_log)
+            db.commit()
+            
+            # Increment failure strikes for IP
+            now = time.time()
+            strikes = _BOT_STRIKES.get(ip_address, [])
+            strikes = [t for t in strikes if now - t < 600]  # 10 minutes sliding window
+            strikes.append(now)
+            _BOT_STRIKES[ip_address] = strikes
+            
+            if len(strikes) >= 5:
+                existing = db.query(IPBlocklist).filter(IPBlocklist.ip_or_range == ip_address).first()
+                if not existing:
+                    new_ban = IPBlocklist(
+                        id=str(uuid.uuid4()),
+                        ip_or_range=ip_address,
+                        reason="Bot Protection Auto-Ban (Repeated Failures)",
+                        created_at=datetime.utcnow().isoformat() + "Z"
+                    )
+                    db.add(new_ban)
+                    
+                    ban_audit = AuditLog(
+                        id=str(uuid.uuid4()),
+                        user_id="anonymous",
+                        action="IP_AUTO_BANNED",
+                        ip_address=ip_address,
+                        details="IP blocked for repeated bot verification failures",
+                        created_at=datetime.utcnow().isoformat() + "Z"
+                    )
+                    db.add(ban_audit)
+                    db.commit()
+                    
+                    try:
+                        from main import invalidate_blocklist_cache
+                        invalidate_blocklist_cache()
+                    except Exception:
+                        pass
+                    
+            raise HTTPException(
+                status_code=400,
+                detail="Bot verification failed. Please try again."
+            )
+    finally:
+        db.close()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -465,7 +606,7 @@ async def login(request: Request, body: LoginRequest, response: Response):
         await check_lockout(request, body.email)
         
     check_honeypot(body.website)
-    await verify_turnstile_token(body.turnstile_token, request.client.host if request.client else "unknown")
+    await verify_bot_token(body.turnstile_token, request.client.host if request.client else "unknown", route="login")
 
     # ── Path 1: Master Admin ────────────────────────────────────────────
     admin = ADMIN_USERS.get(body.email)
@@ -884,7 +1025,7 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest):
         await check_lockout(request, body.email)
         
     check_honeypot(body.website)
-    await verify_turnstile_token(body.turnstile_token, request.client.host if request.client else "unknown")
+    await verify_bot_token(body.turnstile_token, request.client.host if request.client else "unknown", route="forgot_password")
 
     # Record the attempt to rate-limit password resets (protect against email spam)
     if not is_cloud():
@@ -981,7 +1122,7 @@ async def reset_password(request: Request, body: ResetPasswordRequest):
         await check_lockout(request, email)
         
     check_honeypot(body.website)
-    await verify_turnstile_token(body.turnstile_token, request.client.host if request.client else "unknown")
+    await verify_bot_token(body.turnstile_token, request.client.host if request.client else "unknown", route="forgot_password")
     
     # Check if the user is the master admin
     admin = ADMIN_USERS.get(email)
@@ -1035,16 +1176,95 @@ async def reset_password(request: Request, body: ResetPasswordRequest):
 # Advanced Security Endpoints (IP Blocklist, WAF, Audit Logs)
 # ─────────────────────────────────────────────────────────────────────────────
 
+async def push_security_to_edges(tenant_id: str | None = None, tenant_slug: str | None = None):
+    """Sync FRONTBASE_SECURITY configuration to active edge engines via /api/import/settings.
+    If tenant_slug is provided, appends ?tenant_slug=... so the edge stores settings under the correct tenant key.
+    Non-fatal: failures are logged but don't block the CRUD response.
+    """
+    from app.database.config import SessionLocal
+    from app.models.models import EdgeEngine, Project
+    from app.services.edge_client import get_edge_headers
+    from sqlalchemy import or_
+    from app.database.utils import get_project
+    from app.services.secrets_builder import _build_security_config
+    import httpx
+    
+    db = SessionLocal()
+    try:
+        query = db.query(EdgeEngine).filter(EdgeEngine.url.isnot(None))
+        if tenant_id:
+            project = db.query(Project).filter(Project.tenant_id == tenant_id).first()
+            if project:
+                query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))
+            else:
+                return
+        elif tenant_slug:
+            from app.models.tenant import Tenant
+            tenant = db.query(Tenant).filter(Tenant.slug == tenant_slug).first()
+            if tenant:
+                project = db.query(Project).filter(Project.tenant_id == tenant.id).first()
+                if project:
+                    query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))
+                else:
+                    return
+            else:
+                return
+        else:
+            project = get_project(db)
+            if project and project.tenant_id is not None:
+                query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))
+                tenant_slug = str(project.tenant.slug) if project.tenant else None
+
+        engines = query.all()
+        if not engines:
+            return
+
+        # Detach engines data before closing DB or going async
+        engine_data = []
+        for eng in engines:
+            sec_config = _build_security_config(db, str(eng.id))
+            engine_data.append({
+                "url": str(eng.url),
+                "headers": get_edge_headers(eng),
+                "securityConfig": sec_config,
+            })
+    finally:
+        db.close()
+
+    # Fan out to all engines (no DB held)
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for eng in engine_data:
+            try:
+                import_url = f"{eng['url'].rstrip('/')}/api/import/settings"
+                if tenant_slug and tenant_slug != '_default':
+                    import_url += f"?tenant_slug={tenant_slug}"
+
+                await client.post(
+                    import_url,
+                    json={"securityConfig": eng["securityConfig"]},
+                    headers={"Content-Type": "application/json", **eng["headers"]},
+                )
+                print(f"[SecuritySync] Synced security config to {import_url}")
+            except Exception as e:
+                print(f"[SecuritySync] Edge security sync failed for {eng['url']}: {e}")
+
+
 @router.get("/security/blocklist")
 async def get_blocklist(
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     user = get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
-    bans = db.query(IPBlocklist).order_by(IPBlocklist.created_at.desc()).all()
+    tenant_id = ctx.tenant_id if ctx else None
+    if tenant_id:
+        bans = db.query(IPBlocklist).filter(IPBlocklist.tenant_id == tenant_id).order_by(IPBlocklist.created_at.desc()).all()
+    else:
+        bans = db.query(IPBlocklist).filter(IPBlocklist.tenant_id.is_(None)).order_by(IPBlocklist.created_at.desc()).all()
+        
     return [{"id": ban.id, "ip_or_range": ban.ip_or_range, "reason": ban.reason, "created_at": ban.created_at} for ban in bans]
 
 
@@ -1052,7 +1272,9 @@ async def get_blocklist(
 async def add_ip_ban(
     body: IPBlockRequest,
     request: Request,
-    db: Session = Depends(get_db)
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     user = get_current_user(request)
     if not user:
@@ -1067,7 +1289,13 @@ async def add_ip_ban(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid IP address or CIDR range format: {e}")
         
-    existing = db.query(IPBlocklist).filter(IPBlocklist.ip_or_range == ip_str).first()
+    tenant_id = ctx.tenant_id if ctx else None
+    tenant_slug = ctx.tenant_slug if ctx else None
+    
+    existing = db.query(IPBlocklist).filter(
+        IPBlocklist.ip_or_range == ip_str,
+        IPBlocklist.tenant_id == tenant_id
+    ).first()
     if existing:
         raise HTTPException(status_code=400, detail="IP address or range is already blocked.")
         
@@ -1075,6 +1303,8 @@ async def add_ip_ban(
         id=str(uuid.uuid4()),
         ip_or_range=ip_str,
         reason=body.reason,
+        tenant_id=tenant_id,
+        tenant_slug=tenant_slug,
         created_at=datetime.utcnow().isoformat() + "Z"
     )
     db.add(new_ban)
@@ -1098,6 +1328,9 @@ async def add_ip_ban(
         invalidate_blocklist_cache()
     except Exception:
         pass
+        
+    # Sync settings to edges asynchronously
+    background_tasks.add_task(push_security_to_edges, tenant_id=tenant_id, tenant_slug=tenant_slug)
             
     return {"success": True, "message": f"Successfully blocked {ip_str}"}
 
@@ -1106,13 +1339,22 @@ async def add_ip_ban(
 async def delete_ip_ban(
     ban_id: str,
     request: Request,
-    db: Session = Depends(get_db)
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     user = get_current_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
-    ban = db.query(IPBlocklist).filter(IPBlocklist.id == ban_id).first()
+    tenant_id = ctx.tenant_id if ctx else None
+    tenant_slug = ctx.tenant_slug if ctx else None
+    
+    if tenant_id:
+        ban = db.query(IPBlocklist).filter(IPBlocklist.id == ban_id, IPBlocklist.tenant_id == tenant_id).first()
+    else:
+        ban = db.query(IPBlocklist).filter(IPBlocklist.id == ban_id, IPBlocklist.tenant_id.is_(None)).first()
+        
     if not ban:
         raise HTTPException(status_code=404, detail="IP block record not found.")
         
@@ -1138,8 +1380,151 @@ async def delete_ip_ban(
         invalidate_blocklist_cache()
     except Exception:
         pass
+        
+    # Sync settings to edges asynchronously
+    background_tasks.add_task(push_security_to_edges, tenant_id=tenant_id, tenant_slug=tenant_slug)
             
     return {"success": True, "message": f"Successfully unblocked {ip_str}"}
+
+
+@router.get("/security/bot-protection", response_model=BotProtectionSettings)
+async def get_bot_protection_settings(
+    request: Request,
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    from app.routers.settings import load_settings
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings_dict = load_settings(tenant_slug)
+    bot_settings = settings_dict.get("security", {}).get("bot_protection", {})
+    
+    # Expose site_key/provider fallbacks from env vars if database settings are empty
+    env_site_key = os.getenv("VITE_TURNSTILE_SITE_KEY", "")
+    env_secret_key = os.getenv("TURNSTILE_SECRET_KEY", "")
+    
+    enabled = bool(bot_settings.get("enabled", False))
+    provider = str(bot_settings.get("provider", "cloudflare"))
+    site_key = str(bot_settings.get("site_key", env_site_key if not bot_settings.get("site_key") else bot_settings.get("site_key")))
+    secret_key = str(bot_settings.get("secret_key", env_secret_key if not bot_settings.get("secret_key") else bot_settings.get("secret_key")))
+    
+    # Mask secret key if populated
+    masked_secret = "••••••••" if secret_key else ""
+    
+    return BotProtectionSettings(
+        enabled=enabled,
+        provider=cast(Literal["cloudflare", "recaptcha_v2", "recaptcha_v3"], provider),
+        site_key=site_key,
+        secret_key=masked_secret,
+        protect_login=bool(bot_settings.get("protect_login", True)),
+        protect_forgot_password=bool(bot_settings.get("protect_forgot_password", True)),
+        recaptcha_v3_threshold=float(bot_settings.get("recaptcha_v3_threshold", 0.5)),
+        widget_theme=cast(Literal["light", "dark", "auto"], bot_settings.get("widget_theme", "auto")),
+        widget_size=cast(Literal["normal", "compact", "invisible"], bot_settings.get("widget_size", "normal")),
+        auto_ban_lockout_hours=int(bot_settings.get("auto_ban_lockout_hours", 24))
+    )
+
+
+@router.post("/security/bot-protection")
+async def update_bot_protection_settings(
+    body: BotProtectionUpdateRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    from app.routers.settings import load_settings, save_settings
+    tenant_slug = ctx.tenant_slug if ctx else None
+    tenant_id = ctx.tenant_id if ctx else None
+    settings_dict = load_settings(tenant_slug)
+    
+    if "security" not in settings_dict:
+        settings_dict["security"] = {}
+        
+    old_bot_settings = settings_dict["security"].get("bot_protection", {})
+    
+    # Resolve the secret key
+    secret_key = body.secret_key
+    if secret_key == "••••••••":
+        secret_key = str(old_bot_settings.get("secret_key", os.getenv("TURNSTILE_SECRET_KEY", "")))
+        
+    settings_dict["security"]["bot_protection"] = {
+        "enabled": bool(body.enabled),
+        "provider": str(body.provider),
+        "site_key": str(body.site_key),
+        "secret_key": str(secret_key),
+        "protect_login": bool(body.protect_login),
+        "protect_forgot_password": bool(body.protect_forgot_password),
+        "recaptcha_v3_threshold": float(body.recaptcha_v3_threshold),
+        "widget_theme": str(body.widget_theme),
+        "widget_size": str(body.widget_size),
+        "auto_ban_lockout_hours": int(body.auto_ban_lockout_hours)
+    }
+    
+    save_settings(settings_dict, tenant_slug)
+    
+    # Log audit entry
+    audit_log = AuditLog(
+        id=str(uuid.uuid4()),
+        user_id=user["id"] if "id" in user else user.get("user_id", "admin"),
+        action="BOT_PROTECTION_UPDATED",
+        ip_address=request.client.host if request.client else "unknown",
+        user_agent=request.headers.get("user-agent"),
+        details=f"Bot protection settings updated. Enabled: {body.enabled}, Provider: {body.provider}",
+        created_at=datetime.utcnow().isoformat() + "Z"
+    )
+    db.add(audit_log)
+    db.commit()
+    
+    # Sync settings to edges asynchronously
+    background_tasks.add_task(push_security_to_edges, tenant_id=tenant_id, tenant_slug=tenant_slug)
+    
+    return {"success": True}
+
+
+@router.get("/security/bot-protection/metrics")
+async def get_bot_protection_metrics(
+    request: Request,
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
+    # Aggregate counts from AuditLog
+    success_count = db.query(AuditLog).filter(AuditLog.action == "BOT_CHALLENGE_SUCCESS").count()
+    failed_count = db.query(AuditLog).filter(AuditLog.action == "BOT_CHALLENGE_FAILED").count()
+    
+    tenant_id = ctx.tenant_id if ctx else None
+    if tenant_id:
+        banned_ips_count = db.query(IPBlocklist).filter(
+            IPBlocklist.reason == "Bot Protection Auto-Ban (Repeated Failures)",
+            IPBlocklist.tenant_id == tenant_id
+        ).count()
+    else:
+        banned_ips_count = db.query(IPBlocklist).filter(
+            IPBlocklist.reason == "Bot Protection Auto-Ban (Repeated Failures)",
+            IPBlocklist.tenant_id.is_(None)
+        ).count()
+        
+    total_challenges = success_count + failed_count
+    solve_rate = 0.0
+    if total_challenges > 0:
+        solve_rate = round((success_count / total_challenges) * 100, 1)
+        
+    return {
+        "solve_rate": solve_rate,
+        "total_challenges": total_challenges,
+        "blocked_solves": failed_count,
+        "banned_ips": banned_ips_count
+    }
 
 
 @router.get("/security/waf")

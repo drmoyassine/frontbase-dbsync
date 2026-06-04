@@ -65,7 +65,7 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
     const [isBanning, setIsBanning] = React.useState(false);
 
     // Diagnostics calculation
-    const isDefaultAdmin = user?.email === 'admin@frontbase.dev';
+    const isDefaultEmail = user?.email === 'admin@frontbase.dev';
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     
     const turnstileSiteKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string) || '';
@@ -260,22 +260,22 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                     {/* Section 1: Security Health & Diagnostics Checklist */}
                     <div className="grid gap-4 md:grid-cols-3">
                         {/* Credentials Security */}
-                        <Card className={`border-l-4 transition-all duration-200 hover:shadow-md ${isDefaultAdmin ? 'border-l-destructive bg-destructive/5' : 'border-l-green-500 bg-green-500/5'}`}>
+                        <Card className={`border-l-4 transition-all duration-200 hover:shadow-md ${isDefaultEmail ? 'border-l-amber-500 bg-amber-500/5' : 'border-l-green-500 bg-green-500/5'}`}>
                             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-sm font-medium">Administrator Account</CardTitle>
-                                {isDefaultAdmin ? (
-                                    <AlertTriangle className="h-4 w-4 text-destructive animate-pulse" />
+                                <CardTitle className="text-sm font-medium">Administrator Email</CardTitle>
+                                {isDefaultEmail ? (
+                                    <AlertTriangle className="h-4 w-4 text-amber-500" />
                                 ) : (
                                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                                 )}
                             </CardHeader>
                             <CardContent>
                                 <div className="text-lg font-bold">
-                                    {isDefaultAdmin ? 'Default Account Active' : 'Custom Account Configured'}
+                                    {isDefaultEmail ? 'Default Email Active' : 'Custom Email Configured'}
                                 </div>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    {isDefaultAdmin 
-                                        ? 'Warning: Default admin credentials are in use. Please change ADMIN_EMAIL / ADMIN_PASSWORD.' 
+                                    {isDefaultEmail 
+                                        ? 'Warning: Using default email "admin@frontbase.dev". Change ADMIN_EMAIL in environment variables to prevent brute-forcing.' 
                                         : 'Master account email is customized and secured.'
                                     }
                                 </p>

@@ -90,7 +90,7 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
         }),
         execute: async ({ dummy }: any) => {
             try {
-                const workflows = await stateProvider.listWorkflows();
+                const workflows = await stateProvider.listWorkflows(profile.tenantSlug || undefined);
                 return {
                     count: workflows.length,
                     workflows: workflows.map((w: any) => ({

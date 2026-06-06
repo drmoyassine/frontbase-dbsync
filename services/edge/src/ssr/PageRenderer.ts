@@ -26,6 +26,7 @@ export interface PageComponent {
     stylesData?: Record<string, any>; // Builder stores viewportOverrides here
     binding?: Record<string, any>;
     visibility?: { mobile: boolean; tablet: boolean; desktop: boolean; };
+    visibilityCondition?: string;
     children?: PageComponent[];
 }
 
@@ -114,8 +115,66 @@ async function renderComponent(
     context: TemplateContext,
     depth: number = 0
 ): Promise<string> {
-    const { id, type, props, styles, children, binding } = component;
+    const { id, type, props, styles, children, binding, visibilityCondition } = component;
+
+    // Check visibility condition first
+    let isClientSideCondition = false;
+    let visibilityResult = true;
+
+    if (visibilityCondition) {
+        const cond = visibilityCondition;
+        isClientSideCondition = cond.includes('local.') || cond.includes('local[') ||
+                                cond.includes('session.') || cond.includes('session[') ||
+                                cond.includes('cookies.') || cond.includes('cookies[') ||
+                                cond.includes('url.') || cond.includes('url[');
+        
+        try {
+            // Render the condition template
+            const expr = `{% if ${cond} %}true{% else %}false{% endif %}`;
+            const resultStr = await liquid.parseAndRender(expr, context);
+            visibilityResult = resultStr.trim() === 'true';
+        } catch (error) {
+            console.error(`[SSR Visibility] Failed to evaluate: ${cond}`, error);
+            visibilityResult = true; // Default to true so it doesn't break rendering
+        }
+
+        // If it's pure server-side and false, completely skip rendering
+        if (!isClientSideCondition && !visibilityResult) {
+            return '';
+        }
+    }
+
     let resolvedProps = await resolveProps(props, context);
+
+    // If client-side condition, pass data-show-if and set initial display style if false
+    if (isClientSideCondition) {
+        resolvedProps['data-show-if'] = visibilityCondition;
+        
+        if (!visibilityResult) {
+            // Add display:none to styles
+            if (!component.styles) {
+                component.styles = {};
+            }
+            component.styles.display = 'none';
+
+            if (!resolvedProps.style) {
+                resolvedProps.style = {};
+            }
+            if (typeof resolvedProps.style === 'object') {
+                resolvedProps.style = {
+                    ...resolvedProps.style,
+                    display: 'none'
+                };
+            } else if (typeof resolvedProps.style === 'string') {
+                resolvedProps.style = resolvedProps.style + ';display:none;';
+            }
+            // Also update stylesData values if present
+            if (component.stylesData) {
+                if (!component.stylesData.values) component.stylesData.values = {};
+                component.stylesData.values.display = 'none';
+            }
+        }
+    }
 
     // Special handling for Navbar with useProjectLogo or showIcon
     if (type === 'Navbar' && resolvedProps.logo) {
@@ -254,9 +313,14 @@ function renderLayoutComponent(
 
     // Build data-fb-props attribute if actionBindings exist (for hover tooltips, etc.)
     const actionBindings = props.actionBindings as Array<unknown> | undefined;
-    const propsAttr = actionBindings && actionBindings.length > 0
+    let propsAttr = actionBindings && actionBindings.length > 0
         ? ` data-fb-props="${escapeHtml(JSON.stringify({ actionBindings }))}"`
         : '';
+
+    const showIf = props['data-show-if'] as string | undefined;
+    if (showIf) {
+        propsAttr += ` data-show-if="${escapeHtml(showIf)}"`;
+    }
 
     switch (type) {
         case 'Container':

@@ -51,20 +51,39 @@ agentRoute.get('/chat/:profileSlug', async (c) => {
         return c.json({ error: { message: "Unauthorized: Missing Authorization header" } }, 401);
     }
     const token = authHeader.split(' ')[1];
+    let isMaster = false;
+    let jwtTenantSlug: string | undefined = undefined;
     try {
         const secret = (c.env as any)?.FRONTBASE_JWT_SECRET;
         if (!secret) {
             console.error('[Agent Chat] FRONTBASE_JWT_SECRET is not configured.');
             return c.json({ error: { message: "Internal server error: JWT secret not configured." } }, 500);
         }
-        await verify(token, secret, 'HS256');
+        const payload = await verify(token, secret, 'HS256') as any;
+        isMaster = !!payload.isMaster;
+        jwtTenantSlug = payload.tenantSlug || undefined;
     } catch (e) {
         console.error('[Agent Chat] JWT verification failed:', e);
         return c.json({ error: { message: "Unauthorized: Invalid JWT token" } }, 401);
     }
 
+    const ctxTenantSlug = (c.get as any)('tenantSlug') || undefined;
+    if (jwtTenantSlug !== ctxTenantSlug) {
+        return c.json({ error: { message: "Forbidden: JWT tenantSlug does not match request tenantSlug context." } }, 403);
+    }
+
+    const profilesConfig = getAgentProfilesConfig();
+    const profile = getOrSynthesizeProfile(profileSlug, profilesConfig, ctxTenantSlug, isMaster);
+    if (!profile) {
+        return c.json({ error: { message: `Agent Profile '${profileSlug}' not deployed on this engine.` } }, 404);
+    }
+
+    const resolvedProfileSlug = profilesConfig[profileSlug]
+        ? profileSlug
+        : (ctxTenantSlug && profilesConfig[`${ctxTenantSlug}:${profileSlug}`] ? `${ctxTenantSlug}:${profileSlug}` : profileSlug);
+
     try {
-        const history = await cacheProvider.get<any[]>(`agent:session:${profileSlug}`);
+        const history = await cacheProvider.get<any[]>(`agent:session:${resolvedProfileSlug}`);
         return c.json(history || []);
     } catch (e: any) {
         console.error('[Agent Chat] Failed to fetch history:', e);
@@ -73,9 +92,15 @@ agentRoute.get('/chat/:profileSlug', async (c) => {
 });
 
 // Helper to auto-vivify the master admin workspace agent
-function getOrSynthesizeProfile(profileSlug: string, profilesConfig: any) {
+function getOrSynthesizeProfile(profileSlug: string, profilesConfig: any, ctxTenantSlug?: string, isMaster: boolean = false) {
     let profile = profilesConfig[profileSlug];
+    if (!profile && ctxTenantSlug && ctxTenantSlug !== '_default') {
+        profile = profilesConfig[`${ctxTenantSlug}:${profileSlug}`];
+    }
     if (!profile && profileSlug === 'workspace-agent') {
+        if (!isMaster) {
+            return null;
+        }
         profile = {
             name: 'Workspace Master Agent',
             systemPrompt: 'You are the Master Admin\'s Workspace Agent. You have full, unrestricted access to the Frontbase Edge Engine and all its connected workloads, datasources, and runtime variables. You act as an expert developer assistant.',
@@ -96,7 +121,28 @@ function getOrSynthesizeProfile(profileSlug: string, profilesConfig: any) {
 agentRoute.get('/status/:profileSlug', async (c) => {
     const profileSlug = c.req.param('profileSlug');
     const profilesConfig = getAgentProfilesConfig();
-    const profile = getOrSynthesizeProfile(profileSlug, profilesConfig);
+    const ctxTenantSlug = (c.get as any)('tenantSlug') || undefined;
+
+    let isMaster = false;
+    const authHeader = c.req.header('Authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        try {
+            const secret = (c.env as any)?.FRONTBASE_JWT_SECRET;
+            if (secret) {
+                const payload = await verify(token, secret, 'HS256');
+                isMaster = !!payload.isMaster;
+                const jwtTenantSlug = payload.tenantSlug || undefined;
+                if (jwtTenantSlug !== ctxTenantSlug) {
+                    return c.json({ hasProfile: false, hasModels: false });
+                }
+            }
+        } catch {
+            // Ignore error, fallback to defaults
+        }
+    }
+
+    const profile = getOrSynthesizeProfile(profileSlug, profilesConfig, ctxTenantSlug, isMaster);
     if (!profile) return c.json({ hasProfile: false, hasModels: false });
     
     try {
@@ -113,39 +159,28 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
     const profileSlug = c.req.param('profileSlug');
     const profilesConfig = getAgentProfilesConfig();
     
-    // 1. Hydrate the Identity target
-    const profile = getOrSynthesizeProfile(profileSlug, profilesConfig);
-    if (!profile) {
-        return c.json({ error: { message: `Agent Profile '${profileSlug}' not deployed on this engine. Check your Edge Inspector.` } }, 404);
-    }
-
-    const body = await c.req.json().catch(() => ({}));
-    const messages = body.messages || [];
-    
-    if (!Array.isArray(messages) || messages.length === 0) {
-        return c.json({ error: { message: "Missing or invalid 'messages' array" } }, 400);
-    }
-
-    // 2. Hardware Allocation (GPU)
-    let targetModelSlug = body.model;
-    let modelRecord: any = null;
-    let ai: any = null;
-
     // Check for Stateless JWT Injection (Multi-tenant Mega-Shared approach)
     const authHeader = c.req.header('Authorization');
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return c.json({ error: { message: "Unauthorized: Missing Authorization header" } }, 401);
     }
     const token = authHeader.split(' ')[1];
+    let jwtTenantSlug: string | undefined = undefined;
+    let isMaster = false;
+    let payload: any = null;
+    let modelRecord: any = null;
+
     try {
         const secret = (c.env as any)?.FRONTBASE_JWT_SECRET;
         if (!secret) {
             console.error('[Agent Chat] FRONTBASE_JWT_SECRET is not configured.');
             return c.json({ error: { message: "Internal server error: JWT secret not configured." } }, 500);
         }
-        const payload = await verify(token, secret, 'HS256');
-        const providerStr = String(payload.provider || 'openai');
+        payload = await verify(token, secret, 'HS256');
+        jwtTenantSlug = payload.tenantSlug || undefined;
+        isMaster = !!payload.isMaster;
         
+        const providerStr = String(payload.provider || 'openai');
         modelRecord = {
              slug: 'workspace-injected-model',
              provider: providerStr,
@@ -162,6 +197,32 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
         console.error('[Agent Chat] JWT verification failed:', e);
         return c.json({ error: { message: "Unauthorized: Invalid JWT token" } }, 401);
     }
+
+    const ctxTenantSlug = (c.get as any)('tenantSlug') || undefined;
+    if (jwtTenantSlug !== ctxTenantSlug) {
+        return c.json({ error: { message: "Forbidden: JWT tenantSlug does not match request tenantSlug context." } }, 403);
+    }
+
+    // 1. Hydrate the Identity target
+    const profile = getOrSynthesizeProfile(profileSlug, profilesConfig, ctxTenantSlug, isMaster);
+    if (!profile) {
+        return c.json({ error: { message: `Agent Profile '${profileSlug}' not deployed on this engine. Check your Edge Inspector.` } }, 404);
+    }
+
+    const resolvedProfileSlug = profilesConfig[profileSlug]
+        ? profileSlug
+        : (ctxTenantSlug && profilesConfig[`${ctxTenantSlug}:${profileSlug}`] ? `${ctxTenantSlug}:${profileSlug}` : profileSlug);
+
+    const body = await c.req.json().catch(() => ({}));
+    const messages = body.messages || [];
+    
+    if (!Array.isArray(messages) || messages.length === 0) {
+        return c.json({ error: { message: "Missing or invalid 'messages' array" } }, 400);
+    }
+
+    // 2. Hardware Allocation (GPU)
+    let targetModelSlug = body.model;
+    let ai: any = null;
 
     // Fallback to legacy static engine `.env` models if no JWT is provided or valid
     if (!modelRecord) {
@@ -204,7 +265,7 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
                 tools,
                 onFinish: async (event) => {
                     const responseMsgs = event.response?.messages || [];
-                    await cacheProvider.setex(`agent:session:${profileSlug}`, 86400 * 7, JSON.stringify([...messages, ...responseMsgs]));
+                    await cacheProvider.setex(`agent:session:${resolvedProfileSlug}`, 86400 * 7, JSON.stringify([...messages, ...responseMsgs]));
                 }
             });
             return result.toTextStreamResponse();
@@ -217,7 +278,7 @@ agentRoute.post('/chat/:profileSlug', async (c) => {
             });
 
             const responseMsgs = result.response?.messages || [];
-            await cacheProvider.setex(`agent:session:${profileSlug}`, 86400 * 7, JSON.stringify([...messages, ...responseMsgs]));
+            await cacheProvider.setex(`agent:session:${resolvedProfileSlug}`, 86400 * 7, JSON.stringify([...messages, ...responseMsgs]));
 
             return c.json({
                 success: true,

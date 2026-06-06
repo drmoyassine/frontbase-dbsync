@@ -165,6 +165,7 @@ export const PageComponentSchema: z.ZodType<PageComponent, z.ZodTypeDef, unknown
         styles: ComponentStylesSchema, // Legacy: direct styles
         stylesData: StylesDataSchema.nullable().optional(), // New: structured styles with overrides
         visibility: VisibilitySettingsSchema.nullable().optional(), // Per-viewport visibility
+        visibilityCondition: z.string().nullish(), // Client or server visibility expression
         children: z.array(PageComponentSchema).nullable().optional(),
         binding: ComponentBindingSchema.nullable().optional(),
     })
@@ -177,6 +178,7 @@ export interface PageComponent {
     styles?: Record<string, any> | null; // Legacy: direct styles
     stylesData?: StylesData | null; // New: structured styles with overrides
     visibility?: VisibilitySettings | null; // Per-viewport visibility
+    visibilityCondition?: string | null;
     children?: PageComponent[] | null;
     binding?: ComponentBinding | null;
 }
@@ -244,6 +246,9 @@ export const PublishPageSchema = z.object({
 
     // Auth form config baked at publish time (for private page gating overlay)
     _primaryAuthForm: z.record(z.string(), z.unknown()).nullable().optional(),
+
+    // Global app variables baked at publish time (non-secret only)
+    appVariables: z.record(z.string(), z.unknown()).nullish(),
 });
 
 export type PublishPage = z.infer<typeof PublishPageSchema>;

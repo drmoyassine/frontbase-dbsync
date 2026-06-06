@@ -230,6 +230,97 @@ async def get_template_registry(page_id: Optional[str] = None, db: Session = Dep
     # Start with all static variables except user scope
     variables = [v for v in STATIC_VARIABLES if v.source != 'user']
     
+    # Load page-specific custom variables
+    if page_id:
+        try:
+            from ..models.models import Page, Project
+            query = db.query(Page).filter(Page.id == page_id)
+            if ctx and ctx.tenant_id and not ctx.is_master:
+                project_ids = (
+                    db.query(Project.id)
+                    .filter(Project.tenant_id == ctx.tenant_id)
+                    .scalar_subquery()
+                )
+                query = query.filter(Page.project_id.in_(project_ids))
+            elif ctx and ctx.is_master:
+                query = query.filter(Page.project_id == None)  # noqa: E711
+                
+            page = query.first()
+            if not page:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Page not found"
+                )
+            
+            if page.layout_data:  # type: ignore[truthy-bool]
+                layout = page.layout_data
+                if isinstance(layout, str):
+                    try:
+                        layout = json.loads(layout)
+                    except:
+                        layout = {}
+                if isinstance(layout, dict):
+                    root_config = layout.get("root", {})
+                    if isinstance(root_config, dict):
+                        # Local variables
+                        local_vars = root_config.get("localVariables", {})
+                        if isinstance(local_vars, dict):
+                            for name, val_info in local_vars.items():
+                                val_type = "any"
+                                val_default = ""
+                                if isinstance(val_info, dict):
+                                    val_type = val_info.get("type", "string")
+                                    val_default = val_info.get("defaultValue", "")
+                                else:
+                                    val_default = val_info
+                                    if isinstance(val_info, bool):
+                                        val_type = "boolean"
+                                    elif isinstance(val_info, (int, float)):
+                                        val_type = "number"
+                                    elif isinstance(val_info, list):
+                                        val_type = "array"
+                                    elif isinstance(val_info, dict):
+                                        val_type = "object"
+                                    else:
+                                        val_type = "string"
+                                
+                                variables.append(TemplateVariable(
+                                    path=f"local.{name}",
+                                    type=val_type,
+                                    source="local",
+                                    description=f"Local variable (default: {val_default})"
+                                ))
+                        # Session variables
+                        session_vars = root_config.get("sessionVariables", {})
+                        if isinstance(session_vars, dict):
+                            for name, val_info in session_vars.items():
+                                val_type = "any"
+                                val_default = ""
+                                if isinstance(val_info, dict):
+                                    val_type = val_info.get("type", "string")
+                                    val_default = val_info.get("defaultValue", "")
+                                else:
+                                    val_default = val_info
+                                    if isinstance(val_info, bool):
+                                        val_type = "boolean"
+                                    elif isinstance(val_info, (int, float)):
+                                        val_type = "number"
+                                    elif isinstance(val_info, list):
+                                        val_type = "array"
+                                    elif isinstance(val_info, dict):
+                                        val_type = "object"
+                                    else:
+                                        val_type = "string"
+                                
+                                variables.append(TemplateVariable(
+                                    path=f"session.{name}",
+                                    type=val_type,
+                                    source="session",
+                                    description=f"Session variable (default: {val_default})"
+                                ))
+        except Exception as e:
+            print(f"Warning: Failed to load page-specific custom variables: {e}")
+
     # Try to load dynamic user variables from contacts table
     try:
         project = get_project(db, ctx)

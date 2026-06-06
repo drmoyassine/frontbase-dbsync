@@ -151,6 +151,7 @@ class PageComponent(BaseModel):
     styles: Optional[Dict[str, Any]] = None  # Legacy: direct styles
     stylesData: Optional[StylesData] = None  # New: structured styles with overrides
     visibility: Optional[VisibilitySettings] = None  # Per-viewport visibility
+    visibilityCondition: Optional[str] = None  # e.g. "local.modalOpen == true"
     children: Optional[List["PageComponent"]] = None
     binding: Optional[ComponentBinding] = None
     
@@ -225,6 +226,9 @@ class PublishPageRequest(BaseModel):
 
     # Auth form config baked at publish time (for private page gating overlay)
     primary_auth_form: Optional[Dict[str, Any]] = Field(None, alias="_primaryAuthForm")
+    
+    # Global app variables baked at publish time (non-secret only)
+    appVariables: Optional[Dict[str, Any]] = Field(None, alias="appVariables")
     
     class Config:
         populate_by_name = True

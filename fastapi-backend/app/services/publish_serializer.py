@@ -387,6 +387,41 @@ async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: 
             print(f"[publish] Could not fetch primary auth form: {e}")
     # ======================================================
     
+    # ==== BAKE DYNAMIC APP VARIABLES (non-secret only) ====
+    app_variables_config = {}
+    try:
+        from app.database.config import SessionLocal as PubSessionLocal
+        from app.models.auth import AppVariable
+        pub_db = PubSessionLocal()
+        try:
+            query = pub_db.query(AppVariable)
+            if page.project_id is not None:
+                query = query.filter(AppVariable.project_id == str(page.project_id))
+            
+            app_vars = query.all()
+            for var in app_vars:
+                val = var.value
+                if val is not None:
+                    if val.lower() == 'true':
+                        val = True
+                    elif val.lower() == 'false':
+                        val = False
+                    else:
+                        try:
+                            if '.' in val:
+                                val = float(val)
+                            else:
+                                val = int(val)
+                        except ValueError:
+                            pass
+                app_variables_config[var.name] = val
+            print(f"[publish] Baked {len(app_variables_config)} app variables")
+        finally:
+            pub_db.close()
+    except Exception as e:
+        print(f"[publish] Could not fetch app variables: {e}")
+    # ======================================================
+
     # tenant_slug is passed in by the caller (resolved before session close)
 
     return PublishPageRequest(
@@ -406,4 +441,5 @@ async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: 
         isPublic=bool(page.is_public),
         isHomepage=bool(page.is_homepage),
         primary_auth_form=primary_auth_form_config,  # type: ignore[call-arg]
+        appVariables=app_variables_config,  # type: ignore[call-arg]
     )

@@ -197,6 +197,7 @@ class EdgeAPIKey(Base):
     prefix = Column(String(20), nullable=False)            # "fb_sk_a1b2..." (for display)
     key_hash = Column(String(256), nullable=False, unique=True)  # Fernet-encrypted key (or legacy SHA-256)
     edge_engine_id = Column(String, ForeignKey('edge_engines.id'), nullable=True)  # null = all engines
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_active = Column(Boolean, default=True)
     scope = Column(String(20), nullable=False, default='user')  # user | management | all
     expires_at = Column(String, nullable=True)             # ISO datetime or null = never
@@ -219,6 +220,7 @@ class EdgeAgentProfile(Base):
 
     id = Column(String, primary_key=True)
     engine_id = Column(String, ForeignKey('edge_engines.id'), nullable=False)
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
     name = Column(String(100), nullable=False)            # "Admin Agent"
     slug = Column(String(50), nullable=False)             # "admin-agent"
     system_prompt = Column(Text, nullable=True)           # "You are a database admin..."

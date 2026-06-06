@@ -707,12 +707,16 @@ export class SupabaseRestProvider implements IStateProvider {
         throwIfError(result, `upsertAgentTool(${tool.id})`);
     }
 
-    async deleteAgentTool(id: string): Promise<boolean> {
+    async deleteAgentTool(id: string, tenantSlug?: string): Promise<boolean> {
         const client = getClient();
-        const result = await client
+        let query = client
             .from('agent_tools')
             .delete()
             .eq('id', id);
+        if (tenantSlug && tenantSlug !== '_default') {
+            query = query.or(`profile_slug.eq.${tenantSlug},profile_slug.like.${tenantSlug}:%`);
+        }
+        const result = await query;
         throwIfError(result, `deleteAgentTool(${id})`);
         return true;
     }

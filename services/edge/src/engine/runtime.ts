@@ -35,12 +35,19 @@ export interface NodeExecution {
     usage?: number;
 }
 
+export interface VariableMutation {
+    scope: string;
+    key: string;
+    value: any;
+}
+
 interface ExecutionContext {
     executionId: string;
     workflowId: string;
     parameters: Record<string, any>;
     nodeOutputs: Record<string, Record<string, any>>;
     nodeExecutions: NodeExecution[];
+    variableMutations: VariableMutation[];
 }
 
 export interface ExecutionResult {
@@ -53,6 +60,7 @@ export interface ExecutionResult {
         headers?: Record<string, string>;
         contentType?: string;
     };
+    variableMutations?: VariableMutation[];
 }
 
 /**
@@ -97,6 +105,7 @@ export async function executeWorkflow(
             nodeId: n.id,
             status: 'idle' as NodeExecutionStatus,
         })),
+        variableMutations: [],
     };
 
     // Core execution logic wrapped for timeout race
@@ -241,7 +250,7 @@ export async function executeWorkflow(
             }
 
             log.info(`Execution completed (${executed.size} nodes)`);
-            return { status: 'completed', result, httpResponse };
+            return { status: 'completed', result, httpResponse, variableMutations: context.variableMutations };
 
         } catch (error: any) {
             // ── Write to dead_letters if DLQ enabled and no queue ──
@@ -268,7 +277,7 @@ export async function executeWorkflow(
             });
 
             log.error(`Execution failed: ${error.message}`);
-            return { status: 'error', result: {}, error: error.message };
+            return { status: 'error', result: {}, error: error.message, variableMutations: context.variableMutations };
         }
     } // end coreExecute
 
@@ -306,6 +315,7 @@ export async function executeSingleNode(
         parameters: inputParameters,
         nodeOutputs: {},
         nodeExecutions: [],
+        variableMutations: [],
     };
 
     try {

@@ -263,15 +263,23 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
             const pageIndex = pages.findIndex(p => p.id === currentPageId);
             if (pageIndex === -1) return state;
 
-
-
             const page = { ...pages[pageIndex] };
 
             if (page.layoutData?.content) {
                 page.layoutData.content = updateComponentInTree(
                     page.layoutData.content,
                     componentId,
-                    (comp) => ({ ...comp, props: { ...comp.props, ...propsUpdates } })
+                    (comp) => {
+                        const { visibilityCondition, ...restProps } = propsUpdates;
+                        const updated: any = {
+                            ...comp,
+                            props: { ...comp.props, ...restProps }
+                        };
+                        if (visibilityCondition !== undefined) {
+                            updated.visibilityCondition = visibilityCondition;
+                        }
+                        return updated;
+                    }
                 );
             }
 

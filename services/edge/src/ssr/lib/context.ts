@@ -25,6 +25,7 @@ export interface PageData {
     ogImage?: string;
     ogType?: string;
     customVariables?: Record<string, unknown>;
+    appVariables?: Record<string, unknown> | null;
 }
 
 export interface SystemContext {
@@ -61,6 +62,7 @@ export interface TemplateContext {
     session: Record<string, unknown>;
     record?: Record<string, unknown>;
     records?: Record<string, unknown>[];
+    app: Record<string, unknown>;
 }
 
 // =============================================================================
@@ -120,6 +122,7 @@ export async function buildTemplateContext(
         session: {}, // Client-only, empty on SSR
         record: dataContext?.record,
         records: dataContext?.records,
+        app: pageData.appVariables || {},
     };
 }
 

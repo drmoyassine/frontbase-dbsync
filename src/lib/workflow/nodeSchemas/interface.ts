@@ -98,3 +98,42 @@ export const refreshSchema: NodeSchema = {
     ],
     outputs: [],
 };
+
+export const setVariableSchema: NodeSchema = {
+    type: 'set_variable',
+    label: 'Set Variable',
+    description: 'Set value of a variable in local, session, cookie, or URL scope',
+    category: 'interface',
+    inputs: [
+        {
+            name: 'scope',
+            type: 'select',
+            label: 'Scope',
+            default: 'local',
+            required: true,
+            options: [
+                { value: 'local', label: 'Local (Page State)' },
+                { value: 'session', label: 'Session' },
+                { value: 'cookies', label: 'Browser Cookie' },
+                { value: 'url', label: 'URL Parameter' },
+            ],
+        } as SelectFieldDefinition,
+        {
+            name: 'key',
+            type: 'string',
+            label: 'Variable Key',
+            required: true,
+            placeholder: 'e.g. modalOpen or user_theme',
+        },
+        {
+            name: 'value',
+            type: 'string',
+            label: 'Value',
+            required: true,
+            placeholder: 'e.g. true or dynamic value',
+        },
+    ],
+    outputs: [
+        { name: 'data', type: 'any', description: 'Pass-through input data' },
+    ],
+};

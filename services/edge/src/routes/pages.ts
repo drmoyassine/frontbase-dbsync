@@ -392,6 +392,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
                 createdAt: (page as any).createdAt || new Date().toISOString(),
                 updatedAt: (page as any).updatedAt || new Date().toISOString(),
                 canonicalUrl: undefined, ogImage: undefined, ogType: 'website', customVariables: {},
+                appVariables: (page as any).appVariables || null,
             };
             const context = await buildTemplateContext(c.req.raw, contextPageData, undefined, undefined, tenantSlug);
             const bodyHtml = await renderPage(page.layoutData, context);
@@ -425,6 +426,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
         ogImage: undefined,
         ogType: 'website',
         customVariables: {},
+        appVariables: (page as any).appVariables || null,
     };
 
     // Build template context for LiquidJS
@@ -597,6 +599,7 @@ pagesRoute.get('/', async (c) => {
                         createdAt: homepage.publishedAt || new Date().toISOString(),
                         updatedAt: homepage.publishedAt || new Date().toISOString(),
                         canonicalUrl: undefined, ogImage: undefined, ogType: 'website', customVariables: {},
+                        appVariables: (homepage as any).appVariables || null,
                     };
                     const ctx = await buildTemplateContext(c.req.raw, cpd, undefined, undefined, tenantSlug);
                     const bodyHtml = await renderPage(page.layoutData, ctx);
@@ -635,6 +638,7 @@ pagesRoute.get('/', async (c) => {
                 ogImage: undefined,
                 ogType: 'website',
                 customVariables: {},
+                appVariables: (homepage as any).appVariables || null,
             };
 
             // Build template context for LiquidJS

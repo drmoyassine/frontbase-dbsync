@@ -46,7 +46,7 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
             }),
             execute: async ({ slug, componentId }: any) => {
                 try {
-                    const page = await stateProvider.getPageBySlug(slug);
+                    const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || undefined);
                     if (!page) return { error: `Page '${slug}' not found` };
 
                     const layoutData = page.layoutData;
@@ -78,7 +78,7 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
             }),
             execute: async ({ slug, componentId, styles }: any) => {
                 try {
-                    const page = await stateProvider.getPageBySlug(slug);
+                    const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || undefined);
                     if (!page) return { error: `Page '${slug}' not found` };
 
                     const layoutData = { ...page.layoutData };
@@ -125,7 +125,7 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
             }),
             execute: async ({ slug, updates }: any) => {
                 try {
-                    const page = await stateProvider.getPageBySlug(slug);
+                    const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || undefined);
                     if (!page) return { error: `Page '${slug}' not found` };
 
                     const layoutData = { ...page.layoutData };

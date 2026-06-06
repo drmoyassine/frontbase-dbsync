@@ -123,7 +123,10 @@ function getCommonAttributes(
 
     const finalStyle = [extraStyle, propStyleString].filter(Boolean).join(';');
 
-    return `id="${id}" class="${className}" style="${finalStyle}" data-fb-hydrate="${hydrateType}" data-fb-props="${escapeHtml(propsJson)}" ${extraAttrs}`;
+    const showIf = props['data-show-if'] as string | undefined;
+    const showIfAttr = showIf ? `data-show-if="${escapeHtml(showIf)}"` : '';
+
+    return `id="${id}" class="${className}" style="${finalStyle}" data-fb-hydrate="${hydrateType}" data-fb-props="${escapeHtml(propsJson)}" ${showIfAttr} ${extraAttrs}`;
 }
 
 /**

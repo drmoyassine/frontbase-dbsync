@@ -610,8 +610,15 @@ export class CfD1HttpProvider implements IStateProvider {
         );
     }
 
-    async deleteAgentTool(id: string): Promise<boolean> {
-        await this.run(`DELETE FROM agent_tools WHERE id = ?1`, [id]);
+    async deleteAgentTool(id: string, tenantSlug?: string): Promise<boolean> {
+        if (tenantSlug && tenantSlug !== '_default') {
+            await this.run(
+                `DELETE FROM agent_tools WHERE id = ?1 AND (profile_slug = ?2 OR profile_slug LIKE ?3)`,
+                [id, tenantSlug, `${tenantSlug}:%`]
+            );
+        } else {
+            await this.run(`DELETE FROM agent_tools WHERE id = ?1`, [id]);
+        }
         return true;
     }
 }

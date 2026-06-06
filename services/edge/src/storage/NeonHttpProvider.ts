@@ -662,8 +662,15 @@ export class NeonHttpProvider implements IStateProvider {
         );
     }
 
-    async deleteAgentTool(id: string): Promise<boolean> {
-        await this.query(`DELETE FROM ${SCHEMA}.agent_tools WHERE id = $1`, [id]);
+    async deleteAgentTool(id: string, tenantSlug?: string): Promise<boolean> {
+        if (tenantSlug && tenantSlug !== '_default') {
+            await this.query(
+                `DELETE FROM ${SCHEMA}.agent_tools WHERE id = $1 AND (profile_slug = $2 OR profile_slug LIKE $3)`,
+                [id, tenantSlug, `${tenantSlug}:%`]
+            );
+        } else {
+            await this.query(`DELETE FROM ${SCHEMA}.agent_tools WHERE id = $1`, [id]);
+        }
         return true;
     }
 }

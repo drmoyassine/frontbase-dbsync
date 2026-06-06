@@ -57,8 +57,7 @@ app.use('/api/data/execute', async (_c, next) => await next());
 app.use('/api/data/*', systemKeyAuth);
 app.use('/api/manage/*', systemKeyAuth);
 
-// ── Tenant middleware (cloud mode: extract slug from Host subdomain) ───
-app.use('*', tenantMiddleware);
+
 
 // ── IP Blocklist — public routes only ──────────────────────────────────
 app.use('/api/data/execute', ipBlocklist);

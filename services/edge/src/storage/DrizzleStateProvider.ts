@@ -16,7 +16,7 @@
  * AGENTS.md §2.1: Edge Self-Sufficiency — no calls to FastAPI at runtime.
  */
 
-import { sql, eq, and, desc } from 'drizzle-orm';
+import { sql, eq, and, desc, or, like } from 'drizzle-orm';
 import type { PublishPage, PageLayout, SeoData, DatasourceConfig } from '../schemas/publish';
 import type {
     IStateProvider, ProjectSettingsData, PublishedPageSummary,
@@ -513,9 +513,20 @@ export abstract class DrizzleStateProvider implements IStateProvider {
             });
     }
 
-    async deleteAgentTool(id: string): Promise<boolean> {
+    async deleteAgentTool(id: string, tenantSlug?: string): Promise<boolean> {
+        const conditions = [eq(agentToolsTable.id, id)];
+        if (tenantSlug && tenantSlug !== '_default') {
+            const orCond = or(
+                eq(agentToolsTable.profileSlug, tenantSlug),
+                like(agentToolsTable.profileSlug, `${tenantSlug}:%`)
+            );
+            if (orCond) {
+                conditions.push(orCond);
+            }
+        }
+        const whereClause = conditions.length > 1 ? and(...conditions) : conditions[0];
         await this.getDb().delete(agentToolsTable)
-            .where(eq(agentToolsTable.id, id));
+            .where(whereClause);
         return true;
     }
 }

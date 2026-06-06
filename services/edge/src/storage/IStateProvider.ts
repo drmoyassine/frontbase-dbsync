@@ -249,5 +249,5 @@ export interface IStateProvider {
     /** Upsert an agent tool */
     upsertAgentTool(tool: AgentToolData): Promise<void>;
     /** Delete an agent tool by ID */
-    deleteAgentTool(id: string): Promise<boolean>;
+    deleteAgentTool(id: string, tenantSlug?: string): Promise<boolean>;
 }

@@ -16,6 +16,7 @@ interface ExecutionContext {
     parameters: Record<string, any>;
     nodeOutputs: Record<string, Record<string, any>>;
     nodeExecutions: NodeExecution[];
+    variableMutations?: Array<{ scope: string; key: string; value: any }>;
 }
 
 /**
@@ -51,6 +52,40 @@ export async function executeNode(
         case 'console':
             console.log(`[Node ${node.id}]:`, inputs);
             return { logged: true, data: inputs };
+
+        case 'set_variable':
+        case 'setVariable': {
+            const nodeInputs = node.inputs || [];
+            const getVal = (name: string) => {
+                const inp = nodeInputs.find((i: any) => i.name === name);
+                return inp?.value !== undefined ? inp.value : inputs[name];
+            };
+            const scope = getVal('scope') || 'local';
+            const key = getVal('key');
+            const rawValue = getVal('value');
+
+            // Evaluate value dynamically if it's an expression or reference
+            let evaluatedValue = rawValue;
+            if (typeof rawValue === 'string') {
+                try {
+                    evaluatedValue = safeEval(rawValue, inputs);
+                } catch (e) {
+                    evaluatedValue = rawValue;
+                }
+            }
+
+            // Append mutation to context.variableMutations
+            if (context.variableMutations) {
+                context.variableMutations.push({
+                    scope,
+                    key,
+                    value: evaluatedValue
+                });
+            }
+
+            console.log(`[Set Variable Node] scope=${scope}, key=${key}, value=`, evaluatedValue);
+            return { scope, key, value: evaluatedValue };
+        }
 
         case 'http_response': {
             // Extract response config from node inputs

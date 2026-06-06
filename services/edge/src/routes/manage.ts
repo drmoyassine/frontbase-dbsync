@@ -47,7 +47,7 @@ const listPagesRoute = createRoute({
 });
 
 manageRoute.openapi(listPagesRoute, async (c) => {
-    const tenantSlug = c.req.query('tenant_slug') || undefined;
+    const tenantSlug = (c.get as any)('tenantSlug') || c.req.query('tenant_slug') || undefined;
     const pages = await stateProvider.listPages(tenantSlug);
     return c.json({ pages, total: pages.length }, 200);
 });
@@ -85,7 +85,7 @@ const getPageRoute = createRoute({
 
 manageRoute.openapi(getPageRoute, async (c) => {
     const { slug } = c.req.valid('param');
-    const tenantSlug = c.req.query('tenant_slug') || undefined;
+    const tenantSlug = (c.get as any)('tenantSlug') || c.req.query('tenant_slug') || undefined;
     const page = await stateProvider.getPageBySlug(slug, tenantSlug);
     if (!page) {
         return c.json({ error: 'NotFound', message: `Page "${slug}" not found` }, 404);
@@ -118,7 +118,7 @@ const deletePageRoute = createRoute({
 
 manageRoute.openapi(deletePageRoute, async (c) => {
     const { slug } = c.req.valid('param');
-    const tenantSlug = c.req.query('tenant_slug') || undefined;
+    const tenantSlug = (c.get as any)('tenantSlug') || c.req.query('tenant_slug') || undefined;
     await stateProvider.deletePage(slug, tenantSlug);
 
     // Invalidate Redis cache (tenant-scoped)

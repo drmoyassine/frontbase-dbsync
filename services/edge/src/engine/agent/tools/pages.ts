@@ -34,7 +34,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
             }),
             execute: async ({ dummy }: any) => {
                 try {
-                    const pages = await stateProvider.listPages();
+                    const pages = await stateProvider.listPages(profile.tenantSlug || undefined);
                     return {
                         count: pages.length,
                         pages: pages.map((p: any) => ({
@@ -56,7 +56,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
             }),
             execute: async ({ slug }: any) => {
                 try {
-                    const page = await stateProvider.getPageBySlug(slug);
+                    const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || undefined);
                     if (!page) {
                         return { error: `Page with slug '${slug}' not found` };
                     }
@@ -107,7 +107,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
             }),
             execute: async ({ slug, componentId, props }: any) => {
                 try {
-                    const page = await stateProvider.getPageBySlug(slug);
+                    const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || undefined);
                     if (!page) return { error: `Page '${slug}' not found` };
 
                     const layoutData = { ...page.layoutData };
@@ -153,7 +153,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
             execute: async ({ slug, componentId, props }: any) => {
                 try {
                     // Step 1: Update the component
-                    const page = await stateProvider.getPageBySlug(slug);
+                    const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || undefined);
                     if (!page) return { error: `Page '${slug}' not found` };
 
                     const layoutData = { ...page.layoutData };
@@ -187,7 +187,11 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
                                 'Content-Type': 'application/json',
                                 'x-api-key': profile.apiKey || '',
                             },
-                            body: JSON.stringify({ pattern: `page:${slug}*` }),
+                            body: JSON.stringify({
+                                pattern: profile.tenantSlug && profile.tenantSlug !== '_default'
+                                    ? `page:${profile.tenantSlug}:${slug}*`
+                                    : `page:${slug}*`
+                            }),
                         });
                         await liteApp.request(cacheReq);
                     } catch {

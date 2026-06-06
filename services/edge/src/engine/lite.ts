@@ -51,6 +51,7 @@ import { mcpServerRoute } from '../routes/mcp.js';
 import { agentRoute } from '../routes/agent.js';
 import { getAgentProfilesConfig } from '../config/env.js';
 import { systemKeyAuth, userApiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
+import { tenantMiddleware } from '../middleware/tenant.js';
 
 // =============================================================================
 // Liquid Engine (shared singleton for template rendering)
@@ -169,6 +170,7 @@ export function createLiteApp(mode: EngineMode = 'lite') {
 
     app.use('*', requestId());
     app.use('*', logger());
+    app.use('*', tenantMiddleware);
     app.use('*', secureHeaders());
     app.use('*', timing());               // Server-Timing header
     app.use('*', bodyLimit({ maxSize: 50 * 1024 * 1024 })); // 50MB
@@ -211,6 +213,7 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     app.use('/api/workflows/*', systemKeyAuth);
     app.use('/api/queue/*', systemKeyAuth);
     app.use('/api/config/*', systemKeyAuth);
+    app.use('/api/agent-tools/*', systemKeyAuth);
 
     // User API key auth — webhooks (unified with AI key system)
     app.use('/api/webhook/*', userApiKeyAuth);

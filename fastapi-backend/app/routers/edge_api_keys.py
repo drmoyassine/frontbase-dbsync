@@ -202,9 +202,7 @@ def list_api_keys(
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
-            query = query.join(EdgeEngine, EdgeAPIKey.edge_engine_id == EdgeEngine.id).filter(
-                EdgeEngine.project_id == project.id
-            )
+            query = query.filter(EdgeAPIKey.project_id == project.id)
             if engine_id:
                 query = query.filter(EdgeAPIKey.edge_engine_id == engine_id)
         else:
@@ -235,12 +233,14 @@ def create_api_key(
 ):
     """Create a new API key. Returns the full key ONCE."""
     # Validate engine if specified
+    project_id = None
     if ctx and ctx.tenant_id:
         if not payload.edge_engine_id:
             raise HTTPException(400, "edge_engine_id is required in cloud mode")
         project = get_project(db, ctx)
         if not project:
             raise HTTPException(403, "Access denied: tenant project not found")
+        project_id = project.id
         engine = db.query(EdgeEngine).filter(
             EdgeEngine.id == payload.edge_engine_id,
             EdgeEngine.project_id == project.id
@@ -269,6 +269,7 @@ def create_api_key(
         prefix=prefix,
         key_hash=key_hash,
         edge_engine_id=payload.edge_engine_id,
+        project_id=project_id,
         is_active=True,
         scope=payload.scope,
         expires_at=payload.expires_at,
@@ -306,9 +307,9 @@ def update_api_key(
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
-            query = query.join(EdgeEngine, EdgeAPIKey.edge_engine_id == EdgeEngine.id).filter(
+            query = query.filter(
                 EdgeAPIKey.id == key_id,
-                EdgeEngine.project_id == project.id
+                EdgeAPIKey.project_id == project.id
             )
         else:
             raise HTTPException(404, "API key not found")
@@ -368,9 +369,9 @@ def delete_api_key(
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
-            query = query.join(EdgeEngine, EdgeAPIKey.edge_engine_id == EdgeEngine.id).filter(
+            query = query.filter(
                 EdgeAPIKey.id == key_id,
-                EdgeEngine.project_id == project.id
+                EdgeAPIKey.project_id == project.id
             )
         else:
             raise HTTPException(404, "API key not found")
@@ -398,9 +399,9 @@ def reveal_api_key(key_id: str, db: Session = Depends(get_db), ctx: TenantContex
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
-            query = query.join(EdgeEngine, EdgeAPIKey.edge_engine_id == EdgeEngine.id).filter(
+            query = query.filter(
                 EdgeAPIKey.id == key_id,
-                EdgeEngine.project_id == project.id
+                EdgeAPIKey.project_id == project.id
             )
         else:
             raise HTTPException(404, "API key not found")

@@ -117,7 +117,10 @@ function getCommonAttributes(
 
     const finalStyle = [extraStyle, propStyleString].filter(Boolean).join(';');
 
-    return `id="${id}" class="${className}" style="${finalStyle}" data-fb-hydrate="${hydrateType}" data-fb-props="${escapeHtml(propsJson)}"`;
+    const showIf = props['data-show-if'] as string | undefined;
+    const showIfAttr = showIf ? ` data-show-if="${escapeHtml(showIf)}"` : '';
+
+    return `id="${id}" class="${className}" style="${finalStyle}" data-fb-hydrate="${hydrateType}" data-fb-props="${escapeHtml(propsJson)}"${showIfAttr}`;
 }
 
 /**
@@ -188,14 +191,25 @@ function renderButton(id: string, props: Record<string, unknown>, propsJson: str
     // Handle action bindings for onClick
     interface ActionBinding {
         trigger: string;
-        actionType: 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow';
+        actionType: 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow' | 'setVariable';
         config?: {
             sectionId?: string;
             pageUrl?: string;
             openInNewTab?: boolean;
             modalId?: string;
+            variableScope?: string;
+            variableName?: string;
+            variableValue?: string;
         };
         workflowId?: string | null;
+        onSuccess?: {
+            type: string;
+            message?: string;
+            url?: string;
+            variableScope?: string;
+            variableName?: string;
+            resultPath?: string;
+        };
     }
     const actionBindings = (props.actionBindings as ActionBinding[]) || [];
     const onClickAction = actionBindings.find(b => b.trigger === 'onClick');
@@ -241,7 +255,31 @@ function renderButton(id: string, props: Record<string, unknown>, propsJson: str
                     actionAttrs = `data-navigate-to="${url}"${newTab ? ' data-navigate-new-tab="true"' : ''}`;
                 }
                 break;
-            // openModal and runWorkflow require client-side hydration
+            case 'setVariable':
+                if (onClickAction.config?.variableName) {
+                    const scope = escapeHtml(onClickAction.config.variableScope || 'local');
+                    const name = escapeHtml(onClickAction.config.variableName);
+                    const val = escapeHtml(onClickAction.config.variableValue || '');
+                    actionAttrs = `data-action-set-var-scope="${scope}" data-action-set-var-name="${name}" data-action-set-var-value="${val}"`;
+                }
+                break;
+            case 'runWorkflow':
+                if (onClickAction.workflowId) {
+                    actionAttrs = `data-action-run-workflow="${escapeHtml(onClickAction.workflowId)}"`;
+                    if (onClickAction.onSuccess) {
+                        actionAttrs += ` data-action-onsuccess="${escapeHtml(onClickAction.onSuccess.type)}"`;
+                        if (onClickAction.onSuccess.type === 'toast' && onClickAction.onSuccess.message) {
+                            actionAttrs += ` data-action-onsuccess-toast-message="${escapeHtml(onClickAction.onSuccess.message)}"`;
+                        } else if (onClickAction.onSuccess.type === 'redirect' && onClickAction.onSuccess.url) {
+                            actionAttrs += ` data-action-onsuccess-redirect-url="${escapeHtml(onClickAction.onSuccess.url)}"`;
+                        } else if (onClickAction.onSuccess.type === 'setVariable') {
+                            actionAttrs += ` data-action-onsuccess-var-scope="${escapeHtml(onClickAction.onSuccess.variableScope || 'local')}"`;
+                            actionAttrs += ` data-action-onsuccess-var-name="${escapeHtml(onClickAction.onSuccess.variableName || '')}"`;
+                            actionAttrs += ` data-action-onsuccess-result-path="${escapeHtml(onClickAction.onSuccess.resultPath || '')}"`;
+                        }
+                    }
+                }
+                break;
         }
     }
 

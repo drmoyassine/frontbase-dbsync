@@ -159,7 +159,7 @@ importRoute.post('/', async (c) => {
 importRoute.delete('/:slug', async (c) => {
     try {
         const slug = c.req.param('slug');
-        const tenantSlug = c.req.query('tenant_slug') || undefined;
+        const tenantSlug = (c.get as any)('tenantSlug') || c.req.query('tenant_slug') || undefined;
 
         if (!slug) {
             return c.json({
@@ -221,7 +221,7 @@ importRoute.post('/settings', async (c) => {
     try {
         const body = await c.req.json();
 
-        const tenantSlug = c.req.query('tenant_slug') || undefined;
+        const tenantSlug = (c.get as any)('tenantSlug') || c.req.query('tenant_slug') || undefined;
 
         console.log('[Import Settings] Received:', Object.keys(body), tenantSlug ? `tenant=${tenantSlug}` : '');
 
@@ -264,7 +264,7 @@ importRoute.post('/settings', async (c) => {
 
 importRoute.get('/settings', async (c) => {
     try {
-        const tenantSlug = c.req.query('tenant_slug') || undefined;
+        const tenantSlug = (c.get as any)('tenantSlug') || c.req.query('tenant_slug') || undefined;
         const settings = await stateProvider.getProjectSettings(tenantSlug);
         return c.json({
             success: true,

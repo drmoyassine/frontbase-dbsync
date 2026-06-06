@@ -94,6 +94,8 @@ export interface AgentProfile {
     apiKey?: string;
     excludedEndpoints?: string[];
     maxAutoTools?: number;  // Cap on Tier 1 auto-registered tools (default: 50)
+    slug?: string;
+    tenantSlug?: string;
 }
 
 export type AgentProfilesConfig = Record<string, AgentProfile>;

@@ -102,6 +102,8 @@ def get_workspace_agent_token(db: Session = Depends(get_db), ctx: TenantContext 
     payload = {
         "provider": str(target.provider),
         "credentials": creds,
+        "tenantSlug": ctx.tenant_slug if ctx else None,
+        "isMaster": ctx.is_master if ctx else True,
         "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)
     }
     
@@ -144,7 +146,7 @@ def set_workspace_agent_token(payload: SetWorkspaceDefaultRequest, db: Session =
     provider.provider_metadata = json.dumps(meta)  # type: ignore[assignment]
     db.commit()
     
-    return get_workspace_agent_token(db)
+    return get_workspace_agent_token(db, ctx)
 
 
 # =============================================================================

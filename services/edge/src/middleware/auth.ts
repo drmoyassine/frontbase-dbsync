@@ -26,6 +26,7 @@ interface APIKeyHashEntry {
     hash: string;
     scope?: string;       // 'user' | 'management' | 'all'
     expires_at?: string | null;
+    tenantSlug?: string;
 }
 
 /** Parse API key hashes from FRONTBASE_API_KEYS config. Returns null if not configured. */
@@ -117,7 +118,24 @@ export const systemKeyAuth = async (c: Context, next: Next) => {
     const bearerToken = extractBearerToken(c);
     if (bearerToken) {
         const matched = await validateApiKey(bearerToken, ['management', 'all']);
-        if (matched) return next();
+        if (matched) {
+            (c.set as any)('apiKey', matched);
+            // Verify tenant scope if API key is restricted to a tenant
+            if (matched.tenantSlug) {
+                const reqTenantSlug = c.req.query('tenant_slug') || (c.get as any)('tenantSlug');
+                if (reqTenantSlug && reqTenantSlug !== matched.tenantSlug) {
+                    return c.json({
+                        error: {
+                            message: `Access denied. API key is restricted to tenant '${matched.tenantSlug}'.`,
+                            type: 'invalid_request_error',
+                            code: 'forbidden',
+                        },
+                    }, 403);
+                }
+                c.set('tenantSlug', matched.tenantSlug);
+            }
+            return next();
+        }
     }
 
     return c.json({
@@ -199,6 +217,21 @@ export const userApiKeyAuth = async (c: Context, next: Next) => {
                 code: 'invalid_api_key',
             },
         }, 401);
+    }
+
+    (c.set as any)('apiKey', matched);
+    if (matched.tenantSlug) {
+        const reqTenantSlug = c.req.query('tenant_slug') || (c.get as any)('tenantSlug');
+        if (reqTenantSlug && reqTenantSlug !== matched.tenantSlug) {
+            return c.json({
+                error: {
+                    message: `Access denied. API key is restricted to tenant '${matched.tenantSlug}'.`,
+                    type: 'invalid_request_error',
+                    code: 'forbidden',
+                },
+            }, 403);
+        }
+        c.set('tenantSlug', matched.tenantSlug);
     }
 
     return next();

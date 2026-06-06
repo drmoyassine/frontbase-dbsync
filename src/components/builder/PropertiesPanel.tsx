@@ -288,6 +288,15 @@ export const PropertiesPanel = () => {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="component-visibility-condition" className="text-sm font-medium">Visibility Condition <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
+              <VariableInput
+                value={selectedComponent.visibilityCondition || ''}
+                onChange={(value) => updateComponent(selectedComponentId, { visibilityCondition: value })}
+                placeholder="e.g. local.modalOpen == true"
+              />
+            </div>
+
             {renderPropertyFields()}
           </TabsContent>
 

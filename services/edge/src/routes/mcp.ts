@@ -27,11 +27,26 @@ mcpServerRoute.all('/:profileSlug/*', async (c) => {
     // Check auth
     const profileSlug = c.req.param('profileSlug');
     const profilesConfig = getAgentProfilesConfig();
-    const profile = profilesConfig[profileSlug];
+    const ctxTenantSlug = (c.get as any)('tenantSlug') || undefined;
+
+    let profile = profilesConfig[profileSlug];
+    if (!profile && ctxTenantSlug && ctxTenantSlug !== '_default') {
+        profile = profilesConfig[`${ctxTenantSlug}:${profileSlug}`];
+    }
 
     if (!profile) {
         return c.json({ error: { message: `Agent Profile '${profileSlug}' not found.` } }, 404);
     }
+
+    // Assert profile's tenant matches context
+    const profileTenantSlug = profile.tenantSlug || undefined;
+    if (profileTenantSlug !== ctxTenantSlug) {
+        return c.json({ error: { message: `Forbidden: Profile tenant does not match request tenantSlug context.` } }, 403);
+    }
+
+    const resolvedProfileSlug = profilesConfig[profileSlug]
+        ? profileSlug
+        : (ctxTenantSlug && profilesConfig[`${ctxTenantSlug}:${profileSlug}`] ? `${ctxTenantSlug}:${profileSlug}` : profileSlug);
 
     // Verify API Key matches the profile
     const apiKeyHeader = c.req.header('x-api-key') || c.req.header('authorization')?.replace('Bearer ', '');
@@ -40,11 +55,11 @@ mcpServerRoute.all('/:profileSlug/*', async (c) => {
     }
 
     // Load or initialize MCP Server
-    let instance = serverCache.get(profileSlug);
+    let instance = serverCache.get(resolvedProfileSlug);
 
     if (!instance) {
         const mcpServer = new McpServer({
-            name: `frontbase-${profileSlug}`,
+            name: `frontbase-${resolvedProfileSlug}`,
             version: '1.0.0',
         });
 
@@ -85,7 +100,7 @@ mcpServerRoute.all('/:profileSlug/*', async (c) => {
             'pages',
             'engine://pages',
             async (uri: any) => {
-                const pages = await getStateProvider().listPages();
+                const pages = await getStateProvider().listPages(profile.tenantSlug || undefined);
                 return {
                     contents: [{
                         uri: uri.href,
@@ -99,7 +114,7 @@ mcpServerRoute.all('/:profileSlug/*', async (c) => {
             'workflows',
             'engine://workflows',
             async (uri: any) => {
-                const workflows = await getStateProvider().listWorkflows();
+                const workflows = await getStateProvider().listWorkflows(profile.tenantSlug || undefined);
                 return {
                     contents: [{
                         uri: uri.href,
@@ -127,7 +142,7 @@ mcpServerRoute.all('/:profileSlug/*', async (c) => {
 
         const transport = new StreamableHTTPTransport();
         instance = { mcpServer, transport };
-        serverCache.set(profileSlug, instance);
+        serverCache.set(resolvedProfileSlug, instance);
     }
 
     if (!instance.mcpServer.isConnected()) {

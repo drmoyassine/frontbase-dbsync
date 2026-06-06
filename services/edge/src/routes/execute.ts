@@ -205,18 +205,28 @@ executeRoute.openapi(route, async (c) => {
         startedAt: now,
     });
 
-    // Execute workflow asynchronously, release concurrency in finally
-    executeWorkflow(executionId, workflow, body.parameters || {}, settings)
-        .catch(err => console.error(`Execution ${executionId} failed:`, err))
-        .finally(() => {
-            if (concurrencyLimit > 0) releaseConcurrency(id);
-        });
-
-    return c.json({
-        executionId,
-        status: 'started' as const,
-        message: 'Workflow execution started',
-    }, 200);
+    try {
+        const result = await executeWorkflow(executionId, workflow, body.parameters || {}, settings);
+        
+        return c.json({
+            executionId,
+            status: result.status === 'completed' ? 'completed' as const : 'error' as const,
+            result: result.result,
+            variableMutations: result.variableMutations || [],
+            error: result.error,
+            message: result.status === 'completed' ? 'Workflow execution completed' : 'Workflow execution failed',
+        }, 200);
+    } catch (err: any) {
+        console.error(`Execution ${executionId} failed:`, err);
+        return c.json({
+            executionId,
+            status: 'error' as const,
+            error: err.message,
+            message: 'Workflow execution failed',
+        }, 200);
+    } finally {
+        if (concurrencyLimit > 0) releaseConcurrency(id);
+    }
 });
 
 // Single node execution route
@@ -291,15 +301,22 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
         startedAt: now,
     });
 
-    // Execute single node asynchronously
-    executeSingleNode(executionId, workflow, nodeId, body.parameters || {})
-        .catch(err => console.error(`Node execution ${executionId} failed:`, err));
-
-    return c.json({
-        executionId,
-        status: 'started' as const,
-        message: `Executing node ${nodeId}`,
-    }, 200);
+    try {
+        await executeSingleNode(executionId, workflow, nodeId, body.parameters || {});
+        return c.json({
+            executionId,
+            status: 'completed' as const,
+            message: `Node ${nodeId} execution completed`,
+        }, 200);
+    } catch (err: any) {
+        console.error(`Node execution ${executionId} failed:`, err);
+        return c.json({
+            executionId,
+            status: 'error' as const,
+            error: err.message,
+            message: `Node ${nodeId} execution failed`,
+        }, 200);
+    }
 });
 
 export { executeRoute };

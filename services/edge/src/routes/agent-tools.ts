@@ -20,6 +20,13 @@ export const agentToolsRoute = new OpenAPIHono();
 agentToolsRoute.get('/:profileSlug', async (c) => {
     const profileSlug = c.req.param('profileSlug');
     const includeInactive = c.req.query('includeInactive') === 'true';
+    const tenantSlug = (c.get as any)('tenantSlug') as string | undefined;
+
+    if (tenantSlug && tenantSlug !== '_default') {
+        if (profileSlug !== tenantSlug && !profileSlug.startsWith(`${tenantSlug}:`)) {
+            return c.json({ error: 'Forbidden: Access to this profile is restricted to another tenant.' }, 403);
+        }
+    }
 
     try {
         const provider = getStateProvider();
@@ -44,6 +51,13 @@ agentToolsRoute.post('/', async (c) => {
     // Validate type
     if (!['workflow', 'mcp_server'].includes(body.type)) {
         return c.json({ error: 'Invalid type. Must be "workflow" or "mcp_server".' }, 400);
+    }
+
+    const tenantSlug = (c.get as any)('tenantSlug') as string | undefined;
+    if (tenantSlug && tenantSlug !== '_default') {
+        if (body.profileSlug !== tenantSlug && !body.profileSlug.startsWith(`${tenantSlug}:`)) {
+            return c.json({ error: 'Forbidden: Cannot upsert agent tools for another tenant\'s profile.' }, 403);
+        }
     }
 
     // Validate config is valid JSON
@@ -81,10 +95,11 @@ agentToolsRoute.post('/', async (c) => {
 // Delete a tool
 agentToolsRoute.delete('/:id', async (c) => {
     const id = c.req.param('id');
+    const tenantSlug = (c.get as any)('tenantSlug') as string | undefined;
 
     try {
         const provider = getStateProvider();
-        await provider.deleteAgentTool(id);
+        await provider.deleteAgentTool(id, tenantSlug);
         return c.json({ success: true });
     } catch (err: any) {
         return c.json({ error: err.message }, 500);

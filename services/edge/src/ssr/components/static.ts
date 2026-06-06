@@ -113,9 +113,14 @@ function getCommonAttributes(id: string, baseClass: string, props: Record<string
 
     // Include data-fb-props if actionBindings exist (for hover tooltips, etc.)
     const actionBindings = props.actionBindings as Array<unknown> | undefined;
-    const propsAttr = actionBindings && actionBindings.length > 0
+    let propsAttr = actionBindings && actionBindings.length > 0
         ? ` data-fb-props="${escapeHtml(JSON.stringify({ actionBindings }))}"`
         : '';
+
+    const showIf = props['data-show-if'] as string | undefined;
+    if (showIf) {
+        propsAttr += ` data-show-if="${escapeHtml(showIf)}"`;
+    }
 
     return `id="${id}" class="${className}" style="${finalStyle}"${propsAttr}`;
 }

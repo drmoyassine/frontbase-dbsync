@@ -131,6 +131,9 @@ export function createVariableStore(initialState?: {
             if (expression.startsWith('page.')) {
                 return pageVariables[expression.slice(5)];
             }
+            if (expression.startsWith('local.')) {
+                return pageVariables[expression.slice(6)];
+            }
             if (expression.startsWith('session.')) {
                 return sessionVariables[expression.slice(8)];
             }

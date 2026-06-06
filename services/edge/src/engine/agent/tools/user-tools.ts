@@ -232,11 +232,12 @@ export async function buildUserTools(
     const tools: Record<string, any> = {};
 
     try {
-        // Determine profile slug from name (normalize to lowercase kebab)
-        const profileSlug = profile.name?.toLowerCase().replace(/\s+/g, '-') || 'default';
-        const userTools = await stateProvider.listAgentTools(profileSlug);
+        // Determine profile slug
+        const slug = profile.slug || profile.name?.toLowerCase().replace(/\s+/g, '-') || 'default';
+        const lookupKey = profile.tenantSlug ? `${profile.tenantSlug}:${slug}` : slug;
+        const userTools = await stateProvider.listAgentTools(lookupKey);
 
-        if (!userTools.length) return tools;
+        if (!userTools || !userTools.length) return tools;
 
         for (const toolDef of userTools) {
             try {

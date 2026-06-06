@@ -139,6 +139,13 @@ export const ExecuteResponseSchema = z.object({
     executionId: z.string().uuid(),
     status: ExecutionStatusSchema,
     message: z.string().optional(),
+    result: z.record(z.any()).optional(),
+    variableMutations: z.array(z.object({
+        scope: z.string(),
+        key: z.string(),
+        value: z.any()
+    })).optional(),
+    error: z.string().optional(),
 }).openapi('ExecuteResponse');
 
 export const WebhookPayloadSchema = z.object({

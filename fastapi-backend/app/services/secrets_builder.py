@@ -129,11 +129,21 @@ def _build_api_keys_config(db: Session, engine_id: str | None) -> dict:
                     derived = raw_hash  # Fallback: push as-is
             else:
                 derived = raw_hash  # Already a legacy SHA-256 hash
+
+            # Resolve tenant_slug
+            tenant_slug = None
+            if bool(k.project_id):
+                from ..models.auth import Project
+                proj = db.query(Project).filter(Project.id == k.project_id).first()
+                if proj and proj.tenant:
+                    tenant_slug = str(proj.tenant.slug)
+
             hashes.append({
                 "prefix": str(k.prefix),
                 "hash": derived,
                 "scope": str(k.scope) if k.scope else 'user',  # type: ignore[truthy-bool]
                 "expires_at": str(k.expires_at) if k.expires_at else None,  # type: ignore[truthy-bool]
+                "tenantSlug": tenant_slug,
             })
         config['apiKeyHashes'] = hashes
 
@@ -150,7 +160,10 @@ def _build_agent_profiles_config(db: Session, engine_id: str | None) -> dict:
     if not engine_id:
         return config
 
-    from ..models.models import EdgeAgentProfile
+    from ..models.models import EdgeAgentProfile, EdgeEngine
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    is_shared = bool(engine.is_shared) if engine else False
+
     profiles = db.query(EdgeAgentProfile).filter(EdgeAgentProfile.engine_id == engine_id).all()
     
     for p in profiles:
@@ -159,8 +172,23 @@ def _build_agent_profiles_config(db: Session, engine_id: str | None) -> dict:
         except (json.JSONDecodeError, TypeError):
             perms = {}
 
-        config[str(p.slug)] = {
+        # Resolve tenant_slug
+        tenant_slug = None
+        if bool(p.project_id):
+            from ..models.auth import Project
+            proj = db.query(Project).filter(Project.id == p.project_id).first()
+            if proj and proj.tenant:
+                tenant_slug = str(proj.tenant.slug)
+
+        if is_shared and tenant_slug:
+            key = f"{tenant_slug}:{p.slug}"
+        else:
+            key = str(p.slug)
+
+        config[key] = {
             "name": str(p.name),
+            "slug": str(p.slug),
+            "tenantSlug": tenant_slug,
             "systemPrompt": str(p.system_prompt) if p.system_prompt is not None else None,
             "permissions": perms
         }

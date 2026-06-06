@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Zap, GitBranch, Globe, Code, MessageSquare, Database, Timer, Send, Bell, ExternalLink, RefreshCw, Reply } from 'lucide-react';
+import { Zap, GitBranch, Globe, Code, MessageSquare, Database, Timer, Send, Bell, ExternalLink, RefreshCw, Reply, Sliders } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionsStore } from '@/stores/actions';
 import { getNodeSchema, getDefaultInputsFromSchema, getDefaultOutputsFromSchema } from '@/lib/workflow/nodeSchemas';
@@ -111,6 +111,13 @@ const nodeTypes: NodeTypeConfig[] = [
         label: 'Refresh Page',
         description: 'Reload the current page',
         icon: <RefreshCw className="w-4 h-4" />,
+        category: 'interface',
+    },
+    {
+        type: 'set_variable',
+        label: 'Set Variable',
+        description: 'Set value of a variable',
+        icon: <Sliders className="w-4 h-4" />,
         category: 'interface',
     },
 

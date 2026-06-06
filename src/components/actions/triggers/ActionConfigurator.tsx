@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { Play, Plus, Settings2, Trash2, X, Hash, ExternalLink, MousePointer, Workflow, Layers, MessageSquare } from 'lucide-react';
+import { Play, Plus, Settings2, Trash2, X, Hash, ExternalLink, MousePointer, Workflow, Layers, MessageSquare, Variable } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,7 +21,7 @@ import { SelectTargetButton } from '@/components/builder/shared/SelectTargetButt
 import { VariableInput } from '@/components/builder/VariableInput';
 
 // Action types for the hybrid configurator
-export type ActionType = 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow' | 'showTooltip';
+export type ActionType = 'scrollToSection' | 'openPage' | 'openModal' | 'runWorkflow' | 'showTooltip' | 'setVariable';
 
 export interface ActionConfig {
     sectionId?: string;      // For scrollToSection: e.g., "#features"
@@ -29,6 +29,10 @@ export interface ActionConfig {
     openInNewTab?: boolean;  // For openPage: whether to open in new tab
     modalId?: string;        // For openModal (future)
     tooltipMessage?: string; // For showTooltip: tooltip text (supports @ variables)
+    variableScope?: 'local' | 'session' | 'cookies' | 'url';  // For setVariable: which scope to write to
+    variableName?: string;   // For setVariable: e.g. "modalOpen", "theme", "tab"
+    variableValue?: string;  // For setVariable: e.g. "true", "dark", "pricing"
+    cookieExpiryDays?: number; // For setVariable (cookies scope)
 }
 
 export interface ActionBinding {
@@ -51,9 +55,12 @@ export interface ParameterMapping {
 }
 
 export interface SuccessAction {
-    type: 'toast' | 'redirect' | 'refresh' | 'custom';
+    type: 'toast' | 'redirect' | 'refresh' | 'setVariable' | 'custom';
     message?: string;
     url?: string;
+    variableScope?: 'local' | 'session' | 'cookies' | 'url';
+    variableName?: string;
+    resultPath?: string;
 }
 
 export interface ErrorAction {
@@ -96,6 +103,11 @@ const actionTypeInfo: Record<ActionType, { label: string; icon: React.ReactNode;
         label: 'Show Tooltip',
         icon: <MessageSquare className="w-4 h-4" />,
         description: 'Display a tooltip message on hover'
+    },
+    setVariable: {
+        label: 'Set Variable',
+        icon: <Variable className="w-4 h-4 text-indigo-500" />,
+        description: 'Set a variable value instantly'
     }
 };
 
@@ -114,6 +126,8 @@ function getBindingDisplayText(binding: ActionBinding): string {
             return binding.config?.tooltipMessage
                 ? `"${binding.config.tooltipMessage.substring(0, 30)}${binding.config.tooltipMessage.length > 30 ? '...' : ''}"`
                 : 'Tooltip (not configured)';
+        case 'setVariable':
+            return `${binding.config?.variableScope || 'local'}.${binding.config?.variableName || 'var'} = ${binding.config?.variableValue || '""'}`;
         default:
             return 'Not configured';
     }
@@ -260,46 +274,160 @@ export function ActionConfigurator({
                 );
 
             case 'runWorkflow':
+                const onSuccess = editingBinding.onSuccess || { type: 'toast', message: 'Workflow executed successfully' };
                 return (
-                    <div className="space-y-2">
-                        <Label>Workflow</Label>
-                        <div className="flex gap-2">
-                            <Select
-                                disabled={workflows.length === 0}
-                                value={editingBinding.workflowId || ''}
-                                onValueChange={(v) => {
-                                    const wf = workflows.find(w => w.id === v);
-                                    updateLocalBinding({
-                                        workflowId: v,
-                                        workflowName: wf?.name
-                                    });
-                                }}
-                            >
-                                <SelectTrigger className="flex-1">
-                                    <SelectValue placeholder={workflows.length === 0 ? "No workflows" : "Select workflow..."} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {workflows.map(wf => (
-                                        <SelectItem key={wf.id} value={wf.id}>
-                                            {wf.name}
-                                            {wf.published_version && (
-                                                <span className="ml-2 text-xs text-muted-foreground">
-                                                    v{wf.published_version}
-                                                </span>
-                                            )}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={() => setShowEditor(true)}
-                                title={editingBinding.workflowId ? "Edit workflow" : "Create new workflow"}
-                            >
-                                {editingBinding.workflowId ? <Settings2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                            </Button>
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Workflow</Label>
+                            <div className="flex gap-2">
+                                <Select
+                                    disabled={workflows.length === 0}
+                                    value={editingBinding.workflowId || ''}
+                                    onValueChange={(v) => {
+                                        const wf = workflows.find(w => w.id === v);
+                                        updateLocalBinding({
+                                            workflowId: v,
+                                            workflowName: wf?.name
+                                        });
+                                    }}
+                                >
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue placeholder={workflows.length === 0 ? "No workflows" : "Select workflow..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {workflows.map(wf => (
+                                            <SelectItem key={wf.id} value={wf.id}>
+                                                {wf.name}
+                                                {wf.published_version && (
+                                                    <span className="ml-2 text-xs text-muted-foreground">
+                                                        v{wf.published_version}
+                                                    </span>
+                                                )}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => setShowEditor(true)}
+                                    title={editingBinding.workflowId ? "Edit workflow" : "Create new workflow"}
+                                >
+                                    {editingBinding.workflowId ? <Settings2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                </Button>
+                            </div>
                         </div>
+
+                        {/* On Success config */}
+                        {editingBinding.workflowId && (
+                            <div className="border-t pt-4 space-y-4">
+                                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">On Success</h4>
+                                
+                                <div className="space-y-2">
+                                    <Label>Action Type</Label>
+                                    <Select
+                                        value={onSuccess.type}
+                                        onValueChange={(type) => {
+                                            updateLocalBinding({
+                                                onSuccess: {
+                                                    type: type as any,
+                                                    message: type === 'toast' ? 'Workflow executed successfully' : undefined,
+                                                    url: type === 'redirect' ? '/' : undefined,
+                                                    variableScope: type === 'setVariable' ? 'local' : undefined,
+                                                    variableName: type === 'setVariable' ? '' : undefined,
+                                                    resultPath: type === 'setVariable' ? '' : undefined,
+                                                }
+                                            });
+                                        }}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="toast">Show Toast</SelectItem>
+                                            <SelectItem value="redirect">Redirect to URL</SelectItem>
+                                            <SelectItem value="refresh">Refresh Page</SelectItem>
+                                            <SelectItem value="setVariable">Set Variable</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                {onSuccess.type === 'toast' && (
+                                    <div className="space-y-2">
+                                        <Label>Toast Message</Label>
+                                        <Input
+                                            value={onSuccess.message || ''}
+                                            onChange={(e) => updateLocalBinding({
+                                                onSuccess: { ...onSuccess, message: e.target.value }
+                                            })}
+                                            placeholder="Action completed successfully"
+                                        />
+                                    </div>
+                                )}
+
+                                {onSuccess.type === 'redirect' && (
+                                    <div className="space-y-2">
+                                        <Label>Redirect URL</Label>
+                                        <Input
+                                            value={onSuccess.url || ''}
+                                            onChange={(e) => updateLocalBinding({
+                                                onSuccess: { ...onSuccess, url: e.target.value }
+                                            })}
+                                            placeholder="/dashboard or https://example.com"
+                                        />
+                                    </div>
+                                )}
+
+                                {onSuccess.type === 'setVariable' && (
+                                    <div className="space-y-3">
+                                        <div className="space-y-2">
+                                            <Label>Target Scope</Label>
+                                            <Select
+                                                value={onSuccess.variableScope || 'local'}
+                                                onValueChange={(v) => updateLocalBinding({
+                                                    onSuccess: { ...onSuccess, variableScope: v as any }
+                                                })}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="local">Local (Page-scoped)</SelectItem>
+                                                    <SelectItem value="session">Session (Tab-scoped)</SelectItem>
+                                                    <SelectItem value="cookies">Cookie</SelectItem>
+                                                    <SelectItem value="url">URL Parameter</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Variable Name</Label>
+                                            <Input
+                                                value={onSuccess.variableName || ''}
+                                                onChange={(e) => updateLocalBinding({
+                                                    onSuccess: { ...onSuccess, variableName: e.target.value }
+                                                })}
+                                                placeholder="e.g. discount, userData"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label>Result Path</Label>
+                                            <Input
+                                                value={onSuccess.resultPath || ''}
+                                                onChange={(e) => updateLocalBinding({
+                                                    onSuccess: { ...onSuccess, resultPath: e.target.value }
+                                                })}
+                                                placeholder="e.g. data.discount or result"
+                                            />
+                                            <p className="text-[10px] text-muted-foreground">
+                                                Dot-path into the JSON workflow result. Empty sets the full result.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 );
 
@@ -315,6 +443,56 @@ export function ActionConfigurator({
                         <p className="text-xs text-muted-foreground">
                             Type @ to insert dynamic variables like visitor info
                         </p>
+                    </div>
+                );
+
+            case 'setVariable':
+                return (
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <Label>Target Scope</Label>
+                            <Select
+                                value={editingBinding.config?.variableScope || 'local'}
+                                onValueChange={(v) => updateConfig({ variableScope: v as any })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="local">Local (Page-scoped)</SelectItem>
+                                    <SelectItem value="session">Session (Tab-scoped)</SelectItem>
+                                    <SelectItem value="cookies">Cookie</SelectItem>
+                                    <SelectItem value="url">URL Parameter</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Variable Name</Label>
+                            <Input
+                                placeholder="e.g. modalOpen, currentTab"
+                                value={editingBinding.config?.variableName || ''}
+                                onChange={(e) => updateConfig({ variableName: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Value</Label>
+                            <VariableInput
+                                value={editingBinding.config?.variableValue || ''}
+                                onChange={(val) => updateConfig({ variableValue: val })}
+                                placeholder="Enter value (e.g. true, dark, or @visitor.country)"
+                            />
+                        </div>
+                        {editingBinding.config?.variableScope === 'cookies' && (
+                            <div className="space-y-2">
+                                <Label>Cookie Expiry (Days)</Label>
+                                <Input
+                                    type="number"
+                                    placeholder="365"
+                                    value={editingBinding.config?.cookieExpiryDays || ''}
+                                    onChange={(e) => updateConfig({ cookieExpiryDays: e.target.value === '' ? undefined : Number(e.target.value) })}
+                                />
+                            </div>
+                        )}
                     </div>
                 );
 

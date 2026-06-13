@@ -8,7 +8,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_create_datasource(client):
     """Test creating a new datasource."""
-    response = await client.post("/api/datasources", json={
+    response = await client.post("/datasources", json={
         "name": "Test Supabase",
         "type": "supabase",
         "host": "db.example.supabase.co",
@@ -29,7 +29,7 @@ async def test_create_datasource(client):
 async def test_list_datasources(client):
     """Test listing datasources."""
     # Create a datasource first
-    await client.post("/api/datasources", json={
+    await client.post("/datasources", json={
         "name": "Test DB",
         "type": "postgres",
         "host": "localhost",
@@ -37,7 +37,7 @@ async def test_list_datasources(client):
         "database": "test",
     })
     
-    response = await client.get("/api/datasources")
+    response = await client.get("/datasources")
     
     assert response.status_code == 200
     data = response.json()
@@ -48,7 +48,7 @@ async def test_list_datasources(client):
 async def test_get_datasource(client):
     """Test getting a specific datasource."""
     # Create first
-    create_response = await client.post("/api/datasources", json={
+    create_response = await client.post("/datasources", json={
         "name": "Get Test",
         "type": "postgres",
         "host": "localhost",
@@ -57,7 +57,7 @@ async def test_get_datasource(client):
     })
     ds_id = create_response.json()["id"]
     
-    response = await client.get(f"/api/datasources/{ds_id}")
+    response = await client.get(f"/datasources/{ds_id}")
     
     assert response.status_code == 200
     assert response.json()["name"] == "Get Test"
@@ -67,7 +67,7 @@ async def test_get_datasource(client):
 async def test_delete_datasource(client):
     """Test deleting a datasource."""
     # Create first
-    create_response = await client.post("/api/datasources", json={
+    create_response = await client.post("/datasources", json={
         "name": "Delete Test",
         "type": "postgres",
         "host": "localhost",
@@ -77,9 +77,9 @@ async def test_delete_datasource(client):
     ds_id = create_response.json()["id"]
     
     # Delete
-    response = await client.delete(f"/api/datasources/{ds_id}")
+    response = await client.delete(f"/datasources/{ds_id}")
     assert response.status_code == 204
     
     # Verify deleted
-    get_response = await client.get(f"/api/datasources/{ds_id}")
+    get_response = await client.get(f"/datasources/{ds_id}")
     assert get_response.status_code == 404

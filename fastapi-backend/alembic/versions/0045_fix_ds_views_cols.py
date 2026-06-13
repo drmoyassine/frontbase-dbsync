@@ -1,6 +1,6 @@
 """Fix datasource_views columns and types
 
-Revision ID: 0045_fix_datasource_views_columns
+Revision ID: 0045_fix_ds_views_cols
 Revises: 440c4f10942f
 Create Date: 2026-06-13
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision: str = '0045_fix_datasource_views_columns'
+revision: str = '0045_fix_ds_views_cols'
 down_revision: Union[str, Sequence[str], None] = '440c4f10942f'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

@@ -1,6 +1,6 @@
 """DB-Sync domain models — SyncConfig, FieldMapping, SyncJob, Conflict, DatasourceView, TableSchemaCache."""
 
-from sqlalchemy import Column, String, Text, Boolean, Integer, ForeignKey
+from sqlalchemy import Column, String, Text, Boolean, Integer, ForeignKey, JSON, DateTime
 from sqlalchemy.orm import relationship
 
 from ..database.config import Base
@@ -74,14 +74,20 @@ class Conflict(Base):
 class DatasourceView(Base):
     __tablename__ = 'datasource_views'
     
-    id = Column(String, primary_key=True)
-    datasource_id = Column(String, nullable=False)
-    name = Column(String(100), nullable=False)
-    view_definition = Column(Text, nullable=False)  # JSON
-    is_shared = Column(Boolean, default=False)
-    created_by = Column(String, nullable=False)
-    created_at = Column(String, nullable=False)
-    updated_at = Column(String, nullable=False)
+    id = Column(String(36), primary_key=True)
+    name = Column(String(255), nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    datasource_id = Column(String(36), nullable=False)
+    target_table = Column(String(255), nullable=False)
+    filters = Column(JSON, default=list)
+    field_mappings = Column(JSON, default=dict)
+    linked_views = Column(JSON, default=dict)
+    visible_columns = Column(JSON, default=list)
+    pinned_columns = Column(JSON, default=list)
+    column_order = Column(JSON, default=list)
+    webhooks = Column(JSON, default=list)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
 
 
 class TableSchemaCache(Base):

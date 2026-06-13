@@ -119,6 +119,17 @@ class DatasourceViewBase(BaseModel):
     column_order: List[str] = Field(default_factory=list)
     webhooks: list[Dict[str, Any]] = Field(default_factory=list)
 
+    @field_validator("filters", "visible_columns", "pinned_columns", "column_order", "webhooks", mode="before")
+    @classmethod
+    def list_fallback(cls, v: Any) -> list:
+        return v if v is not None else []
+
+    @field_validator("field_mappings", "linked_views", mode="before")
+    @classmethod
+    def dict_fallback(cls, v: Any) -> dict:
+        return v if v is not None else {}
+
+
 class DatasourceViewCreate(DatasourceViewBase):
     """Schema for creating a datasource view."""
     datasource_id: Optional[str] = None

@@ -18,10 +18,10 @@ def init_supertokens():
     )
     from supertokens_python.recipe.emailpassword.interfaces import APIInterface
 
-    api_base_url = os.environ.get("BACKEND_URL", "http://localhost:8000")
-    website_base_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-    supertokens_uri = os.environ.get("SUPERTOKENS_URI", "http://supertokens:3567")
-    api_key = os.environ.get("SUPERTOKENS_API_KEY", "frontbase-dev-secret-key-change-me")
+    api_base_url = os.environ.get("BACKEND_URL") or "http://localhost:8000"
+    website_base_url = os.environ.get("FRONTEND_URL") or "http://localhost:3000"
+    supertokens_uri = os.environ.get("SUPERTOKENS_URI") or "http://supertokens:3567"
+    api_key = os.environ.get("SUPERTOKENS_API_KEY") or "frontbase-dev-secret-key-change-me"
 
     # ── Override: disable built-in sign-up endpoint ─────────────────────
     # We use a custom POST /api/auth/signup endpoint in auth.py that

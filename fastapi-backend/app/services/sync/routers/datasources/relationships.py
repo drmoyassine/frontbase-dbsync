@@ -73,6 +73,8 @@ async def get_datasource_relationships(
             "relationships": relationships
         }
     except Exception as e:
-        logger.error(f"Error fetching relationships for {datasource_id}: {str(e)}")
+        # logger.exception logs the full traceback (not just str(e)) so prod
+        # failures are diagnosable from the server logs, not just the response.
+        logger.exception(f"Error fetching relationships for {datasource_id}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch relationships: {str(e)}")
 

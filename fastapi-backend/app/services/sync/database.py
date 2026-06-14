@@ -55,66 +55,92 @@ def _drop_stale_cache_tables(connection):
 
     Only targets tables in _REBUILDABLE_TABLES — these contain transient cache
     data that is rebuilt from remote sources on next access.
+
+    Dialect-agnostic (SQLite + PostgreSQL) via SQLAlchemy inspect. Each DDL runs
+    in a SAVEPOINT so a failure doesn't abort the whole startup transaction (on
+    Postgres a failed statement poisons the surrounding transaction).
     """
     import logging
-    from sqlalchemy import text
+    from sqlalchemy import text, inspect as sa_inspect
     _logger = logging.getLogger("sync.db.migrate")
 
+    insp = sa_inspect(connection)
+    existing_tables = set(insp.get_table_names())
+
     for table in Base.metadata.sorted_tables:
-        if table.name not in _REBUILDABLE_TABLES:
+        if table.name not in _REBUILDABLE_TABLES or table.name not in existing_tables:
             continue
 
-        result = connection.execute(text(f'PRAGMA table_info("{table.name}")'))
-        existing_cols = {row[1] for row in result}
-
-        if not existing_cols:
-            continue  # Table doesn't exist — nothing to drop
-
+        existing_cols = {c["name"] for c in insp.get_columns(table.name)}
         model_cols = {col.name for col in table.columns}
         stale_cols = existing_cols - model_cols
 
         if stale_cols:
             _logger.info(f"[AUTO-MIGRATE] Dropping stale cache table '{table.name}' (extra cols: {stale_cols})")
-            connection.execute(text(f'DROP TABLE IF EXISTS "{table.name}"'))
+            try:
+                with connection.begin_nested():
+                    connection.execute(text(f'DROP TABLE IF EXISTS "{table.name}"'))
+            except Exception as e:
+                _logger.warning(f"[AUTO-MIGRATE] Could not drop stale table {table.name}: {e}")
 
 
 def _add_missing_columns(connection):
-    """Compare model columns against physical SQLite tables and ADD any missing ones.
+    """Compare model columns against the physical tables and ADD any missing ones.
 
-    This is a lightweight alternative to Alembic for simple column additions.
-    Runs on every startup — safe because ALTER TABLE ADD COLUMN is a no-op if
-    the column already exists (we check via PRAGMA first).
+    A lightweight, dialect-agnostic (SQLite + PostgreSQL) self-heal for simple
+    column additions. The sync tables (datasources, table_schema_cache, ...) are
+    created by create_all, not Alembic, so without this a column added to a model
+    never reaches an EXISTING Postgres table (create_all won't ALTER) → SELECT *
+    fails with "column does not exist". Runs on every startup.
+
+    Each ALTER runs in its own SAVEPOINT: on Postgres a failed statement aborts
+    the surrounding transaction, so per-statement savepoints are required for the
+    "try, warn, continue" behaviour to work across dialects.
     """
     import logging
+    from sqlalchemy import text, inspect as sa_inspect
     _logger = logging.getLogger("sync.db.migrate")
 
-    for table in Base.metadata.sorted_tables:
-        # Get existing columns from SQLite
-        result = connection.execute(
-            __import__("sqlalchemy").text(f"PRAGMA table_info(\"{table.name}\")")
-        )
-        existing_cols = {row[1] for row in result}
+    insp = sa_inspect(connection)
+    existing_tables = set(insp.get_table_names())
 
-        if not existing_cols:
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
             continue  # Table doesn't exist yet — create_all will handle it
 
+        existing_cols = {c["name"] for c in insp.get_columns(table.name)}
+
         for col in table.columns:
-            if col.name not in existing_cols:
-                # Build the column type string
-                col_type = col.type.compile(connection.dialect)
-                nullable = "" if col.nullable else " NOT NULL"
-                default = ""
-                if col.default is not None and hasattr(col.default, 'is_scalar') and col.default.is_scalar:  # type: ignore[union-attr]
-                    from enum import Enum as _Enum
-                    _arg = col.default.arg  # type: ignore[union-attr]
-                    val = _arg.value if isinstance(_arg, _Enum) else _arg
-                    default = f" DEFAULT {val!r}"
-                stmt = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type}{nullable}{default}'
-                try:
-                    connection.execute(__import__("sqlalchemy").text(stmt))
-                    _logger.info(f"[AUTO-MIGRATE] Added column {table.name}.{col.name} ({col_type})")
-                except Exception as e:
-                    _logger.warning(f"[AUTO-MIGRATE] Could not add {table.name}.{col.name}: {e}")
+            if col.name in existing_cols:
+                continue
+
+            col_type = col.type.compile(connection.dialect)
+            nullable = "" if col.nullable else " NOT NULL"
+            default = ""
+            if col.default is not None and hasattr(col.default, 'is_scalar') and col.default.is_scalar:  # type: ignore[union-attr]
+                from enum import Enum as _Enum
+                _arg = col.default.arg  # type: ignore[union-attr]
+                val = _arg.value if isinstance(_arg, _Enum) else _arg
+                default = f" DEFAULT {val!r}"
+            stmt = f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type}{nullable}{default}'
+            try:
+                with connection.begin_nested():
+                    connection.execute(text(stmt))
+                _logger.info(f"[AUTO-MIGRATE] Added column {table.name}.{col.name} ({col_type})")
+            except Exception as e:
+                # A NOT NULL add fails on a populated table without a default.
+                # Fall back to a nullable add so reads (SELECT *) stop crashing.
+                if nullable:
+                    try:
+                        with connection.begin_nested():
+                            connection.execute(text(
+                                f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col_type}{default}'
+                            ))
+                        _logger.info(f"[AUTO-MIGRATE] Added column {table.name}.{col.name} as NULLABLE (fallback)")
+                        continue
+                    except Exception as e2:
+                        e = e2
+                _logger.warning(f"[AUTO-MIGRATE] Could not add {table.name}.{col.name}: {e}")
 
 
 async def init_db():
@@ -123,16 +149,17 @@ async def init_db():
         # Import models to register them with Base
         from app.services.sync.models import datasource, sync_config, job, conflict, view, project_settings, table_schema  # noqa
 
-        # Drop stale cache tables whose schema diverged (safe — cache is rebuilt)
-        if "sqlite" in str(settings.database_url):
-            await conn.run_sync(_drop_stale_cache_tables)
+        # Drop stale cache tables whose schema diverged (safe — cache is rebuilt).
+        # Runs on SQLite AND Postgres: the sync tables are managed by create_all,
+        # not Alembic, so this is the only self-heal path on an existing DB.
+        await conn.run_sync(_drop_stale_cache_tables)
 
         await conn.run_sync(Base.metadata.create_all)
 
         # Auto-migrate: add any columns defined in models but missing from the DB.
-        # create_all only creates NEW tables — it won't ALTER existing ones.
-        if "sqlite" in str(settings.database_url):
-            await conn.run_sync(_add_missing_columns)
+        # create_all only creates NEW tables — it won't ALTER existing ones, so an
+        # existing Postgres table never gains a newly-added model column without this.
+        await conn.run_sync(_add_missing_columns)
 
 
 async def get_db():

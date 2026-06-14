@@ -74,7 +74,10 @@ export default function ForgotPasswordPage() {
                 // Cloud mode: SuperTokens password reset token API
                 const response = await fetch(`/api/auth/user/password/reset/token`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'rid': 'emailpassword'
+                    },
                     body: JSON.stringify({
                         formFields: [{ id: 'email', value: email }],
                         website,

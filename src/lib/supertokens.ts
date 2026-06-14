@@ -27,6 +27,7 @@ export function initSuperTokens(): void {
       appName: 'Frontbase Cloud',
       apiDomain: window.location.origin,  // Same origin — reverse proxy handles routing
       apiBasePath: '/api/auth',
+      websiteBasePath: '/admin',
     },
     recipeList: [
       Session.init(),

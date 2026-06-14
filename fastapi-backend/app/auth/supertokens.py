@@ -120,7 +120,7 @@ def init_supertokens():
             api_domain=api_base_url,
             website_domain=website_base_url,
             api_base_path="/api/auth",
-            website_base_path="/auth"
+            website_base_path="/admin"
         ),
         supertokens_config=SupertokensConfig(
             connection_uri=supertokens_uri,

@@ -90,7 +90,10 @@ export default function ResetPasswordPage() {
                 // Cloud mode: SuperTokens reset password API
                 const response = await fetch(`/api/auth/user/password/reset`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'rid': 'emailpassword'
+                    },
                     body: JSON.stringify({
                         formFields: [{ id: 'password', value: password }],
                         token: token,

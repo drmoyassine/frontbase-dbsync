@@ -20,12 +20,15 @@ export function Chart({
     componentId,
     binding,
     className = '',
+    style,
     chartType = 'bar',
     height = '300px',
     initialData,
     onConfigureBinding,
     configureOverlay,
 }: ChartProps) {
+    // Cast to break cross-package csstype version incompatibility (see InfoList).
+    const safeStyle = style as React.CSSProperties | undefined;
     // Data fetching via custom edge-aware hook
     const {
         data,
@@ -56,10 +59,18 @@ export function Chart({
     const titleClass = "text-lg font-semibold capitalize";
     const contentClass = "p-6 pt-0";
 
+    // Derive chart data. NOTE: this hook must run before any early return below,
+    // otherwise the hook order changes between renders (loading -> loaded) and
+    // React throws "Rendered more hooks than during the previous render".
+    const chartData = useMemo(() => {
+        if (!data || data.length === 0) return [];
+        return data.slice(0, 10); // Limit to 10 rows for clean chart display
+    }, [data]);
+
     // 1. Unconfigured State
     if (!binding?.tableName) {
         return (
-            <div className={cn(cardClass, className)}>
+            <div className={cn(cardClass, className)} style={safeStyle}>
                 <div className="p-6 text-center space-y-4">
                     <p className="text-muted-foreground text-sm">No data binding configured</p>
                     {configureOverlay as any}
@@ -79,7 +90,7 @@ export function Chart({
     // 2. Loading State (Matching SSR skeleton layout)
     if (loading && !data) {
         return (
-            <div className={cn(cardClass, className)}>
+            <div className={cn(cardClass, className)} style={safeStyle}>
                 <div className={headerClass}>
                     <div className="h-4 bg-muted rounded w-1/3 animate-pulse"></div>
                 </div>
@@ -98,7 +109,7 @@ export function Chart({
     // 3. Error State
     if (error) {
         return (
-            <div className={cn(cardClass, className)}>
+            <div className={cn(cardClass, className)} style={safeStyle}>
                 <div className="p-6 text-center space-y-4">
                     <p className="text-destructive text-sm font-medium">Error loading data: {error instanceof Error ? error.message : String(error)}</p>
                     <button
@@ -113,11 +124,6 @@ export function Chart({
     }
 
     // 4. Render Chart Types
-    const chartData = useMemo(() => {
-        if (!data || data.length === 0) return [];
-        return data.slice(0, 10); // Limit to 10 rows for clean chart display
-    }, [data]);
-
     const renderChartContent = () => {
         if (chartData.length === 0) {
             return (
@@ -238,7 +244,7 @@ export function Chart({
     };
 
     return (
-        <div className={cn(cardClass, className)}>
+        <div className={cn(cardClass, className)} style={safeStyle}>
             <div className={headerClass}>
                 <h3 className={titleClass}>{title} Chart</h3>
             </div>

@@ -1,5 +1,4 @@
-import React, { useMemo } from 'react';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -15,10 +14,13 @@ export function KPICard({
     componentId,
     binding,
     className = '',
+    style,
     initialData,
     onConfigureBinding,
     configureOverlay,
 }: KPICardProps) {
+    // Cast to break cross-package csstype version incompatibility (see InfoList).
+    const safeStyle = style as CSSProperties | undefined;
     const {
         data,
         isLoading: loading,
@@ -46,7 +48,7 @@ export function KPICard({
     // 1. Unconfigured State
     if (!binding?.tableName) {
         return (
-            <div className={cn(cardClass, className)}>
+            <div className={cn(cardClass, className)} style={safeStyle}>
                 <div className="p-6 text-center space-y-4">
                     <p className="text-muted-foreground text-sm">No data binding configured</p>
                     {configureOverlay as any}
@@ -66,14 +68,12 @@ export function KPICard({
     // 2. Loading State (Matches SSR renderKPICard exactly)
     if (loading && !data) {
         return (
-            <div className={cn(cardClass, className)}>
+            <div className={cn(cardClass, className)} style={safeStyle}>
                 <div className={headerClass}>
                     <div className="h-4 bg-muted rounded w-1/3 animate-pulse"></div>
-                    <div className="h-4 w-4 bg-muted rounded-full animate-pulse"></div>
                 </div>
                 <div className={contentClass}>
                     <div className="text-2xl font-bold fb-skeleton" style={{ height: '2rem', width: '80px', borderRadius: '0.25rem' }}>&nbsp;</div>
-                    <div className="text-xs text-muted-foreground mt-1.5 fb-skeleton" style={{ height: '1rem', width: '120px', borderRadius: '0.25rem' }}>&nbsp;</div>
                 </div>
             </div>
         );
@@ -82,7 +82,7 @@ export function KPICard({
     // 3. Error State
     if (error) {
         return (
-            <div className={cn(cardClass, className)}>
+            <div className={cn(cardClass, className)} style={safeStyle}>
                 <div className="p-6 text-center space-y-4">
                     <p className="text-destructive text-sm font-medium">Error loading data: {error instanceof Error ? error.message : String(error)}</p>
                     <button
@@ -109,36 +109,19 @@ export function KPICard({
         return val?.toString() || '0';
     };
 
-    // Trend calculation
-    const trend = 5.2; // default KPI trend
-    const getTrendIcon = (t: number) => {
-        if (t > 0) return <TrendingUp className="h-4 w-4 text-green-500" />;
-        if (t < 0) return <TrendingDown className="h-4 w-4 text-red-500" />;
-        return <Minus className="h-4 w-4 text-muted-foreground" />;
-    };
-
-    const getTrendColor = (t: number) => {
-        if (t > 0) return 'text-green-500';
-        if (t < 0) return 'text-red-500';
-        return 'text-muted-foreground';
-    };
+    // NOTE: Trend/period comparison is intentionally omitted. It requires a
+    // second time-windowed query that we don't yet issue; rendering a hardcoded
+    // percentage would present fabricated analytics as real data.
 
     return (
-        <div className={cn(cardClass, className)}>
+        <div className={cn(cardClass, className)} style={safeStyle}>
             <div className={headerClass}>
                 <h4 className={titleClass}>
                     {valueField.replace(/_/g, ' ')}
                 </h4>
-                {getTrendIcon(trend)}
             </div>
             <div className={contentClass}>
                 <div className="text-2xl font-bold">{formatValue(value)}</div>
-                <div className="flex items-center space-x-2 text-xs text-muted-foreground mt-1">
-                    <span className={cn("font-medium", getTrendColor(trend))}>
-                        {trend > 0 ? '+' : ''}{trend}%
-                    </span>
-                    <span>from last period</span>
-                </div>
             </div>
         </div>
     );

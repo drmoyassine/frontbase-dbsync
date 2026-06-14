@@ -1,37 +1,13 @@
-export interface ColumnOverride {
-    visible?: boolean;
-    displayName?: string;
-    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
-}
+import type { ComponentDataBinding, ColumnOverride } from '@frontbase/types';
 
-export interface ComponentDataBinding {
-    componentId: string;
-    dataSourceId: string;
-    tableName: string;
-    refreshInterval?: number;
-    pagination: {
-        enabled: boolean;
-        pageSize: number;
-        page: number;
-    };
-    sorting: {
-        enabled: boolean;
-        column?: string;
-        direction?: 'asc' | 'desc';
-    };
-    filtering: {
-        searchEnabled: boolean;
-        filters: Record<string, any>;
-    };
-    columnOverrides: Record<string, ColumnOverride>;
-    dataRequest?: any;
-}
+export type { ComponentDataBinding, ColumnOverride };
 
 export interface KPICardProps {
     mode?: 'builder' | 'edge';
     componentId: string;
     binding?: ComponentDataBinding | null;
     className?: string;
+    style?: React.CSSProperties;
     initialData?: any[];
     onConfigureBinding?: () => void;
     configureOverlay?: React.ReactNode;

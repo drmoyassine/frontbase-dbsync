@@ -164,7 +164,7 @@ function RequiresQueueBadge({ queueEnabled }: { queueEnabled: boolean }) {
 
 const ALL_TIMEZONES = (() => {
     try {
-        return Intl.supportedValuesOf('timeZone');
+        return (Intl as any).supportedValuesOf('timeZone') as string[];
     } catch {
         // Fallback for older browsers
         return [

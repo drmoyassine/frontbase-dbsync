@@ -80,7 +80,7 @@ export const componentTemplates: ComponentTemplate[] = [
                         id: 'nav-links',
                         type: 'Container',
                         props: { className: 'flex gap-6' },
-                        style s: { display: 'flex', gap: '24px' },
+                        styles: { display: 'flex', gap: '24px' },
                         children: [
                             { id: 'nav-link-1', type: 'Link', props: { text: 'Home', href: '/' } },
                             { id: 'nav-link-2', type: 'Link', props: { text: 'About', href: '/about' } },

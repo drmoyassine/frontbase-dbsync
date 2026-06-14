@@ -7,6 +7,7 @@ import api from './api-service';
 import type {
     RLSPolicy,
     RLSTableStatus,
+    RLSApiResponse,
     CreatePolicyRequest,
     UpdatePolicyRequest,
     CreateBatchPolicyRequest,
@@ -19,7 +20,7 @@ export const rlsApi = {
     /**
      * List all RLS policies
      */
-    listPolicies: async (schema = 'public'): Promise<RLSPolicy[]> => {
+    listPolicies: async (schema = 'public'): Promise<RLSApiResponse<RLSPolicy[]>> => {
         const response = await api.get(`${API_BASE}/rls/policies?schema=${schema}`);
         return response.data;
     },
@@ -38,7 +39,7 @@ export const rlsApi = {
     /**
      * Get RLS status for all tables
      */
-    getTablesStatus: async (schema = 'public'): Promise<RLSTableStatus[]> => {
+    getTablesStatus: async (schema = 'public'): Promise<RLSApiResponse<RLSTableStatus[]>> => {
         const response = await api.get(`${API_BASE}/rls/tables?schema=${schema}`);
         return response.data;
     },

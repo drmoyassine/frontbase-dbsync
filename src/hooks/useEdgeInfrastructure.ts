@@ -23,6 +23,7 @@ export interface EdgeEngine {
     provider: string;
     adapter_type: string;
     url: string;
+    is_imported?: boolean;
     edge_db_id: string | null;
     edge_db_name?: string;
     edge_cache_id: string | null;

@@ -28,6 +28,7 @@ export interface TenantAdminResponse {
     status: string;
     member_count: number;
     created_at: string;
+    owner_email?: string | null;
     owner_last_login_at?: string | null;
     project_count: number;
     active_resources?: ActiveResources;

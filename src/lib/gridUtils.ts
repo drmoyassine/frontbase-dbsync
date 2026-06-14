@@ -39,7 +39,7 @@ export const snapDimensionsToGrid = (
     gridSize: number = 20
 ): { width: number; height: number } => {
     return {
-        width: Math.max(gridSize, snap ToGrid(width, gridSize)),
+        width: Math.max(gridSize, snapToGrid(width, gridSize)),
         height: Math.max(gridSize, snapToGrid(height, gridSize))
     };
 };

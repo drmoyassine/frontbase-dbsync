@@ -570,11 +570,9 @@ function renderKPICard(id: string, props: Record<string, unknown>, propsJson: st
     return `<div ${attrs}>
         <div class="flex flex-row items-center justify-between space-y-0 pb-2 p-6">
             <h4 class="text-sm font-medium capitalize">${title || 'KPI'}</h4>
-            <div class="h-4 w-4 bg-muted rounded-full animate-pulse"></div>
         </div>
         <div class="p-6 pt-0">
             <div class="text-2xl font-bold fb-skeleton animate-pulse" style="height:2rem;width:80px;border-radius:0.25rem">&nbsp;</div>
-            <div class="text-xs text-muted-foreground mt-1.5 fb-skeleton animate-pulse" style="height:1rem;width:120px;border-radius:0.25rem">&nbsp;</div>
         </div>
     </div>`;
 }

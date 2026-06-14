@@ -96,13 +96,13 @@ export const databaseApi = {
   fetchTables: async (): Promise<{ tables: SupabaseTable[] }> => {
     const response = await api.get('/api/database/tables');
     const data = ApiContracts.validate(TablesListSchema, response.data, 'fetchTables');
-    return data;
+    return data as { tables: SupabaseTable[] };
   },
 
   fetchTableSchema: async (tableName: string): Promise<{ table_name: string; columns: any[] }> => {
     const response = await api.get(`/api/database/table-schema/${encodeURIComponent(tableName)}`);
     const data = ApiContracts.validate(TableSchemaResponseSchema, response.data, 'fetchTableSchema');
-    return data;
+    return data as { table_name: string; columns: any[] };
   },
 
   queryData: async (tableName: string, params: URLSearchParams): Promise<any> => {

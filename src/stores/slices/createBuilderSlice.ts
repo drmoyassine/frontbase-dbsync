@@ -25,6 +25,11 @@ export interface BuilderSlice {
         callback: ((elementId: string) => void) | null;
     } | null;
 
+    // Pending request to open the data-binding modal for a component, raised
+    // from the canvas (e.g. a data component's "Configure Data" button) and
+    // consumed by the PropertiesPanel.
+    dataBindingRequestId: string | null;
+
     setSelectedComponentId: (id: string | null) => void;
     setDraggedComponentId: (componentId: string | null) => void;
     setEditingTextNode: (node: { componentId: string, property: string } | null) => void;
@@ -39,6 +44,10 @@ export interface BuilderSlice {
     // Element picker actions
     startElementPicker: (callback: (elementId: string) => void) => void;
     cancelElementPicker: () => void;
+
+    // Data-binding modal request actions
+    requestDataBindingFor: (componentId: string) => void;
+    clearDataBindingRequest: () => void;
 
     moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
     updateComponentText: (componentId: string, textProperty: string, text: string) => void;
@@ -59,6 +68,7 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
     selectedCardIndex: null,
     copiedCard: null,
     elementPickerMode: null,
+    dataBindingRequestId: null,
 
     setSelectedComponentId: (id) => set({ selectedComponentId: id, selectedCardIndex: null }),
     setDraggedComponentId: (id) => set({ draggedComponentId: id }),
@@ -71,6 +81,14 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         elementPickerMode: { active: true, callback }
     }),
     cancelElementPicker: () => set({ elementPickerMode: null }),
+
+    // Select the component and flag that its data-binding modal should open.
+    requestDataBindingFor: (componentId) => set({
+        selectedComponentId: componentId,
+        selectedCardIndex: null,
+        dataBindingRequestId: componentId,
+    }),
+    clearDataBindingRequest: () => set({ dataBindingRequestId: null }),
 
     copyCard: (cardData) => {
         set({ copiedCard: JSON.parse(JSON.stringify(cardData)) });

@@ -14,12 +14,15 @@ export function Grid({
     componentId,
     binding,
     className = '',
+    style,
     columns = 3,
     initialData,
     onConfigureBinding,
     configureOverlay,
     cardWrapper,
 }: GridProps) {
+    // Cast to break cross-package csstype version incompatibility (see InfoList).
+    const safeStyle = style as React.CSSProperties | undefined;
     const {
         data,
         isLoading: loading,
@@ -56,7 +59,7 @@ export function Grid({
     // 1. Unconfigured State
     if (!binding?.tableName) {
         return (
-            <div className={cn(cardClass, className)}>
+            <div className={cn(cardClass, className)} style={safeStyle}>
                 <div className="p-6 text-center space-y-4">
                     <p className="text-muted-foreground text-sm">No data binding configured</p>
                     {configureOverlay as any}
@@ -76,7 +79,7 @@ export function Grid({
     // 2. Loading State (Matches SSR renderDataGrid exactly)
     if (loading && !data) {
         return (
-            <div className={cn(gridLayoutClass, className)}>
+            <div className={cn(gridLayoutClass, className)} style={safeStyle}>
                 {Array.from({ length: columns || 3 }).map((_, index) => (
                     <div key={index} className={cn(cardClass)}>
                         <div className={headerClass}>
@@ -97,7 +100,7 @@ export function Grid({
     // 3. Error State
     if (error) {
         return (
-            <div className={cn(cardClass, className)}>
+            <div className={cn(cardClass, className)} style={safeStyle}>
                 <div className="p-6 text-center space-y-4">
                     <p className="text-destructive text-sm font-medium">Error loading data: {error instanceof Error ? error.message : String(error)}</p>
                     <button
@@ -113,7 +116,7 @@ export function Grid({
 
     if (!data || data.length === 0) {
         return (
-            <div className={cn(cardClass, className)}>
+            <div className={cn(cardClass, className)} style={safeStyle}>
                 <div className="p-6 text-center text-muted-foreground text-sm">
                     No data available
                 </div>
@@ -195,7 +198,7 @@ export function Grid({
     const secondaryColumns = visibleColumns.slice(1, 3);
 
     return (
-        <div className={cn(gridLayoutClass, className)}>
+        <div className={cn(gridLayoutClass, className)} style={safeStyle}>
             {data.map((item: any, index: number) => {
                 const cardContent = (
                     <div className={cn(cardClass, "hover:shadow-md transition-shadow h-full flex flex-col")}>

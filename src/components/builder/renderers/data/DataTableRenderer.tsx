@@ -1,13 +1,12 @@
 import React from 'react';
 import { DataTable } from '@frontbase/datatable';
 import { ColumnSettingsPopover } from '@/components/data-binding/table/ColumnSettingsPopover';
-import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { RendererProps } from '../types';
+import { useResolvedBinding } from './useResolvedBinding';
 
 export const DataTableRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, componentId, onColumnOverrideChange }) => {
-    // Get binding from store as fallback if effectiveProps.binding doesn't have it
-    const { getComponentBinding } = useDataBindingStore();
-    const binding = effectiveProps.binding || getComponentBinding(componentId || 'datatable');
+    // Shared resolution: prefer props.binding, fall back to the data-binding store.
+    const binding = useResolvedBinding(componentId || 'datatable', effectiveProps.binding);
 
     return (
         <DataTable

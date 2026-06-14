@@ -91,6 +91,10 @@ async function fetchFromEdge(binding: ComponentDataBinding) {
             body: JSON.stringify(queryBody),
         });
 
+        if (!response.ok) {
+            throw new Error(`Failed to fetch data (HTTP ${response.status})`);
+        }
+
         const result = await response.json();
         return result.rows || result.data || [];
     } else {

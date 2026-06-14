@@ -136,7 +136,7 @@ export function DataTable({
     // No binding state
     if (!binding || !binding.tableName) {
         return (
-            <div className={cn('rounded-md border p-8', className)} style={style}>
+            <div className={cn('rounded-md border p-8', className)} style={style as any}>
                 <div className="text-center text-muted-foreground">
                     No data source configured.
                     {onConfigureBinding && (
@@ -155,7 +155,7 @@ export function DataTable({
     // Error state
     if (error) {
         return (
-            <div className={cn('rounded-md border border-red-200 bg-red-50 p-4', className)} style={style}>
+            <div className={cn('rounded-md border border-red-200 bg-red-50 p-4', className)} style={style as any}>
                 <div className="text-red-700">
                     {error instanceof Error ? error.message : 'Failed to load data'}
                 </div>
@@ -166,7 +166,7 @@ export function DataTable({
     // Initial loading state
     if (isLoading && data.length === 0) {
         return (
-            <div className={cn('rounded-md border', className)} style={style}>
+            <div className={cn('rounded-md border', className)} style={style as any}>
                 <div className="p-8 text-center text-muted-foreground">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                     <div>Loading data...</div>
@@ -176,7 +176,7 @@ export function DataTable({
     }
 
     return (
-        <div className={cn('space-y-4', className)} style={style}>
+        <div className={cn('space-y-4', className)} style={style as any}>
             {/* Title */}
             {title && (
                 <h3 className="text-lg font-semibold">{title}</h3>
@@ -225,7 +225,7 @@ export function DataTable({
                         sortColumn={sortColumn}
                         sortDirection={sortDirection}
                         onSort={handleSort}
-                        headerCellWrapper={headerCellWrapper}
+                        headerCellWrapper={headerCellWrapper as any}
                     />
                     <TableBody
                         data={data}

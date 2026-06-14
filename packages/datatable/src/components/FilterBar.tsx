@@ -36,7 +36,11 @@ export function FilterBar({
                     filter.label ||
                     filter.column.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
                 const value = filterValues[filter.column];
-                const options = fetchedOptions[filter.column] || filter.options || [];
+                const rawOptions = fetchedOptions[filter.column] || filter.options || [];
+                // Normalize to { label, value }[] — filter.options may be a plain string[].
+                const options: { label: string; value: string }[] = rawOptions.map((opt) =>
+                    typeof opt === 'string' ? { label: opt, value: opt } : opt
+                );
 
                 return (
                     <div key={filter.id} className="flex flex-col gap-1 min-w-[150px]">

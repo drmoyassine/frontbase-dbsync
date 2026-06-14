@@ -11,9 +11,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DataTable } from '../components/UnifiedDataTable';
 import { Form } from '../components/form/Form';
 import { InfoList } from '../components/infolist/InfoList';
-import { Chart } from '@frontbase/chart';
-import { KPICard } from '@frontbase/kpicard';
-import { Grid } from '@frontbase/grid';
+import { Chart } from '../components/chart/Chart';
+import { KPICard } from '../components/kpicard/KPICard';
+import { Grid } from '../components/grid/Grid';
 import './globals.css';
 
 // Create QueryClient with sensible defaults for SSR hydration

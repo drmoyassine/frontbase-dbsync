@@ -81,7 +81,7 @@ export function DataBindingModal({
 
   useEffect(() => {
     if (existingBinding) {
-      setBinding(existingBinding);
+      setBinding(existingBinding as any);
     }
   }, [existingBinding]);
 

@@ -51,8 +51,11 @@ const DATA_COMPONENTS = new Set([
     'Card', 'Repeater', 'DataCard', 'KPICard'
 ]);
 
+// NOTE: 'Grid' is intentionally NOT a layout component. There is exactly one
+// Grid in the system — the data-bound Grid (see DATA_COMPONENTS). Use Container
+// with display:grid for pure layout grids.
 const LAYOUT_COMPONENTS = new Set([
-    'Container', 'Section', 'Row', 'Column', 'Flex', 'Grid',
+    'Container', 'Section', 'Row', 'Column', 'Flex',
     'Stack', 'Group', 'Box', 'Paper', 'Panel'
 ]);
 
@@ -371,17 +374,6 @@ function renderLayoutComponent(
             const align = (styles.alignItems as string) || (props.align as string) || 'stretch';
             const gap = (styles.gap as string) || (props.gap as string) || '0';
             return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${inlineStyle}">${childrenHtml}</div>`;
-
-        case 'Grid':
-            const columns = (props.columns as number) || 2;
-            const gridGap = (styles.gap as string) || (props.gap as string) || '1rem';
-            // Responsive grid: 1 col mobile, 2 col tablet, N col desktop
-            const gridResponsiveClass = columns <= 2
-                ? 'grid grid-cols-1 md:grid-cols-2'
-                : columns === 3
-                    ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-                    : `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(columns, 4)}`;
-            return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} ${gridResponsiveClass}" style="gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
 
         case 'Stack':
             const stackGap = (styles.gap as string) || (props.gap as string) || '1rem';

@@ -51,7 +51,7 @@ export const InfoList: React.FC<InfoListProps> = ({
 }) => {
     // Get binding from store as fallback
     const { getComponentBinding } = useDataBindingStore();
-    const binding = propBinding || getComponentBinding(componentId || 'infolist') || {};
+    const binding: any = propBinding || getComponentBinding(componentId || 'infolist') || {};
 
     // Reconstruct the unified binding object for the pure component
     const unifiedBinding: InfoListBinding = {

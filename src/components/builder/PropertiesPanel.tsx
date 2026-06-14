@@ -68,7 +68,9 @@ export const PropertiesPanel = () => {
     currentPageId,
     updateComponent,
     removeComponent,
-    project
+    project,
+    dataBindingRequestId,
+    clearDataBindingRequest
   } = useBuilderStore();
 
   const { setComponentBinding, initialize } = useDataBindingStore();
@@ -80,6 +82,15 @@ export const PropertiesPanel = () => {
   React.useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // Open the data-binding modal when a canvas component requests it
+  // (e.g. clicking "Configure Data" on an unbound Chart/Grid/KPICard).
+  React.useEffect(() => {
+    if (dataBindingRequestId && dataBindingRequestId === selectedComponentId) {
+      setShowDataBinding(true);
+      clearDataBindingRequest();
+    }
+  }, [dataBindingRequestId, selectedComponentId, clearDataBindingRequest]);
 
   if (!selectedComponentId || !currentPageId) {
     return (

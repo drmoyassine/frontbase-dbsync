@@ -28,7 +28,7 @@ export function initSuperTokens(): void {
       apiDomain: window.location.origin,  // Same origin — reverse proxy handles routing
       apiBasePath: '/api/auth',
       websiteBasePath: '/admin',
-    },
+    } as any,
     recipeList: [
       Session.init(),
     ],

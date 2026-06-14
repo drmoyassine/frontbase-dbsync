@@ -154,6 +154,12 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
     });
   }, [id, binding]);
 
+  // Open the data-binding modal for this component from the canvas (used by
+  // data components' "Configure Data" affordance).
+  const handleConfigureBinding = React.useCallback(() => {
+    if (id) useBuilderStore.getState().requestDataBindingFor(id);
+  }, [id]);
+
   const rendererProps = {
     effectiveProps,
     combinedClassName,
@@ -162,6 +168,7 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
     children,
     componentId: id,
     onColumnOverrideChange: type === 'DataTable' ? handleColumnOverrideChange : undefined,
+    onConfigureBinding: handleConfigureBinding,
     styles // Passed for ContainerRenderer
   };
 

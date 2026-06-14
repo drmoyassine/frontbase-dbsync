@@ -8,5 +8,7 @@ export interface RendererProps {
     children?: React.ReactNode;
     componentId?: string;
     onColumnOverrideChange?: (columnName: string, updates: any) => void;
+    /** Opens the data-binding modal for this component (data components only). */
+    onConfigureBinding?: () => void;
     styles?: any;
 }

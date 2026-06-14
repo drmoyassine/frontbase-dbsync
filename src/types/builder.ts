@@ -69,6 +69,8 @@ export interface PageDeployment {
     contentHash?: string;
     publishedAt: string;
     errorMessage?: string;
+    /** Tenant-aware preview URL returned by the edge at publish time. */
+    previewUrl?: string;
     target?: {
         id?: string;
         name?: string;

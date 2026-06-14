@@ -69,6 +69,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
+        "@frontbase/types": path.resolve(__dirname, "./packages/types/src/index.ts"),
         "@frontbase/datatable": path.resolve(__dirname, "./packages/datatable/src/index.ts"),
         "@frontbase/infolist": path.resolve(__dirname, "./packages/infolist/src/index.ts"),
         "@frontbase/form": path.resolve(__dirname, "./packages/form/src/index.ts"),

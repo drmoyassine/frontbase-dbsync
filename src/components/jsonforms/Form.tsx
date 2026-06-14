@@ -55,7 +55,7 @@ export const Form: React.FC<FormProps> = ({
 }) => {
     // Get binding from store as fallback
     const { getComponentBinding } = useDataBindingStore();
-    const binding = propBinding || getComponentBinding(componentId || 'form') || {};
+    const binding: any = propBinding || getComponentBinding(componentId || 'form') || {};
 
     // Reconstruct the unified binding object for the pure component
     const unifiedBinding: FormBinding = {

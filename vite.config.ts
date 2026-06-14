@@ -72,6 +72,9 @@ export default defineConfig(({ mode }) => {
         "@frontbase/datatable": path.resolve(__dirname, "./packages/datatable/src/index.ts"),
         "@frontbase/infolist": path.resolve(__dirname, "./packages/infolist/src/index.ts"),
         "@frontbase/form": path.resolve(__dirname, "./packages/form/src/index.ts"),
+        "@frontbase/chart": path.resolve(__dirname, "./packages/chart/src/index.ts"),
+        "@frontbase/kpicard": path.resolve(__dirname, "./packages/kpicard/src/index.ts"),
+        "@frontbase/grid": path.resolve(__dirname, "./packages/grid/src/index.ts"),
       },
     },
     // Expose server-side env vars to client

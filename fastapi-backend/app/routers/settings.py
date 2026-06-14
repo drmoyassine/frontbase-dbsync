@@ -189,15 +189,28 @@ def get_settings_file_path(tenant_slug: Optional[str] = None) -> str:
     return SETTINGS_FILE
 
 
+# In-process cache: file_path -> (mtime, data). Keyed on the file's mtime so it
+# auto-invalidates whenever the file changes (save_settings rewrites it). Avoids a
+# disk read on every call — load_settings runs on every mutation via is_waf_enabled().
+_SETTINGS_CACHE: dict[str, tuple[float, dict]] = {}
+
+
 def load_settings(tenant_slug: Optional[str] = None) -> dict:
     """Load settings from file, with migration from legacy path"""
     file_path = get_settings_file_path(tenant_slug)
     try:
         # First try the new persisted path
         if os.path.exists(file_path):
+            mtime = os.path.getmtime(file_path)
+            cached = _SETTINGS_CACHE.get(file_path)
+            if cached is not None and cached[0] == mtime:
+                # Return a copy so callers can't mutate the cached dict
+                return json.loads(json.dumps(cached[1]))
             with open(file_path, "r") as f:
-                return json.load(f)
-        
+                data = json.load(f)
+            _SETTINGS_CACHE[file_path] = (mtime, data)
+            return json.loads(json.dumps(data))
+
         # Check legacy path and migrate if found (only for default settings)
         if file_path == SETTINGS_FILE and os.path.exists(LEGACY_SETTINGS_FILE):
             print(f"[Settings] Migrating settings from legacy path to persisted volume...")
@@ -220,6 +233,8 @@ def save_settings(settings: dict, tenant_slug: Optional[str] = None):
     try:
         with open(file_path, "w") as f:
             json.dump(settings, f, indent=2)
+        # Evict so the next load_settings re-reads the fresh file
+        _SETTINGS_CACHE.pop(file_path, None)
     except Exception as e:
         print(f"Error saving settings: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to save settings: {e}")

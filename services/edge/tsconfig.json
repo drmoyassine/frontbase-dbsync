@@ -31,6 +31,24 @@
             ],
             "@frontbase/form/*": [
                 "../../packages/form/src/*"
+            ],
+            "@frontbase/chart": [
+                "../../packages/chart/src/index.ts"
+            ],
+            "@frontbase/chart/*": [
+                "../../packages/chart/src/*"
+            ],
+            "@frontbase/kpicard": [
+                "../../packages/kpicard/src/index.ts"
+            ],
+            "@frontbase/kpicard/*": [
+                "../../packages/kpicard/src/*"
+            ],
+            "@frontbase/grid": [
+                "../../packages/grid/src/index.ts"
+            ],
+            "@frontbase/grid/*": [
+                "../../packages/grid/src/*"
             ]
         }
     },

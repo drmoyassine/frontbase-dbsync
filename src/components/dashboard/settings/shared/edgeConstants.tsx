@@ -74,7 +74,7 @@ export const PROVIDER_RESOURCE_LABELS: Record<string, { inputLabel: string; urlS
     supabase: { inputLabel: 'Function Name', urlSuffix: '' },
     vercel: { inputLabel: 'Project Name', urlSuffix: '.vercel.app' },
     netlify: { inputLabel: 'Site Name', urlSuffix: '.netlify.app' },
-    deno: { inputLabel: 'Project Name', urlSuffix: '' },
+    deno: { inputLabel: 'Project Name', urlSuffix: '.deno.dev' },
 };
 
 // ============================================================================

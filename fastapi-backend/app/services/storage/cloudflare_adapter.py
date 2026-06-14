@@ -57,8 +57,8 @@ class CloudflareR2Adapter(StorageAdapter):
         secret_access_key = hashlib.sha256(self.api_token.encode()).hexdigest()
 
         # Step 3: Create boto3 S3 client
-        import boto3
-        from botocore.config import Config as BotoConfig
+        import boto3  # type: ignore[import-not-found]  # optional R2 dependency
+        from botocore.config import Config as BotoConfig  # type: ignore[import-not-found]
 
         self._s3_client = boto3.client(
             "s3",

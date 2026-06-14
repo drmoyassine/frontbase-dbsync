@@ -26,9 +26,20 @@ export class IoRedisAdapter implements ICacheProvider {
                 connectTimeout: 1000, // 1 second timeout
                 maxRetriesPerRequest: 1
             });
+            this.client.on('error', () => {
+                // Quietly handle connection errors to avoid unhandled log storms in dev when Redis is down
+            });
         } catch (error) {
             console.error('Failed to load ioredis. Ensure you are running in a Node.js environment for TCP connections.', error);
             throw error;
+        }
+    }
+
+    async disconnect() {
+        if (this.client) {
+            try {
+                this.client.disconnect();
+            } catch {}
         }
     }
 

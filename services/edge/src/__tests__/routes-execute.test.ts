@@ -103,7 +103,9 @@ describe('Execute Route', () => {
         });
         expect(res.status).toBe(200);
         const json = await res.json();
-        expect(json.status).toBe('started');
+        // Route runs the workflow synchronously and returns the final status
+        // (mockExecuteWorkflow resolves to { status: 'completed' }).
+        expect(json.status).toBe('completed');
         expect(json.executionId).toBeDefined();
     });
 

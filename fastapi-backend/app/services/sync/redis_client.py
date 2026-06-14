@@ -276,8 +276,8 @@ async def test_redis_connection(
             decode_responses=True,
             socket_connect_timeout=5
         )
-        await client.ping()
-        info = await client.info("server")
+        await client.ping()  # type: ignore[misc]  # redis.asyncio stub types ping() as sync
+        info = await client.info("server")  # type: ignore[misc]
         version = info.get("redis_version", "unknown")
         await client.close()
         return True, f"Connected successfully (Redis {version})"

@@ -11,6 +11,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DataTable } from '../components/UnifiedDataTable';
 import { Form } from '../components/form/Form';
 import { InfoList } from '../components/infolist/InfoList';
+import { Chart } from '@frontbase/chart';
+import { KPICard } from '@frontbase/kpicard';
+import { Grid } from '@frontbase/grid';
 import './globals.css';
 
 // Create QueryClient with sensible defaults for SSR hydration
@@ -32,6 +35,12 @@ const components: Record<string, React.ComponentType<any>> = {
     form: Form, // lowercase alias
     InfoList,
     infolist: InfoList, // lowercase alias
+    Chart,
+    chart: Chart,
+    KPICard,
+    kpicard: KPICard,
+    Grid,
+    grid: Grid,
 };
 
 // Hydrate all React components
@@ -39,13 +48,20 @@ function hydrateReactComponents() {
     console.log('🔄 React hydration starting...');
 
     // Find all elements marked for React hydration
-    const elements = document.querySelectorAll('[data-react-component], [data-fb-hydrate="datatable"], [data-fb-hydrate="form"], [data-fb-hydrate="infolist"]');
+    const elements = document.querySelectorAll(
+        '[data-react-component], [data-fb-hydrate="datatable"], [data-fb-hydrate="form"], [data-fb-hydrate="infolist"], [data-fb-hydrate="chart"], [data-fb-hydrate="kpicard"], [data-fb-hydrate="grid"], [data-fb-hydrate="datagrid"]'
+    );
 
     elements.forEach((element) => {
         // Handle both new data-react-component and legacy data-fb-hydrate
         const hydrateType = element.getAttribute('data-fb-hydrate');
         const componentName = element.getAttribute('data-react-component') ||
-            (hydrateType === 'datatable' ? 'DataTable' : hydrateType === 'form' ? 'Form' : hydrateType === 'infolist' ? 'InfoList' : null);
+            (hydrateType === 'datatable' ? 'DataTable' : 
+             hydrateType === 'form' ? 'Form' : 
+             hydrateType === 'infolist' ? 'InfoList' : 
+             hydrateType === 'chart' ? 'Chart' : 
+             hydrateType === 'kpicard' ? 'KPICard' : 
+             (hydrateType === 'grid' || hydrateType === 'datagrid') ? 'Grid' : null);
 
         const propsAttr = element.getAttribute('data-react-props') || element.getAttribute('data-fb-props');
 

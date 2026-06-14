@@ -400,7 +400,9 @@ async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: 
             
             app_vars = query.all()
             for var in app_vars:
-                val = var.value
+                # Cast SQLAlchemy Column[str] → plain str so the numeric/bool
+                # coercion below type-checks (see AGENTS.md Column-cast rule).
+                val = str(var.value) if var.value is not None else None
                 if val is not None:
                     if val.lower() == 'true':
                         val = True

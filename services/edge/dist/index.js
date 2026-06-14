@@ -1,18 +1,28 @@
 import {
+  getBlockedIpsAsync,
+  getBotProtection,
+  getBotProtectionAsync
+} from "./chunk-BYKNZ3TJ.js";
+import {
+  tenantMiddleware
+} from "./chunk-N3IK2FTA.js";
+import {
   SupabaseAuthProvider
-} from "./chunk-R2ERTRIO.js";
+} from "./chunk-G2JKDDT6.js";
 import {
   edgeLogsTable,
   ensureInitialized,
   getStateProvider,
+  init_IStateProvider,
+  isMultiTenantSlug,
   stateProvider
-} from "./chunk-J7G2UYPF.js";
+} from "./chunk-WDIFPRX2.js";
 import {
   shouldDebounce
-} from "./chunk-ESNN5VK7.js";
+} from "./chunk-ZSGX623W.js";
 import {
   cacheProvider
-} from "./chunk-C5H4IGGO.js";
+} from "./chunk-2Z7ZEFVT.js";
 import {
   getAgentProfilesConfig,
   getApiKeysConfig,
@@ -25,7 +35,7 @@ import {
   overrideApiKeysConfig,
   overrideCacheConfig,
   overrideQueueConfig
-} from "./chunk-YLQ7CKVG.js";
+} from "./chunk-5Y7X2AYA.js";
 import {
   cached,
   getRedis,
@@ -51,7 +61,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 // src/engine/lite.ts
-import { OpenAPIHono as OpenAPIHono15 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono16 } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
@@ -74,7 +84,7 @@ function getPlatform() {
 // src/routes/health.ts
 var startedAt = Date.now();
 var healthRoute = new OpenAPIHono();
-var PING_TIMEOUT_MS = 8e3;
+var PING_TIMEOUT_MS = 2e4;
 function withTimeout(promise, ms) {
   return Promise.race([
     promise,
@@ -82,7 +92,7 @@ function withTimeout(promise, ms) {
   ]);
 }
 async function checkStateDb() {
-  const { getStateDbConfig: getStateDbConfig2 } = await import("./env-IFXQKGIA.js");
+  const { getStateDbConfig: getStateDbConfig2 } = await import("./env-YBQ7MHV3.js");
   const cfg = getStateDbConfig2();
   if (cfg.provider === "local" && !cfg.url) {
     return { provider: "none", status: "not_configured" };
@@ -93,7 +103,7 @@ async function checkStateDb() {
   };
   if (cfg.schema) result.schema = cfg.schema;
   try {
-    const { stateProvider: stateProvider2 } = await import("./storage-5TVM5HGK.js");
+    const { stateProvider: stateProvider2 } = await import("./storage-XEDALIEO.js");
     await withTimeout(stateProvider2.listPages(), PING_TIMEOUT_MS);
     result.status = "ok";
   } catch (e) {
@@ -103,13 +113,13 @@ async function checkStateDb() {
   return result;
 }
 async function checkCache() {
-  const { getCacheConfig: getCacheConfig2 } = await import("./env-IFXQKGIA.js");
+  const { getCacheConfig: getCacheConfig2 } = await import("./env-YBQ7MHV3.js");
   const cfg = getCacheConfig2();
   if (cfg.provider === "none" && !cfg.url) {
     return { provider: "none", status: "not_configured" };
   }
   try {
-    const { cacheProvider: cacheProvider2 } = await import("./cache-VJNABVJY.js");
+    const { cacheProvider: cacheProvider2 } = await import("./cache-GZUTJ5CB.js");
     await withTimeout(cacheProvider2.get("__health_check__"), PING_TIMEOUT_MS);
     return { provider: cfg.provider || "redis", status: "ok" };
   } catch (e) {
@@ -121,7 +131,7 @@ async function checkCache() {
   }
 }
 async function checkQueue() {
-  const { getQueueConfig: getQueueConfig3 } = await import("./env-IFXQKGIA.js");
+  const { getQueueConfig: getQueueConfig3 } = await import("./env-YBQ7MHV3.js");
   const cfg = getQueueConfig3();
   if (cfg.provider === "none" && !cfg.token && !cfg.url) {
     return { provider: "none", status: "not_configured" };
@@ -219,7 +229,9 @@ function getGPUModels() {
           model_id: m.modelId || m.model_id,
           model_type: m.modelType || m.model_type,
           provider: m.provider,
-          provider_config: m.providerConfig || m.provider_config
+          provider_config: m.providerConfig || m.provider_config,
+          api_key: m.apiKey || m.api_key,
+          base_url: m.baseUrl || m.base_url
         }));
         console.log(`[AI] Auto-loaded ${_gpuModels.length} GPU model(s) from env:`, _gpuModels.map((m) => m.slug).join(", "));
       }
@@ -374,7 +386,8 @@ var DeployWorkflowSchema = z2.object({
   nodes: z2.array(WorkflowNodeSchema),
   edges: z2.array(WorkflowEdgeSchema),
   isActive: z2.boolean().optional(),
-  publishedBy: z2.string().optional().nullable()
+  publishedBy: z2.string().optional().nullable(),
+  tenantSlug: z2.string().default("_default")
 }).openapi("DeployWorkflow");
 var NodeExecutionSchema = z2.object({
   nodeId: z2.string(),
@@ -402,7 +415,14 @@ var ExecuteRequestSchema = z2.object({
 var ExecuteResponseSchema = z2.object({
   executionId: z2.string().uuid(),
   status: ExecutionStatusSchema,
-  message: z2.string().optional()
+  message: z2.string().optional(),
+  result: z2.record(z2.any()).optional(),
+  variableMutations: z2.array(z2.object({
+    scope: z2.string(),
+    key: z2.string(),
+    value: z2.any()
+  })).optional(),
+  error: z2.string().optional()
 }).openapi("ExecuteResponse");
 var WebhookPayloadSchema = z2.object({
   event: z2.string().optional(),
@@ -470,11 +490,12 @@ deployRoute.openapi(route2, async (c) => {
       nodes: JSON.stringify(body.nodes),
       edges: JSON.stringify(body.edges),
       settings: body.settings ? JSON.stringify(body.settings) : null,
+      publishedBy: body.publishedBy || null,
+      tenantSlug: body.tenantSlug || "_default",
       version: 1,
       isActive: body.isActive ?? true,
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      publishedBy: body.publishedBy || null
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     };
     const { version } = await stateProvider.upsertWorkflow(workflow);
     return c.json({
@@ -563,6 +584,34 @@ async function executeNode(node, inputs, context) {
     case "console":
       console.log(`[Node ${node.id}]:`, inputs);
       return { logged: true, data: inputs };
+    case "set_variable":
+    case "setVariable": {
+      const nodeInputs = node.inputs || [];
+      const getVal = (name) => {
+        const inp = nodeInputs.find((i) => i.name === name);
+        return inp?.value !== void 0 ? inp.value : inputs[name];
+      };
+      const scope = getVal("scope") || "local";
+      const key = getVal("key");
+      const rawValue = getVal("value");
+      let evaluatedValue = rawValue;
+      if (typeof rawValue === "string") {
+        try {
+          evaluatedValue = safeEval(rawValue, inputs);
+        } catch (e) {
+          evaluatedValue = rawValue;
+        }
+      }
+      if (context.variableMutations) {
+        context.variableMutations.push({
+          scope,
+          key,
+          value: evaluatedValue
+        });
+      }
+      console.log(`[Set Variable Node] scope=${scope}, key=${key}, value=`, evaluatedValue);
+      return { scope, key, value: evaluatedValue };
+    }
     case "http_response": {
       const nodeInputs = node.inputs || [];
       const getVal = (name) => {
@@ -678,12 +727,88 @@ async function executeHttpRequest(node, inputs) {
     data
   };
 }
+function normalizeExpression(expr) {
+  return expr.replace(/\[['"]([^'"]+)['"]\]/g, ".$1").replace(/\[(\d+)\]/g, ".$1");
+}
+function getPath(obj, path2) {
+  const parts = path2.trim().split(".");
+  let current = obj;
+  for (const part of parts) {
+    if (current === null || current === void 0) return void 0;
+    current = current[part];
+  }
+  return current;
+}
+function safeEval(expression, data) {
+  expression = normalizeExpression(expression.trim());
+  if (expression === "true") return true;
+  if (expression === "false") return false;
+  if (expression === "null") return null;
+  if (expression === "undefined") return void 0;
+  if (/^\d+(\.\d+)?$/.test(expression)) {
+    return Number(expression);
+  }
+  const stringMatch = expression.match(/^['"](.*)['"]$/);
+  if (stringMatch) {
+    return stringMatch[1];
+  }
+  if (expression.startsWith("!")) {
+    return !safeEval(expression.substring(1), data);
+  }
+  if (expression.includes("||")) {
+    const parts = expression.split("||");
+    for (const part of parts) {
+      const val = safeEval(part, data);
+      if (val) return val;
+    }
+    return safeEval(parts[parts.length - 1], data);
+  }
+  if (expression.includes("&&")) {
+    const parts = expression.split("&&");
+    let val = true;
+    for (const part of parts) {
+      val = safeEval(part, data);
+      if (!val) return val;
+    }
+    return val;
+  }
+  const operators = ["===", "!==", "==", "!=", ">=", "<=", ">", "<"];
+  for (const op of operators) {
+    if (expression.includes(op)) {
+      const parts = expression.split(op).map((p) => p.trim());
+      if (parts.length === 2) {
+        const left = safeEval(parts[0], data);
+        const right = safeEval(parts[1], data);
+        switch (op) {
+          case "===":
+          case "==":
+            return left === right;
+          case "!==":
+          case "!=":
+            return left !== right;
+          case ">=":
+            return left >= right;
+          case "<=":
+            return left <= right;
+          case ">":
+            return left > right;
+          case "<":
+            return left < right;
+        }
+      }
+    }
+  }
+  if (expression === "data") return data;
+  if (expression.startsWith("data.")) {
+    return getPath({ data }, expression);
+  }
+  return getPath(data, expression);
+}
 function executeTransform(node, inputs) {
   const expression = (node.inputs || []).find((i) => i.name === "expression")?.value;
   if (expression && typeof expression === "string") {
     try {
-      const fn = new Function("data", `return ${expression}`);
-      return { result: fn(inputs) };
+      return { result: safeEval(expression, inputs) };
     } catch (e) {
       return { result: inputs, error: "Transform expression failed" };
     }
@@ -695,8 +820,7 @@ function executeCondition(node, inputs) {
   let result = false;
   if (condition && typeof condition === "string") {
     try {
-      const fn = new Function("data", `return !!(${condition})`);
-      result = fn(inputs);
+      result = !!safeEval(condition, inputs);
     } catch (e) {
       result = false;
     }
@@ -742,7 +866,8 @@ async function executeWorkflow(executionId, workflow, inputParameters, settings)
     nodeExecutions: nodes.map((n) => ({
       nodeId: n.id,
       status: "idle"
-    }))
+    })),
+    variableMutations: []
   };
   async function coreExecute() {
     try {
@@ -847,7 +972,7 @@ async function executeWorkflow(executionId, workflow, inputParameters, settings)
         }
       }
       log.info(`Execution completed (${executed.size} nodes)`);
-      return { status: "completed", result, httpResponse };
+      return { status: "completed", result, httpResponse, variableMutations: context.variableMutations };
     } catch (error) {
       if (s.dlq_enabled) {
         try {
@@ -868,7 +993,7 @@ async function executeWorkflow(executionId, workflow, inputParameters, settings)
         endedAt: formatTime()
       });
       log.error(`Execution failed: ${error.message}`);
-      return { status: "error", result: {}, error: error.message };
+      return { status: "error", result: {}, error: error.message, variableMutations: context.variableMutations };
     }
   }
   const timeoutPromise = new Promise(
@@ -890,7 +1015,8 @@ async function executeSingleNode(executionId, workflow, targetNodeId, inputParam
     workflowId: workflow.id,
     parameters: inputParameters,
     nodeOutputs: {},
-    nodeExecutions: []
+    nodeExecutions: [],
+    variableMutations: []
   };
   try {
     await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
@@ -997,8 +1123,8 @@ function getQueueClient() {
   }
   if (provider === "qstash") {
     try {
-      const { Client: Client2 } = __require("@upstash/qstash");
-      queueClient = new Client2({ token });
+      const { Client: Client3 } = __require("@upstash/qstash");
+      queueClient = new Client3({ token });
       console.log("\u{1F504} Queue: QStash durable execution enabled");
       return queueClient;
     } catch {
@@ -1204,7 +1330,8 @@ executeRoute.openapi(route3, async (c) => {
       }, 401);
     }
   }
-  const workflow = await stateProvider.getWorkflowById(id);
+  const tenantSlug = c.env?.FRONTBASE_TENANT_SLUG || c.get("tenantSlug") || void 0;
+  const workflow = await stateProvider.getWorkflowById(id, tenantSlug);
   if (!workflow) {
     return c.json({
       error: "NotFound",
@@ -1238,7 +1365,7 @@ executeRoute.openapi(route3, async (c) => {
     }
   }
   if (debounceSec > 0) {
-    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-DDWODTYS.js");
+    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-AUSJFGPO.js");
     const debounced = await shouldDebounce2(id, debounceSec);
     if (debounced) {
       return c.json({
@@ -1284,14 +1411,27 @@ executeRoute.openapi(route3, async (c) => {
     nodeExecutions: JSON.stringify([]),
     startedAt: now
   });
-  executeWorkflow(executionId, workflow, body.parameters || {}, settings).catch((err) => console.error(`Execution ${executionId} failed:`, err)).finally(() => {
+  try {
+    const result = await executeWorkflow(executionId, workflow, body.parameters || {}, settings);
+    return c.json({
+      executionId,
+      status: result.status === "completed" ? "completed" : "error",
+      result: result.result,
+      variableMutations: result.variableMutations || [],
+      error: result.error,
+      message: result.status === "completed" ? "Workflow execution completed" : "Workflow execution failed"
+    }, 200);
+  } catch (err) {
+    console.error(`Execution ${executionId} failed:`, err);
+    return c.json({
+      executionId,
+      status: "error",
+      error: err.message,
+      message: "Workflow execution failed"
+    }, 200);
+  } finally {
     if (concurrencyLimit > 0) releaseConcurrency(id);
-  });
-  return c.json({
-    executionId,
-    status: "started",
-    message: "Workflow execution started"
-  }, 200);
+  }
 });
 var singleNodeRoute = createRoute3({
   method: "post",
@@ -1335,7 +1475,8 @@ var singleNodeRoute = createRoute3({
 executeRoute.openapi(singleNodeRoute, async (c) => {
   const { id, nodeId } = c.req.valid("param");
   const body = await c.req.json().catch(() => ({}));
-  const workflow = await stateProvider.getWorkflowById(id);
+  const tenantSlug = c.env?.FRONTBASE_TENANT_SLUG || c.get("tenantSlug") || void 0;
+  const workflow = await stateProvider.getWorkflowById(id, tenantSlug);
   if (!workflow) {
     return c.json({
       error: "NotFound",
@@ -1353,19 +1494,56 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
     nodeExecutions: JSON.stringify([]),
     startedAt: now
   });
-  executeSingleNode(executionId, workflow, nodeId, body.parameters || {}).catch((err) => console.error(`Node execution ${executionId} failed:`, err));
-  return c.json({
-    executionId,
-    status: "started",
-    message: `Executing node ${nodeId}`
-  }, 200);
+  try {
+    await executeSingleNode(executionId, workflow, nodeId, body.parameters || {});
+    return c.json({
+      executionId,
+      status: "completed",
+      message: `Node ${nodeId} execution completed`
+    }, 200);
+  } catch (err) {
+    console.error(`Node execution ${executionId} failed:`, err);
+    return c.json({
+      executionId,
+      status: "error",
+      error: err.message,
+      message: `Node ${nodeId} execution failed`
+    }, 200);
+  }
 });
 
 // src/routes/webhook.ts
 import { OpenAPIHono as OpenAPIHono5, createRoute as createRoute4, z as z5 } from "@hono/zod-openapi";
 import { v4 as uuidv42 } from "uuid";
 init_redis();
+
+// src/middleware/rateLimit.ts
+init_redis();
+async function ipRateLimiter(c, next) {
+  const clientIp = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for")?.split(",")[0].trim() || c.req.header("x-real-ip") || "unknown";
+  if (clientIp === "unknown") {
+    return await next();
+  }
+  try {
+    const minuteTimestamp = Math.floor(Date.now() / 6e4);
+    const key = `rate:ip:${clientIp}:${minuteTimestamp}`;
+    const { allowed, remaining } = await rateLimit(key, 60, 60);
+    if (!allowed) {
+      console.warn(`[Edge Rate Limit] Blocked request from IP: ${clientIp}`);
+      return c.json({
+        error: "TooManyRequests",
+        message: "Rate limit exceeded. Maximum 60 requests per minute allowed."
+      }, 429);
+    }
+    c.header("X-RateLimit-IP-Remaining", String(remaining));
+  } catch (e) {
+  }
+  return await next();
+}
+
+// src/routes/webhook.ts
 var webhookRoute = new OpenAPIHono5();
+webhookRoute.use("*", ipRateLimiter);
 var route4 = createRoute4({
   method: "post",
   path: "/:id",
@@ -1415,7 +1593,8 @@ webhookRoute.openapi(route4, async (c) => {
   try {
     const { id } = c.req.valid("param");
     const payload = c.req.valid("json");
-    const workflow = await stateProvider.getActiveWebhookWorkflow(id);
+    const tenantSlug = c.env?.FRONTBASE_TENANT_SLUG || c.get("tenantSlug") || void 0;
+    const workflow = await stateProvider.getActiveWebhookWorkflow(id, tenantSlug);
     if (!workflow) {
       return c.json({
         error: "NotFound",
@@ -1635,12 +1814,14 @@ var allRoute = createRoute5({
 });
 executionsRoute.openapi(allRoute, async (c) => {
   const q = c.req.valid("query");
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
   const filters = {
     limit: Math.min(parseInt(q.limit || "100"), 500),
     status: q.status ? q.status.split(",") : void 0,
     workflowId: q.workflowId || void 0,
     since: q.since || void 0,
-    until: q.until || void 0
+    until: q.until || void 0,
+    tenantSlug
   };
   const results = await stateProvider.listAllExecutions(filters);
   return c.json({
@@ -1682,7 +1863,8 @@ var statsRoute = createRoute5({
   }
 });
 executionsRoute.openapi(statsRoute, async (c) => {
-  const stats = await stateProvider.getExecutionStats();
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  const stats = await stateProvider.getExecutionStats(tenantSlug);
   return c.json({ stats }, 200);
 });
 var getRoute = createRoute5({
@@ -1717,7 +1899,8 @@ var getRoute = createRoute5({
 });
 executionsRoute.openapi(getRoute, async (c) => {
   const { id } = c.req.valid("param");
-  const execution = await stateProvider.getExecutionById(id);
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  const execution = await stateProvider.getExecutionById(id, tenantSlug);
   if (!execution) {
     return c.json({
       error: "NotFound",
@@ -1769,8 +1952,9 @@ var listRoute = createRoute5({
 executionsRoute.openapi(listRoute, async (c) => {
   const { workflowId } = c.req.valid("param");
   const { limit } = c.req.valid("query");
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
   const maxResults = Math.min(parseInt(limit || "20"), 100);
-  const results = await stateProvider.listExecutionsByWorkflow(workflowId, maxResults);
+  const results = await stateProvider.listExecutionsByWorkflow(workflowId, maxResults, tenantSlug);
   return c.json({
     executions: results.map((e) => ({
       id: e.id,
@@ -2198,7 +2382,8 @@ var listRoute2 = createRoute8({
   }
 });
 workflowsRoute.openapi(listRoute2, async (c) => {
-  const workflows = await stateProvider.listWorkflows();
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  const workflows = await stateProvider.listWorkflows(tenantSlug);
   return c.json({
     workflows: workflows.map((w) => ({
       id: w.id,
@@ -2242,7 +2427,8 @@ var getRoute2 = createRoute8({
 });
 workflowsRoute.openapi(getRoute2, async (c) => {
   const { id } = c.req.valid("param");
-  const workflow = await stateProvider.getWorkflowById(id);
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  const workflow = await stateProvider.getWorkflowById(id, tenantSlug);
   if (!workflow) {
     return c.json({ error: "NotFound", message: `Workflow ${id} not found` }, 404);
   }
@@ -2272,7 +2458,8 @@ var deleteRoute = createRoute8({
 });
 workflowsRoute.openapi(deleteRoute, async (c) => {
   const { id } = c.req.valid("param");
-  await stateProvider.deleteWorkflow(id);
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  await stateProvider.deleteWorkflow(id, tenantSlug);
   return c.json({ success: true, message: `Workflow ${id} deleted` }, 200);
 });
 var toggleRoute = createRoute8({
@@ -2311,7 +2498,8 @@ var toggleRoute = createRoute8({
 workflowsRoute.openapi(toggleRoute, async (c) => {
   const { id } = c.req.valid("param");
   const { isActive } = c.req.valid("json");
-  await stateProvider.toggleWorkflow(id, isActive);
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  await stateProvider.toggleWorkflow(id, isActive, tenantSlug);
   return c.json({
     success: true,
     message: `Workflow ${id} ${isActive ? "activated" : "deactivated"}`,
@@ -2321,6 +2509,87 @@ workflowsRoute.openapi(toggleRoute, async (c) => {
 
 // src/routes/queue.ts
 import { OpenAPIHono as OpenAPIHono10, createRoute as createRoute9, z as z10 } from "@hono/zod-openapi";
+
+// src/services/queue/qstash-provider.ts
+import { Client } from "@upstash/qstash";
+var QStashProvider = class {
+  client;
+  handlers = /* @__PURE__ */ new Map();
+  constructor() {
+    this.client = new Client({ token: process.env.QSTASH_TOKEN });
+  }
+  async enqueue(jobName, data, opts) {
+    const baseUrl = process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3002}`;
+    const url = `${baseUrl}/api/queue/process?jobName=${jobName}`;
+    const notBefore = opts?.delay ? Math.floor(Date.now() / 1e3) + Math.floor(opts.delay / 1e3) : void 0;
+    const res = await this.client.publishJSON({
+      url,
+      body: data,
+      retries: opts?.retries,
+      notBefore
+    });
+    return res.messageId;
+  }
+  process(jobName, handler) {
+    this.handlers.set(jobName, handler);
+  }
+  getHandler(jobName) {
+    return this.handlers.get(jobName);
+  }
+};
+
+// src/services/queue/index.ts
+var NoopProvider = class {
+  async enqueue(jobName, data, opts) {
+    console.warn(`[Queue] No queue configured, dropped job: ${jobName}`);
+    return "noop-id";
+  }
+  process(jobName, handler) {
+    console.warn(`[Queue] No queue configured, ignored process attempt for: ${jobName}`);
+  }
+};
+async function createBullMQProvider() {
+  try {
+    const { Queue, Worker } = await import("bullmq");
+    const parseRedisUrl = () => {
+      const url = new URL(process.env.BULLMQ_REDIS_URL || "redis://localhost:6379");
+      return { host: url.hostname, port: url.port ? parseInt(url.port) : 6379 };
+    };
+    const queues = /* @__PURE__ */ new Map();
+    const workers = /* @__PURE__ */ new Map();
+    return {
+      async enqueue(jobName, data, opts) {
+        if (!queues.has(jobName)) {
+          queues.set(jobName, new Queue(jobName, { connection: parseRedisUrl() }));
+        }
+        const job = await queues.get(jobName).add(jobName, data, {
+          delay: opts?.delay,
+          attempts: opts?.retries,
+          priority: opts?.priority
+        });
+        return job.id;
+      },
+      process(jobName, handler) {
+        if (workers.has(jobName)) return;
+        const worker = new Worker(jobName, async (job) => {
+          await handler(job.data);
+        }, { connection: parseRedisUrl() });
+        workers.set(jobName, worker);
+      }
+    };
+  } catch (e) {
+    console.warn("[Queue] bullmq not available \u2014 falling back to NoopProvider");
+    return new NoopProvider();
+  }
+}
+async function createQueueService() {
+  if (process.env.BULLMQ_REDIS_URL) return createBullMQProvider();
+  if (process.env.QSTASH_TOKEN) return new QStashProvider();
+  return new NoopProvider();
+}
+var queueServiceReady = createQueueService();
+
+// src/routes/queue.ts
 var queueRoute = new OpenAPIHono10();
 function getQueueConfig2() {
   const url = process.env.FRONTBASE_QUEUE_URL;
@@ -2467,6 +2736,45 @@ queueRoute.openapi(publishRoute, async (c) => {
     }, 400);
   }
 });
+var processRoute = createRoute9({
+  method: "post",
+  path: "/process",
+  tags: ["Queue"],
+  summary: "Process queued message webhook",
+  description: "Endpoint invoked by QStash when a message is ready to be handled",
+  responses: {
+    200: { description: "Processed", content: { "application/json": { schema: SuccessResponseSchema } } },
+    400: { description: "Bad Request", content: { "application/json": { schema: ErrorResponseSchema } } },
+    401: { description: "Unauthorized", content: { "application/json": { schema: ErrorResponseSchema } } },
+    404: { description: "Not Found", content: { "application/json": { schema: ErrorResponseSchema } } },
+    500: { description: "Internal error", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+queueRoute.openapi(processRoute, async (c) => {
+  const jobName = c.req.query("jobName");
+  if (!jobName) {
+    return c.json({ error: "MissingJobName", message: "Missing jobName query parameter" }, 400);
+  }
+  const queueService = await queueServiceReady;
+  if (queueService instanceof QStashProvider) {
+    const signature = c.req.header("upstash-signature");
+    if (!signature) {
+      return c.json({ error: "MissingSignature", message: "Missing upstash-signature header" }, 401);
+    }
+    const handler = queueService.getHandler(jobName);
+    if (!handler) {
+      return c.json({ error: "NoHandler", message: `No handler configured for job ${jobName}` }, 404);
+    }
+    try {
+      const data = await c.req.json();
+      await handler(data);
+      return c.json({ success: true, message: "Processed successfully" }, 200);
+    } catch (e) {
+      return c.json({ error: "HandlerError", message: e.message }, 500);
+    }
+  }
+  return c.json({ error: "InvalidProvider", message: "Not using QStashProvider" }, 400);
+});
 
 // src/routes/config.ts
 import { OpenAPIHono as OpenAPIHono11, createRoute as createRoute10, z as z12 } from "@hono/zod-openapi";
@@ -2475,69 +2783,35 @@ init_env();
 // src/engine/agent/auto-register.ts
 import { tool } from "ai";
 import { z as z11 } from "zod";
+
+// src/engine/agent/tools/schema-helper.ts
+import { jsonSchema } from "ai";
+function objectSchema(properties, required) {
+  return jsonSchema({
+    type: "object",
+    properties,
+    required: required || Object.keys(properties),
+    additionalProperties: false
+  });
+}
+var S = {
+  string: (desc2) => ({ type: "string", description: desc2 }),
+  number: (desc2) => ({ type: "number", description: desc2 }),
+  boolean: (desc2) => ({ type: "boolean", description: desc2 }),
+  record: (desc2) => ({ type: "object", description: desc2, additionalProperties: true }),
+  array: (desc2, items) => ({ type: "array", description: desc2, ...items ? { items } : {} }),
+  optional: {
+    string: (desc2) => ({ type: "string", description: desc2 }),
+    number: (desc2) => ({ type: "number", description: desc2 })
+  }
+};
+
+// src/engine/agent/auto-register.ts
 var _cachedTools = null;
 var _cachedExcluded = [];
 function invalidateAutoToolCache() {
   _cachedTools = null;
   _cachedExcluded = [];
-}
-function jsonSchemaToZod(schema) {
-  if (!schema || typeof schema !== "object") return z11.any();
-  if (schema.enum && Array.isArray(schema.enum)) {
-    if (schema.enum.length === 0) return z11.string();
-    if (schema.enum.every((v) => typeof v === "string")) {
-      return z11.enum(schema.enum);
-    }
-    return z11.any();
-  }
-  if (schema.oneOf || schema.anyOf) {
-    const variants = schema.oneOf || schema.anyOf;
-    if (Array.isArray(variants) && variants.length > 0) {
-      return jsonSchemaToZod(variants[0]).optional();
-    }
-  }
-  const type = schema.type;
-  switch (type) {
-    case "string": {
-      let s = z11.string();
-      if (schema.description) s = s.describe(schema.description);
-      return s;
-    }
-    case "number":
-    case "integer": {
-      let n = z11.number();
-      if (schema.description) n = n.describe(schema.description);
-      return n;
-    }
-    case "boolean": {
-      let b = z11.boolean();
-      if (schema.description) b = b.describe(schema.description);
-      return b;
-    }
-    case "array": {
-      const itemSchema = schema.items ? jsonSchemaToZod(schema.items) : z11.any();
-      let a = z11.array(itemSchema);
-      if (schema.description) a = a.describe(schema.description);
-      return a;
-    }
-    case "object": {
-      if (schema.properties && typeof schema.properties === "object") {
-        const shape = {};
-        const required = new Set(schema.required || []);
-        for (const [key, propSchema] of Object.entries(schema.properties)) {
-          let zodProp = jsonSchemaToZod(propSchema);
-          if (!required.has(key)) {
-            zodProp = zodProp.optional();
-          }
-          shape[key] = zodProp;
-        }
-        return z11.object(shape);
-      }
-      return z11.record(z11.any());
-    }
-    default:
-      return z11.any();
-  }
 }
 var MAX_RESPONSE_CHARS = 4096;
 function truncateResponse(data) {
@@ -2550,12 +2824,20 @@ function truncateResponse(data) {
     return { _truncated: true, _originalLength: str.length, preview: truncated + "..." };
   }
 }
-async function buildAutoTools(profile) {
+async function buildAutoTools(profile, curatedNames) {
   const excluded = profile.excludedEndpoints || [];
   const excludedKey = excluded.sort().join(",");
   if (_cachedTools && excludedKey === _cachedExcluded.join(",")) {
+    if (curatedNames && curatedNames.size > 0) {
+      const filtered = {};
+      for (const [name, t] of Object.entries(_cachedTools)) {
+        if (!curatedNames.has(name)) filtered[name] = t;
+      }
+      return filtered;
+    }
     return { ..._cachedTools };
   }
+  const maxAutoTools = profile.maxAutoTools ?? 50;
   const tools = {};
   try {
     const req = new Request("http://localhost/api/openapi.json");
@@ -2566,7 +2848,12 @@ async function buildAutoTools(profile) {
     }
     const spec = await res.json();
     for (const [path2, methods] of Object.entries(spec.paths || {})) {
+      if (Object.keys(tools).length >= maxAutoTools) {
+        console.warn(`[AutoTools] Tool cap reached (${maxAutoTools}). Skipping remaining endpoints.`);
+        break;
+      }
       for (const [method, operation] of Object.entries(methods)) {
+        if (Object.keys(tools).length >= maxAutoTools) break;
         const op = operation;
         let operationId = op.operationId;
         if (!operationId) {
@@ -2577,34 +2864,48 @@ async function buildAutoTools(profile) {
         }
         const tag = op.tags && op.tags[0] ? op.tags[0].toLowerCase().replace(/\s+/g, "_") : "api";
         const toolName = `${tag}_${operationId}`;
+        if (curatedNames && curatedNames.has(toolName)) {
+          continue;
+        }
+        const tagPerms = profile.permissions?.[`api.${tag}`] || profile.permissions?.["api.all"] || [];
+        if (!tagPerms.includes("execute") && !tagPerms.includes("all")) {
+          continue;
+        }
         const reqBodySchema = op.requestBody?.content?.["application/json"]?.schema;
         const queryParams = (op.parameters || []).filter((p) => p.in === "query");
         const pathParams = (op.parameters || []).filter((p) => p.in === "path");
-        const paramShape = {};
+        const properties = {};
+        const required = [];
         for (const p of pathParams) {
-          paramShape[p.name] = p.required ? z11.string().describe(p.description || `Path param: ${p.name}`) : z11.string().optional().describe(p.description || p.name);
+          properties[p.name] = {
+            type: "string",
+            description: p.description || `Path param: ${p.name}`
+          };
+          if (p.required) required.push(p.name);
         }
         for (const p of queryParams) {
-          let paramZod;
-          if (p.schema) {
-            paramZod = jsonSchemaToZod(p.schema);
-          } else {
-            paramZod = z11.string();
-          }
-          if (p.description) paramZod = paramZod.describe(p.description);
-          paramShape[p.name] = p.required ? paramZod : paramZod.optional();
+          let pType = p.schema ? { ...p.schema } : { type: "string" };
+          if (p.description) pType.description = p.description;
+          properties[p.name] = pType;
+          if (p.required) required.push(p.name);
         }
         if (reqBodySchema) {
-          const bodyZod = jsonSchemaToZod(reqBodySchema);
-          paramShape["body"] = bodyZod.describe("JSON request body");
+          properties["body"] = {
+            ...reqBodySchema,
+            description: "JSON request body"
+          };
+          required.push("body");
         }
         let desc2 = op.summary || `Execute ${method.toUpperCase()} ${path2}`;
         if (op.description) desc2 += `
 ${op.description}`;
         try {
+          if (Object.keys(properties).length === 0) {
+            properties["_request"] = { type: "string", description: "Not used, pass empty string" };
+          }
           tools[toolName] = tool({
             description: desc2,
-            parameters: z11.object(paramShape),
+            parameters: objectSchema(properties, required.length > 0 ? required : void 0),
             execute: async (args) => {
               let actualPath = path2;
               for (const p of pathParams) {
@@ -2818,7 +3119,98 @@ import {
   experimental_transcribe as transcribe,
   experimental_generateSpeech as generateSpeech
 } from "ai";
+
+// src/engine/model-factory.ts
+import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createWorkersAI } from "workers-ai-provider";
+function createModelInstance(model, aiBinding) {
+  switch (model.provider) {
+    case "workers_ai": {
+      if (!aiBinding) {
+        throw new Error("AI binding required for workers_ai provider");
+      }
+      const workersai = createWorkersAI({ binding: aiBinding });
+      return workersai(model.model_id);
+    }
+    case "openai": {
+      if (!model.api_key) {
+        throw new Error("API key required for openai provider");
+      }
+      const openai = createOpenAI({
+        apiKey: model.api_key,
+        ...model.base_url ? { baseURL: model.base_url } : {},
+        fetch: async (url, options) => {
+          if (options?.body) {
+            try {
+              const body = JSON.parse(options.body);
+              if (body.tools && Array.isArray(body.tools)) {
+                body.tools.forEach((t) => {
+                  if (t.function?.parameters) {
+                    if (t.function.parameters.properties && !t.function.parameters.type) {
+                      t.function.parameters.type = "object";
+                    }
+                    if (Object.keys(t.function.parameters.properties || {}).length === 0) {
+                      t.function.parameters.additionalProperties = true;
+                    }
+                  }
+                });
+                options.body = JSON.stringify(body);
+              }
+            } catch (e) {
+            }
+          }
+          return fetch(url, options);
+        }
+      });
+      return openai.chat(model.model_id);
+    }
+    case "anthropic": {
+      if (!model.api_key) {
+        throw new Error("API key required for anthropic provider");
+      }
+      const anthropic = createAnthropic({
+        apiKey: model.api_key,
+        ...model.base_url ? { baseURL: model.base_url } : {}
+      });
+      return anthropic(model.model_id);
+    }
+    case "google": {
+      if (!model.api_key) {
+        throw new Error("API key required for google provider");
+      }
+      const google = createGoogleGenerativeAI({
+        apiKey: model.api_key,
+        ...model.base_url ? { baseURL: model.base_url } : {}
+      });
+      return google(model.model_id);
+    }
+    case "ollama": {
+      const ollama = createOpenAI({
+        apiKey: model.api_key || "ollama",
+        // Ollama doesn't need a real key
+        baseURL: model.base_url || "http://localhost:11434/v1"
+      });
+      return ollama.chat(model.model_id);
+    }
+    case "openai_compatible": {
+      if (!model.base_url) {
+        throw new Error("base_url required for openai_compatible provider");
+      }
+      const compatible = createOpenAI({
+        apiKey: model.api_key || "no-key",
+        baseURL: model.base_url
+      });
+      return compatible.chat(model.model_id);
+    }
+    default:
+      throw new Error(`Unsupported AI provider: '${model.provider}'. Supported: workers_ai, openai, anthropic, google, ollama, openai_compatible`);
+  }
+}
+
+// src/routes/openai.ts
+import { createWorkersAI as createWorkersAI2 } from "workers-ai-provider";
 
 // src/engine/ai-tasks.ts
 var AI_TASK_TTL = 3600;
@@ -2870,7 +3262,7 @@ async function dispatchAITask(taskId) {
 }
 
 // src/engine/agent/prompts.ts
-var buildAgentSystemPrompt = (profile) => {
+var buildAgentSystemPrompt = (profile, tools) => {
   let prompt = `You are a helpful AI Agent named ${profile.name} running autonomously on a Frontbase Edge Engine. `;
   if (profile.systemPrompt) {
     prompt += `
@@ -2986,17 +3378,98 @@ ${profile.systemPrompt}
 `;
   prompt += `- Always verify your changes took effect by using inspection tools after modifications.
 `;
+  if (tools && Object.keys(tools).length > 0) {
+    prompt += `
+=== TOOL MANIFEST ===
+`;
+    prompt += `The following ${Object.keys(tools).length} tools are available to you:
+
+`;
+    for (const [name, t] of Object.entries(tools)) {
+      const desc2 = t?.description ? t.description.split("\n")[0].slice(0, 120) : "No description";
+      prompt += `- \`${name}\`: ${desc2}
+`;
+    }
+    prompt += `
+=== END TOOL MANIFEST ===
+`;
+  }
   return prompt;
 };
 
 // src/engine/agent/tools.ts
 import { tool as tool6 } from "ai";
-import { z as z17 } from "zod";
 
 // src/routes/data.ts
 import { Hono as Hono2 } from "hono";
+init_IStateProvider();
 init_redis();
+
+// src/middleware/captchaVerify.ts
+async function verifyCaptchaToken(token, clientIp) {
+  try {
+    const botConfig = await getBotProtectionAsync();
+    if (!botConfig || !botConfig.enabled) {
+      return { success: true };
+    }
+    const { provider, secretKey } = botConfig;
+    if (!secretKey) {
+      console.warn("[CAPTCHA] Bot protection is enabled but secretKey is missing. Failing open.");
+      return { success: true };
+    }
+    let verifyUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+    if (provider === "recaptcha_v2" || provider === "recaptcha_v3") {
+      verifyUrl = "https://www.google.com/recaptcha/api/siteverify";
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3e3);
+    try {
+      const formData = new URLSearchParams();
+      formData.append("secret", secretKey);
+      formData.append("response", token);
+      formData.append("remoteip", clientIp);
+      const response = await fetch(verifyUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: formData.toString(),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        console.warn(`[CAPTCHA] Siteverify response error: ${response.status}. Failing open.`);
+        return { success: true };
+      }
+      const result = await response.json();
+      if (result && typeof result === "object") {
+        if (provider === "recaptcha_v3") {
+          const score = typeof result.score === "number" ? result.score : 1;
+          if (result.success && score < 0.5) {
+            console.warn(`[CAPTCHA] reCAPTCHA v3 blocked request: score ${score} is below threshold 0.5.`);
+            return { success: false, error: "Low CAPTCHA score" };
+          }
+        }
+        return {
+          success: !!result.success,
+          error: result.success ? void 0 : result["error-codes"]?.join(", ") || "Verification failed"
+        };
+      }
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      console.warn("[CAPTCHA] Verification request timed out or failed. Failing open.", fetchErr.message);
+      return { success: true };
+    }
+  } catch (e) {
+    console.error("[CAPTCHA] Unexpected error in verifyCaptchaToken. Failing open.", e);
+    return { success: true };
+  }
+  return { success: true };
+}
+
+// src/routes/data.ts
 var dataRoute = new Hono2();
+dataRoute.use("*", ipRateLimiter);
 var cachedDatasource = null;
 var _datasourcesCache = null;
 function getDatasourceCredentials(datasourceId) {
@@ -3074,10 +3547,29 @@ function buildProxyRequest(datasourceId, queryConfig, body) {
   console.error(`[Data Execute] Unsupported datasource type: ${dsType}`);
   return null;
 }
-function resolveEnvVars(template) {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    return process.env[key] || "";
-  });
+function isPrivateUrl(urlStr) {
+  try {
+    const parsed = new URL(urlStr);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "localhost.localdomain" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "0.0.0.0") {
+      return true;
+    }
+    if (hostname.endsWith(".local") || hostname.endsWith(".localhost") || hostname.endsWith(".internal")) {
+      return true;
+    }
+    if (/^10\./.test(hostname)) return true;
+    if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)) return true;
+    if (/^192\.168\./.test(hostname)) return true;
+    if (/^169\.254\./.test(hostname)) return true;
+    if (/^127\./.test(hostname)) return true;
+    if (/^0\./.test(hostname)) return true;
+    if (hostname.startsWith("[fc") || hostname.startsWith("[fd") || hostname.startsWith("[fe80")) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
 }
 function getByPath(obj, path2) {
   if (!path2) return obj;
@@ -3125,10 +3617,14 @@ async function executeDataRequest2(dataRequest) {
     headers = proxyReq.headers;
     body = proxyReq.body;
   } else {
-    url = resolveEnvVars(dataRequest.url);
+    url = dataRequest.url;
     for (const [key, value] of Object.entries(dataRequest.headers || {})) {
-      headers[key] = resolveEnvVars(value);
+      headers[key] = value;
     }
+  }
+  if (isPrivateUrl(url)) {
+    console.warn(`[Data Execute] Blocked private URL request to: ${url}`);
+    throw new Error(`Access to private URL is blocked: ${url}`);
   }
   console.log(`[Data Execute] ${isProxy ? "Proxy" : "Direct"}: ${url.substring(0, 100)}...`);
   const cacheKey = `data:${url}:${body ? JSON.stringify(body) : ""}`;
@@ -3184,16 +3680,18 @@ async function executeDataRequestUncached(dataRequest, url, headers, resolvedBod
   }
   return { data, total };
 }
-async function getDefaultDatasource() {
-  if (cachedDatasource) return cachedDatasource;
+async function getDefaultDatasource(tenantSlug) {
+  if (!isMultiTenantSlug(tenantSlug) && cachedDatasource) return cachedDatasource;
   try {
-    const pages = await stateProvider.listPages();
+    const pages = await stateProvider.listPages(tenantSlug);
     if (pages.length > 0) {
-      const page = await stateProvider.getPageBySlug(pages[0].slug);
+      const page = await stateProvider.getPageBySlug(pages[0].slug, tenantSlug);
       if (page?.datasources && page.datasources.length > 0) {
-        cachedDatasource = page.datasources[0];
-        console.log(`[Data API] Using datasource: ${cachedDatasource.name} (${cachedDatasource.type})`);
-        return cachedDatasource;
+        if (!isMultiTenantSlug(tenantSlug)) {
+          cachedDatasource = page.datasources[0];
+        }
+        console.log(`[Data API] Using datasource: ${page.datasources[0].name} (${page.datasources[0].type})`);
+        return page.datasources[0];
       }
     }
   } catch (error) {
@@ -3213,7 +3711,8 @@ dataRoute.get("/:table", async (c) => {
       direction: query.order || "asc"
     } : void 0;
     console.log(`[Data API] Querying ${table}:`, { columns, limit, offset });
-    const datasource = await getDefaultDatasource();
+    const tenantSlug = c.get("tenantSlug");
+    const datasource = await getDefaultDatasource(tenantSlug);
     const result = await handleDataQuery(table, {
       columns,
       limit,
@@ -3245,7 +3744,8 @@ dataRoute.get("/:table/:id", async (c) => {
   const table = c.req.param("table");
   const id = c.req.param("id");
   try {
-    const datasource = await getDefaultDatasource();
+    const tenantSlug = c.get("tenantSlug");
+    const datasource = await getDefaultDatasource(tenantSlug);
     const result = await handleDataQuery(table, {
       filters: { id },
       limit: 1
@@ -3266,6 +3766,7 @@ dataRoute.post("/execute", async (c) => {
   try {
     const body = await c.req.json();
     const dataRequest = body.dataRequest;
+    const tenantSlug = c.get("tenantSlug");
     if (!dataRequest) {
       return c.json({
         success: false,
@@ -3278,6 +3779,28 @@ dataRoute.post("/execute", async (c) => {
         success: false,
         error: "Invalid dataRequest: missing url (direct) or datasourceId (proxy)"
       }, 400);
+    }
+    if (isProxy && dataRequest.datasourceId) {
+      const isAuthorized = await stateProvider.isDatasourceAuthorized(dataRequest.datasourceId, tenantSlug);
+      if (!isAuthorized) {
+        console.warn(`[Data Execute] Unauthorized access attempt: tenantSlug='${tenantSlug}', datasourceId='${dataRequest.datasourceId}'`);
+        return c.json({
+          success: false,
+          error: "Unauthorized access to this datasource"
+        }, 403);
+      }
+    }
+    const botConfig = getBotProtection();
+    if (botConfig && botConfig.enabled && dataRequest.method === "POST") {
+      const captchaToken = body.captchaToken || c.req.header("x-captcha-token") || "";
+      if (!captchaToken) {
+        return c.json({ success: false, error: "CAPTCHA required for write operations" }, 403);
+      }
+      const clientIp = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for")?.split(",")[0].trim() || c.req.header("x-real-ip") || "unknown";
+      const result = await verifyCaptchaToken(captchaToken, clientIp);
+      if (!result.success) {
+        return c.json({ success: false, error: result.error || "CAPTCHA verification failed" }, 403);
+      }
     }
     const label = isProxy ? `proxy:${dataRequest.datasourceId}` : dataRequest.url?.substring(0, 80);
     console.log(`[Data Execute] Processing: ${label}...`);
@@ -3305,7 +3828,6 @@ dataRoute.post("/clear-cache", async (c) => {
 
 // src/engine/agent/tools/pages.ts
 import { tool as tool2 } from "ai";
-import { z as z13 } from "zod";
 function buildPageTools(profile) {
   const tools = {};
   const perms = profile.permissions?.["pages.all"] || [];
@@ -3315,10 +3837,12 @@ function buildPageTools(profile) {
   if (hasRead) {
     tools["pages_list"] = tool2({
       description: "List all published pages on this engine. Returns page name, slug, and version for each page.",
-      parameters: z13.object({}),
-      execute: async () => {
+      parameters: objectSchema({
+        dummy: S.string("Unused, pass empty string")
+      }),
+      execute: async ({ dummy }) => {
         try {
-          const pages = await stateProvider.listPages();
+          const pages = await stateProvider.listPages(profile.tenantSlug || void 0);
           return {
             count: pages.length,
             pages: pages.map((p) => ({
@@ -3334,12 +3858,12 @@ function buildPageTools(profile) {
     });
     tools["pages_get"] = tool2({
       description: "Get the full structure of a published page by slug. Returns the page name, slug, version, component tree (types and IDs), and SEO metadata.",
-      parameters: z13.object({
-        slug: z13.string().describe('The page slug (URL path), e.g. "about" or "pricing"')
+      parameters: objectSchema({
+        slug: S.string('The page slug (URL path), e.g. "about" or "pricing"')
       }),
       execute: async ({ slug }) => {
         try {
-          const page = await stateProvider.getPageBySlug(slug);
+          const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || void 0);
           if (!page) {
             return { error: `Page with slug '${slug}' not found` };
           }
@@ -3376,14 +3900,14 @@ function buildPageTools(profile) {
   if (hasWrite) {
     tools["pages_updateComponent"] = tool2({
       description: "Update a single component's props on a published page. Changes are applied to the page in the state DB but NOT automatically published \u2014 use pages_updateAndPublish for atomic edit+publish.",
-      parameters: z13.object({
-        slug: z13.string().describe("The page slug"),
-        componentId: z13.string().describe("The ID of the component to update"),
-        props: z13.record(z13.any()).describe("The prop key-value pairs to merge into the component")
+      parameters: objectSchema({
+        slug: S.string("The page slug"),
+        componentId: S.string("The ID of the component to update"),
+        props: S.record("The prop key-value pairs to merge into the component")
       }),
       execute: async ({ slug, componentId, props }) => {
         try {
-          const page = await stateProvider.getPageBySlug(slug);
+          const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || void 0);
           if (!page) return { error: `Page '${slug}' not found` };
           const layoutData = { ...page.layoutData };
           let found = false;
@@ -3412,14 +3936,14 @@ function buildPageTools(profile) {
     });
     tools["pages_updateAndPublish"] = tool2({
       description: "Update a component's props on a page AND trigger a full publish cycle (CSS rebundle + cache flush). This is the recommended way to make visible changes. It is an atomic one-shot operation.",
-      parameters: z13.object({
-        slug: z13.string().describe("The page slug"),
-        componentId: z13.string().describe("The ID of the component to update"),
-        props: z13.record(z13.any()).describe("The prop key-value pairs to merge into the component")
+      parameters: objectSchema({
+        slug: S.string("The page slug"),
+        componentId: S.string("The ID of the component to update"),
+        props: S.record("The prop key-value pairs to merge into the component")
       }),
       execute: async ({ slug, componentId, props }) => {
         try {
-          const page = await stateProvider.getPageBySlug(slug);
+          const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || void 0);
           if (!page) return { error: `Page '${slug}' not found` };
           const layoutData = { ...page.layoutData };
           let found = false;
@@ -3447,7 +3971,9 @@ function buildPageTools(profile) {
                 "Content-Type": "application/json",
                 "x-api-key": profile.apiKey || ""
               },
-              body: JSON.stringify({ pattern: `page:${slug}*` })
+              body: JSON.stringify({
+                pattern: profile.tenantSlug && profile.tenantSlug !== "_default" ? `page:${profile.tenantSlug}:${slug}*` : `page:${slug}*`
+              })
             });
             await liteApp.request(cacheReq);
           } catch {
@@ -3467,7 +3993,6 @@ function buildPageTools(profile) {
 
 // src/engine/agent/tools/styles.ts
 import { tool as tool3 } from "ai";
-import { z as z14 } from "zod";
 function buildStyleTools(profile) {
   const tools = {};
   const perms = profile.permissions?.["pages.all"] || [];
@@ -3487,13 +4012,13 @@ function buildStyleTools(profile) {
   if (hasRead) {
     tools["styles_get"] = tool3({
       description: "Get the current styles for a specific component on a page. Returns the style values (colors, spacing, typography, etc.) and any viewport overrides.",
-      parameters: z14.object({
-        slug: z14.string().describe("The page slug"),
-        componentId: z14.string().describe("The component ID to inspect")
+      parameters: objectSchema({
+        slug: S.string("The page slug"),
+        componentId: S.string("The component ID to inspect")
       }),
       execute: async ({ slug, componentId }) => {
         try {
-          const page = await stateProvider.getPageBySlug(slug);
+          const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || void 0);
           if (!page) return { error: `Page '${slug}' not found` };
           const layoutData = page.layoutData;
           const component = findComponent(layoutData?.content || [], componentId);
@@ -3513,14 +4038,14 @@ function buildStyleTools(profile) {
   if (hasWrite) {
     tools["styles_update"] = tool3({
       description: "Update styles for a single component on a page. Merges the provided style values into the component's existing styles. Supports CSS properties like backgroundColor, fontSize, padding, margin, borderRadius, color, etc.",
-      parameters: z14.object({
-        slug: z14.string().describe("The page slug"),
-        componentId: z14.string().describe("The component ID to style"),
-        styles: z14.record(z14.any()).describe('Style key-value pairs to merge, e.g. { "backgroundColor": "#1a1a2e", "fontSize": "18px" }')
+      parameters: objectSchema({
+        slug: S.string("The page slug"),
+        componentId: S.string("The component ID to style"),
+        styles: S.record('Style key-value pairs to merge, e.g. { "backgroundColor": "#1a1a2e", "fontSize": "18px" }')
       }),
       execute: async ({ slug, componentId, styles }) => {
         try {
-          const page = await stateProvider.getPageBySlug(slug);
+          const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || void 0);
           if (!page) return { error: `Page '${slug}' not found` };
           const layoutData = { ...page.layoutData };
           let found = false;
@@ -3548,16 +4073,20 @@ function buildStyleTools(profile) {
     });
     tools["styles_batchUpdate"] = tool3({
       description: "Update styles for multiple components on a page in a single operation. Useful for applying a theme or making coordinated visual changes across several components at once.",
-      parameters: z14.object({
-        slug: z14.string().describe("The page slug"),
-        updates: z14.array(z14.object({
-          componentId: z14.string().describe("The component ID"),
-          styles: z14.record(z14.any()).describe("Style key-value pairs to merge")
-        })).describe("Array of component style updates")
+      parameters: objectSchema({
+        slug: S.string("The page slug"),
+        updates: S.array("Array of component style updates", {
+          type: "object",
+          properties: {
+            componentId: S.string("The component ID"),
+            styles: S.record("Style key-value pairs to merge")
+          },
+          required: ["componentId", "styles"]
+        })
       }),
       execute: async ({ slug, updates }) => {
         try {
-          const page = await stateProvider.getPageBySlug(slug);
+          const page = await stateProvider.getPageBySlug(slug, profile.tenantSlug || void 0);
           if (!page) return { error: `Page '${slug}' not found` };
           const layoutData = { ...page.layoutData };
           const updateMap = new Map(updates.map((u) => [u.componentId, u.styles]));
@@ -3596,7 +4125,6 @@ function buildStyleTools(profile) {
 
 // src/engine/agent/tools/engine.ts
 import { tool as tool4 } from "ai";
-import { z as z15 } from "zod";
 function buildEngineTools(profile) {
   const tools = {};
   const perms = profile.permissions?.["engine.all"] || [];
@@ -3604,8 +4132,10 @@ function buildEngineTools(profile) {
   if (!hasRead) return tools;
   tools["engine_status"] = tool4({
     description: "Get the engine's current health status including state DB, cache, and queue binding status. Use this to understand what infrastructure is connected.",
-    parameters: z15.object({}),
-    execute: async () => {
+    parameters: objectSchema({
+      dummy: S.string("Not used, pass empty string")
+    }),
+    execute: async ({ dummy }) => {
       try {
         const req = new Request("http://localhost/api/health", {
           headers: { "x-api-key": profile.apiKey || "" }
@@ -3626,10 +4156,12 @@ function buildEngineTools(profile) {
   });
   tools["engine_config"] = tool4({
     description: "Get a non-secret summary of the engine's configuration: which providers are configured for state DB, cache, queue, and how many GPU models are available.",
-    parameters: z15.object({}),
-    execute: async () => {
+    parameters: objectSchema({
+      dummy: S.string("Not used, pass empty string")
+    }),
+    execute: async ({ dummy }) => {
       try {
-        const { getStateDbConfig: getStateDbConfig2, getCacheConfig: getCacheConfig2, getQueueConfig: getQueueConfig3, getGpuModels: getGpuModels2, getAgentProfilesConfig: getAgentProfilesConfig2 } = await import("./env-IFXQKGIA.js");
+        const { getStateDbConfig: getStateDbConfig2, getCacheConfig: getCacheConfig2, getQueueConfig: getQueueConfig3, getGpuModels: getGpuModels2, getAgentProfilesConfig: getAgentProfilesConfig2 } = await import("./env-YBQ7MHV3.js");
         const stateDb = getStateDbConfig2();
         const cache = getCacheConfig2();
         const queue = getQueueConfig3();
@@ -3657,10 +4189,12 @@ function buildEngineTools(profile) {
   });
   tools["engine_workflows"] = tool4({
     description: "List all deployed workflows on this engine. Returns name, trigger type, active status, and version for each workflow.",
-    parameters: z15.object({}),
-    execute: async () => {
+    parameters: objectSchema({
+      dummy: S.string("Not used, pass empty string")
+    }),
+    execute: async ({ dummy }) => {
       try {
-        const workflows = await stateProvider.listWorkflows();
+        const workflows = await stateProvider.listWorkflows(profile.tenantSlug || void 0);
         return {
           count: workflows.length,
           workflows: workflows.map((w) => ({
@@ -3680,10 +4214,10 @@ function buildEngineTools(profile) {
   });
   tools["engine_logs"] = tool4({
     description: "Get recent edge engine logs. Useful for debugging issues or checking recent activity.",
-    parameters: z15.object({
-      limit: z15.number().optional().describe("Max number of log entries to return (default: 20, max: 100)"),
-      level: z15.string().optional().describe('Filter by log level: "info", "warn", "error"')
-    }),
+    parameters: objectSchema({
+      limit: S.number("Max number of log entries to return (default: 20, max: 100)"),
+      level: S.string('Filter by log level: "info", "warn", "error"')
+    }, ["limit"]),
     execute: async ({ limit, level }) => {
       try {
         const queryLimit = Math.min(limit || 20, 100);
@@ -3706,50 +4240,51 @@ function buildEngineTools(profile) {
 
 // src/engine/agent/tools/user-tools.ts
 import { tool as tool5 } from "ai";
-import { z as z16 } from "zod";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { z as z13 } from "zod";
+import { Client as Client2 } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-function parametersToZod(params) {
-  const shape = {};
+function parametersToJsonSchema(params) {
+  const properties = {};
+  const required = [];
   for (const param of params) {
-    let zodType;
+    let typeInfo = {};
     switch (param.type) {
       case "number":
-        zodType = z16.number();
+        typeInfo = { type: "number" };
         break;
       case "boolean":
-        zodType = z16.boolean();
+        typeInfo = { type: "boolean" };
         break;
       case "array":
-        zodType = z16.array(z16.any());
+        typeInfo = { type: "array" };
         break;
       case "object":
-        zodType = z16.record(z16.string(), z16.any());
+        typeInfo = { type: "object", additionalProperties: true };
         break;
       case "string":
       default:
         if (param.enum && param.enum.length > 0) {
-          zodType = z16.enum(param.enum);
+          typeInfo = { type: "string", enum: param.enum };
         } else {
-          zodType = z16.string();
+          typeInfo = { type: "string" };
         }
         break;
     }
     if (param.description) {
-      zodType = zodType.describe(param.description);
+      typeInfo.description = param.description;
     }
     if (param.default !== void 0) {
-      zodType = zodType.default(param.default);
+      typeInfo.default = param.default;
     }
-    if (!param.required) {
-      zodType = zodType.optional();
+    if (param.required) {
+      required.push(param.name);
     }
-    shape[param.name] = zodType;
+    properties[param.name] = typeInfo;
   }
-  return z16.object(shape);
+  return objectSchema(properties, required.length > 0 ? required : void 0);
 }
 function buildWorkflowTool(toolDef, config, profile) {
-  const schema = config.parameters?.length > 0 ? parametersToZod(config.parameters) : z16.object({});
+  const schema = config.parameters?.length > 0 ? parametersToJsonSchema(config.parameters) : objectSchema({ dummy: S.string("Not used, pass empty string") });
   return {
     [toolDef.name]: tool5({
       description: toolDef.description || `Trigger workflow: ${toolDef.name}`,
@@ -3785,7 +4320,7 @@ async function buildMcpClientTools(toolDef, config) {
     const transport = new SSEClientTransport(sseUrl, {
       requestInit: { headers: config.headers || {} }
     });
-    const client = new Client(
+    const client = new Client2(
       { name: `frontbase-edge-client`, version: "1.0.0" },
       { capabilities: {} }
     );
@@ -3800,7 +4335,7 @@ async function buildMcpClientTools(toolDef, config) {
         }
         tools[`mcp_${toolDef.name}_${mTool.name}`] = tool5({
           description: `[From ${toolDef.name} MCP]: ${mTool.description || `Tool ${mTool.name}`}`,
-          parameters: z16.any(),
+          parameters: z13.any(),
           execute: async (args) => {
             try {
               const result = await client.callTool({
@@ -3830,8 +4365,8 @@ async function buildMcpClientTools(toolDef, config) {
     console.error(`[UserTools] Failed to initialize MCP Client '${toolDef.name}':`, err.message);
     tools[`mcp_${toolDef.name}_status`] = tool5({
       description: `MCP Server '${toolDef.name}' is currently unreachable.`,
-      parameters: z16.object({}),
-      execute: async () => ({
+      parameters: objectSchema({ dummy: S.string("Not used, pass empty string") }),
+      execute: async ({ dummy }) => ({
         error: `MCP Connection failed`,
         message: err.message
       })
@@ -3842,9 +4377,10 @@ async function buildMcpClientTools(toolDef, config) {
 async function buildUserTools(profile, stateProvider2) {
   const tools = {};
   try {
-    const profileSlug = profile.name?.toLowerCase().replace(/\s+/g, "-") || "default";
-    const userTools = await stateProvider2.listAgentTools(profileSlug);
-    if (!userTools.length) return tools;
+    const slug = profile.slug || profile.name?.toLowerCase().replace(/\s+/g, "-") || "default";
+    const lookupKey = profile.tenantSlug ? `${profile.tenantSlug}:${slug}` : slug;
+    const userTools = await stateProvider2.listAgentTools(lookupKey);
+    if (!userTools || !userTools.length) return tools;
     for (const toolDef of userTools) {
       try {
         const config = JSON.parse(toolDef.config);
@@ -3886,15 +4422,14 @@ async function buildUserTools(profile, stateProvider2) {
 // src/engine/agent/tools.ts
 var buildAgentTools = async (profile, stateProvider2) => {
   const tools = {};
-  Object.assign(tools, await buildAutoTools(profile));
   Object.assign(tools, buildPageTools(profile));
   Object.assign(tools, buildStyleTools(profile));
   Object.assign(tools, buildEngineTools(profile));
   tools.queryDatasource = tool6({
     description: "Execute a read-only SQL SELECT query against a connected external Datasource. Use this to query live app data.",
-    parameters: z17.object({
-      datasourceId: z17.string().describe("The UUID of the connected datasource to query."),
-      sql: z17.string().describe("The raw SQL SELECT query to execute. Do not execute destructive commands like DROP or DELETE.")
+    parameters: objectSchema({
+      datasourceId: S.string("The UUID of the connected datasource to query."),
+      sql: S.string("The raw SQL SELECT query to execute. Do not execute destructive commands like DROP or DELETE.")
     }),
     // @ts-ignore
     execute: async ({ datasourceId, sql: sql2 }) => {
@@ -3924,10 +4459,10 @@ var buildAgentTools = async (profile, stateProvider2) => {
   if (workflowPerms.includes("trigger") || workflowPerms.includes("all")) {
     tools.triggerWorkflow = tool6({
       description: "Trigger an Action Workflow deployed on this Edge Engine.",
-      parameters: z17.object({
-        workflowId: z17.string().describe("The ID of the workflow to trigger."),
-        payload: z17.record(z17.any()).optional().describe("Optional JSON payload to send to the workflow.")
-      }),
+      parameters: objectSchema({
+        workflowId: S.string("The ID of the workflow to trigger."),
+        payload: S.record("Optional JSON payload to send to the workflow.")
+      }, ["workflowId"]),
       execute: async ({ workflowId, payload }) => {
         try {
           const req = new Request(`http://localhost/api/execute/${workflowId}`, {
@@ -3950,6 +4485,8 @@ var buildAgentTools = async (profile, stateProvider2) => {
   if (stateProvider2) {
     Object.assign(tools, await buildUserTools(profile, stateProvider2));
   }
+  const curatedNames = new Set(Object.keys(tools));
+  Object.assign(tools, await buildAutoTools(profile, curatedNames));
   return tools;
 };
 
@@ -3965,8 +4502,8 @@ function resolveModel(modelSlug, c) {
     return { error: c.json({ error: { message: `Model '${modelSlug}' not found. Available: ${models.map((m) => m.slug).join(", ")}`, type: "invalid_request_error", code: "model_not_found" } }, 404) };
   }
   const ai = getAIBinding();
-  if (!ai) {
-    return { error: c.json({ error: { message: "AI binding not available.", type: "server_error", code: "ai_binding_missing" } }, 503) };
+  if (!ai && model.provider === "workers_ai") {
+    return { error: c.json({ error: { message: "AI binding not available for workers_ai provider.", type: "server_error", code: "ai_binding_missing" } }, 503) };
   }
   return { model, ai };
 }
@@ -3979,7 +4516,7 @@ function mergeDefaults(payload, model) {
   }
 }
 function getWorkersAI(ai) {
-  return createWorkersAI({ binding: ai });
+  return createWorkersAI2({ binding: ai });
 }
 function convertOpenAIMessages(messages) {
   if (!Array.isArray(messages)) return messages;
@@ -4027,8 +4564,7 @@ openaiRoute.post("/chat/completions", async (c) => {
   const resolved = resolveModel(body.model, c);
   if ("error" in resolved) return resolved.error;
   const { model, ai } = resolved;
-  const workersai = getWorkersAI(ai);
-  const sdkModel = workersai(model.model_id);
+  const sdkModel = createModelInstance(model, ai);
   const mergedBody = { ...body };
   mergeDefaults(mergedBody, model);
   const sdkOptions = {
@@ -4037,8 +4573,8 @@ openaiRoute.post("/chat/completions", async (c) => {
   };
   const profile = c.get ? c.get("agentProfile") : c.var?.agentProfile;
   if (profile) {
-    sdkOptions.system = buildAgentSystemPrompt(profile);
     sdkOptions.tools = await buildAgentTools(profile, getStateProvider());
+    sdkOptions.system = buildAgentSystemPrompt(profile, sdkOptions.tools);
     sdkOptions.messages = sdkOptions.messages.filter((m) => m.role !== "system");
     if (mergedBody.max_steps == null && mergedBody.maxSteps == null) {
       mergedBody.max_steps = 5;
@@ -4178,8 +4714,7 @@ openaiRoute.post("/chat/completions/continue", async (c) => {
     const resolved = resolveModel(task.model, c);
     if ("error" in resolved) return resolved.error;
     const { model, ai } = resolved;
-    const workersai = getWorkersAI(ai);
-    const sdkModel = workersai(model.model_id);
+    const sdkModel = createModelInstance(model, ai);
     const sdkOptions = { ...task.options, model: sdkModel, messages: task.messages, maxSteps: task.maxSteps };
     const profile = c.get ? c.get("agentProfile") : c.var?.agentProfile;
     if (profile) {
@@ -4532,6 +5067,12 @@ var agentToolsRoute = new OpenAPIHono13();
 agentToolsRoute.get("/:profileSlug", async (c) => {
   const profileSlug = c.req.param("profileSlug");
   const includeInactive = c.req.query("includeInactive") === "true";
+  const tenantSlug = c.get("tenantSlug");
+  if (tenantSlug && tenantSlug !== "_default") {
+    if (profileSlug !== tenantSlug && !profileSlug.startsWith(`${tenantSlug}:`)) {
+      return c.json({ error: "Forbidden: Access to this profile is restricted to another tenant." }, 403);
+    }
+  }
   try {
     const provider = getStateProvider();
     const tools = await provider.listAgentTools(profileSlug, includeInactive);
@@ -4549,6 +5090,12 @@ agentToolsRoute.post("/", async (c) => {
   }
   if (!["workflow", "mcp_server"].includes(body.type)) {
     return c.json({ error: 'Invalid type. Must be "workflow" or "mcp_server".' }, 400);
+  }
+  const tenantSlug = c.get("tenantSlug");
+  if (tenantSlug && tenantSlug !== "_default") {
+    if (body.profileSlug !== tenantSlug && !body.profileSlug.startsWith(`${tenantSlug}:`)) {
+      return c.json({ error: "Forbidden: Cannot upsert agent tools for another tenant's profile." }, 403);
+    }
   }
   try {
     if (typeof body.config === "string") {
@@ -4579,9 +5126,10 @@ agentToolsRoute.post("/", async (c) => {
 });
 agentToolsRoute.delete("/:id", async (c) => {
   const id = c.req.param("id");
+  const tenantSlug = c.get("tenantSlug");
   try {
     const provider = getStateProvider();
-    await provider.deleteAgentTool(id);
+    await provider.deleteAgentTool(id, tenantSlug);
     return c.json({ success: true });
   } catch (err) {
     return c.json({ error: err.message }, 500);
@@ -4598,18 +5146,27 @@ var serverCache = /* @__PURE__ */ new Map();
 mcpServerRoute.all("/:profileSlug/*", async (c) => {
   const profileSlug = c.req.param("profileSlug");
   const profilesConfig = getAgentProfilesConfig();
-  const profile = profilesConfig[profileSlug];
+  const ctxTenantSlug = c.get("tenantSlug") || void 0;
+  let profile = profilesConfig[profileSlug];
+  if (!profile && ctxTenantSlug && ctxTenantSlug !== "_default") {
+    profile = profilesConfig[`${ctxTenantSlug}:${profileSlug}`];
+  }
   if (!profile) {
     return c.json({ error: { message: `Agent Profile '${profileSlug}' not found.` } }, 404);
   }
+  const profileTenantSlug = profile.tenantSlug || void 0;
+  if (profileTenantSlug !== ctxTenantSlug) {
+    return c.json({ error: { message: `Forbidden: Profile tenant does not match request tenantSlug context.` } }, 403);
+  }
+  const resolvedProfileSlug = profilesConfig[profileSlug] ? profileSlug : ctxTenantSlug && profilesConfig[`${ctxTenantSlug}:${profileSlug}`] ? `${ctxTenantSlug}:${profileSlug}` : profileSlug;
   const apiKeyHeader = c.req.header("x-api-key") || c.req.header("authorization")?.replace("Bearer ", "");
   if (profile.apiKey && apiKeyHeader !== profile.apiKey) {
     return c.text("Unauthorized API Key", 401);
   }
-  let instance = serverCache.get(profileSlug);
+  let instance = serverCache.get(resolvedProfileSlug);
   if (!instance) {
     const mcpServer = new McpServer({
-      name: `frontbase-${profileSlug}`,
+      name: `frontbase-${resolvedProfileSlug}`,
       version: "1.0.0"
     });
     const aiTools = await buildAgentTools(profile, getStateProvider());
@@ -4637,14 +5194,280 @@ mcpServerRoute.all("/:profileSlug/*", async (c) => {
         }
       );
     }
+    mcpServer.resource(
+      "pages",
+      "engine://pages",
+      async (uri) => {
+        const pages = await getStateProvider().listPages(profile.tenantSlug || void 0);
+        return {
+          contents: [{
+            uri: uri.href,
+            text: JSON.stringify(pages, null, 2)
+          }]
+        };
+      }
+    );
+    mcpServer.resource(
+      "workflows",
+      "engine://workflows",
+      async (uri) => {
+        const workflows = await getStateProvider().listWorkflows(profile.tenantSlug || void 0);
+        return {
+          contents: [{
+            uri: uri.href,
+            text: JSON.stringify(workflows, null, 2)
+          }]
+        };
+      }
+    );
+    mcpServer.resource(
+      "config",
+      "engine://config",
+      async (uri) => {
+        const sanitizedProfile = { ...profile };
+        delete sanitizedProfile.apiKey;
+        return {
+          contents: [{
+            uri: uri.href,
+            text: JSON.stringify(sanitizedProfile, null, 2)
+          }]
+        };
+      }
+    );
     const transport = new StreamableHTTPTransport();
     instance = { mcpServer, transport };
-    serverCache.set(profileSlug, instance);
+    serverCache.set(resolvedProfileSlug, instance);
   }
   if (!instance.mcpServer.isConnected()) {
     await instance.mcpServer.connect(instance.transport);
   }
   return instance.transport.handleRequest(c);
+});
+
+// src/routes/agent.ts
+import { OpenAPIHono as OpenAPIHono15 } from "@hono/zod-openapi";
+import { verify } from "hono/jwt";
+import { generateText as generateText2, streamText as streamText2 } from "ai";
+init_env();
+var agentRoute = new OpenAPIHono15();
+function convertOpenAIMessages2(messages) {
+  if (!Array.isArray(messages)) return messages;
+  return messages.map((msg) => {
+    if (!msg || typeof msg !== "object") return msg;
+    if (!Array.isArray(msg.content)) return msg;
+    const convertedContent = msg.content.map((part) => {
+      if (!part || typeof part !== "object") return part;
+      if (part.type === "image_url" && part.image_url) {
+        const url = typeof part.image_url === "string" ? part.image_url : part.image_url.url;
+        if (!url) return part;
+        return { type: "image", image: url };
+      }
+      if (part.type === "input_image" && part.image_url) {
+        const url = typeof part.image_url === "string" ? part.image_url : part.image_url.url;
+        return { type: "image", image: url };
+      }
+      return part;
+    });
+    return { ...msg, content: convertedContent };
+  });
+}
+agentRoute.get("/chat/:profileSlug", async (c) => {
+  const profileSlug = c.req.param("profileSlug");
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return c.json({ error: { message: "Unauthorized: Missing Authorization header" } }, 401);
+  }
+  const token = authHeader.split(" ")[1];
+  let isMaster = false;
+  let jwtTenantSlug = void 0;
+  try {
+    const secret = c.env?.FRONTBASE_JWT_SECRET;
+    if (!secret) {
+      console.error("[Agent Chat] FRONTBASE_JWT_SECRET is not configured.");
+      return c.json({ error: { message: "Internal server error: JWT secret not configured." } }, 500);
+    }
+    const payload = await verify(token, secret, "HS256");
+    isMaster = !!payload.isMaster;
+    jwtTenantSlug = payload.tenantSlug || void 0;
+  } catch (e) {
+    console.error("[Agent Chat] JWT verification failed:", e);
+    return c.json({ error: { message: "Unauthorized: Invalid JWT token" } }, 401);
+  }
+  const ctxTenantSlug = c.get("tenantSlug") || void 0;
+  if (jwtTenantSlug !== ctxTenantSlug) {
+    return c.json({ error: { message: "Forbidden: JWT tenantSlug does not match request tenantSlug context." } }, 403);
+  }
+  const profilesConfig = getAgentProfilesConfig();
+  const profile = getOrSynthesizeProfile(profileSlug, profilesConfig, ctxTenantSlug, isMaster);
+  if (!profile) {
+    return c.json({ error: { message: `Agent Profile '${profileSlug}' not deployed on this engine.` } }, 404);
+  }
+  const resolvedProfileSlug = profilesConfig[profileSlug] ? profileSlug : ctxTenantSlug && profilesConfig[`${ctxTenantSlug}:${profileSlug}`] ? `${ctxTenantSlug}:${profileSlug}` : profileSlug;
+  try {
+    const history = await cacheProvider.get(`agent:session:${resolvedProfileSlug}`);
+    return c.json(history || []);
+  } catch (e) {
+    console.error("[Agent Chat] Failed to fetch history:", e);
+    return c.json([]);
+  }
+});
+function getOrSynthesizeProfile(profileSlug, profilesConfig, ctxTenantSlug, isMaster = false) {
+  let profile = profilesConfig[profileSlug];
+  if (!profile && ctxTenantSlug && ctxTenantSlug !== "_default") {
+    profile = profilesConfig[`${ctxTenantSlug}:${profileSlug}`];
+  }
+  if (!profile && profileSlug === "workspace-agent") {
+    if (!isMaster) {
+      return null;
+    }
+    profile = {
+      name: "Workspace Master Agent",
+      systemPrompt: "You are the Master Admin's Workspace Agent. You have full, unrestricted access to the Frontbase Edge Engine and all its connected workloads, datasources, and runtime variables. You act as an expert developer assistant.",
+      permissions: {
+        "pages.all": ["all"],
+        "datasources.all": ["all"],
+        "workflows.all": ["all"],
+        "engine.all": ["all"],
+        "stateDb": ["all"]
+      }
+    };
+  }
+  return profile;
+}
+agentRoute.get("/status/:profileSlug", async (c) => {
+  const profileSlug = c.req.param("profileSlug");
+  const profilesConfig = getAgentProfilesConfig();
+  const ctxTenantSlug = c.get("tenantSlug") || void 0;
+  let isMaster = false;
+  const authHeader = c.req.header("Authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    try {
+      const secret = c.env?.FRONTBASE_JWT_SECRET;
+      if (secret) {
+        const payload = await verify(token, secret, "HS256");
+        isMaster = !!payload.isMaster;
+        const jwtTenantSlug = payload.tenantSlug || void 0;
+        if (jwtTenantSlug !== ctxTenantSlug) {
+          return c.json({ hasProfile: false, hasModels: false });
+        }
+      }
+    } catch {
+    }
+  }
+  const profile = getOrSynthesizeProfile(profileSlug, profilesConfig, ctxTenantSlug, isMaster);
+  if (!profile) return c.json({ hasProfile: false, hasModels: false });
+  try {
+    const models = getGPUModels();
+    return c.json({ hasProfile: true, hasModels: models.length > 0 });
+  } catch {
+    return c.json({ hasProfile: true, hasModels: false });
+  }
+});
+agentRoute.post("/chat/:profileSlug", async (c) => {
+  const profileSlug = c.req.param("profileSlug");
+  const profilesConfig = getAgentProfilesConfig();
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return c.json({ error: { message: "Unauthorized: Missing Authorization header" } }, 401);
+  }
+  const token = authHeader.split(" ")[1];
+  let jwtTenantSlug = void 0;
+  let isMaster = false;
+  let payload = null;
+  let modelRecord = null;
+  try {
+    const secret = c.env?.FRONTBASE_JWT_SECRET;
+    if (!secret) {
+      console.error("[Agent Chat] FRONTBASE_JWT_SECRET is not configured.");
+      return c.json({ error: { message: "Internal server error: JWT secret not configured." } }, 500);
+    }
+    payload = await verify(token, secret, "HS256");
+    jwtTenantSlug = payload.tenantSlug || void 0;
+    isMaster = !!payload.isMaster;
+    const providerStr = String(payload.provider || "openai");
+    modelRecord = {
+      slug: "workspace-injected-model",
+      provider: providerStr,
+      model_type: "chat-completion",
+      model_id: providerStr === "anthropic" ? "claude-3-5-sonnet-latest" : providerStr === "workers_ai" ? "@cf/meta/llama-3.1-8b-instruct" : "gpt-4o",
+      api_key: (payload.credentials || {}).api_key || (payload.credentials || {}).apiKey,
+      base_url: (payload.credentials || {}).base_url || (payload.credentials || {}).baseUrl,
+      provider_config: payload.credentials || {},
+      endpoint_url: providerStr === "openai" ? "https://api.openai.com/v1/chat/completions" : void 0
+    };
+  } catch (e) {
+    console.error("[Agent Chat] JWT verification failed:", e);
+    return c.json({ error: { message: "Unauthorized: Invalid JWT token" } }, 401);
+  }
+  const ctxTenantSlug = c.get("tenantSlug") || void 0;
+  if (jwtTenantSlug !== ctxTenantSlug) {
+    return c.json({ error: { message: "Forbidden: JWT tenantSlug does not match request tenantSlug context." } }, 403);
+  }
+  const profile = getOrSynthesizeProfile(profileSlug, profilesConfig, ctxTenantSlug, isMaster);
+  if (!profile) {
+    return c.json({ error: { message: `Agent Profile '${profileSlug}' not deployed on this engine. Check your Edge Inspector.` } }, 404);
+  }
+  const resolvedProfileSlug = profilesConfig[profileSlug] ? profileSlug : ctxTenantSlug && profilesConfig[`${ctxTenantSlug}:${profileSlug}`] ? `${ctxTenantSlug}:${profileSlug}` : profileSlug;
+  const body = await c.req.json().catch(() => ({}));
+  const messages = body.messages || [];
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return c.json({ error: { message: "Missing or invalid 'messages' array" } }, 400);
+  }
+  let targetModelSlug = body.model;
+  let ai = null;
+  if (!modelRecord) {
+    const models = getGPUModels();
+    if (!targetModelSlug && models.length > 0) {
+      const chatModels = models.filter((m) => m.model_type === "chat-completion" || m.model_type === "text-generation");
+      targetModelSlug = chatModels.length > 0 ? chatModels[0].slug : models[0].slug;
+    }
+    modelRecord = models.find((m) => m.slug === targetModelSlug);
+    if (!modelRecord) {
+      return c.json({ error: { message: `GPU Model '${targetModelSlug}' not assigned to this engine.` } }, 404);
+    }
+    ai = getAIBinding();
+    if (!ai && modelRecord.provider === "workers_ai") {
+      return c.json({ error: { message: "AI binding not available for workers_ai provider." } }, 503);
+    }
+  }
+  const sdkModel = createModelInstance(modelRecord, ai);
+  const tools = await buildAgentTools(profile, getStateProvider());
+  const systemPrompt = buildAgentSystemPrompt(profile, tools);
+  const userMessages = convertOpenAIMessages2(messages.filter((m) => m.role !== "system"));
+  try {
+    if (body.stream) {
+      console.log("[DEBUG] Tools:", Object.keys(tools));
+      const result = await streamText2({
+        model: sdkModel,
+        system: systemPrompt,
+        messages: userMessages,
+        tools,
+        onFinish: async (event) => {
+          const responseMsgs = event.response?.messages || [];
+          await cacheProvider.setex(`agent:session:${resolvedProfileSlug}`, 86400 * 7, JSON.stringify([...messages, ...responseMsgs]));
+        }
+      });
+      return result.toTextStreamResponse();
+    } else {
+      const result = await generateText2({
+        model: sdkModel,
+        system: systemPrompt,
+        messages: userMessages,
+        tools
+      });
+      const responseMsgs = result.response?.messages || [];
+      await cacheProvider.setex(`agent:session:${resolvedProfileSlug}`, 86400 * 7, JSON.stringify([...messages, ...responseMsgs]));
+      return c.json({
+        success: true,
+        message: result.text,
+        steps: result.steps
+      });
+    }
+  } catch (e) {
+    console.error("[Agent Chat] Exception:", e);
+    return c.json({ error: { message: e.message || "Failed to generate agent response" } }, 500);
+  }
 });
 
 // src/engine/lite.ts
@@ -4687,7 +5510,17 @@ async function validateApiKey(token, allowedScopes) {
 var systemKeyAuth = async (c, next) => {
   const systemKey = getApiKeysConfig().systemKey;
   if (!systemKey) {
-    return next();
+    const isDev = (process.env.NODE_ENV || "development") === "development";
+    if (isDev) {
+      return next();
+    }
+    return c.json({
+      error: {
+        message: "System key is not configured on this engine.",
+        type: "invalid_request_error",
+        code: "system_key_not_configured"
+      }
+    }, 500);
   }
   const sysHeader = c.req.header("x-system-key");
   if (sysHeader && sysHeader === systemKey) {
@@ -4696,7 +5529,23 @@ var systemKeyAuth = async (c, next) => {
   const bearerToken = extractBearerToken(c);
   if (bearerToken) {
     const matched = await validateApiKey(bearerToken, ["management", "all"]);
-    if (matched) return next();
+    if (matched) {
+      c.set("apiKey", matched);
+      if (matched.tenantSlug) {
+        const reqTenantSlug = c.req.query("tenant_slug") || c.get("tenantSlug");
+        if (reqTenantSlug && reqTenantSlug !== matched.tenantSlug) {
+          return c.json({
+            error: {
+              message: `Access denied. API key is restricted to tenant '${matched.tenantSlug}'.`,
+              type: "invalid_request_error",
+              code: "forbidden"
+            }
+          }, 403);
+        }
+        c.set("tenantSlug", matched.tenantSlug);
+      }
+      return next();
+    }
   }
   return c.json({
     error: {
@@ -4759,6 +5608,20 @@ var userApiKeyAuth = async (c, next) => {
       }
     }, 401);
   }
+  c.set("apiKey", matched);
+  if (matched.tenantSlug) {
+    const reqTenantSlug = c.req.query("tenant_slug") || c.get("tenantSlug");
+    if (reqTenantSlug && reqTenantSlug !== matched.tenantSlug) {
+      return c.json({
+        error: {
+          message: `Access denied. API key is restricted to tenant '${matched.tenantSlug}'.`,
+          type: "invalid_request_error",
+          code: "forbidden"
+        }
+      }, 403);
+    }
+    c.set("tenantSlug", matched.tenantSlug);
+  }
   return next();
 };
 var aiApiKeyAuth = userApiKeyAuth;
@@ -4808,7 +5671,7 @@ var ENGINE_PROFILES = {
 };
 function createLiteApp(mode = "lite") {
   const profile = ENGINE_PROFILES[mode];
-  const app2 = new OpenAPIHono15({
+  const app2 = new OpenAPIHono16({
     defaultHook: (result, c) => {
       if (!result.success) {
         console.error("[Zod Validation Error]", JSON.stringify(result.error.issues, null, 2));
@@ -4848,6 +5711,7 @@ function createLiteApp(mode = "lite") {
   });
   app2.use("*", requestId());
   app2.use("*", logger());
+  app2.use("*", tenantMiddleware);
   app2.use("*", secureHeaders());
   app2.use("*", timing());
   app2.use("*", bodyLimit({ maxSize: 50 * 1024 * 1024 }));
@@ -4878,6 +5742,7 @@ function createLiteApp(mode = "lite") {
   app2.use("/api/workflows/*", systemKeyAuth);
   app2.use("/api/queue/*", systemKeyAuth);
   app2.use("/api/config/*", systemKeyAuth);
+  app2.use("/api/agent-tools/*", systemKeyAuth);
   app2.use("/api/webhook/*", userApiKeyAuth);
   app2.route("/api/health", healthRoute);
   app2.route("/api/manifest", manifestRoute);
@@ -4895,6 +5760,7 @@ function createLiteApp(mode = "lite") {
   app2.use("/api/agents/v1/*", aiApiKeyAuth);
   app2.route("/api/agents/v1", openaiRoute);
   app2.route("/api/mcp", mcpServerRoute);
+  app2.route("/api/agent", agentRoute);
   app2.use("/api/agents/:profileSlug/v1/*", aiApiKeyAuth);
   app2.use("/api/agents/:profileSlug/v1/*", async (c, next) => {
     const profileSlug = c.req.param("profileSlug");
@@ -5101,13 +5967,36 @@ liteApp.get("/", (c) => c.json({
   health: "/api/health"
 }));
 
+// src/middleware/ipBlocklist.ts
+async function ipBlocklist(c, next) {
+  const clientIp = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for")?.split(",")[0].trim() || c.req.header("x-real-ip") || "unknown";
+  if (clientIp === "unknown") {
+    return await next();
+  }
+  try {
+    const tenantSlug = c.get("tenantSlug") || "_default";
+    const blockedIps = await getBlockedIpsAsync(tenantSlug);
+    const defaultBlockedIps = tenantSlug !== "_default" ? await getBlockedIpsAsync("_default") : [];
+    if (blockedIps.includes(clientIp) || defaultBlockedIps.includes(clientIp)) {
+      console.warn(`[Edge IP Blocklist] Blocked request from IP: ${clientIp} for tenant: ${tenantSlug}`);
+      return c.json({
+        error: "Blocked",
+        message: "Access denied. Your IP address is blocked."
+      }, 403);
+    }
+  } catch (e) {
+    console.warn(`[Edge IP Blocklist] Error in IP blocking check (fail-safe enabled):`, e.message);
+  }
+  return await next();
+}
+
 // src/ssr/staticAssets.ts
 var HYDRATE_JS = "%%HYDRATE_JS%%";
 var HYDRATE_CSS = "%%HYDRATE_CSS%%";
 var FAVICON_PNG_B64 = "%%FAVICON_PNG_B64%%";
 
 // src/routes/pages.ts
-import { OpenAPIHono as OpenAPIHono16, createRoute as createRoute11, z as z18 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono17, createRoute as createRoute11, z as z14 } from "@hono/zod-openapi";
 
 // src/ssr/components/static.ts
 function escapeHtml(str) {
@@ -5178,7 +6067,11 @@ function getCommonAttributes(id, baseClass, props, extraStyle = "") {
   }
   const finalStyle = [extraStyle, propStyleString].filter(Boolean).join(";");
   const actionBindings = props.actionBindings;
-  const propsAttr = actionBindings && actionBindings.length > 0 ? ` data-fb-props="${escapeHtml(JSON.stringify({ actionBindings }))}"` : "";
+  let propsAttr = actionBindings && actionBindings.length > 0 ? ` data-fb-props="${escapeHtml(JSON.stringify({ actionBindings }))}"` : "";
+  const showIf = props["data-show-if"];
+  if (showIf) {
+    propsAttr += ` data-show-if="${escapeHtml(showIf)}"`;
+  }
   return `id="${id}" class="${className}" style="${finalStyle}"${propsAttr}`;
 }
 function renderStaticComponent(type, id, props, childrenHtml) {
@@ -5489,7 +6382,9 @@ function getCommonAttributes2(id, baseClass, props, extraStyle, hydrateType, pro
     }).join(";");
   }
   const finalStyle = [extraStyle, propStyleString].filter(Boolean).join(";");
-  return `id="${id}" class="${className}" style="${finalStyle}" data-fb-hydrate="${hydrateType}" data-fb-props="${escapeHtml2(propsJson)}"`;
+  const showIf = props["data-show-if"];
+  const showIfAttr = showIf ? ` data-show-if="${escapeHtml2(showIf)}"` : "";
+  return `id="${id}" class="${className}" style="${finalStyle}" data-fb-hydrate="${hydrateType}" data-fb-props="${escapeHtml2(propsJson)}"${showIfAttr}`;
 }
 function renderInteractiveComponent(type, id, props, childrenHtml) {
   const propsJson = JSON.stringify(props).replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
@@ -5560,6 +6455,31 @@ function renderButton(id, props, propsJson) {
           const url = escapeHtml2(onClickAction.config.pageUrl);
           const newTab = onClickAction.config.openInNewTab;
           actionAttrs = `data-navigate-to="${url}"${newTab ? ' data-navigate-new-tab="true"' : ""}`;
+        }
+        break;
+      case "setVariable":
+        if (onClickAction.config?.variableName) {
+          const scope = escapeHtml2(onClickAction.config.variableScope || "local");
+          const name = escapeHtml2(onClickAction.config.variableName);
+          const val = escapeHtml2(onClickAction.config.variableValue || "");
+          actionAttrs = `data-action-set-var-scope="${scope}" data-action-set-var-name="${name}" data-action-set-var-value="${val}"`;
+        }
+        break;
+      case "runWorkflow":
+        if (onClickAction.workflowId) {
+          actionAttrs = `data-action-run-workflow="${escapeHtml2(onClickAction.workflowId)}"`;
+          if (onClickAction.onSuccess) {
+            actionAttrs += ` data-action-onsuccess="${escapeHtml2(onClickAction.onSuccess.type)}"`;
+            if (onClickAction.onSuccess.type === "toast" && onClickAction.onSuccess.message) {
+              actionAttrs += ` data-action-onsuccess-toast-message="${escapeHtml2(onClickAction.onSuccess.message)}"`;
+            } else if (onClickAction.onSuccess.type === "redirect" && onClickAction.onSuccess.url) {
+              actionAttrs += ` data-action-onsuccess-redirect-url="${escapeHtml2(onClickAction.onSuccess.url)}"`;
+            } else if (onClickAction.onSuccess.type === "setVariable") {
+              actionAttrs += ` data-action-onsuccess-var-scope="${escapeHtml2(onClickAction.onSuccess.variableScope || "local")}"`;
+              actionAttrs += ` data-action-onsuccess-var-name="${escapeHtml2(onClickAction.onSuccess.variableName || "")}"`;
+              actionAttrs += ` data-action-onsuccess-result-path="${escapeHtml2(onClickAction.onSuccess.resultPath || "")}"`;
+            }
+          }
         }
         break;
     }
@@ -5836,7 +6756,9 @@ function getCommonAttributes3(id, baseClass, props, extraStyle, hydrateType, pro
     }).filter(Boolean).join(";");
   }
   const finalStyle = [extraStyle, propStyleString].filter(Boolean).join(";");
-  return `id="${id}" class="${className}" style="${finalStyle}" data-fb-hydrate="${hydrateType}" data-fb-props="${escapeHtml3(propsJson)}" ${extraAttrs}`;
+  const showIf = props["data-show-if"];
+  const showIfAttr = showIf ? `data-show-if="${escapeHtml3(showIf)}"` : "";
+  return `id="${id}" class="${className}" style="${finalStyle}" data-fb-hydrate="${hydrateType}" data-fb-props="${escapeHtml3(propsJson)}" ${showIfAttr} ${extraAttrs}`;
 }
 function renderDataComponent(type, id, props, childrenHtml) {
   const hydrationProps = {
@@ -5855,6 +6777,8 @@ function renderDataComponent(type, id, props, childrenHtml) {
       return renderInfoList(id, props, propsJson);
     case "Chart":
       return renderChart(id, props, propsJson);
+    case "KPICard":
+      return renderKPICard(id, props, propsJson);
     case "Card":
     case "DataCard":
       return renderDataCard(id, props, childrenHtml, propsJson);
@@ -6036,14 +6960,26 @@ function renderInfoList(id, props, propsJson) {
     </div>`;
 }
 function renderChart(id, props, propsJson) {
-  const title = escapeHtml3(String(props.title || "Chart"));
-  const chartType = props.type || props.chartType || "bar";
+  const binding = props.binding || {};
+  const title = binding.tableName ? escapeHtml3(String(binding.tableName).replace(/_/g, " ")) : "";
   const height = props.height || "300px";
-  const attrs = getCommonAttributes3(id, "fb-chart", props, "", "chart", propsJson, `data-chart-type="${chartType}"`);
+  const attrs = getCommonAttributes3(
+    id,
+    "rounded-lg border bg-card text-card-foreground shadow-sm",
+    props,
+    "",
+    "chart",
+    propsJson,
+    `data-react-component="Chart" data-component-id="${id}"`
+  );
   return `<div ${attrs}>
-        ${title ? `<h4 style="margin:0 0 1rem 0;font-size:1rem;font-weight:600">${title}</h4>` : ""}
-        <div class="fb-chart-container fb-skeleton" style="height:${height};border-radius:0.5rem;display:flex;align-items:center;justify-content:center">
-            <span style="color:#9ca3af">Loading chart...</span>
+        <div class="flex flex-col space-y-1.5 p-6 pb-4">
+            <h3 class="text-lg font-semibold capitalize">${title ? `${title} Chart` : "Chart"}</h3>
+        </div>
+        <div class="p-6 pt-0">
+            <div class="fb-chart-container fb-skeleton" style="height:${height};border-radius:0.5rem;display:flex;align-items:center;justify-content:center">
+                <span class="text-muted-foreground text-sm">Loading chart...</span>
+            </div>
         </div>
     </div>`;
 }
@@ -6097,16 +7033,59 @@ function renderRepeater(id, props, childrenHtml, propsJson) {
 }
 function renderDataGrid(id, props, propsJson) {
   const columns = props.columns || 3;
-  const rows = props.rows || 3;
-  const gap = props.gap || "1rem";
-  const cellCount = columns * rows;
-  const skeletonCells = Array(cellCount).fill(0).map(
-    () => `<div class="fb-datagrid-cell fb-skeleton" style="min-height:80px;border-radius:0.375rem">&nbsp;</div>`
-  ).join("");
-  const style = `display:grid;grid-template-columns:repeat(${columns},1fr);gap:${gap}`;
-  const attrs = getCommonAttributes3(id, "fb-datagrid", props, style, "datagrid", propsJson);
+  const cols = Math.min(columns || 3, 4);
+  let gridLayoutClass = "";
+  if (cols === 1) gridLayoutClass = "grid grid-cols-1 gap-4";
+  else if (cols === 2) gridLayoutClass = "grid grid-cols-1 md:grid-cols-2 gap-4";
+  else if (cols === 3) gridLayoutClass = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4";
+  else gridLayoutClass = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4";
+  const attrs = getCommonAttributes3(
+    id,
+    gridLayoutClass,
+    props,
+    "",
+    "grid",
+    propsJson,
+    `data-react-component="Grid" data-component-id="${id}"`
+  );
+  const skeletonCards = Array(columns || 3).fill(0).map(() => `
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div class="pb-3 p-6">
+                <div class="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
+            </div>
+            <div class="p-6 pt-0">
+                <div class="space-y-2">
+                    <div class="h-3 bg-muted rounded w-1/2 animate-pulse"></div>
+                    <div class="h-3 bg-muted rounded w-1/3 animate-pulse"></div>
+                </div>
+            </div>
+        </div>
+    `).join("");
   return `<div ${attrs}>
-        ${skeletonCells}
+        ${skeletonCards}
+    </div>`;
+}
+function renderKPICard(id, props, propsJson) {
+  const binding = props.binding || {};
+  const title = binding.tableName ? escapeHtml3(String(binding.tableName).replace(/_/g, " ")) : "";
+  const attrs = getCommonAttributes3(
+    id,
+    "rounded-lg border bg-card text-card-foreground shadow-sm",
+    props,
+    "",
+    "kpicard",
+    propsJson,
+    `data-react-component="KPICard" data-component-id="${id}"`
+  );
+  return `<div ${attrs}>
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2 p-6">
+            <h4 class="text-sm font-medium capitalize">${title || "KPI"}</h4>
+            <div class="h-4 w-4 bg-muted rounded-full animate-pulse"></div>
+        </div>
+        <div class="p-6 pt-0">
+            <div class="text-2xl font-bold fb-skeleton animate-pulse" style="height:2rem;width:80px;border-radius:0.25rem">&nbsp;</div>
+            <div class="text-xs text-muted-foreground mt-1.5 fb-skeleton animate-pulse" style="height:1rem;width:120px;border-radius:0.25rem">&nbsp;</div>
+        </div>
     </div>`;
 }
 
@@ -7280,7 +8259,8 @@ var DATA_COMPONENTS = /* @__PURE__ */ new Set([
   "List",
   "Card",
   "Repeater",
-  "DataCard"
+  "DataCard",
+  "KPICard"
 ]);
 var LAYOUT_COMPONENTS = /* @__PURE__ */ new Set([
   "Container",
@@ -7334,13 +8314,53 @@ async function resolveProps(props, context) {
   return resolved;
 }
 async function renderComponent(component, context, depth = 0) {
-  const { id, type, props, styles, children, binding } = component;
+  const { id, type, props, styles, children, binding, visibilityCondition } = component;
+  let isClientSideCondition = false;
+  let visibilityResult = true;
+  if (visibilityCondition) {
+    const cond = visibilityCondition;
+    isClientSideCondition = cond.includes("local.") || cond.includes("local[") || cond.includes("session.") || cond.includes("session[") || cond.includes("cookies.") || cond.includes("cookies[") || cond.includes("url.") || cond.includes("url[");
+    try {
+      const expr = `{% if ${cond} %}true{% else %}false{% endif %}`;
+      const resultStr = await liquid.parseAndRender(expr, context);
+      visibilityResult = resultStr.trim() === "true";
+    } catch (error) {
+      console.error(`[SSR Visibility] Failed to evaluate: ${cond}`, error);
+      visibilityResult = true;
+    }
+    if (!isClientSideCondition && !visibilityResult) {
+      return "";
+    }
+  }
   let resolvedProps = await resolveProps(props, context);
+  if (isClientSideCondition) {
+    resolvedProps["data-show-if"] = visibilityCondition;
+    if (!visibilityResult) {
+      if (!component.styles) {
+        component.styles = {};
+      }
+      component.styles.display = "none";
+      if (!resolvedProps.style) {
+        resolvedProps.style = {};
+      }
+      if (typeof resolvedProps.style === "object") {
+        resolvedProps.style = {
+          ...resolvedProps.style,
+          display: "none"
+        };
+      } else if (typeof resolvedProps.style === "string") {
+        resolvedProps.style = resolvedProps.style + ";display:none;";
+      }
+      if (component.stylesData) {
+        if (!component.stylesData.values) component.stylesData.values = {};
+        component.stylesData.values.display = "none";
+      }
+    }
+  }
   if (type === "Navbar" && resolvedProps.logo) {
     const logoProps = resolvedProps.logo;
     if (logoProps.useProjectLogo || logoProps.showIcon) {
-      const { getFaviconUrl } = await import("./project-settings-TNEKQFVJ.js");
-      const faviconUrl = await getFaviconUrl();
+      const faviconUrl = await stateProvider.getFaviconUrl();
       resolvedProps = {
         ...resolvedProps,
         logo: {
@@ -7411,7 +8431,11 @@ function renderLayoutComponent(type, id, props, styles, childrenHtml, visibility
   const visibilityCSS = buildVisibilityCSS(id, visibility);
   const combinedCSS = responsiveCSS + visibilityCSS;
   const actionBindings = props.actionBindings;
-  const propsAttr = actionBindings && actionBindings.length > 0 ? ` data-fb-props="${escapeHtml4(JSON.stringify({ actionBindings }))}"` : "";
+  let propsAttr = actionBindings && actionBindings.length > 0 ? ` data-fb-props="${escapeHtml4(JSON.stringify({ actionBindings }))}"` : "";
+  const showIf = props["data-show-if"];
+  if (showIf) {
+    propsAttr += ` data-show-if="${escapeHtml4(showIf)}"`;
+  }
   switch (type) {
     case "Container":
       const containerDisplay = styles.display || "";
@@ -7569,26 +8593,55 @@ async function renderPage(layoutData, context) {
 
 // src/ssr/lib/auth.ts
 init_env();
-var _provider = void 0;
-async function getAuthProvider() {
-  if (_provider !== void 0) return _provider;
-  const authCfg = getAuthConfig();
-  if (authCfg.provider === "supabase" && authCfg.url && authCfg.anonKey) {
-    const { SupabaseAuthProvider: SupabaseAuthProvider2 } = await import("./SupabaseAuthProvider-72ZS2KN2.js");
-    _provider = new SupabaseAuthProvider2();
-    console.log(`[Auth Factory] Resolved SupabaseAuthProvider from FRONTBASE_AUTH: ${authCfg.url.substring(0, 30)}...`);
-    return _provider;
+var _providers = /* @__PURE__ */ new Map();
+function resolveTenantSlugFromRequest(request) {
+  const deploymentMode = process.env.FRONTBASE_DEPLOYMENT_MODE || "";
+  const baseDomain = process.env.FRONTBASE_BASE_DOMAIN || "";
+  if (deploymentMode !== "cloud" || !baseDomain) {
+    return "_default";
   }
-  _provider = null;
+  const host = request.headers.get("host") || "";
+  const hostOnly = host.split(":")[0].toLowerCase();
+  const base = baseDomain.toLowerCase();
+  if (!hostOnly.endsWith(base)) return "_default";
+  const prefix = hostOnly.slice(0, -(base.length + 1));
+  if (!prefix || prefix.includes(".")) return "_default";
+  const RESERVED_SUBDOMAINS = /* @__PURE__ */ new Set([
+    "app",
+    "api",
+    "www",
+    "admin",
+    "status",
+    "docs"
+  ]);
+  if (RESERVED_SUBDOMAINS.has(prefix)) return "_default";
+  return prefix;
+}
+async function getAuthProvider(tenantSlug) {
+  const key = tenantSlug || "_default";
+  if (_providers.has(key)) {
+    return _providers.get(key);
+  }
+  const authCfg = getAuthConfig(key);
+  if (authCfg.provider === "supabase" && authCfg.url && authCfg.anonKey) {
+    const { SupabaseAuthProvider: SupabaseAuthProvider2 } = await import("./SupabaseAuthProvider-HJK2KTCC.js");
+    const provider = new SupabaseAuthProvider2(authCfg);
+    _providers.set(key, provider);
+    console.log(`[Auth Factory] Resolved SupabaseAuthProvider for tenant "${key}" from FRONTBASE_AUTH: ${authCfg.url.substring(0, 30)}...`);
+    return provider;
+  }
+  _providers.set(key, null);
   return null;
 }
-async function getUserFromSession(request) {
-  const provider = await getAuthProvider();
+async function getUserFromSession(request, tenantSlug) {
+  const resolvedSlug = tenantSlug || resolveTenantSlugFromRequest(request);
+  const provider = await getAuthProvider(resolvedSlug);
   if (!provider) return null;
   return provider.getUserFromRequest(request);
 }
-async function refreshSession(request) {
-  const provider = await getAuthProvider();
+async function refreshSession(request, tenantSlug) {
+  const resolvedSlug = tenantSlug || resolveTenantSlugFromRequest(request);
+  const provider = await getAuthProvider(resolvedSlug);
   if (!provider) return { user: null, setCookieHeaders: [] };
   return provider.refreshSession(request);
 }
@@ -7633,9 +8686,9 @@ function parseTrackingCookie(value) {
 }
 
 // src/ssr/lib/context.ts
-async function buildTemplateContext(request, pageData, trackingConfig, dataContext) {
+async function buildTemplateContext(request, pageData, trackingConfig, dataContext, tenantSlug) {
   const cookies = parseCookies(request.headers.get("Cookie") || "");
-  const user = await getUserFromSession(request);
+  const user = await getUserFromSession(request, tenantSlug);
   let visitor = buildVisitorContext(request);
   const config = trackingConfig || getDefaultTrackingConfig();
   visitor = applyVisitorTracking(visitor, request, config, cookies);
@@ -7666,7 +8719,8 @@ async function buildTemplateContext(request, pageData, trackingConfig, dataConte
     session: {},
     // Client-only, empty on SSR
     record: dataContext?.record,
-    records: dataContext?.records
+    records: dataContext?.records,
+    app: pageData.appVariables || {}
   };
 }
 function parseCookies(cookieHeader) {
@@ -8074,6 +9128,41 @@ ${authConfig ? `
     })();
     </script>
 ` : ""}
+
+    <!-- Background Eager Prefetcher -->
+    <script>
+    (function() {
+        if (sessionStorage.getItem('fb-prefetched')) return;
+        var rIC = window.requestIdleCallback || function(cb) { setTimeout(cb, 2000); };
+        rIC(function() {
+            fetch('/sitemap.xml')
+                .then(function(r) { return r.text(); })
+                .then(function(xml) {
+                    var urls = [];
+                    var regex = /<loc>(.*?)<\\/loc>/g;
+                    var match;
+                    while ((match = regex.exec(xml)) !== null) {
+                        if (match[1] !== window.location.href) urls.push(match[1]);
+                    }
+                    var i = 0;
+                    function fetchNext() {
+                        if (i >= urls.length) {
+                            sessionStorage.setItem('fb-prefetched', '1');
+                            return;
+                        }
+                        if (urls[i].indexOf(window.location.origin) === 0) {
+                            fetch(urls[i], { priority: 'low' }).catch(function(){});
+                        }
+                        i++;
+                        setTimeout(fetchNext, 100); // Stagger requests
+                    }
+                    if (urls.length > 0) fetchNext();
+                })
+                .catch(function(){});
+        });
+    })();
+    </script>
+
     <!-- Hydration bundle (all interactive components) -->
     <script type="module" src="/static/react/hydrate.js?v=${HYDRATE_VERSION}"></script>
 </body>
@@ -8243,26 +9332,52 @@ function escapeHtml6(str) {
 
 // src/routes/pages.ts
 init_env();
+init_redis();
+function isCloudEnv() {
+  return !!(process.env.VERCEL || process.env.NETLIFY || process.env.FRONTBASE_ADAPTER_PLATFORM === "cloudflare" || process.env.FRONTBASE_DEPLOYMENT_MODE === "cloud");
+}
+function getSafeApiBase() {
+  if (process.env.BACKEND_URL) return process.env.BACKEND_URL;
+  if (isCloudEnv()) return null;
+  return "http://127.0.0.1:8000";
+}
+var _htmlCache = /* @__PURE__ */ new Map();
+var HTML_CACHE_TTL_MS = 6e5;
+function invalidateHtmlCache(slug, tenantSlug) {
+  const prefix = tenantSlug && tenantSlug !== "_default" ? `html:${tenantSlug}:` : "html:";
+  _htmlCache.delete(`${prefix}${slug}:mobile`);
+  _htmlCache.delete(`${prefix}${slug}:tablet`);
+  _htmlCache.delete(`${prefix}${slug}:desktop`);
+  _htmlCache.delete(`${prefix}__homepage__:mobile`);
+  _htmlCache.delete(`${prefix}__homepage__:tablet`);
+  _htmlCache.delete(`${prefix}__homepage__:desktop`);
+}
+function getCacheKey(slug, device, tenantSlug) {
+  const prefix = tenantSlug && tenantSlug !== "_default" ? `html:${tenantSlug}:` : "html:";
+  return `${prefix}${slug}:${device}`;
+}
 var DEFAULT_FAVICON2 = "/static/icon.png";
 var SETTINGS_TTL_MS = 3e4;
 var SETTINGS_TIMEOUT_MS = 3e3;
-var _settingsCache = null;
-async function getCachedSettings(sessionAccessToken) {
-  if (_settingsCache && Date.now() - _settingsCache.ts < SETTINGS_TTL_MS) {
-    if (sessionAccessToken && _settingsCache.authConfig) {
-      return { ..._settingsCache, authConfig: { ..._settingsCache.authConfig, accessToken: sessionAccessToken } };
+var _settingsCache = /* @__PURE__ */ new Map();
+async function getCachedSettings(tenantSlug, sessionAccessToken) {
+  const cacheKey = tenantSlug || "_default";
+  const cached2 = _settingsCache.get(cacheKey);
+  if (cached2 && Date.now() - cached2.ts < SETTINGS_TTL_MS) {
+    if (sessionAccessToken && cached2.authConfig) {
+      return { ...cached2, authConfig: { ...cached2.authConfig, accessToken: sessionAccessToken } };
     }
-    return _settingsCache;
+    return cached2;
   }
   try {
     const settings = await Promise.race([
-      stateProvider.getProjectSettings(),
+      stateProvider.getProjectSettings(tenantSlug),
       new Promise(
         (_, reject) => setTimeout(() => reject(new Error("settings_timeout")), SETTINGS_TIMEOUT_MS)
       )
     ]);
     let authConfig = null;
-    const authEnv = getAuthConfig();
+    const authEnv = getAuthConfig(tenantSlug);
     if (authEnv.contacts?.table && authEnv.url && authEnv.anonKey) {
       authConfig = {
         url: authEnv.url,
@@ -8272,26 +9387,28 @@ async function getCachedSettings(sessionAccessToken) {
         accessToken: sessionAccessToken
       };
     }
-    _settingsCache = {
+    const newCached = {
       faviconUrl: settings?.faviconUrl || DEFAULT_FAVICON2,
       authConfig,
       ts: Date.now()
     };
-    return _settingsCache;
+    _settingsCache.set(cacheKey, newCached);
+    return newCached;
   } catch (e) {
     console.warn("[Pages] Settings fetch failed/timeout:", e.message);
     return {
-      faviconUrl: _settingsCache?.faviconUrl || DEFAULT_FAVICON2,
+      faviconUrl: cached2?.faviconUrl || DEFAULT_FAVICON2,
       authConfig: null,
       ts: Date.now()
     };
   }
 }
-var ErrorResponseSchema2 = z18.object({
-  error: z18.string(),
-  message: z18.string().optional()
+var ErrorResponseSchema2 = z14.object({
+  error: z14.string(),
+  message: z14.string().optional()
 });
-var pagesRoute = new OpenAPIHono16();
+var pagesRoute = new OpenAPIHono17();
+pagesRoute.use("*", ipBlocklist);
 pagesRoute.use("*", async (c, next) => {
   await next();
   const ct = c.res.headers.get("Content-Type");
@@ -8306,8 +9423,8 @@ var renderPageRoute = createRoute11({
   summary: "Render a published page",
   description: "Server-side renders a published page by slug. Returns full HTML document.",
   request: {
-    params: z18.object({
-      slug: z18.string().min(1).describe("Page slug")
+    params: z14.object({
+      slug: z14.string().min(1).describe("Page slug")
     })
   },
   responses: {
@@ -8315,7 +9432,7 @@ var renderPageRoute = createRoute11({
       description: "Rendered HTML page",
       content: {
         "text/html": {
-          schema: z18.string()
+          schema: z14.string()
         }
       }
     },
@@ -8329,23 +9446,22 @@ var renderPageRoute = createRoute11({
     }
   }
 });
-async function fetchPage(slug) {
-  const cacheKey = `page:${slug}`;
+async function fetchPage(slug, tenantSlug) {
+  const cachePrefix = tenantSlug && tenantSlug !== "_default" ? `page:${tenantSlug}:` : "page:";
+  const cacheKey = `${cachePrefix}${slug}`;
   try {
-    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
-    const redis = getRedis2();
+    const redis = getRedis();
     const cached2 = await redis.get(cacheKey);
     if (cached2) {
-      console.log(`[SSR] Cache HIT: ${slug}`);
       return cached2;
     }
   } catch {
   }
   let page = null;
   try {
-    const publishedPage = await stateProvider.getPageBySlug(slug);
+    const publishedPage = await stateProvider.getPageBySlug(slug, tenantSlug);
     if (publishedPage) {
-      console.log(`[SSR] Found published page: ${slug} (v${publishedPage.version})`);
+      console.log(`[SSR] Found published page: ${tenantSlug ? tenantSlug + "/" : ""}${slug} (v${publishedPage.version})`);
       page = {
         id: publishedPage.id,
         name: publishedPage.name,
@@ -8363,8 +9479,11 @@ async function fetchPage(slug) {
   } catch (error) {
     console.warn("[SSR] Error reading local storage:", error);
   }
-  if (!page) {
-    const apiBase = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+  if (!page && (!tenantSlug || tenantSlug === "_default")) {
+    const apiBase = getSafeApiBase();
+    if (!apiBase) {
+      return null;
+    }
     try {
       const url = `${apiBase}/api/pages/public/${slug}`;
       console.log(`[SSR] Fallback to FastAPI: ${url}`);
@@ -8386,31 +9505,58 @@ async function fetchPage(slug) {
   }
   if (page) {
     try {
-      const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
-      const redis = getRedis2();
+      const redis = getRedis();
       await redis.setex(cacheKey, 60, JSON.stringify(page));
-      console.log(`[SSR] Cache SET: ${slug} (60s TTL)`);
     } catch {
     }
   }
   return page;
 }
+var _trackingCache = null;
+var TRACKING_TTL_MS = 3e4;
 async function fetchTrackingConfig() {
-  const apiBase = process.env.BACKEND_URL || "http://127.0.0.1:8000";
+  if (_trackingCache && Date.now() - _trackingCache.ts < TRACKING_TTL_MS) {
+    return _trackingCache.config;
+  }
+  const apiBase = getSafeApiBase();
+  if (!apiBase) {
+    return getDefaultTrackingConfig();
+  }
   try {
-    const response = await fetch(`${apiBase}/api/settings/privacy`);
+    const response = await fetch(`${apiBase}/api/settings/privacy/`);
     if (response.ok) {
-      return await response.json();
+      const config = await response.json();
+      _trackingCache = { config, ts: Date.now() };
+      return config;
     }
   } catch (error) {
-    console.warn("[SSR] Failed to fetch tracking config:", error);
+    console.warn("[SSR] Failed to fetch tracking config:", error.message);
   }
   return getDefaultTrackingConfig();
 }
 pagesRoute.openapi(renderPageRoute, async (c) => {
   const { slug } = c.req.param();
-  const page = await fetchPage(slug);
+  const tenantSlug = c.get("tenantSlug");
+  const deviceMatch = c.req.header("user-agent")?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
+  const deviceType = deviceMatch[0] ? deviceMatch[0].includes("ipad") || deviceMatch[0].includes("tablet") ? "tablet" : "mobile" : "desktop";
+  const htmlKey = getCacheKey(slug, deviceType, tenantSlug);
+  const cachedHtml = _htmlCache.get(htmlKey);
+  if (cachedHtml && Date.now() - cachedHtml.ts < HTML_CACHE_TTL_MS) {
+    c.header("Cache-Control", "public, max-age=600, s-maxage=600, stale-while-revalidate=300");
+    c.header("Content-Type", "text/html; charset=utf-8");
+    c.header("X-Cache", "HIT");
+    return c.html(cachedHtml.html);
+  }
+  const page = await fetchPage(slug, tenantSlug);
   if (!page) {
+    if (tenantSlug && tenantSlug !== "_default") {
+      const exists = await stateProvider.tenantExists(tenantSlug);
+      if (!exists) {
+        const { renderWorkspaceNotFound } = await import("./tenant-Q5NTKPNM.js");
+        c.header("Content-Type", "text/html; charset=utf-8");
+        return c.html(renderWorkspaceNotFound(tenantSlug), 404);
+      }
+    }
     return c.json(
       { error: "Page not found", message: `No page found with slug: ${slug}` },
       404
@@ -8421,7 +9567,7 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
   }
   let sessionAccessToken;
   if (!page.isPublic) {
-    const refreshResult = await refreshSession(c.req.raw);
+    const refreshResult = await refreshSession(c.req.raw, tenantSlug);
     const { user, setCookieHeaders } = refreshResult;
     sessionAccessToken = refreshResult.accessToken;
     for (const header of setCookieHeaders) {
@@ -8439,13 +9585,14 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
         canonicalUrl: void 0,
         ogImage: void 0,
         ogType: "website",
-        customVariables: {}
+        customVariables: {},
+        appVariables: page.appVariables || null
       };
-      const context2 = await buildTemplateContext(c.req.raw, contextPageData2);
+      const context2 = await buildTemplateContext(c.req.raw, contextPageData2, void 0, void 0, tenantSlug);
       const bodyHtml2 = await renderPage(page.layoutData, context2);
       const initialState2 = { pageVariables: context2.local, sessionVariables: context2.session, cookies: context2.cookies, user: context2.user };
       const trackingConfig2 = await fetchTrackingConfig();
-      const { faviconUrl: faviconUrl2 } = await getCachedSettings();
+      const { faviconUrl: faviconUrl2 } = await getCachedSettings(tenantSlug);
       const authFormConfig = page._primaryAuthForm || void 0;
       const gatedHtml = generateGatedPageDocument(
         page,
@@ -8471,23 +9618,18 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     canonicalUrl: void 0,
     ogImage: void 0,
     ogType: "website",
-    customVariables: {}
+    customVariables: {},
+    appVariables: page.appVariables || null
   };
   const context = await buildTemplateContext(
     c.req.raw,
     contextPageData,
     void 0,
     // trackingConfig (use defaults)
-    void 0
+    void 0,
     // dataContext
+    tenantSlug
   );
-  console.log("[SSR] Visitor Context:", JSON.stringify({
-    country: context.visitor.country,
-    city: context.visitor.city,
-    ip: context.visitor.ip,
-    device: context.visitor.device,
-    browser: context.visitor.browser
-  }, null, 2));
   const bodyHtml = await renderPage(page.layoutData, context);
   const initialState = {
     pageVariables: context.local,
@@ -8496,35 +9638,60 @@ pagesRoute.openapi(renderPageRoute, async (c) => {
     user: context.user
   };
   const trackingConfig = await fetchTrackingConfig();
-  const { faviconUrl, authConfig } = await getCachedSettings(sessionAccessToken);
+  const { faviconUrl, authConfig } = await getCachedSettings(tenantSlug, sessionAccessToken);
   const htmlDoc = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl, authConfig);
-  c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+  if (page.isPublic) {
+    _htmlCache.set(htmlKey, { html: htmlDoc, ts: Date.now() });
+    c.header("Cache-Control", "public, max-age=600, s-maxage=600, stale-while-revalidate=300");
+    c.header("X-Cache", "MISS");
+  } else {
+    c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+  }
   c.header("Content-Type", "text/html; charset=utf-8");
   return c.html(htmlDoc);
 });
 pagesRoute.get("/", async (c) => {
   try {
-    const cacheKey = "page:__homepage__";
+    const tenantSlug = c.get("tenantSlug");
+    const deviceMatch = c.req.header("user-agent")?.toLowerCase().match(/(mobile|tablet|ipad|android(?=.*mobile)|iphone)/i) || [];
+    const deviceType = deviceMatch[0] ? deviceMatch[0].includes("ipad") || deviceMatch[0].includes("tablet") ? "tablet" : "mobile" : "desktop";
+    const cachePrefix = tenantSlug && tenantSlug !== "_default" ? `${tenantSlug}:` : "";
+    const htmlKey = getCacheKey(`${cachePrefix}__homepage__`, deviceType);
+    const cachedHtml = _htmlCache.get(htmlKey);
+    if (cachedHtml && Date.now() - cachedHtml.ts < HTML_CACHE_TTL_MS) {
+      c.header("Cache-Control", "public, max-age=600, s-maxage=600, stale-while-revalidate=300");
+      c.header("Content-Type", "text/html; charset=utf-8");
+      c.header("X-Cache", "HIT");
+      return c.html(cachedHtml.html);
+    }
+    const redisCachePrefix = tenantSlug && tenantSlug !== "_default" ? `page:${tenantSlug}:` : "page:";
+    const cacheKey = `${redisCachePrefix}__homepage__`;
     let homepage = null;
     try {
-      const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
-      const redis = getRedis2();
+      const redis = getRedis();
       const cached2 = await redis.get(cacheKey);
       if (cached2) {
-        console.log("[SSR] Cache HIT: homepage");
         homepage = cached2;
       }
     } catch {
     }
     if (!homepage) {
-      homepage = await stateProvider.getHomepage();
+      homepage = await stateProvider.getHomepage(tenantSlug);
       if (homepage) {
         console.log(`[SSR] Rendering homepage: ${homepage.slug} (v${homepage.version})`);
       } else {
+        if (tenantSlug && tenantSlug !== "_default") {
+          const { renderWorkspaceNotFound } = await import("./tenant-Q5NTKPNM.js");
+          c.header("Content-Type", "text/html; charset=utf-8");
+          return c.html(renderWorkspaceNotFound(tenantSlug), 404);
+        }
+        const apiBase = getSafeApiBase();
+        if (!apiBase) {
+          return c.json({ homepage: false, message: "Waiting for Homepage to be published." }, 200);
+        }
         console.log("[SSR] No local homepage found, pulling from FastAPI...");
-        const fastapiUrl = process.env.BACKEND_URL || "http://backend:8000";
         try {
-          const response = await fetch(`${fastapiUrl}/api/pages/homepage/`);
+          const response = await fetch(`${apiBase}/api/pages/homepage/`);
           if (response.ok) {
             const result = await response.json();
             const pageData = result.data;
@@ -8540,7 +9707,8 @@ pagesRoute.get("/", async (c) => {
               version: 1,
               publishedAt: (/* @__PURE__ */ new Date()).toISOString(),
               isPublic: pageData.isPublic ?? true,
-              isHomepage: true
+              isHomepage: true,
+              tenantSlug: "_default"
             };
             await stateProvider.upsertPage(publishData);
             console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
@@ -8554,17 +9722,15 @@ pagesRoute.get("/", async (c) => {
       }
       if (homepage) {
         try {
-          const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
-          const redis = getRedis2();
+          const redis = getRedis();
           await redis.setex(cacheKey, 60, JSON.stringify(homepage));
-          console.log("[SSR] Cache SET: homepage (60s TTL)");
         } catch {
         }
       }
     }
     if (homepage) {
       if (!homepage.isPublic) {
-        const { user, setCookieHeaders } = await refreshSession(c.req.raw);
+        const { user, setCookieHeaders } = await refreshSession(c.req.raw, tenantSlug);
         for (const header of setCookieHeaders) {
           c.header("Set-Cookie", header, { append: true });
         }
@@ -8592,13 +9758,14 @@ pagesRoute.get("/", async (c) => {
             canonicalUrl: void 0,
             ogImage: void 0,
             ogType: "website",
-            customVariables: {}
+            customVariables: {},
+            appVariables: homepage.appVariables || null
           };
-          const ctx = await buildTemplateContext(c.req.raw, cpd);
+          const ctx = await buildTemplateContext(c.req.raw, cpd, void 0, void 0, tenantSlug);
           const bodyHtml2 = await renderPage(page2.layoutData, ctx);
           const is = { pageVariables: ctx.local, sessionVariables: ctx.session, cookies: ctx.cookies };
           const tc = await fetchTrackingConfig();
-          const { faviconUrl: fav } = await getCachedSettings();
+          const { faviconUrl: fav } = await getCachedSettings(tenantSlug);
           const afc = homepage._primaryAuthForm || void 0;
           return c.html(generateGatedPageDocument(page2, bodyHtml2, is, tc, fav, afc));
         }
@@ -8626,15 +9793,17 @@ pagesRoute.get("/", async (c) => {
         canonicalUrl: void 0,
         ogImage: void 0,
         ogType: "website",
-        customVariables: {}
+        customVariables: {},
+        appVariables: homepage.appVariables || null
       };
       const context = await buildTemplateContext(
         c.req.raw,
         contextPageData,
         void 0,
         // trackingConfig
-        void 0
+        void 0,
         // dataContext
+        tenantSlug
       );
       const bodyHtml = await renderPage(page.layoutData, context);
       const initialState = {
@@ -8643,12 +9812,29 @@ pagesRoute.get("/", async (c) => {
         cookies: context.cookies
       };
       const trackingConfig = await fetchTrackingConfig();
-      const { faviconUrl } = await getCachedSettings();
+      const { faviconUrl } = await getCachedSettings(tenantSlug);
       const fullHtml = generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl);
+      if (page.isPublic) {
+        _htmlCache.set(htmlKey, { html: fullHtml, ts: Date.now() });
+        c.header("Cache-Control", "public, max-age=600, s-maxage=600, stale-while-revalidate=300");
+        c.header("X-Cache", "MISS");
+      } else {
+        c.header("Cache-Control", "no-cache, no-store, must-revalidate");
+      }
       return c.html(fullHtml);
     }
   } catch (error) {
-    console.error("Error fetching homepage:", error);
+    console.error("[SSR] Error fetching homepage:", error);
+    return c.json({
+      service: "Frontbase Edge Engine",
+      mode: "full",
+      status: "error",
+      error: error instanceof Error ? error.message : String(error),
+      message: "Database initialization or fetch failed. Check connection parameters."
+    }, 500);
+  }
+  if (isCloudEnv()) {
+    return c.redirect("/admin/", 302);
   }
   return c.json({
     service: "Frontbase Edge Engine",
@@ -8665,8 +9851,8 @@ pagesRoute.get("/", async (c) => {
 import { Hono as Hono3 } from "hono";
 
 // src/schemas/publish.ts
-import { z as z19 } from "zod";
-var ComponentTypeSchema = z19.enum([
+import { z as z15 } from "zod";
+var ComponentTypeSchema = z15.enum([
   // Static
   "Text",
   "Heading",
@@ -8704,7 +9890,7 @@ var ComponentTypeSchema = z19.enum([
   "Card",
   "Panel"
 ]);
-var DatasourceTypeSchema = z19.enum([
+var DatasourceTypeSchema = z15.enum([
   "supabase",
   "neon",
   "planetscale",
@@ -8713,170 +9899,176 @@ var DatasourceTypeSchema = z19.enum([
   "mysql",
   "sqlite"
 ]);
-var DatasourceConfigSchema = z19.object({
-  id: z19.string(),
+var DatasourceConfigSchema = z15.object({
+  id: z15.string(),
   type: DatasourceTypeSchema,
-  name: z19.string(),
+  name: z15.string(),
   // URL is safe to publish (no password)
-  url: z19.string().optional(),
+  url: z15.string().optional(),
   // For Supabase: anon key is safe to publish
-  anonKey: z19.string().optional(),
+  anonKey: z15.string().optional(),
   // Secret environment variable name (actual secret NOT published)
-  secretEnvVar: z19.string().optional()
+  secretEnvVar: z15.string().optional()
 });
-var ColumnOverrideSchema = z19.object({
-  visible: z19.boolean().nullish(),
-  label: z19.string().nullish(),
-  width: z19.string().nullish(),
-  sortable: z19.boolean().nullish(),
-  filterable: z19.boolean().nullish(),
-  type: z19.string().nullish(),
-  primaryKey: z19.string().nullish()
+var ColumnOverrideSchema = z15.object({
+  visible: z15.boolean().nullish(),
+  label: z15.string().nullish(),
+  width: z15.string().nullish(),
+  sortable: z15.boolean().nullish(),
+  filterable: z15.boolean().nullish(),
+  type: z15.string().nullish(),
+  primaryKey: z15.string().nullish()
   // Added for FK reference
 });
-var DataRequestSchema = z19.object({
-  url: z19.string().default(""),
+var DataRequestSchema = z15.object({
+  url: z15.string().default(""),
   // Full URL (may be empty for proxy — resolved server-side)
-  method: z19.string().default("GET"),
+  method: z15.string().default("GET"),
   // HTTP method
-  headers: z19.record(z19.string(), z19.string()).default({}),
+  headers: z15.record(z15.string(), z15.string()).default({}),
   // Headers
-  body: z19.record(z19.string(), z19.unknown()).optional(),
+  body: z15.record(z15.string(), z15.unknown()).optional(),
   // For POST requests
-  resultPath: z19.string().default(""),
+  resultPath: z15.string().default(""),
   // JSON path to extract data
-  flattenRelations: z19.boolean().default(true),
+  flattenRelations: z15.boolean().default(true),
   // Flatten nested objects
-  queryConfig: z19.record(z19.string(), z19.unknown()).optional(),
+  queryConfig: z15.record(z15.string(), z15.unknown()).optional(),
   // RPC config for DataTable
-  fetchStrategy: z19.enum(["direct", "proxy"]).default("proxy"),
+  fetchStrategy: z15.enum(["direct", "proxy"]).default("proxy"),
   // Publish-time routing decision
-  datasourceId: z19.string().nullish()
+  datasourceId: z15.string().nullish()
   // Datasource ID for proxy strategy (server-side credential resolution)
 });
-var ComponentBindingSchema = z19.object({
-  componentId: z19.string().nullish(),
-  datasourceId: z19.string().nullish(),
-  tableName: z19.string().nullish(),
+var ComponentBindingSchema = z15.object({
+  componentId: z15.string().nullish(),
+  datasourceId: z15.string().nullish(),
+  tableName: z15.string().nullish(),
   // columns can be string[] (column names) or object[] (enriched schema from publish)
-  columns: z19.union([
-    z19.array(z19.string()),
-    z19.array(z19.object({
-      name: z19.string(),
-      type: z19.string(),
-      nullable: z19.boolean().optional(),
-      primary_key: z19.boolean().optional(),
-      default: z19.any().optional(),
-      foreign_key_table: z19.string().nullish(),
-      foreign_key_column: z19.string().nullish()
+  columns: z15.union([
+    z15.array(z15.string()),
+    z15.array(z15.object({
+      name: z15.string(),
+      type: z15.string(),
+      nullable: z15.boolean().optional(),
+      primary_key: z15.boolean().optional(),
+      default: z15.any().optional(),
+      foreign_key_table: z15.string().nullish(),
+      foreign_key_column: z15.string().nullish()
     }).passthrough())
   ]).nullish(),
-  columnOrder: z19.array(z19.string()).nullish(),
-  columnOverrides: z19.record(z19.string(), ColumnOverrideSchema).nullish(),
-  filters: z19.record(z19.string(), z19.unknown()).nullish(),
-  primaryKey: z19.string().nullish(),
-  foreignKeys: z19.array(z19.object({
-    column: z19.string(),
-    referencedTable: z19.string(),
-    referencedColumn: z19.string()
+  columnOrder: z15.array(z15.string()).nullish(),
+  columnOverrides: z15.record(z15.string(), ColumnOverrideSchema).nullish(),
+  filters: z15.record(z15.string(), z15.unknown()).nullish(),
+  primaryKey: z15.string().nullish(),
+  foreignKeys: z15.array(z15.object({
+    column: z15.string(),
+    referencedTable: z15.string(),
+    referencedColumn: z15.string()
   }).passthrough()).nullish(),
   dataRequest: DataRequestSchema.nullish(),
   // Form-specific fields
-  fieldOverrides: z19.record(z19.string(), z19.unknown()).nullish(),
-  fieldOrder: z19.array(z19.string()).nullish(),
-  dataSourceId: z19.string().nullish(),
+  fieldOverrides: z15.record(z15.string(), z15.unknown()).nullish(),
+  fieldOrder: z15.array(z15.string()).nullish(),
+  dataSourceId: z15.string().nullish(),
   // camelCase alias
   // Dynamic feature configuration (for DataTable server-side features)
-  frontendFilters: z19.array(z19.record(z19.string(), z19.unknown())).nullish(),
-  sorting: z19.record(z19.string(), z19.unknown()).nullish(),
-  pagination: z19.record(z19.string(), z19.unknown()).nullish(),
-  filtering: z19.record(z19.string(), z19.unknown()).nullish()
+  frontendFilters: z15.array(z15.record(z15.string(), z15.unknown())).nullish(),
+  sorting: z15.record(z15.string(), z15.unknown()).nullish(),
+  pagination: z15.record(z15.string(), z15.unknown()).nullish(),
+  filtering: z15.record(z15.string(), z15.unknown()).nullish()
 }).passthrough();
-var VisibilitySettingsSchema = z19.object({
-  mobile: z19.boolean().default(true),
-  tablet: z19.boolean().default(true),
-  desktop: z19.boolean().default(true)
+var VisibilitySettingsSchema = z15.object({
+  mobile: z15.boolean().default(true),
+  tablet: z15.boolean().default(true),
+  desktop: z15.boolean().default(true)
 });
-var ViewportOverridesSchema = z19.object({
-  mobile: z19.record(z19.string(), z19.any()).nullable().optional(),
-  tablet: z19.record(z19.string(), z19.any()).nullable().optional()
+var ViewportOverridesSchema = z15.object({
+  mobile: z15.record(z15.string(), z15.any()).nullable().optional(),
+  tablet: z15.record(z15.string(), z15.any()).nullable().optional()
 }).passthrough();
-var StylesDataSchema = z19.object({
-  values: z19.record(z19.string(), z19.any()).nullable().optional(),
-  activeProperties: z19.array(z19.string()).nullable().optional(),
-  stylingMode: z19.string().default("visual"),
+var StylesDataSchema = z15.object({
+  values: z15.record(z15.string(), z15.any()).nullable().optional(),
+  activeProperties: z15.array(z15.string()).nullable().optional(),
+  stylingMode: z15.string().default("visual"),
   viewportOverrides: ViewportOverridesSchema.nullable().optional()
 }).passthrough();
-var ComponentStylesSchema = z19.record(z19.string(), z19.any()).nullable().optional();
-var PageComponentSchema = z19.lazy(
-  () => z19.object({
-    id: z19.string(),
-    type: z19.string(),
+var ComponentStylesSchema = z15.record(z15.string(), z15.any()).nullable().optional();
+var PageComponentSchema = z15.lazy(
+  () => z15.object({
+    id: z15.string(),
+    type: z15.string(),
     // ComponentTypeSchema is too strict for flexibility
-    props: z19.record(z19.string(), z19.unknown()).nullable().optional(),
+    props: z15.record(z15.string(), z15.unknown()).nullable().optional(),
     styles: ComponentStylesSchema,
     // Legacy: direct styles
     stylesData: StylesDataSchema.nullable().optional(),
     // New: structured styles with overrides
     visibility: VisibilitySettingsSchema.nullable().optional(),
     // Per-viewport visibility
-    children: z19.array(PageComponentSchema).nullable().optional(),
+    visibilityCondition: z15.string().nullish(),
+    // Client or server visibility expression
+    children: z15.array(PageComponentSchema).nullable().optional(),
     binding: ComponentBindingSchema.nullable().optional()
   })
 );
-var PageLayoutSchema = z19.object({
-  content: z19.array(PageComponentSchema),
-  root: z19.record(z19.string(), z19.unknown()).optional()
+var PageLayoutSchema = z15.object({
+  content: z15.array(PageComponentSchema),
+  root: z15.record(z15.string(), z15.unknown()).optional()
 });
-var SeoDataSchema = z19.object({
-  title: z19.string().optional(),
-  description: z19.string().optional(),
-  keywords: z19.array(z19.string()).optional(),
-  ogImage: z19.string().optional(),
-  canonical: z19.string().optional()
+var SeoDataSchema = z15.object({
+  title: z15.string().optional(),
+  description: z15.string().optional(),
+  keywords: z15.array(z15.string()).optional(),
+  ogImage: z15.string().optional(),
+  canonical: z15.string().optional()
 });
-var PublishPageSchema = z19.object({
+var PublishPageSchema = z15.object({
   // Page identity (can be UUID or custom string ID like "default-homepage")
-  id: z19.string().min(1),
-  slug: z19.string().min(1),
-  name: z19.string(),
-  title: z19.string().optional(),
-  description: z19.string().optional(),
+  id: z15.string().min(1),
+  slug: z15.string().min(1),
+  tenantSlug: z15.string().default("_default"),
+  // Tenant namespace (community engine)
+  name: z15.string(),
+  title: z15.string().optional(),
+  description: z15.string().optional(),
   // Layout & structure
   layoutData: PageLayoutSchema,
   // SEO
   seoData: SeoDataSchema.nullable().optional(),
   // Datasources (non-sensitive config only)
-  datasources: z19.array(DatasourceConfigSchema).nullable().optional(),
+  datasources: z15.array(DatasourceConfigSchema).nullable().optional(),
   // CSS Bundle (tree-shaken, component-specific CSS from FastAPI)
-  cssBundle: z19.string().nullable().optional(),
+  cssBundle: z15.string().nullable().optional(),
   // Versioning
-  version: z19.number().int().min(1),
-  publishedAt: z19.string().datetime(),
+  version: z15.number().int().min(1),
+  publishedAt: z15.string().datetime(),
   // Flags
-  isPublic: z19.boolean().default(true),
-  isHomepage: z19.boolean().default(false),
+  isPublic: z15.boolean().default(true),
+  isHomepage: z15.boolean().default(false),
   // Content hash for drift detection (SHA-256 of publishable attributes)
-  contentHash: z19.string().nullable().optional(),
+  contentHash: z15.string().nullable().optional(),
   // Auth form config baked at publish time (for private page gating overlay)
-  _primaryAuthForm: z19.record(z19.string(), z19.unknown()).nullable().optional()
+  _primaryAuthForm: z15.record(z15.string(), z15.unknown()).nullable().optional(),
+  // Global app variables baked at publish time (non-secret only)
+  appVariables: z15.record(z15.string(), z15.unknown()).nullish()
 });
-var ImportPageRequestSchema = z19.object({
+var ImportPageRequestSchema = z15.object({
   page: PublishPageSchema,
   // Optional: force overwrite even if version is same
-  force: z19.boolean().default(false)
+  force: z15.boolean().default(false)
 });
-var ImportPageResponseSchema = z19.object({
-  success: z19.boolean(),
-  slug: z19.string(),
-  version: z19.number(),
-  previewUrl: z19.string(),
-  message: z19.string().optional()
+var ImportPageResponseSchema = z15.object({
+  success: z15.boolean(),
+  slug: z15.string(),
+  version: z15.number(),
+  previewUrl: z15.string(),
+  message: z15.string().optional()
 });
-var ErrorResponseSchema3 = z19.object({
-  success: z19.literal(false),
-  error: z19.string(),
-  details: z19.record(z19.string(), z19.unknown()).optional()
+var ErrorResponseSchema3 = z15.object({
+  success: z15.literal(false),
+  error: z15.string(),
+  details: z15.record(z15.string(), z15.unknown()).optional()
 });
 
 // src/routes/import.ts
@@ -8911,7 +10103,7 @@ importRoute.post("/", async (c) => {
     console.log(`[Import] Validated page: ${page.slug} (v${page.version})`);
     console.log(`[Import] cssBundle present: ${!!page.cssBundle}, length: ${page.cssBundle?.length || 0}`);
     if (!force) {
-      const existing = await stateProvider.getPageBySlug(page.slug);
+      const existing = await stateProvider.getPageBySlug(page.slug, page.tenantSlug);
       if (existing && existing.version >= page.version) {
         return c.json({
           success: false,
@@ -8928,14 +10120,20 @@ importRoute.post("/", async (c) => {
     try {
       const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
       const redis = getRedis2();
-      await redis.del(`page:${page.slug}`);
-      console.log(`[Import] Cache invalidated: page:${page.slug}`);
+      const cachePrefix = page.tenantSlug && page.tenantSlug !== "_default" ? `page:${page.tenantSlug}:` : "page:";
+      await redis.del(`${cachePrefix}${page.slug}`);
+      console.log(`[Import] Cache invalidated: ${cachePrefix}${page.slug}`);
       if (page.isHomepage) {
-        await redis.del("page:__homepage__");
-        console.log(`[Import] Cache invalidated: page:__homepage__`);
+        await redis.del(`${cachePrefix}__homepage__`);
+        console.log(`[Import] Cache invalidated: ${cachePrefix}__homepage__`);
       }
-      await redis.del("seo:sitemap", "seo:llms");
+      const seoSuffix = page.tenantSlug && page.tenantSlug !== "_default" ? `:${page.tenantSlug}` : "";
+      await redis.del(`seo:sitemap${seoSuffix}`, `seo:llms${seoSuffix}`);
     } catch {
+    }
+    invalidateHtmlCache(page.slug, page.tenantSlug);
+    if (page.isHomepage) {
+      invalidateHtmlCache("__homepage__", page.tenantSlug);
     }
     const publicUrl = process.env.PUBLIC_URL;
     let previewUrl;
@@ -8973,14 +10171,15 @@ importRoute.post("/", async (c) => {
 importRoute.delete("/:slug", async (c) => {
   try {
     const slug = c.req.param("slug");
+    const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
     if (!slug) {
       return c.json({
         success: false,
         error: "Missing slug parameter"
       }, 400);
     }
-    console.log(`[Import] Unpublishing page: ${slug}`);
-    const existing = await stateProvider.getPageBySlug(slug);
+    console.log(`[Import] Unpublishing page: ${tenantSlug ? tenantSlug + "/" : ""}${slug}`);
+    const existing = await stateProvider.getPageBySlug(slug, tenantSlug);
     if (!existing) {
       console.log(`[Import] Page not found in SSR: ${slug}`);
       return c.json({
@@ -8988,8 +10187,18 @@ importRoute.delete("/:slug", async (c) => {
         message: `Page "${slug}" was not published`
       }, 200);
     }
-    await stateProvider.deletePage(slug);
+    await stateProvider.deletePage(slug, tenantSlug);
     console.log(`[Import] Successfully unpublished: ${slug}`);
+    invalidateHtmlCache(slug, tenantSlug);
+    try {
+      const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+      const redis = getRedis2();
+      const cachePrefix = tenantSlug && tenantSlug !== "_default" ? `page:${tenantSlug}:` : "page:";
+      await redis.del(`${cachePrefix}${slug}`);
+      const seoSuffix = tenantSlug && tenantSlug !== "_default" ? `:${tenantSlug}` : "";
+      await redis.del(`seo:sitemap${seoSuffix}`, `seo:llms${seoSuffix}`);
+    } catch {
+    }
     return c.json({
       success: true,
       slug,
@@ -9006,7 +10215,8 @@ importRoute.delete("/:slug", async (c) => {
 importRoute.post("/settings", async (c) => {
   try {
     const body = await c.req.json();
-    console.log("[Import Settings] Received:", Object.keys(body));
+    const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+    console.log("[Import Settings] Received:", Object.keys(body), tenantSlug ? `tenant=${tenantSlug}` : "");
     const updates = {};
     if (body.faviconUrl !== void 0) updates.faviconUrl = body.faviconUrl || null;
     if (body.logoUrl !== void 0) updates.logoUrl = body.logoUrl || null;
@@ -9016,7 +10226,12 @@ importRoute.post("/settings", async (c) => {
     else if (body.description !== void 0) updates.siteDescription = body.description || null;
     if (body.appUrl !== void 0) updates.appUrl = body.appUrl || null;
     if (body.authForms !== void 0) updates.authForms = body.authForms || null;
-    await stateProvider.updateProjectSettings(updates);
+    if (body.securityConfig !== void 0) {
+      const { updateSecurityConfig } = await import("./securityConfig-SHSLLSFV.js");
+      updateSecurityConfig(body.securityConfig);
+      console.log("[Import Settings] Security config updated");
+    }
+    await stateProvider.updateProjectSettings(updates, tenantSlug);
     return c.json({
       success: true,
       message: "Project settings synced successfully"
@@ -9031,7 +10246,8 @@ importRoute.post("/settings", async (c) => {
 });
 importRoute.get("/settings", async (c) => {
   try {
-    const settings = await stateProvider.getProjectSettings();
+    const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+    const settings = await stateProvider.getProjectSettings(tenantSlug);
     return c.json({
       success: true,
       settings
@@ -9051,8 +10267,8 @@ importRoute.get("/status", async (c) => {
 });
 
 // src/routes/manage.ts
-import { OpenAPIHono as OpenAPIHono17, createRoute as createRoute12, z as z20 } from "@hono/zod-openapi";
-var manageRoute = new OpenAPIHono17();
+import { OpenAPIHono as OpenAPIHono18, createRoute as createRoute12, z as z16 } from "@hono/zod-openapi";
+var manageRoute = new OpenAPIHono18();
 var listPagesRoute = createRoute12({
   method: "get",
   path: "/pages",
@@ -9064,13 +10280,13 @@ var listPagesRoute = createRoute12({
       description: "Page list",
       content: {
         "application/json": {
-          schema: z20.object({
-            pages: z20.array(z20.object({
-              slug: z20.string(),
-              name: z20.string(),
-              version: z20.number()
+          schema: z16.object({
+            pages: z16.array(z16.object({
+              slug: z16.string(),
+              name: z16.string(),
+              version: z16.number()
             })),
-            total: z20.number()
+            total: z16.number()
           })
         }
       }
@@ -9078,7 +10294,8 @@ var listPagesRoute = createRoute12({
   }
 });
 manageRoute.openapi(listPagesRoute, async (c) => {
-  const pages = await stateProvider.listPages();
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  const pages = await stateProvider.listPages(tenantSlug);
   return c.json({ pages, total: pages.length }, 200);
 });
 var getPageRoute = createRoute12({
@@ -9088,8 +10305,8 @@ var getPageRoute = createRoute12({
   summary: "Get page by slug",
   description: "Returns the full page bundle including layout, SEO, datasources, and CSS",
   request: {
-    params: z20.object({
-      slug: z20.string().openapi({ description: "Page slug" })
+    params: z16.object({
+      slug: z16.string().openapi({ description: "Page slug" })
     })
   },
   responses: {
@@ -9097,7 +10314,7 @@ var getPageRoute = createRoute12({
       description: "Page bundle",
       content: {
         "application/json": {
-          schema: z20.object({ page: z20.record(z20.unknown()) })
+          schema: z16.object({ page: z16.record(z16.unknown()) })
         }
       }
     },
@@ -9111,7 +10328,8 @@ var getPageRoute = createRoute12({
 });
 manageRoute.openapi(getPageRoute, async (c) => {
   const { slug } = c.req.valid("param");
-  const page = await stateProvider.getPageBySlug(slug);
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  const page = await stateProvider.getPageBySlug(slug, tenantSlug);
   if (!page) {
     return c.json({ error: "NotFound", message: `Page "${slug}" not found` }, 404);
   }
@@ -9124,8 +10342,8 @@ var deletePageRoute = createRoute12({
   summary: "Delete a page",
   description: "Removes a published page from this engine and invalidates Redis cache",
   request: {
-    params: z20.object({
-      slug: z20.string().openapi({ description: "Page slug" })
+    params: z16.object({
+      slug: z16.string().openapi({ description: "Page slug" })
     })
   },
   responses: {
@@ -9139,11 +10357,13 @@ var deletePageRoute = createRoute12({
 });
 manageRoute.openapi(deletePageRoute, async (c) => {
   const { slug } = c.req.valid("param");
-  await stateProvider.deletePage(slug);
+  const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  await stateProvider.deletePage(slug, tenantSlug);
   try {
     const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
     const redis = getRedis2();
-    await redis.del(`page:${slug}`);
+    const cachePrefix = tenantSlug && tenantSlug !== "_default" ? `page:${tenantSlug}:` : "page:";
+    await redis.del(`${cachePrefix}${slug}`);
   } catch {
   }
   return c.json({ success: true, message: `Page "${slug}" deleted` }, 200);
@@ -9170,10 +10390,12 @@ function getBaseUrl(request) {
   }
 }
 seoRoute.get("/sitemap.xml", async (c) => {
+  const tenantSlug = c.get("tenantSlug");
+  const cacheKey = tenantSlug && tenantSlug !== "_default" ? `seo:sitemap:${tenantSlug}` : "seo:sitemap";
   try {
     const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
     const redis = getRedis2();
-    const cached2 = await redis.get("seo:sitemap");
+    const cached2 = await redis.get(cacheKey);
     if (cached2) {
       c.header("Content-Type", "application/xml");
       c.header("Cache-Control", "public, max-age=3600");
@@ -9183,7 +10405,7 @@ seoRoute.get("/sitemap.xml", async (c) => {
   } catch {
   }
   const baseUrl = getBaseUrl(c.req.raw);
-  const pages = await stateProvider.listPublicPageSlugs();
+  const pages = await stateProvider.listPublicPageSlugs(tenantSlug);
   const urls = pages.map((page) => {
     const loc = page.isHomepage ? baseUrl + "/" : `${baseUrl}/${page.slug}`;
     const priority = page.isHomepage ? "1.0" : "0.8";
@@ -9202,7 +10424,7 @@ ${urls}
   try {
     const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
     const redis = getRedis2();
-    await redis.setex("seo:sitemap", 3600, xml);
+    await redis.setex(cacheKey, 3600, xml);
   } catch {
   }
   c.header("Content-Type", "application/xml");
@@ -9222,10 +10444,12 @@ Sitemap: ${baseUrl}/sitemap.xml
   return c.body(robotsTxt);
 });
 seoRoute.get("/llms.txt", async (c) => {
+  const tenantSlug = c.get("tenantSlug");
+  const cacheKey = tenantSlug && tenantSlug !== "_default" ? `seo:llms:${tenantSlug}` : "seo:llms";
   try {
     const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
     const redis = getRedis2();
-    const cached2 = await redis.get("seo:llms");
+    const cached2 = await redis.get(cacheKey);
     if (cached2) {
       c.header("Content-Type", "text/plain");
       c.header("Cache-Control", "public, max-age=3600");
@@ -9235,7 +10459,7 @@ seoRoute.get("/llms.txt", async (c) => {
   } catch {
   }
   const baseUrl = getBaseUrl(c.req.raw);
-  const pages = await stateProvider.listPublicPageSlugs();
+  const pages = await stateProvider.listPublicPageSlugs(tenantSlug);
   const settings = await stateProvider.getProjectSettings();
   const siteName = settings.siteName || "Frontbase Site";
   const siteDescription = settings.siteDescription || "";
@@ -9255,7 +10479,7 @@ seoRoute.get("/llms.txt", async (c) => {
   try {
     const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
     const redis = getRedis2();
-    await redis.setex("seo:llms", 3600, llmsTxt);
+    await redis.setex(cacheKey, 3600, llmsTxt);
   } catch {
   }
   c.header("Content-Type", "text/plain");
@@ -9268,8 +10492,8 @@ function escapeXml(str) {
 }
 
 // src/routes/embed.ts
-import { OpenAPIHono as OpenAPIHono18 } from "@hono/zod-openapi";
-var embedRoute = new OpenAPIHono18();
+import { OpenAPIHono as OpenAPIHono19 } from "@hono/zod-openapi";
+var embedRoute = new OpenAPIHono19();
 embedRoute.get("/embed.js", (c) => {
   c.header("Content-Type", "application/javascript");
   c.header("Cache-Control", "public, max-age=3600");
@@ -9318,9 +10542,10 @@ embedRoute.get("/embed.js", (c) => {
 });
 embedRoute.get("/auth/:formId", async (c) => {
   const formId = c.req.param("formId");
+  const tenantSlug = c.get("tenantSlug");
   let formConfig = null;
   try {
-    const settings = await stateProvider.getProjectSettings();
+    const settings = await stateProvider.getProjectSettings(tenantSlug);
     if (settings.authForms) {
       const formsMap = JSON.parse(settings.authForms);
       formConfig = formsMap[formId] || null;
@@ -9485,12 +10710,56 @@ function esc(str) {
 }
 
 // src/routes/auth.ts
-import { OpenAPIHono as OpenAPIHono19 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono20 } from "@hono/zod-openapi";
 init_env();
-async function resolveDynamicRedirect(client, userId, formId, isEmbed, fallbackRedirect) {
+init_redis();
+function isSafeRedirect(urlStr, requestUrl) {
+  if (!urlStr) return false;
+  if (urlStr.startsWith("/") && !urlStr.startsWith("//")) {
+    return true;
+  }
+  try {
+    const parsedRedirect = new URL(urlStr);
+    const parsedRequest = new URL(requestUrl);
+    return parsedRedirect.host === parsedRequest.host;
+  } catch {
+    return false;
+  }
+}
+function safeScriptJson(val) {
+  return JSON.stringify(val).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/\//g, "\\u002f").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+}
+function getTargetOrigin(redirectUrl, requestUrl) {
+  if (redirectUrl.startsWith("/") && !redirectUrl.startsWith("//")) {
+    try {
+      return new URL(requestUrl).origin;
+    } catch {
+      return "*";
+    }
+  }
+  try {
+    return new URL(redirectUrl).origin;
+  } catch {
+    return "*";
+  }
+}
+function getClientIp(c) {
+  return c.req.header("cf-connecting-ip") || c.req.header("x-real-ip") || c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+async function checkRateLimit(c, key, limit, windowSeconds) {
+  try {
+    const ip = getClientIp(c);
+    const rateLimitKey = `ratelimit:auth:${key}:${ip}`;
+    const res = await rateLimit(rateLimitKey, limit, windowSeconds);
+    return res.allowed;
+  } catch {
+    return true;
+  }
+}
+async function resolveDynamicRedirect(client, userId, formId, isEmbed, fallbackRedirect, tenantSlug) {
   if (!client) return fallbackRedirect;
   try {
-    const settings = await stateProvider.getProjectSettings();
+    const settings = await stateProvider.getProjectSettings(tenantSlug);
     if (isEmbed && formId && settings.authForms) {
       const authFormsConfig = JSON.parse(settings.authForms);
       const formConfig = authFormsConfig[formId];
@@ -9498,7 +10767,7 @@ async function resolveDynamicRedirect(client, userId, formId, isEmbed, fallbackR
         return formConfig.redirectUrl;
       }
     }
-    const authCfg = getAuthConfig();
+    const authCfg = getAuthConfig(tenantSlug);
     const contacts = authCfg.contacts;
     if (contacts?.table && contacts?.columnMapping && contacts?.contactTypeHomePages) {
       const typeCol = contacts.columnMapping.contactTypeColumn;
@@ -9509,7 +10778,7 @@ async function resolveDynamicRedirect(client, userId, formId, isEmbed, fallbackR
           const contactType = data[typeCol];
           const homePageId = contacts.contactTypeHomePages[contactType];
           if (homePageId && homePageId !== "_default_") {
-            const pages = await stateProvider.listPages();
+            const pages = await stateProvider.listPages(tenantSlug);
             const targetPage = pages.find((p) => p.id === homePageId);
             if (targetPage) {
               return `/${targetPage.slug}`;
@@ -9525,18 +10794,14 @@ async function resolveDynamicRedirect(client, userId, formId, isEmbed, fallbackR
   }
   return fallbackRedirect;
 }
-var authRoute = new OpenAPIHono19();
+var authRoute = new OpenAPIHono20();
 authRoute.post("/login", async (c) => {
-  const provider = new SupabaseAuthProvider();
-  const client = await provider.createClient(c.req.raw);
-  if (!client) {
-    return c.json({ error: "Supabase not configured" }, 503);
-  }
-  let email;
-  let password;
-  let redirectTo;
+  let email = "";
+  let password = "";
+  let redirectTo = "/";
   let isEmbed = false;
   let formId;
+  let captchaToken = "";
   const contentType = c.req.header("Content-Type") || "";
   if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
     const form = await c.req.parseBody();
@@ -9545,13 +10810,49 @@ authRoute.post("/login", async (c) => {
     redirectTo = form["redirectTo"] || "/";
     isEmbed = form["isEmbed"] === "true";
     formId = form["formId"];
+    captchaToken = form["cf-turnstile-response"] || form["g-recaptcha-response"] || form["captchaToken"] || "";
   } else {
-    const body = await c.req.json();
-    email = body.email || "";
-    password = body.password || "";
-    redirectTo = body.redirectTo || "/";
-    isEmbed = !!body.isEmbed;
-    formId = body.formId;
+    const body = await c.req.json().catch(() => null);
+    if (body) {
+      email = body.email || "";
+      password = body.password || "";
+      redirectTo = body.redirectTo || "/";
+      isEmbed = !!body.isEmbed;
+      formId = body.formId;
+      captchaToken = body.captchaToken || body["cf-turnstile-response"] || body["g-recaptcha-response"] || "";
+    }
+  }
+  if (!isSafeRedirect(redirectTo, c.req.url)) {
+    redirectTo = "/";
+  }
+  const allowed = await checkRateLimit(c, "login", 10, 60);
+  if (!allowed) {
+    if (contentType.includes("form")) {
+      const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+      errorUrl.searchParams.set("auth_error", "Too many attempts. Please try again later.");
+      return c.redirect(errorUrl.toString(), 303);
+    }
+    return c.json({ error: "Too many attempts. Please try again later." }, 429);
+  }
+  const botConfig = getBotProtection();
+  if (botConfig && botConfig.enabled && botConfig.protectLogin) {
+    const clientIp = getClientIp(c);
+    const verifyResult = await verifyCaptchaToken(captchaToken, clientIp);
+    if (!verifyResult.success) {
+      const errorMsg = verifyResult.error || "CAPTCHA verification failed";
+      if (contentType.includes("form")) {
+        const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+        errorUrl.searchParams.set("auth_error", errorMsg);
+        return c.redirect(errorUrl.toString(), 303);
+      }
+      return c.json({ error: errorMsg }, 403);
+    }
+  }
+  const tenantSlug = c.get("tenantSlug");
+  const provider = new SupabaseAuthProvider(tenantSlug);
+  const client = await provider.createClient(c.req.raw);
+  if (!client) {
+    return c.json({ error: "Supabase not configured" }, 503);
   }
   if (!email || !password) {
     return c.json({ error: "Email and password required" }, 400);
@@ -9572,22 +10873,33 @@ authRoute.post("/login", async (c) => {
   let finalRedirect = redirectTo;
   let enrichedUser = null;
   if (data.user) {
-    finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo);
+    finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo, tenantSlug);
+    if (!isSafeRedirect(finalRedirect, c.req.url)) {
+      finalRedirect = "/";
+    }
     enrichedUser = await provider.enrichUserContext(data.user, data.session?.access_token);
   }
   if (contentType.includes("form")) {
     if (isEmbed) {
-      const userJson = enrichedUser ? JSON.stringify(enrichedUser) : "null";
+      const safeRedirectJson = safeScriptJson(finalRedirect);
+      const safeUserJson = enrichedUser ? safeScriptJson(enrichedUser) : "null";
+      const targetOrigin = getTargetOrigin(finalRedirect, c.req.url);
+      const safeTargetOriginJson = safeScriptJson(targetOrigin);
       return c.html(`
                 <!DOCTYPE html>
                 <html>
                 <body>
                     <script>
-                        if (window.parent && window.parent !== window) {
-                            window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: '${finalRedirect}', user: ${userJson} }, '*');
-                        } else {
-                            window.location.href = '${finalRedirect}';
-                        }
+                        (function() {
+                            const redirectUrl = ${safeRedirectJson};
+                            const user = ${safeUserJson};
+                            const targetOrigin = ${safeTargetOriginJson};
+                            if (window.parent && window.parent !== window) {
+                                window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: redirectUrl, user: user }, targetOrigin);
+                            } else {
+                                window.location.href = redirectUrl;
+                            }
+                        })();
                     </script>
                 </body>
                 </html>
@@ -9598,7 +10910,8 @@ authRoute.post("/login", async (c) => {
   return c.json({ success: true, user: enrichedUser, redirectUrl: finalRedirect });
 });
 authRoute.get("/me", async (c) => {
-  const provider = new SupabaseAuthProvider();
+  const tenantSlug = c.get("tenantSlug");
+  const provider = new SupabaseAuthProvider(tenantSlug);
   const user = await provider.getUserFromRequest(c.req.raw);
   if (user) {
     return c.json({ success: true, user });
@@ -9606,16 +10919,12 @@ authRoute.get("/me", async (c) => {
   return c.json({ success: false, user: null }, 401);
 });
 authRoute.post("/signup", async (c) => {
-  const provider = new SupabaseAuthProvider();
-  const client = await provider.createClient(c.req.raw);
-  if (!client) {
-    return c.json({ error: "Supabase not configured" }, 503);
-  }
-  let email;
-  let password;
-  let redirectTo;
+  let email = "";
+  let password = "";
+  let redirectTo = "/";
   let isEmbed = false;
   let formId;
+  let captchaToken = "";
   const contentType = c.req.header("Content-Type") || "";
   if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
     const form = await c.req.parseBody();
@@ -9624,13 +10933,49 @@ authRoute.post("/signup", async (c) => {
     redirectTo = form["redirectTo"] || "/";
     isEmbed = form["isEmbed"] === "true";
     formId = form["formId"];
+    captchaToken = form["cf-turnstile-response"] || form["g-recaptcha-response"] || form["captchaToken"] || "";
   } else {
-    const body = await c.req.json();
-    email = body.email || "";
-    password = body.password || "";
-    redirectTo = body.redirectTo || "/";
-    isEmbed = !!body.isEmbed;
-    formId = body.formId;
+    const body = await c.req.json().catch(() => null);
+    if (body) {
+      email = body.email || "";
+      password = body.password || "";
+      redirectTo = body.redirectTo || "/";
+      isEmbed = !!body.isEmbed;
+      formId = body.formId;
+      captchaToken = body.captchaToken || body["cf-turnstile-response"] || body["g-recaptcha-response"] || "";
+    }
+  }
+  if (!isSafeRedirect(redirectTo, c.req.url)) {
+    redirectTo = "/";
+  }
+  const allowed = await checkRateLimit(c, "signup", 10, 60);
+  if (!allowed) {
+    if (contentType.includes("form")) {
+      const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+      errorUrl.searchParams.set("auth_error", "Too many attempts. Please try again later.");
+      return c.redirect(errorUrl.toString(), 303);
+    }
+    return c.json({ error: "Too many attempts. Please try again later." }, 429);
+  }
+  const botConfig = getBotProtection();
+  if (botConfig && botConfig.enabled && botConfig.protectLogin) {
+    const clientIp = getClientIp(c);
+    const verifyResult = await verifyCaptchaToken(captchaToken, clientIp);
+    if (!verifyResult.success) {
+      const errorMsg = verifyResult.error || "CAPTCHA verification failed";
+      if (contentType.includes("form")) {
+        const errorUrl = new URL(redirectTo, new URL(c.req.url).origin);
+        errorUrl.searchParams.set("auth_error", errorMsg);
+        return c.redirect(errorUrl.toString(), 303);
+      }
+      return c.json({ error: errorMsg }, 403);
+    }
+  }
+  const tenantSlug = c.get("tenantSlug");
+  const provider = new SupabaseAuthProvider(tenantSlug);
+  const client = await provider.createClient(c.req.raw);
+  if (!client) {
+    return c.json({ error: "Supabase not configured" }, 503);
   }
   if (!email || !password) {
     return c.json({ error: "Email and password required" }, 400);
@@ -9649,16 +10994,23 @@ authRoute.post("/signup", async (c) => {
       const successUrl = new URL(redirectTo, new URL(c.req.url).origin);
       successUrl.searchParams.set("auth_message", "Check your email to confirm your account");
       if (isEmbed) {
+        const targetOrigin = getTargetOrigin(successUrl.toString(), c.req.url);
+        const safeSuccessUrlJson = safeScriptJson(successUrl.toString());
+        const safeTargetOriginJson = safeScriptJson(targetOrigin);
         return c.html(`
                     <!DOCTYPE html>
                     <html>
                     <body>
                         <script>
-                            if (window.parent && window.parent !== window) {
-                                window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: '${successUrl.toString()}' }, '*');
-                            } else {
-                                window.location.href = '${successUrl.toString()}';
-                            }
+                            (function() {
+                                const redirectUrl = ${safeSuccessUrlJson};
+                                const targetOrigin = ${safeTargetOriginJson};
+                                if (window.parent && window.parent !== window) {
+                                    window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: redirectUrl }, targetOrigin);
+                                } else {
+                                    window.location.href = redirectUrl;
+                                }
+                            })();
                         </script>
                     </body>
                     </html>
@@ -9675,22 +11027,33 @@ authRoute.post("/signup", async (c) => {
   let finalRedirect = redirectTo;
   let enrichedUser = null;
   if (data.user) {
-    finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo);
+    finalRedirect = await resolveDynamicRedirect(client, data.user.id, formId, isEmbed, redirectTo, tenantSlug);
+    if (!isSafeRedirect(finalRedirect, c.req.url)) {
+      finalRedirect = "/";
+    }
     enrichedUser = await provider.enrichUserContext(data.user, data.session?.access_token);
   }
   if (contentType.includes("form")) {
     if (isEmbed) {
-      const userJson = enrichedUser ? JSON.stringify(enrichedUser) : "null";
+      const safeRedirectJson = safeScriptJson(finalRedirect);
+      const safeUserJson = enrichedUser ? safeScriptJson(enrichedUser) : "null";
+      const targetOrigin = getTargetOrigin(finalRedirect, c.req.url);
+      const safeTargetOriginJson = safeScriptJson(targetOrigin);
       return c.html(`
                 <!DOCTYPE html>
                 <html>
                 <body>
                     <script>
-                        if (window.parent && window.parent !== window) {
-                            window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: '${finalRedirect}', user: ${userJson} }, '*');
-                        } else {
-                            window.location.href = '${finalRedirect}';
-                        }
+                        (function() {
+                            const redirectUrl = ${safeRedirectJson};
+                            const user = ${safeUserJson};
+                            const targetOrigin = ${safeTargetOriginJson};
+                            if (window.parent && window.parent !== window) {
+                                window.parent.postMessage({ type: 'frontbase-auth-success', redirectUrl: redirectUrl, user: user }, targetOrigin);
+                            } else {
+                                window.location.href = redirectUrl;
+                            }
+                        })();
                     </script>
                 </body>
                 </html>
@@ -9701,7 +11064,8 @@ authRoute.post("/signup", async (c) => {
   return c.json({ success: true, user: enrichedUser, redirectUrl: finalRedirect });
 });
 authRoute.post("/logout", async (c) => {
-  const provider = new SupabaseAuthProvider();
+  const tenantSlug = c.get("tenantSlug");
+  const provider = new SupabaseAuthProvider(tenantSlug);
   const client = await provider.createClient(c.req.raw);
   if (!client) {
     return c.json({ error: "Supabase not configured" }, 503);
@@ -9713,8 +11077,9 @@ authRoute.post("/logout", async (c) => {
   }
   const contentType = c.req.header("Content-Type") || "";
   const redirectTo = c.req.query("redirectTo") || "/";
+  const safeRedirect = isSafeRedirect(redirectTo, c.req.url) ? redirectTo : "/";
   if (contentType.includes("form")) {
-    return c.redirect(redirectTo, 303);
+    return c.redirect(safeRedirect, 303);
   }
   return c.json({ success: true });
 });
@@ -9747,6 +11112,9 @@ app.use("/api/import/*", systemKeyAuth);
 app.use("/api/data/execute", async (_c, next) => await next());
 app.use("/api/data/*", systemKeyAuth);
 app.use("/api/manage/*", systemKeyAuth);
+app.use("/api/data/execute", ipBlocklist);
+app.use("/api/embed/*", ipBlocklist);
+app.use("/api/auth/*", ipBlocklist);
 app.route("/api/import", importRoute);
 app.route("/api/data", dataRoute);
 app.route("/api/manage", manageRoute);
@@ -9756,126 +11124,30 @@ app.route("/api/auth", authRoute);
 app.route("", pagesRoute);
 
 // src/startup/sync.ts
-init_redis();
 var BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
-var MAX_RETRIES = 5;
-var RETRY_DELAY_MS = 3e3;
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-async function syncRedisSettingsFromFastAPI() {
+async function initEmbeddedRedis() {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/sync/settings/redis/`, {
-      headers: { "Accept": "application/json" },
-      signal: AbortSignal.timeout(5e3)
-    });
-    if (!response.ok) {
-      console.warn(`[Startup Sync] Redis settings fetch failed: ${response.status}`);
-      return { status: "error", retry: response.status >= 500 };
-    }
-    const settings = await response.json();
-    if (settings.redis_enabled && settings.redis_url && settings.redis_token) {
-      initRedis({ url: settings.redis_url, token: settings.redis_token });
-      console.log("[Startup Sync] \u2705 Redis initialized from settings");
-      return { status: "success" };
-    } else {
-      console.log("[Startup Sync] \u2139\uFE0F Redis not enabled or not configured in Settings UI");
-      return { status: "not-configured" };
-    }
+    const { IoRedisAdapter } = await import("./ioredis-adapter-T3ADOFR6.js");
+    const { setCacheProvider } = await import("./cache-GZUTJ5CB.js");
+    const adapter = new IoRedisAdapter("redis://localhost:6379");
+    await adapter.ping();
+    setCacheProvider(adapter);
+    console.log("[Startup Sync] \u2705 Embedded Redis initialized (localhost:6379)");
+    return { status: "success" };
   } catch (error) {
-    const isConnectionError = error?.cause?.code === "ECONNREFUSED";
-    if (isConnectionError) {
-      console.warn("[Startup Sync] \u23F3 FastAPI not ready yet, will retry...");
-    } else {
-      console.warn("[Startup Sync] Redis settings sync failed:", error.message);
-    }
-    return { status: "error", retry: true };
-  }
-}
-async function syncHomepageFromFastAPI() {
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/pages/homepage/`, {
-      headers: { "Accept": "application/json" },
-      signal: AbortSignal.timeout(5e3)
-      // 5s timeout
-    });
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.log("[Startup Sync] No homepage configured in FastAPI yet");
-        return false;
-      }
-      console.warn(`[Startup Sync] FastAPI returned ${response.status}`);
-      return false;
-    }
-    const result = await response.json();
-    const pageData = result.data;
-    if (!pageData) {
-      console.warn("[Startup Sync] No page data in response");
-      return false;
-    }
-    const publishData = {
-      id: pageData.id,
-      slug: pageData.slug,
-      name: pageData.name,
-      title: pageData.title || void 0,
-      description: pageData.description || void 0,
-      layoutData: pageData.layoutData,
-      seoData: pageData.seoData || void 0,
-      datasources: pageData.datasources || void 0,
-      version: 1,
-      publishedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      isPublic: pageData.isPublic ?? true,
-      isHomepage: true
-    };
-    await stateProvider.upsertPage(publishData);
-    console.log(`[Startup Sync] \u2705 Homepage synced: ${pageData.slug}`);
-    return true;
-  } catch (error) {
-    if (error instanceof Error && error.name === "TimeoutError") {
-      console.warn("[Startup Sync] FastAPI request timed out");
-    } else {
-      console.warn("[Startup Sync] Failed to fetch homepage:", error);
-    }
-    return false;
+    console.warn("[Startup Sync] \u26A0\uFE0F Embedded Redis not available:", error.message);
+    return { status: "not-configured" };
   }
 }
 async function runStartupSync() {
   console.log("[Startup Sync] \u{1F680} Starting Edge database initialization...");
   await stateProvider.init();
   const platform = getPlatform();
-  if (platform !== "docker") {
-    console.log(`[Startup Sync] \u2601\uFE0F  Platform "${platform}" \u2014 skipping backend sync (secrets pushed at deploy time)`);
-    return;
+  if (platform === "docker") {
+    console.log("[Startup Sync] Initializing embedded Redis...");
+    await initEmbeddedRedis();
   }
-  console.log("[Startup Sync] Syncing settings from backend...");
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const redisResult = await syncRedisSettingsFromFastAPI();
-    const allDone = redisResult.status === "success" || redisResult.status === "not-configured";
-    if (allDone) break;
-    const needsRetry = redisResult.status === "error" && redisResult.retry;
-    if (needsRetry && attempt < MAX_RETRIES) {
-      console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}, retrying in ${RETRY_DELAY_MS / 1e3}s...`);
-      await sleep(RETRY_DELAY_MS);
-    }
-  }
-  const existingHomepage = await stateProvider.getHomepage();
-  if (existingHomepage) {
-    console.log(`[Startup Sync] Homepage already exists: ${existingHomepage.slug} (v${existingHomepage.version})`);
-    return;
-  }
-  console.log("[Startup Sync] No local homepage, syncing from FastAPI...");
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    console.log(`[Startup Sync] Attempt ${attempt}/${MAX_RETRIES}...`);
-    const success = await syncHomepageFromFastAPI();
-    if (success) {
-      return;
-    }
-    if (attempt < MAX_RETRIES) {
-      console.log(`[Startup Sync] Waiting ${RETRY_DELAY_MS / 1e3}s before retry...`);
-      await sleep(RETRY_DELAY_MS);
-    }
-  }
-  console.warn("[Startup Sync] \u26A0\uFE0F Could not sync homepage after all retries. Homepage will be pull-published on first request.");
+  console.log("[Startup Sync] \u{1F3C1} Edge Node Ready \u2014 waiting for publish events or requests");
 }
 
 // src/index.ts

@@ -30,13 +30,13 @@ def _ensure_local_edge():
     # if is_cloud():
     #     return
 
-    from datetime import datetime
+    from datetime import datetime, timezone
     import uuid
     from app.database.config import SessionLocal
     from app.models.models import EdgeEngine, EdgeDatabase, EdgeCache, EdgeQueue
 
     edge_url = os.getenv("EDGE_URL", "http://localhost:3002")
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     db = SessionLocal()
     try:
         # --- 1. Local SQLite system database ---
@@ -229,31 +229,48 @@ from fastapi.responses import JSONResponse
 _L1_BLOCKLIST: List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]] = []
 _L1_LAST_LOADED: float = 0.0
 _L1_TTL: float = 10.0  # seconds
+# Circuit breaker for an unreachable Redis: after a failure, skip Redis for this
+# cooldown so a down/misconfigured Redis (common in local dev) doesn't cost a ~5s
+# connect/DNS timeout on every blocklist refresh. The DB fallback still runs.
+_REDIS_CIRCUIT_OPEN_UNTIL: float = 0.0
+_REDIS_CIRCUIT_COOLDOWN: float = 300.0  # 5 minutes
 
 async def load_blocklist_async() -> List[str]:
     """Asynchronously load the blocklist from Redis (L2) or DB (fallback) and compile it into L1."""
-    global _L1_BLOCKLIST, _L1_LAST_LOADED
-    
+    global _L1_BLOCKLIST, _L1_LAST_LOADED, _REDIS_CIRCUIT_OPEN_UNTIL
+
     cache_get_fn = None
     cache_set_fn = None
     redis_url = None
-    try:
-        from app.services.sync.redis_client import cache_get, cache_set, get_configured_redis_settings
-        cache_get_fn = cache_get
-        cache_set_fn = cache_set
-        redis_settings = await get_configured_redis_settings()
-        redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
-    except Exception:
-        pass
+    # Skip Redis entirely while the circuit is open (recent failure).
+    if time.time() >= _REDIS_CIRCUIT_OPEN_UNTIL:
+        try:
+            from app.services.sync.redis_client import cache_get, cache_set, get_configured_redis_settings
+            cache_get_fn = cache_get
+            cache_set_fn = cache_set
+            redis_settings = await get_configured_redis_settings()
+            redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+        except Exception:
+            pass
 
     redis_key = "security:ip_blocklist"
     ip_strings = None
-    
+
     if redis_url and cache_get_fn:
+        _redis_t0 = time.time()
         try:
             ip_strings = await cache_get_fn(redis_url, redis_key)
         except Exception as e:
             logger.warning(f"Failed to load blocklist from Redis: {e}")
+            ip_strings = None
+            _REDIS_CIRCUIT_OPEN_UNTIL = time.time() + _REDIS_CIRCUIT_COOLDOWN
+        else:
+            # cache_get swallows connection errors and returns None after its
+            # internal 5s timeout, so an exception never surfaces. Detect an
+            # unreachable Redis by elapsed time (a live Redis answers in ms) and
+            # trip the circuit so we stop paying the timeout on every refresh.
+            if time.time() - _redis_t0 > 2.0:
+                _REDIS_CIRCUIT_OPEN_UNTIL = time.time() + _REDIS_CIRCUIT_COOLDOWN
             
     if ip_strings is None:
         # DB Fallback
@@ -261,7 +278,7 @@ async def load_blocklist_async() -> List[str]:
         from app.models.models import IPBlocklist
         db = SessionLocal()
         try:
-            from datetime import datetime
+            from datetime import datetime, timezone
             from app.routers.settings import load_settings
             settings_dict = load_settings()
             bot_settings = settings_dict.get("security", {}).get("bot_protection", {})
@@ -269,7 +286,7 @@ async def load_blocklist_async() -> List[str]:
             
             items = db.query(IPBlocklist).all()
             ip_strings = []
-            now_dt = datetime.utcnow()
+            now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
             dirty = False
             for item in items:
                 is_temp_ban = False
@@ -308,11 +325,17 @@ async def load_blocklist_async() -> List[str]:
             if dirty:
                 db.commit()
                 
-            if redis_url and cache_set_fn:
+            # Skip the write-back if the GET already tripped the circuit this call.
+            if redis_url and cache_set_fn and time.time() >= _REDIS_CIRCUIT_OPEN_UNTIL:
+                _set_t0 = time.time()
                 try:
                     await cache_set_fn(redis_url, redis_key, ip_strings, ttl=300)
                 except Exception as e:
                     logger.warning(f"Failed to cache blocklist in Redis: {e}")
+                    _REDIS_CIRCUIT_OPEN_UNTIL = time.time() + _REDIS_CIRCUIT_COOLDOWN
+                else:
+                    if time.time() - _set_t0 > 2.0:
+                        _REDIS_CIRCUIT_OPEN_UNTIL = time.time() + _REDIS_CIRCUIT_COOLDOWN
         except Exception as e:
             logger.error(f"Failed to load blocklist from DB: {e}")
             ip_strings = []
@@ -495,13 +518,19 @@ if is_cloud():
 # 1. IP Blocklist Middleware (checks blocked ranges early)
 @app.middleware("http")
 async def ip_blocklist_middleware(request: Request, call_next):
-    if request.url.path in ("/health", "/"):
+    if request.url.path in ("/health", "/health/", "/"):
         return await call_next(request)
-        
+
     client_ip = request.client.host if request.client else None
     if client_ip:
         global _L1_LAST_LOADED
-        if not _L1_BLOCKLIST or (time.time() - _L1_LAST_LOADED > 10.0):
+        # Refresh at most once per 10s. An empty blocklist is the normal state
+        # (no banned IPs), so it must NOT force a reload — otherwise every request
+        # re-hits Redis, which adds a ~5s DNS timeout per request when Redis is
+        # unavailable (e.g. local dev). Advance the timestamp before the attempt
+        # so a failing load is also rate-limited rather than retried every request.
+        if time.time() - _L1_LAST_LOADED > 10.0:
+            _L1_LAST_LOADED = time.time()
             try:
                 await load_blocklist_async()
             except Exception as e:
@@ -820,6 +849,7 @@ async def root():
     return {"message": "Frontbase-DBSync API is running", "test_mode": True}
 
 @app.get("/health")
+@app.get("/health/")
 async def health_check():
     return {"status": "healthy", "message": "API is operational", "test_mode": True}
 
@@ -845,6 +875,4 @@ if __name__ == "__main__":
 # reload 4
 # reload 5
 # reload 6
-# reload 7 - 2step search
-
- 
+# reload 8 - database migrated check

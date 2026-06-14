@@ -202,6 +202,14 @@ export const MIGRATIONS: Migration[] = [
             `CREATE UNIQUE INDEX IF NOT EXISTS idx_published_pages_tenant_slug ON published_pages(tenant_slug, slug)`,
         ],
     },
+    {
+        version: 11,
+        description: 'Add tenant_slug column to workflows for multi-tenant routing (parity with schema.ts)',
+        sql: [
+            `ALTER TABLE workflows ADD COLUMN tenant_slug TEXT NOT NULL DEFAULT '_default'`,
+            `CREATE INDEX IF NOT EXISTS idx_workflows_tenant_slug ON workflows(tenant_slug)`,
+        ],
+    },
 ];
 
 // =============================================================================

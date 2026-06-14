@@ -1,10 +1,14 @@
 {
-  "pythonPath": "C:\\Users\\drmoy\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-  "extraPaths": [
-    "C:\\Users\\drmoy\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages"
-  ],
+  "venvPath": ".",
+  "venv": "venv",
   "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "venv",
     "app/middleware/auto_generated",
-    "app/services/_archived"
+    "app/services/_archived",
+    "scratch_*.py",
+    "_archived*",
+    "tests/_archived"
   ]
 }

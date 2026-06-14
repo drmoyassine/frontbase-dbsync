@@ -161,6 +161,9 @@ export function renderDataComponent(
         case 'Chart':
             return renderChart(id, props, propsJson);
 
+        case 'KPICard':
+            return renderKPICard(id, props, propsJson);
+
         case 'Card':
         case 'DataCard':
             return renderDataCard(id, props, childrenHtml, propsJson);
@@ -411,16 +414,30 @@ function renderInfoList(id: string, props: Record<string, unknown>, propsJson: s
 }
 
 function renderChart(id: string, props: Record<string, unknown>, propsJson: string): string {
-    const title = escapeHtml(String(props.title || 'Chart'));
-    const chartType = props.type as string || props.chartType as string || 'bar';
+    const binding = props.binding as Record<string, unknown> || {};
+    const title = binding.tableName 
+        ? escapeHtml(String(binding.tableName).replace(/_/g, ' '))
+        : '';
     const height = props.height as string || '300px';
 
-    const attrs = getCommonAttributes(id, 'fb-chart', props, '', 'chart', propsJson, `data-chart-type="${chartType}"`);
+    const attrs = getCommonAttributes(
+        id, 
+        "rounded-lg border bg-card text-card-foreground shadow-sm", 
+        props, 
+        "", 
+        "chart", 
+        propsJson, 
+        `data-react-component="Chart" data-component-id="${id}"`
+    );
 
     return `<div ${attrs}>
-        ${title ? `<h4 style="margin:0 0 1rem 0;font-size:1rem;font-weight:600">${title}</h4>` : ''}
-        <div class="fb-chart-container fb-skeleton" style="height:${height};border-radius:0.5rem;display:flex;align-items:center;justify-content:center">
-            <span style="color:#9ca3af">Loading chart...</span>
+        <div class="flex flex-col space-y-1.5 p-6 pb-4">
+            <h3 class="text-lg font-semibold capitalize">${title ? `${title} Chart` : 'Chart'}</h3>
+        </div>
+        <div class="p-6 pt-0">
+            <div class="fb-chart-container fb-skeleton" style="height:${height};border-radius:0.5rem;display:flex;align-items:center;justify-content:center">
+                <span class="text-muted-foreground text-sm">Loading chart...</span>
+            </div>
         </div>
     </div>`;
 }
@@ -496,19 +513,68 @@ function renderRepeater(id: string, props: Record<string, unknown>, childrenHtml
 
 function renderDataGrid(id: string, props: Record<string, unknown>, propsJson: string): string {
     const columns = (props.columns as number) || 3;
-    const rows = (props.rows as number) || 3;
-    const gap = props.gap as string || '1rem';
+    
+    // We compute gridLayoutClass based on columns
+    const cols = Math.min(columns || 3, 4);
+    let gridLayoutClass = '';
+    if (cols === 1) gridLayoutClass = 'grid grid-cols-1 gap-4';
+    else if (cols === 2) gridLayoutClass = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    else if (cols === 3) gridLayoutClass = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
+    else gridLayoutClass = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4';
 
-    // Generate skeleton grid cells
-    const cellCount = columns * rows;
-    const skeletonCells = Array(cellCount).fill(0).map(() =>
-        `<div class="fb-datagrid-cell fb-skeleton" style="min-height:80px;border-radius:0.375rem">&nbsp;</div>`
-    ).join('');
+    const attrs = getCommonAttributes(
+        id, 
+        gridLayoutClass, 
+        props, 
+        "", 
+        "grid", 
+        propsJson, 
+        `data-react-component="Grid" data-component-id="${id}"`
+    );
 
-    const style = `display:grid;grid-template-columns:repeat(${columns},1fr);gap:${gap}`;
-    const attrs = getCommonAttributes(id, 'fb-datagrid', props, style, 'datagrid', propsJson);
+    const skeletonCards = Array(columns || 3).fill(0).map(() => `
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm">
+            <div class="pb-3 p-6">
+                <div class="h-4 bg-muted rounded w-3/4 animate-pulse"></div>
+            </div>
+            <div class="p-6 pt-0">
+                <div class="space-y-2">
+                    <div class="h-3 bg-muted rounded w-1/2 animate-pulse"></div>
+                    <div class="h-3 bg-muted rounded w-1/3 animate-pulse"></div>
+                </div>
+            </div>
+        </div>
+    `).join('');
 
     return `<div ${attrs}>
-        ${skeletonCells}
+        ${skeletonCards}
+    </div>`;
+}
+
+function renderKPICard(id: string, props: Record<string, unknown>, propsJson: string): string {
+    const binding = props.binding as Record<string, unknown> || {};
+    const title = binding.tableName 
+        ? escapeHtml(String(binding.tableName).replace(/_/g, ' '))
+        : '';
+        
+    const attrs = getCommonAttributes(
+        id, 
+        "rounded-lg border bg-card text-card-foreground shadow-sm", 
+        props, 
+        "", 
+        "kpicard", 
+        propsJson, 
+        `data-react-component="KPICard" data-component-id="${id}"`
+    );
+
+    return `<div ${attrs}>
+        <div class="flex flex-row items-center justify-between space-y-0 pb-2 p-6">
+            <h4 class="text-sm font-medium capitalize">${title || 'KPI'}</h4>
+            <div class="h-4 w-4 bg-muted rounded-full animate-pulse"></div>
+        </div>
+        <div class="p-6 pt-0">
+            <div class="text-2xl font-bold fb-skeleton animate-pulse" style="height:2rem;width:80px;border-radius:0.25rem">&nbsp;</div>
+            <div class="text-xs text-muted-foreground mt-1.5 fb-skeleton animate-pulse" style="height:1rem;width:120px;border-radius:0.25rem">&nbsp;</div>
+        </div>
     </div>`;
 }

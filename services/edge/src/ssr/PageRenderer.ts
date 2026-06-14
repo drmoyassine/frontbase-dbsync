@@ -48,7 +48,7 @@ const INTERACTIVE_COMPONENTS = new Set([
 
 const DATA_COMPONENTS = new Set([
     'DataTable', 'Form', 'InfoList', 'Chart', 'Grid', 'List',
-    'Card', 'Repeater', 'DataCard'
+    'Card', 'Repeater', 'DataCard', 'KPICard'
 ]);
 
 const LAYOUT_COMPONENTS = new Set([

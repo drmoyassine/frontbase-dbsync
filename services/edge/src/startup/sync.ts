@@ -34,11 +34,12 @@ type SyncResult = { status: 'success' } | { status: 'not-configured' } | { statu
  * init the ioredis adapter pointing at localhost — no backend call needed.
  */
 async function initEmbeddedRedis(): Promise<SyncResult> {
+    let adapter: any = null;
     try {
         const { IoRedisAdapter } = await import('../cache/ioredis-adapter.js');
         const { setCacheProvider } = await import('../cache/index.js');
 
-        const adapter = new IoRedisAdapter('redis://localhost:6379');
+        adapter = new IoRedisAdapter('redis://localhost:6379');
         // Wait for the adapter to connect (it initializes asynchronously)
         await adapter.ping();
         setCacheProvider(adapter);
@@ -46,6 +47,11 @@ async function initEmbeddedRedis(): Promise<SyncResult> {
         return { status: 'success' };
     } catch (error) {
         console.warn('[Startup Sync] ⚠️ Embedded Redis not available:', (error as Error).message);
+        if (adapter) {
+            try {
+                await adapter.disconnect();
+            } catch {}
+        }
         return { status: 'not-configured' };
     }
 }

@@ -133,3 +133,27 @@ server/
 # =============================================================================
 .agent/
 memory-bank/
+
+# =============================================================================
+# Scratch, debug & temp artifacts (keep the tree clean)
+# =============================================================================
+scratch_*
+/scratch/
+/_check*
+/_test_*
+/_temp*
+/_tw_output.txt
+/temp_*
+*.timestamp-*.mjs
+/*.png
+/debug-*
+/reproduce-*
+/trace_*.py
+/investigation_*.txt
+/git_log*.txt
+/git_status.txt
+/ssr_output.html
+/api_response.json
+/fix-*.js
+/fix-*.cjs
+/fix-*.ps1

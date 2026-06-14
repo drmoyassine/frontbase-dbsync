@@ -43,6 +43,9 @@ services:
       - MAILGUN_REGION=${MAILGUN_REGION}
       - EMAIL_FROM=${EMAIL_FROM}
       - EMAIL_FROM_NAME=${EMAIL_FROM_NAME}
+      # Frontend and Backend URLs for SuperTokens links
+      - FRONTEND_URL=${FRONTEND_URL}
+      - BACKEND_URL=${BACKEND_URL}
     volumes:
       - backend_data:/app/data
     restart: unless-stopped
@@ -70,6 +73,9 @@ services:
       - MAILGUN_REGION=${MAILGUN_REGION}
       - EMAIL_FROM=${EMAIL_FROM}
       - EMAIL_FROM_NAME=${EMAIL_FROM_NAME}
+      # Frontend and Backend URLs for SuperTokens links
+      - FRONTEND_URL=${FRONTEND_URL}
+      - BACKEND_URL=${BACKEND_URL}
     depends_on:
       redis:
         condition: service_healthy

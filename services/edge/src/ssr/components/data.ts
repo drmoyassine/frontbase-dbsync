@@ -165,12 +165,7 @@ export function renderDataComponent(
             return renderKPICard(id, props, propsJson);
 
         case 'Card':
-        case 'DataCard':
             return renderDataCard(id, props, childrenHtml, propsJson);
-
-        case 'Repeater':
-        case 'List':
-            return renderRepeater(id, props, childrenHtml, propsJson);
 
         case 'Grid':
             return renderDataGrid(id, props, propsJson);
@@ -490,26 +485,6 @@ function renderDataCard(id: string, props: Record<string, unknown>, childrenHtml
 
 
 
-function renderRepeater(id: string, props: Record<string, unknown>, childrenHtml: string, propsJson: string): string {
-    const columns = (props.columns as number) || 1;
-    const gap = props.gap as string || '1rem';
-    const itemCount = (props.itemCount as number) || 3;
-
-    // Generate skeleton items
-    const skeletonItems = Array(itemCount).fill(0).map(() =>
-        `<div class="fb-repeater-item fb-skeleton" style="min-height:100px;border-radius:0.5rem">&nbsp;</div>`
-    ).join('');
-
-    const style = `display:grid;grid-template-columns:repeat(${columns},1fr);gap:${gap}`;
-    const attrs = getCommonAttributes(id, 'fb-repeater', props, style, 'repeater', propsJson);
-
-    return `<div ${attrs}>
-        <div class="fb-repeater-items fb-loading">
-            ${skeletonItems}
-        </div>
-        ${childrenHtml}
-    </div>`;
-}
 
 function renderDataGrid(id: string, props: Record<string, unknown>, propsJson: string): string {
     const columns = (props.columns as number) || 3;

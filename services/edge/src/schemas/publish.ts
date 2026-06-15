@@ -17,7 +17,7 @@ export const ComponentTypeSchema = z.enum([
     // Interactive
     'Button', 'Link', 'Tabs', 'Accordion', 'Modal', 'Dropdown', 'Toggle', 'Checkbox', 'Radio',
     // Data-Driven
-    'DataTable', 'Form', 'InfoList', 'Chart', 'DataCard', 'Repeater', 'Grid',
+    'DataTable', 'Form', 'InfoList', 'Chart', 'Grid', 'KPICard',
     // Layout
     'Container', 'Row', 'Column', 'Section', 'Card', 'Panel'
 ]);

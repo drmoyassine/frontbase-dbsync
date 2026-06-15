@@ -62,7 +62,6 @@ const componentCategories = {
       { name: 'Row', icon: Rows3, description: 'Horizontal flex row', section: 'layout' },
       { name: 'Column', icon: Columns3, description: 'Vertical flex column', section: 'layout' },
       { name: 'Card', icon: CreditCard, description: 'Content card', section: 'layout' },
-      { name: 'Grid', icon: LayoutGrid, description: 'Grid layout', section: 'layout' },
       { name: 'Flex', icon: AlignJustify, description: 'Flex container', section: 'layout' },
       { name: 'Separator', icon: Minus, description: 'Visual separator', section: 'layout' },
       { name: 'Tabs', icon: PanelTop, description: 'Tabbed content', section: 'layout' },
@@ -85,6 +84,7 @@ const componentCategories = {
 
       // Data/Lists Components
       { name: 'DataTable', icon: Table, description: 'Advanced data table', section: 'data' },
+      { name: 'Grid', icon: LayoutGrid, description: 'Card grid from a table', section: 'data' },
       { name: 'KPICard', icon: BarChart, description: 'KPI display card', section: 'data' },
       { name: 'Chart', icon: BarChart, description: 'Data visualization', section: 'data' },
       { name: 'Progress', icon: BarChart, description: 'Progress indicator', section: 'data' },

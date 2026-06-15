@@ -47,8 +47,8 @@ const INTERACTIVE_COMPONENTS = new Set([
 ]);
 
 const DATA_COMPONENTS = new Set([
-    'DataTable', 'Form', 'InfoList', 'Chart', 'Grid', 'List',
-    'Card', 'Repeater', 'DataCard', 'KPICard'
+    'DataTable', 'Form', 'InfoList', 'Chart', 'Grid',
+    'Card', 'KPICard'
 ]);
 
 // NOTE: 'Grid' is intentionally NOT a layout component. There is exactly one

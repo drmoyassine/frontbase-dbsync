@@ -31,3 +31,5 @@ export { EmbedProperties } from './EmbedProperties';
 // Data
 export { ChartProperties } from './ChartProperties';
 export { GridProperties } from './GridProperties';
+export { KPICardProperties } from './KPICardProperties';
+

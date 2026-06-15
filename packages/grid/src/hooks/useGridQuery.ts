@@ -144,5 +144,8 @@ export function useGridQuery({
         staleTime: 5 * 60 * 1000,
         refetchOnWindowFocus: false,
         retry: 1,
+        refetchInterval: binding.refreshInterval && binding.refreshInterval > 0
+            ? binding.refreshInterval * 1000
+            : false,
     });
 }

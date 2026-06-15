@@ -8,16 +8,12 @@ interface MediaPropertiesProps {
     type: string;
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
-    onDataBindingClick: () => void;
-    hasBinding: boolean;
 }
 
 export const MediaProperties: React.FC<MediaPropertiesProps> = ({
     type,
     props,
-    updateComponentProp,
-    onDataBindingClick,
-    hasBinding
+    updateComponentProp
 }) => {
     // Image component
     if (type === 'Image') {

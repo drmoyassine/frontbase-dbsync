@@ -64,8 +64,9 @@ export function Chart({
     // React throws "Rendered more hooks than during the previous render".
     const chartData = useMemo(() => {
         if (!data || data.length === 0) return [];
-        return data.slice(0, 10); // Limit to 10 rows for clean chart display
-    }, [data]);
+        const maxRows = binding?.chartConfig?.maxRows || 10;
+        return data.slice(0, maxRows); // Limit to maxRows (default 10) for clean chart display
+    }, [data, binding?.chartConfig?.maxRows]);
 
     // 1. Unconfigured State
     if (!binding?.tableName) {
@@ -134,8 +135,8 @@ export function Chart({
         }
 
         const keys = Object.keys(chartData[0]);
-        const xAxisKey = keys[0];
-        const valueKey = keys[1] || xAxisKey;
+        const xAxisKey = binding?.chartConfig?.labelColumn || keys[0];
+        const valueKey = binding?.chartConfig?.valueColumn || keys[1] || xAxisKey;
 
         // Custom container styles to satisfy recharts sizing constraints
         const containerStyle = {

@@ -263,7 +263,7 @@ const SearchColumnSelector: React.FC<SearchColumnSelectorProps> = ({
 };
 
 // ============ DefaultSortColumnSelector Component ============
-interface DefaultSortColumnSelectorProps {
+export interface DefaultSortColumnSelectorProps {
     tableName: string;
     dataSourceId?: string;
     columnOrder?: string[];
@@ -271,7 +271,7 @@ interface DefaultSortColumnSelectorProps {
     onValueChange: (column: string) => void;
 }
 
-const DefaultSortColumnSelector: React.FC<DefaultSortColumnSelectorProps> = ({
+export const DefaultSortColumnSelector: React.FC<DefaultSortColumnSelectorProps> = ({
     tableName,
     dataSourceId,
     columnOrder = [],
@@ -658,16 +658,12 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="-1">Manual</SelectItem>
-                                    <SelectItem value="0">Real-time</SelectItem>
                                     <SelectItem value="5">Every 5 seconds</SelectItem>
                                     <SelectItem value="30">Every 30 seconds</SelectItem>
                                     <SelectItem value="60">Every minute</SelectItem>
                                     <SelectItem value="300">Every 5 minutes</SelectItem>
                                 </SelectContent>
                             </Select>
-                            <p className="text-xs text-muted-foreground">
-                                Note: Auto-refresh will be implemented in a future update
-                            </p>
                         </div>
                     </div>
                 ) : (

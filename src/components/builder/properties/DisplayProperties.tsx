@@ -12,16 +12,12 @@ interface DisplayPropertiesProps {
     type: string;
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
-    onDataBindingClick: () => void;
-    hasBinding: boolean;
 }
 
 export const DisplayProperties: React.FC<DisplayPropertiesProps> = ({
     type,
     props,
-    updateComponentProp,
-    onDataBindingClick,
-    hasBinding
+    updateComponentProp
 }) => {
     // Alert component
     if (type === 'Alert') {
@@ -167,48 +163,7 @@ export const DisplayProperties: React.FC<DisplayPropertiesProps> = ({
         );
     }
 
-    // Chart component
-    if (type === 'Chart') {
-        return (
-            <div className="space-y-4">
-                <div className="space-y-2">
-                    <Label htmlFor="chart-type">Chart Type</Label>
-                    <Select value={props.chartType || 'bar'} onValueChange={(value) => updateComponentProp('chartType', value)}>
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="bar">Bar Chart</SelectItem>
-                            <SelectItem value="line">Line Chart</SelectItem>
-                            <SelectItem value="pie">Pie Chart</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-        );
-    }
 
-    // Grid component
-    if (type === 'Grid') {
-        return (
-            <div className="space-y-4">
-                <div className="space-y-2">
-                    <Label htmlFor="grid-columns">Columns</Label>
-                    <Select value={(props.columns || 3).toString()} onValueChange={(value) => updateComponentProp('columns', parseInt(value))}>
-                        <SelectTrigger>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="1">1 Column</SelectItem>
-                            <SelectItem value="2">2 Columns</SelectItem>
-                            <SelectItem value="3">3 Columns</SelectItem>
-                            <SelectItem value="4">4 Columns</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
-        );
-    }
 
     // Card Component
     if (type === 'Card') {

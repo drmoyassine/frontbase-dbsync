@@ -15,7 +15,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { DataBindingModal } from './data-binding/DataBindingModal';
 import { DataTablePropertiesPanel } from '@/components/builder/data-table/DataTablePropertiesPanel';
 import { FormPropertiesPanel } from './form/FormPropertiesPanel';
 import { VariableInput } from './VariableInput';
@@ -39,6 +38,7 @@ import {
   AlertProperties,
   ChartProperties,
   GridProperties,
+  KPICardProperties,
 } from './properties/basic';
 
 // Landing Components
@@ -68,29 +68,17 @@ export const PropertiesPanel = () => {
     currentPageId,
     updateComponent,
     removeComponent,
-    project,
-    dataBindingRequestId,
-    clearDataBindingRequest
+    project
   } = useBuilderStore();
 
   const { setComponentBinding, initialize } = useDataBindingStore();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showDataBinding, setShowDataBinding] = useState(false);
 
   // Initialize data binding store when panel opens
   React.useEffect(() => {
     initialize();
   }, [initialize]);
-
-  // Open the data-binding modal when a canvas component requests it
-  // (e.g. clicking "Configure Data" on an unbound Chart/Grid/KPICard).
-  React.useEffect(() => {
-    if (dataBindingRequestId && dataBindingRequestId === selectedComponentId) {
-      setShowDataBinding(true);
-      clearDataBindingRequest();
-    }
-  }, [dataBindingRequestId, selectedComponentId, clearDataBindingRequest]);
 
   if (!selectedComponentId || !currentPageId) {
     return (
@@ -127,15 +115,6 @@ export const PropertiesPanel = () => {
   const deleteComponent = () => {
     removeComponent(selectedComponentId);
     setShowDeleteDialog(false);
-  };
-
-  const handleDataBindingSave = (binding: any) => {
-    setComponentBinding(selectedComponentId, binding);
-    updateComponentProp('binding', binding);
-  };
-
-  const onDataBindingClick = () => setShowDataBinding(true);
-
   const renderPropertyFields = () => {
     const { type, props, styles = {} } = selectedComponent;
 
@@ -170,10 +149,10 @@ export const PropertiesPanel = () => {
 
       // === ACTIONS ===
       case 'Button':
-        return <ButtonProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} hasBinding={!!props.binding} />;
+        return <ButtonProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} />;
 
       case 'Link':
-        return <LinkProperties props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} />;
+        return <LinkProperties props={props} updateComponentProp={updateComponentProp} />;
 
       // === MEDIA ===
       case 'Icon':
@@ -211,10 +190,46 @@ export const PropertiesPanel = () => {
 
       // === DATA ===
       case 'Chart':
-        return <ChartProperties props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} />;
+        return (
+          <ChartProperties
+            componentId={selectedComponentId!}
+            binding={selectedComponent?.props?.binding}
+            onBindingUpdate={(binding) => {
+              setComponentBinding(selectedComponentId!, binding);
+              updateComponentProp('binding', binding);
+            }}
+            props={props}
+            updateComponentProp={updateComponentProp}
+          />
+        );
 
       case 'Grid':
-        return <GridProperties props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} />;
+        return (
+          <GridProperties
+            componentId={selectedComponentId!}
+            binding={selectedComponent?.props?.binding}
+            onBindingUpdate={(binding) => {
+              setComponentBinding(selectedComponentId!, binding);
+              updateComponentProp('binding', binding);
+            }}
+            props={props}
+            updateComponentProp={updateComponentProp}
+          />
+        );
+
+      case 'KPICard':
+        return (
+          <KPICardProperties
+            componentId={selectedComponentId!}
+            binding={selectedComponent?.props?.binding}
+            onBindingUpdate={(binding) => {
+              setComponentBinding(selectedComponentId!, binding);
+              updateComponentProp('binding', binding);
+            }}
+            props={props}
+            updateComponentProp={updateComponentProp}
+          />
+        );
 
       case 'DataTable':
         const dataTableBinding = selectedComponent?.props?.binding;
@@ -238,7 +253,7 @@ export const PropertiesPanel = () => {
       // === DISPLAY PROPERTIES (fallback for some types) ===
       case 'Card':
       case 'Embed':
-        return <DisplayProperties type={type} props={props} updateComponentProp={updateComponentProp} onDataBindingClick={onDataBindingClick} hasBinding={!!props.binding} />;
+        return <DisplayProperties type={type} props={props} updateComponentProp={updateComponentProp} />;
 
       default:
         return (
@@ -327,14 +342,6 @@ export const PropertiesPanel = () => {
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         onConfirm={deleteComponent}
-      />
-
-      <DataBindingModal
-        open={showDataBinding}
-        onOpenChange={setShowDataBinding}
-        componentId={selectedComponentId || ''}
-        componentType={selectedComponent?.type || ''}
-        onSave={handleDataBindingSave}
       />
     </div>
   );

@@ -10,8 +10,6 @@ export interface PropertyComponentProps {
     type: string;
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
-    onDataBindingClick: () => void;
-    hasBinding: boolean;
 }
 
 /**
@@ -20,16 +18,12 @@ export interface PropertyComponentProps {
 export const getPropertyComponent = (
     type: string,
     props: Record<string, any>,
-    updateComponentProp: (key: string, value: any) => void,
-    onDataBindingClick: () => void,
-    hasBinding: boolean
+    updateComponentProp: (key: string, value: any) => void
 ): React.ReactNode => {
     const componentProps = {
         type,
         props,
-        updateComponentProp,
-        onDataBindingClick,
-        hasBinding
+        updateComponentProp
     };
 
     switch (type) {

@@ -73,6 +73,7 @@ export interface DataTableBinding {
     // Data source
     tableName?: string;
     dataSourceId?: string;
+    refreshInterval?: number;
 
     // Columns
     columnOrder?: string[];

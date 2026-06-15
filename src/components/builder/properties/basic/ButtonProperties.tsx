@@ -13,16 +13,12 @@ interface ButtonPropertiesProps {
     componentId: string;
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
-    onDataBindingClick: () => void;
-    hasBinding: boolean;
 }
 
 export const ButtonProperties: React.FC<ButtonPropertiesProps> = ({
     componentId,
     props,
-    updateComponentProp,
-    onDataBindingClick,
-    hasBinding
+    updateComponentProp
 }) => {
     return (
         <>
@@ -30,8 +26,6 @@ export const ButtonProperties: React.FC<ButtonPropertiesProps> = ({
                 componentId={componentId}
                 props={props}
                 updateComponentProp={updateComponentProp}
-                onDataBindingClick={onDataBindingClick}
-                hasBinding={hasBinding}
             />
             {/* Button Icon */}
             <div className="space-y-3 pt-4 border-t">

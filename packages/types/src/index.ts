@@ -40,4 +40,9 @@ export interface ComponentDataBinding {
     };
     columnOverrides: Record<string, ColumnOverride>;
     dataRequest?: any;
+    chartConfig?: {
+        labelColumn?: string;
+        valueColumn?: string;
+        maxRows?: number;
+    };
 }

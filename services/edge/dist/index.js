@@ -2,7 +2,7 @@ import {
   getBlockedIpsAsync,
   getBotProtection,
   getBotProtectionAsync
-} from "./chunk-BYKNZ3TJ.js";
+} from "./chunk-7VSIW6QK.js";
 import {
   tenantMiddleware
 } from "./chunk-N3IK2FTA.js";
@@ -16,13 +16,13 @@ import {
   init_IStateProvider,
   isMultiTenantSlug,
   stateProvider
-} from "./chunk-WDIFPRX2.js";
+} from "./chunk-XT6D4PKS.js";
 import {
   shouldDebounce
-} from "./chunk-ZSGX623W.js";
+} from "./chunk-5OO2Q5JL.js";
 import {
   cacheProvider
-} from "./chunk-2Z7ZEFVT.js";
+} from "./chunk-WSTEQZPX.js";
 import {
   getAgentProfilesConfig,
   getApiKeysConfig,
@@ -45,7 +45,7 @@ import {
   invalidatePattern,
   rateLimit,
   testConnection
-} from "./chunk-2T6KJ3IO.js";
+} from "./chunk-TRXWF3US.js";
 import {
   handleDataQuery
 } from "./chunk-Z42UIXOU.js";
@@ -103,7 +103,7 @@ async function checkStateDb() {
   };
   if (cfg.schema) result.schema = cfg.schema;
   try {
-    const { stateProvider: stateProvider2 } = await import("./storage-XEDALIEO.js");
+    const { stateProvider: stateProvider2 } = await import("./storage-6KFPNL4N.js");
     await withTimeout(stateProvider2.listPages(), PING_TIMEOUT_MS);
     result.status = "ok";
   } catch (e) {
@@ -119,7 +119,7 @@ async function checkCache() {
     return { provider: "none", status: "not_configured" };
   }
   try {
-    const { cacheProvider: cacheProvider2 } = await import("./cache-GZUTJ5CB.js");
+    const { cacheProvider: cacheProvider2 } = await import("./cache-O2IECQQT.js");
     await withTimeout(cacheProvider2.get("__health_check__"), PING_TIMEOUT_MS);
     return { provider: cfg.provider || "redis", status: "ok" };
   } catch (e) {
@@ -1365,7 +1365,7 @@ executeRoute.openapi(route3, async (c) => {
     }
   }
   if (debounceSec > 0) {
-    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-AUSJFGPO.js");
+    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-UO7EC3S7.js");
     const debounced = await shouldDebounce2(id, debounceSec);
     if (debounced) {
       return c.json({
@@ -3077,7 +3077,7 @@ configRoute.openapi(updateConfigRoute, async (c) => {
     if (body.cache) {
       overrideCacheConfig({ provider: "upstash", url: body.cache.url, token: body.cache.token });
       try {
-        const { initRedis: initRedis2 } = await import("./redis-E24KJZFG.js");
+        const { initRedis: initRedis2 } = await import("./redis-ISXX7Q6Q.js");
         initRedis2({ url: body.cache.url, token: body.cache.token });
         updated.push("cache");
         console.log("[Config] Cache reinitialized");
@@ -7080,11 +7080,9 @@ function renderKPICard(id, props, propsJson) {
   return `<div ${attrs}>
         <div class="flex flex-row items-center justify-between space-y-0 pb-2 p-6">
             <h4 class="text-sm font-medium capitalize">${title || "KPI"}</h4>
-            <div class="h-4 w-4 bg-muted rounded-full animate-pulse"></div>
         </div>
         <div class="p-6 pt-0">
             <div class="text-2xl font-bold fb-skeleton animate-pulse" style="height:2rem;width:80px;border-radius:0.25rem">&nbsp;</div>
-            <div class="text-xs text-muted-foreground mt-1.5 fb-skeleton animate-pulse" style="height:1rem;width:120px;border-radius:0.25rem">&nbsp;</div>
         </div>
     </div>`;
 }
@@ -8268,7 +8266,6 @@ var LAYOUT_COMPONENTS = /* @__PURE__ */ new Set([
   "Row",
   "Column",
   "Flex",
-  "Grid",
   "Stack",
   "Group",
   "Box",
@@ -8466,11 +8463,6 @@ function renderLayoutComponent(type, id, props, styles, childrenHtml, visibility
       const align = styles.alignItems || props.align || "stretch";
       const gap = styles.gap || props.gap || "0";
       return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="display:flex;flex-direction:${flexDirection};justify-content:${justify};align-items:${align};gap:${gap};${inlineStyle}">${childrenHtml}</div>`;
-    case "Grid":
-      const columns = props.columns || 2;
-      const gridGap = styles.gap || props.gap || "1rem";
-      const gridResponsiveClass = columns <= 2 ? "grid grid-cols-1 md:grid-cols-2" : columns === 3 ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3" : `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(columns, 4)}`;
-      return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className} ${gridResponsiveClass}" style="gap:${gridGap};${inlineStyle}">${childrenHtml}</div>`;
     case "Stack":
       const stackGap = styles.gap || props.gap || "1rem";
       return `${combinedCSS}<div id="${elementId}"${propsAttr} class="${className}" style="display:flex;flex-direction:column;gap:${stackGap};${inlineStyle}">${childrenHtml}</div>`;
@@ -10118,7 +10110,7 @@ importRoute.post("/", async (c) => {
     }
     const result = await stateProvider.upsertPage(page);
     try {
-      const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+      const { getRedis: getRedis2 } = await import("./redis-ISXX7Q6Q.js");
       const redis = getRedis2();
       const cachePrefix = page.tenantSlug && page.tenantSlug !== "_default" ? `page:${page.tenantSlug}:` : "page:";
       await redis.del(`${cachePrefix}${page.slug}`);
@@ -10191,7 +10183,7 @@ importRoute.delete("/:slug", async (c) => {
     console.log(`[Import] Successfully unpublished: ${slug}`);
     invalidateHtmlCache(slug, tenantSlug);
     try {
-      const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+      const { getRedis: getRedis2 } = await import("./redis-ISXX7Q6Q.js");
       const redis = getRedis2();
       const cachePrefix = tenantSlug && tenantSlug !== "_default" ? `page:${tenantSlug}:` : "page:";
       await redis.del(`${cachePrefix}${slug}`);
@@ -10227,7 +10219,7 @@ importRoute.post("/settings", async (c) => {
     if (body.appUrl !== void 0) updates.appUrl = body.appUrl || null;
     if (body.authForms !== void 0) updates.authForms = body.authForms || null;
     if (body.securityConfig !== void 0) {
-      const { updateSecurityConfig } = await import("./securityConfig-SHSLLSFV.js");
+      const { updateSecurityConfig } = await import("./securityConfig-WBFYRYJ7.js");
       updateSecurityConfig(body.securityConfig);
       console.log("[Import Settings] Security config updated");
     }
@@ -10360,7 +10352,7 @@ manageRoute.openapi(deletePageRoute, async (c) => {
   const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
   await stateProvider.deletePage(slug, tenantSlug);
   try {
-    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const { getRedis: getRedis2 } = await import("./redis-ISXX7Q6Q.js");
     const redis = getRedis2();
     const cachePrefix = tenantSlug && tenantSlug !== "_default" ? `page:${tenantSlug}:` : "page:";
     await redis.del(`${cachePrefix}${slug}`);
@@ -10393,7 +10385,7 @@ seoRoute.get("/sitemap.xml", async (c) => {
   const tenantSlug = c.get("tenantSlug");
   const cacheKey = tenantSlug && tenantSlug !== "_default" ? `seo:sitemap:${tenantSlug}` : "seo:sitemap";
   try {
-    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const { getRedis: getRedis2 } = await import("./redis-ISXX7Q6Q.js");
     const redis = getRedis2();
     const cached2 = await redis.get(cacheKey);
     if (cached2) {
@@ -10422,7 +10414,7 @@ seoRoute.get("/sitemap.xml", async (c) => {
 ${urls}
 </urlset>`;
   try {
-    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const { getRedis: getRedis2 } = await import("./redis-ISXX7Q6Q.js");
     const redis = getRedis2();
     await redis.setex(cacheKey, 3600, xml);
   } catch {
@@ -10447,7 +10439,7 @@ seoRoute.get("/llms.txt", async (c) => {
   const tenantSlug = c.get("tenantSlug");
   const cacheKey = tenantSlug && tenantSlug !== "_default" ? `seo:llms:${tenantSlug}` : "seo:llms";
   try {
-    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const { getRedis: getRedis2 } = await import("./redis-ISXX7Q6Q.js");
     const redis = getRedis2();
     const cached2 = await redis.get(cacheKey);
     if (cached2) {
@@ -10477,7 +10469,7 @@ seoRoute.get("/llms.txt", async (c) => {
   }
   const llmsTxt = lines.join("\n") + "\n";
   try {
-    const { getRedis: getRedis2 } = await import("./redis-E24KJZFG.js");
+    const { getRedis: getRedis2 } = await import("./redis-ISXX7Q6Q.js");
     const redis = getRedis2();
     await redis.setex(cacheKey, 3600, llmsTxt);
   } catch {
@@ -11126,16 +11118,23 @@ app.route("", pagesRoute);
 // src/startup/sync.ts
 var BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 async function initEmbeddedRedis() {
+  let adapter = null;
   try {
-    const { IoRedisAdapter } = await import("./ioredis-adapter-T3ADOFR6.js");
-    const { setCacheProvider } = await import("./cache-GZUTJ5CB.js");
-    const adapter = new IoRedisAdapter("redis://localhost:6379");
+    const { IoRedisAdapter } = await import("./ioredis-adapter-BNGRWZKT.js");
+    const { setCacheProvider } = await import("./cache-O2IECQQT.js");
+    adapter = new IoRedisAdapter("redis://localhost:6379");
     await adapter.ping();
     setCacheProvider(adapter);
     console.log("[Startup Sync] \u2705 Embedded Redis initialized (localhost:6379)");
     return { status: "success" };
   } catch (error) {
     console.warn("[Startup Sync] \u26A0\uFE0F Embedded Redis not available:", error.message);
+    if (adapter) {
+      try {
+        await adapter.disconnect();
+      } catch {
+      }
+    }
     return { status: "not-configured" };
   }
 }

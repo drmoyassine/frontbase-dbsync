@@ -10,16 +10,12 @@ interface FormPropertiesProps {
     type: string;
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
-    onDataBindingClick: () => void;
-    hasBinding: boolean;
 }
 
 export const FormProperties: React.FC<FormPropertiesProps> = ({
     type,
     props,
-    updateComponentProp,
-    onDataBindingClick,
-    hasBinding
+    updateComponentProp
 }) => {
     // Input component
     if (type === 'Input') {

@@ -154,10 +154,10 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
     });
   }, [id, binding]);
 
-  // Open the data-binding modal for this component from the canvas (used by
+  // Select the component in the properties panel from the canvas (used by
   // data components' "Configure Data" affordance).
   const handleConfigureBinding = React.useCallback(() => {
-    if (id) useBuilderStore.getState().requestDataBindingFor(id);
+    if (id) useBuilderStore.getState().setSelectedComponentId(id);
   }, [id]);
 
   const rendererProps = {

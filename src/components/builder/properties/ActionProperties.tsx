@@ -11,16 +11,12 @@ interface ActionPropertiesProps {
     componentId?: string;
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
-    onDataBindingClick: () => void;
-    hasBinding: boolean;
 }
 
 export const ActionProperties: React.FC<ActionPropertiesProps> = ({
     componentId,
     props,
-    updateComponentProp,
-    onDataBindingClick,
-    hasBinding
+    updateComponentProp
 }) => {
     // Get action bindings from props
     const actionBindings: ActionBinding[] = props.actionBindings || [];

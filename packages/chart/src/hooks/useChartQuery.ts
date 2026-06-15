@@ -147,5 +147,8 @@ export function useChartQuery({
         staleTime: 5 * 60 * 1000, // 5 minutes per AGENTS.md 7.2
         refetchOnWindowFocus: false,
         retry: 1, // standard retry limit
+        refetchInterval: binding.refreshInterval && binding.refreshInterval > 0
+            ? binding.refreshInterval * 1000
+            : false,
     });
 }

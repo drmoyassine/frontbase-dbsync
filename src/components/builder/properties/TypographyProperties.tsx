@@ -10,16 +10,12 @@ interface TypographyPropertiesProps {
     type: string;
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
-    onDataBindingClick: () => void;
-    hasBinding: boolean;
 }
 
 export const TypographyProperties: React.FC<TypographyPropertiesProps> = ({
     type,
     props,
-    updateComponentProp,
-    onDataBindingClick,
-    hasBinding
+    updateComponentProp
 }) => {
     // Heading component
     if (type === 'Heading') {

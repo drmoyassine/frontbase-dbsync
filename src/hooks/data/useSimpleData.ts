@@ -44,6 +44,11 @@ export interface ComponentDataBinding {
     rpcName?: string;
     params?: Record<string, any>;
     fieldMapping?: Record<string, string>;
+    chartConfig?: {
+        labelColumn?: string;
+        valueColumn?: string;
+        maxRows?: number;
+    };
 }
 
 export interface UseSimpleDataOptions {

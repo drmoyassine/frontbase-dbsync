@@ -13,13 +13,11 @@ import { Database } from 'lucide-react';
 interface LinkPropertiesProps {
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
-    onDataBindingClick: () => void;
 }
 
 export const LinkProperties: React.FC<LinkPropertiesProps> = ({
     props,
-    updateComponentProp,
-    onDataBindingClick
+    updateComponentProp
 }) => {
     return (
         <>
@@ -50,14 +48,6 @@ export const LinkProperties: React.FC<LinkPropertiesProps> = ({
                         <SelectItem value="_blank">New Tab</SelectItem>
                     </SelectContent>
                 </Select>
-                <Button
-                    variant="outline"
-                    onClick={onDataBindingClick}
-                    className="w-full justify-start"
-                >
-                    <Database className="mr-2 h-4 w-4" />
-                    {props.binding ? 'Edit Data Binding' : 'Configure Data Binding'}
-                </Button>
             </div>
         </>
     );

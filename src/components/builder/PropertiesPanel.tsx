@@ -115,6 +115,8 @@ export const PropertiesPanel = () => {
   const deleteComponent = () => {
     removeComponent(selectedComponentId);
     setShowDeleteDialog(false);
+  };
+
   const renderPropertyFields = () => {
     const { type, props, styles = {} } = selectedComponent;
 

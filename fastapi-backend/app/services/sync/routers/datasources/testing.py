@@ -17,6 +17,7 @@ from app.services.sync.schemas.datasource import (
     DatasourceTestRequest,
 )
 from app.services.sync.adapters import get_adapter
+from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.testing")
@@ -40,22 +41,11 @@ def _get_error_suggestion(e: Exception) -> Optional[str]:
 
 @router.post("/{datasource_id}/test/", response_model=DatasourceTestResult)
 async def test_datasource(
-    datasource_id: str,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Test a datasource connection."""
-    logger.info(f"Testing connection for saved datasource: {datasource_id}")
-    result = await db.execute(
-        select(Datasource).where(Datasource.id == datasource_id)
-    )
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Datasource not found"
-        )
-    
+    logger.info(f"Testing connection for saved datasource: {datasource.id}")
     try:
         adapter = get_adapter(datasource)
         await adapter.connect()
@@ -72,7 +62,7 @@ async def test_datasource(
             tables=tables
         )
     except Exception as e:
-        logger.error(f"Error testing datasource {datasource_id}: {str(e)}", exc_info=True)
+        logger.error(f"Error testing datasource {datasource.id}: {str(e)}", exc_info=True)
         datasource.last_tested_at = datetime.utcnow()  # Naive for PostgreSQL TIMESTAMP WITHOUT TIME ZONE
         datasource.last_test_success = False
         await db.commit()
@@ -150,22 +140,12 @@ async def test_new_datasource(data: DatasourceTestRequest):
 
 @router.post("/{datasource_id}/test-update/", response_model=DatasourceTestResult)
 async def test_datasource_update(
-    datasource_id: str,
     data: DatasourceUpdate,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Test a datasource connection with proposed updates merged into existing config."""
-    logger.info(f"Testing connection update for datasource: {datasource_id}")
-    result = await db.execute(
-        select(Datasource).where(Datasource.id == datasource_id)
-    )
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Datasource not found"
-        )
+    logger.info(f"Testing connection update for datasource: {datasource.id}")
     
     test_ds = Datasource(
         name=data.name or datasource.name,
@@ -192,7 +172,7 @@ async def test_datasource_update(
             tables=tables
         )
     except Exception as e:
-        logger.error(f"Error testing update for datasource {datasource_id}: {str(e)}", exc_info=True)
+        logger.error(f"Error testing update for datasource {datasource.id}: {str(e)}", exc_info=True)
         return DatasourceTestResult(
             success=False,
             message="Connection failed with these settings",

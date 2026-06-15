@@ -15,6 +15,7 @@ from app.services.sync.schemas.datasource import (
     DatasourceViewCreate,
     DatasourceViewResponse
 )
+from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.views")
@@ -22,26 +23,21 @@ logger = logging.getLogger("app.routers.datasources.views")
 
 @router.get("/{datasource_id}/views/", response_model=List[DatasourceViewResponse])
 async def list_datasource_views(
-    datasource_id: str,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """List all views for a specific datasource."""
-    result = await db.execute(select(DatasourceView).where(DatasourceView.datasource_id == datasource_id))
+    result = await db.execute(select(DatasourceView).where(DatasourceView.datasource_id == datasource.id))
     return result.scalars().all()
 
 
 @router.post("/{datasource_id}/views/", response_model=DatasourceViewResponse, status_code=status.HTTP_201_CREATED)
 async def create_datasource_view(
-    datasource_id: str,
     view: DatasourceViewCreate,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new view for a datasource."""
-    # Verify datasource exists
-    ds_result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    if not ds_result.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Datasource not found")
-    
     # Check for duplicate name
     existing_view = await db.execute(select(DatasourceView).where(DatasourceView.name == view.name))
     if existing_view.scalar_one_or_none():
@@ -53,7 +49,7 @@ async def create_datasource_view(
     db_view = DatasourceView(
         name=view.name,
         description=view.description,
-        datasource_id=datasource_id,
+        datasource_id=datasource.id,
         target_table=view.target_table,
         filters=view.filters,
         field_mappings=view.field_mappings,

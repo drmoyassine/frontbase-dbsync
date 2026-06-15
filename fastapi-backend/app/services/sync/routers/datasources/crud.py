@@ -10,6 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.middleware.tenant_context import TenantContext, get_tenant_context
+from app.models.models import Project
+
 from app.services.sync.database import get_db
 from app.services.sync.models.datasource import Datasource
 from app.services.sync.schemas.datasource import (
@@ -27,12 +30,30 @@ logger = logging.getLogger("app.routers.datasources.crud")
 @router.post("/", response_model=DatasourceResponse, status_code=status.HTTP_201_CREATED)
 async def create_datasource(
     data: DatasourceCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Register a new datasource."""
-    # Check for duplicate name
+    project_id: str | None = None
+    if ctx and ctx.tenant_id:
+        project_result = await db.execute(
+            select(Project).where(Project.tenant_id == ctx.tenant_id)
+        )
+        project = project_result.scalar_one_or_none()
+        if project:
+            project_id = str(project.id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Tenant project not found"
+            )
+
+    # Check for duplicate name within the same project scope
     existing_result = await db.execute(
-        select(Datasource).where(Datasource.name == data.name)
+        select(Datasource).where(
+            Datasource.name == data.name,
+            Datasource.project_id == project_id
+        )
     )
     if existing_result.scalar_one_or_none():
         raise HTTPException(
@@ -55,6 +76,7 @@ async def create_datasource(
         table_prefix=data.table_prefix,
         extra_config=json.dumps(data.extra_config) if data.extra_config else None,
         provider_account_id=data.provider_account_id,
+        project_id=project_id,
     )
     
     db.add(datasource)
@@ -75,7 +97,7 @@ async def create_datasource(
                 if data.api_key:  # Service role key
                     update_data["supabase_service_key_encrypted"] = encrypt_data(data.api_key)
                 
-                update_project_settings(frontbase_db, "default", update_data)
+                update_project_settings(frontbase_db, project_id or "default", update_data)
                 logger.info(f"Synced Supabase credentials to Frontbase project_settings")
         except Exception as e:
             logger.warning(f"Failed to sync Supabase credentials to Frontbase: {e}")
@@ -102,17 +124,26 @@ async def create_datasource(
 
 @router.get("/", response_model=List[DatasourceResponse])
 async def list_datasources(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """List all registered datasources."""
     import time
     start_time = time.time()
     
-    result = await db.execute(
-        select(Datasource)
-        .options(selectinload(Datasource.views))
-        .order_by(Datasource.created_at.desc())
-    )
+    query = select(Datasource).options(selectinload(Datasource.views))
+    
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        project_result = await db.execute(
+            select(Project).where(Project.tenant_id == ctx.tenant_id)
+        )
+        project = project_result.scalar_one_or_none()
+        if project:
+            query = query.where(Datasource.project_id == project.id)
+        else:
+            return []
+            
+    result = await db.execute(query.order_by(Datasource.created_at.desc()))
     datasources = result.scalars().all()
     
     duration = time.time() - start_time
@@ -124,7 +155,8 @@ async def list_datasources(
 @router.get("/{datasource_id}/", response_model=DatasourceResponse)
 async def get_datasource(
     datasource_id: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Get a specific datasource by ID."""
     result = await db.execute(
@@ -139,6 +171,17 @@ async def get_datasource(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Datasource not found"
         )
+        
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        project_result = await db.execute(
+            select(Project).where(Project.tenant_id == ctx.tenant_id)
+        )
+        project = project_result.scalar_one_or_none()
+        if not project or datasource.project_id != project.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Datasource not found"
+            )
     
     return datasource
 
@@ -147,7 +190,8 @@ async def get_datasource(
 async def update_datasource(
     datasource_id: str,
     data: DatasourceUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Update a datasource."""
     result = await db.execute(
@@ -160,6 +204,17 @@ async def update_datasource(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Datasource not found"
         )
+        
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        project_result = await db.execute(
+            select(Project).where(Project.tenant_id == ctx.tenant_id)
+        )
+        project = project_result.scalar_one_or_none()
+        if not project or datasource.project_id != project.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Datasource not found"
+            )
     
     # Update fields if provided
     update_data = data.model_dump(exclude_unset=True)
@@ -188,7 +243,8 @@ async def update_datasource(
 @router.delete("/{datasource_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_datasource(
     datasource_id: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Delete a datasource."""
     result = await db.execute(
@@ -201,6 +257,17 @@ async def delete_datasource(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Datasource not found"
         )
+        
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        project_result = await db.execute(
+            select(Project).where(Project.tenant_id == ctx.tenant_id)
+        )
+        project = project_result.scalar_one_or_none()
+        if not project or datasource.project_id != project.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Datasource not found"
+            )
     
     await db.delete(datasource)
     await db.commit()

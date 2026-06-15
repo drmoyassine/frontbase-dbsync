@@ -15,6 +15,9 @@ from app.services.sync.database import get_db
 from app.services.sync.models.datasource import Datasource
 from app.services.sync.adapters import get_adapter
 from app.services.sync.services.schema_service import SchemaService
+from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
+from app.middleware.tenant_context import TenantContext, get_tenant_context
+from app.models.models import Project
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.data")
@@ -41,7 +44,6 @@ def _extract_row_id(record: Dict[str, Any]) -> Any:
 
 @router.get("/{datasource_id}/tables/{table}/data/")
 async def get_datasource_table_data(
-    datasource_id: str,
     table: str,
     limit: int = 50,
     offset: int = 0,
@@ -51,14 +53,10 @@ async def get_datasource_table_data(
     search: Optional[str] = None,
     search_cols: Optional[str] = None,  # JSON array of column names to restrict search to
     select: Optional[str] = None,  # Support for related columns: "*,programs(degree_name,type)"
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Get data for a specific table in a datasource with pagination, sorting, search, and related data."""
-    result = await db.execute(sqlalchemy_select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
     
     # Parse filters if provided
     where = None
@@ -117,7 +115,7 @@ async def get_datasource_table_data(
                 if related_specs and hasattr(adapter, 'read_records_with_relations'):
                     # Get schema from cache (single source of truth)
                     try:
-                        schema = await SchemaService.get_cached_schema(db, datasource_id, table)
+                        schema = await SchemaService.get_cached_schema(db, datasource.id, table)
                         logger.info(f"[FK DEBUG] Cached schema for {table}: {bool(schema)}")
                         if not schema:
                             logger.warning(f"No cached schema for {table}. Skipping FK enrichment.")
@@ -246,25 +244,20 @@ async def get_datasource_table_data(
             }
     except Exception as e:
         import traceback
-        logger.error(f"Error fetching data for {datasource_id} table {table}: {str(e)}")
+        logger.error(f"Error fetching data for {datasource.id} table {table}: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to fetch sample data: {str(e)}")
 
 
 @router.get("/{datasource_id}/tables/{table}/distinct/{column}/")
 async def get_distinct_values(
-    datasource_id: str,
     table: str,
     column: str,
     limit: int = 100,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Get distinct values for a column (for dropdown filter options)."""
-    result = await db.execute(sqlalchemy_select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
     
     try:
         adapter = get_adapter(datasource)
@@ -284,17 +277,12 @@ async def get_distinct_values(
 
 @router.post("/{datasource_id}/tables/{table}/records/")
 async def create_record(
-    datasource_id: str,
     table: str,
     body: Dict[str, Any],
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new record in a table."""
-    result = await db.execute(sqlalchemy_select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
     
     data = body.get("data", {})
     if not data:
@@ -317,18 +305,13 @@ async def create_record(
 
 @router.patch("/{datasource_id}/tables/{table}/records/{record_id}")
 async def update_record(
-    datasource_id: str,
     table: str,
     record_id: str,
     body: Dict[str, Any],
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Update an existing record in a table."""
-    result = await db.execute(sqlalchemy_select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
     
     data = body.get("data", {})
     if not data:
@@ -351,18 +334,13 @@ async def update_record(
 
 @router.get("/{datasource_id}/search")
 async def search_datasource_tables(
-    datasource_id: str,
     q: str,
     detailed: bool = False,
     limit: int = 10,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Search for a string across all tables in a specific datasource."""
-    result = await db.execute(sqlalchemy_select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
     
     matches = []
     try:
@@ -379,7 +357,7 @@ async def search_datasource_tables(
                             if matched_fields:
                                 matches.append({
                                     "table": table,
-                                    "datasource_id": datasource_id,
+                                    "datasource_id": datasource.id,
                                     "datasource_name": datasource.name,
                                     "record": record,
                                     "matched_fields": matched_fields,
@@ -398,7 +376,7 @@ async def search_datasource_tables(
                             if count > 0:
                                 return {
                                     "table": table_name,
-                                    "datasource_id": datasource_id,
+                                    "datasource_id": datasource.id,
                                     "datasource_name": datasource.name,
                                     "count": count
                                 }
@@ -410,7 +388,7 @@ async def search_datasource_tables(
                 matches = [r for r in results if r]
         return matches
     except Exception as e:
-        logger.error(f"Error searching datasource {datasource_id}: {str(e)}")
+        logger.error(f"Error searching datasource {datasource.id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
@@ -419,10 +397,22 @@ async def search_all_datasources(
     q: str,
     detailed: bool = False,
     limit: int = 10,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Search for a string across all tables in ALL datasources."""
-    result = await db.execute(sqlalchemy_select(Datasource))
+    query = sqlalchemy_select(Datasource)
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        project_result = await db.execute(
+            sqlalchemy_select(Project).where(Project.tenant_id == ctx.tenant_id)
+        )
+        project = project_result.scalar_one_or_none()
+        if project:
+            query = query.where(Datasource.project_id == project.id)
+        else:
+            return []
+            
+    result = await db.execute(query)
     datasources = result.scalars().all()
     
     all_matches = []

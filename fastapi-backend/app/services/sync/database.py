@@ -161,6 +161,27 @@ async def init_db():
         # existing Postgres table never gains a newly-added model column without this.
         await conn.run_sync(_add_missing_columns)
 
+        # Idempotent startup backfill (Phase 1): associate project-less datasources to default project
+        from app.config.edition import is_cloud
+        if is_cloud():
+            from sqlalchemy import text
+            import logging
+            _logger = logging.getLogger("sync.db.migrate")
+            try:
+                # Find default project
+                default_proj = await conn.execute(text("SELECT id FROM project WHERE tenant_id IS NULL LIMIT 1"))
+                row = default_proj.fetchone()
+                if row:
+                    default_id = row[0]
+                    # Update datasources that have null project_id
+                    await conn.execute(
+                        text("UPDATE datasources SET project_id = :default_id WHERE project_id IS NULL"),
+                        {"default_id": default_id}
+                    )
+                    _logger.info(f"[AUTO-MIGRATE] Backfilled unassigned datasources to default project '{default_id}'")
+            except Exception as e:
+                _logger.warning(f"[AUTO-MIGRATE] Backfill failed: {e}")
+
 
 async def get_db():
     """Dependency to get database session."""

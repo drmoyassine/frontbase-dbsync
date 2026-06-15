@@ -1,9 +1,25 @@
 """Edge infrastructure domain models — EdgeDatabase, EdgeCache, EdgeQueue, EdgeProviderAccount, EdgeEngine, EdgeGPUModel, EdgeAPIKey."""
 
-from sqlalchemy import Column, String, Text, Boolean, ForeignKey
+from sqlalchemy import Table, Column, String, Text, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 
 from ..database.config import Base
+
+
+# Association tables for multi-bindings
+engine_datasources = Table(
+    "engine_datasources",
+    Base.metadata,
+    Column("engine_id", String, ForeignKey("edge_engines.id", ondelete="CASCADE"), primary_key=True),
+    Column("datasource_id", String(36), primary_key=True)
+)
+
+engine_storages = Table(
+    "engine_storages",
+    Base.metadata,
+    Column("engine_id", String, ForeignKey("edge_engines.id", ondelete="CASCADE"), primary_key=True),
+    Column("storage_id", String, ForeignKey("storage_providers.id", ondelete="CASCADE"), primary_key=True)
+)
 
 
 class EdgeDatabase(Base):
@@ -127,6 +143,7 @@ class EdgeEngine(Base):
     edge_db_id = Column(String, ForeignKey('edge_databases.id'), nullable=True)
     edge_cache_id = Column(String, ForeignKey('edge_caches.id'), nullable=True)
     edge_queue_id = Column(String, ForeignKey('edge_queues.id'), nullable=True)
+    edge_auth_id = Column(String, nullable=True)
     engine_config = Column(Text, nullable=True)         # JSON — e.g., {"worker_name": "frontbase-edge"}
     project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_active = Column(Boolean, default=True)

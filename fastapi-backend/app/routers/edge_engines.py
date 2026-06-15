@@ -52,7 +52,9 @@ def _validate_resource_ownership(
     edge_provider_id: str | None = None,
     edge_db_id: str | None = None,
     edge_cache_id: str | None = None,
-    edge_queue_id: str | None = None
+    edge_queue_id: str | None = None,
+    datasource_ids: List[str] | None = None,
+    storage_ids: List[str] | None = None
 ) -> None:
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
@@ -89,6 +91,24 @@ def _validate_resource_ownership(
             ).first()
             if not queue_record:
                 raise HTTPException(403, "Access denied: queue not found or does not belong to this tenant")
+        if datasource_ids:
+            from app.services.sync.models.datasource import Datasource
+            for ds_id in datasource_ids:
+                ds = db.query(Datasource).filter(
+                    Datasource.id == ds_id,
+                    Datasource.project_id == project.id
+                ).first()
+                if not ds:
+                    raise HTTPException(403, f"Access denied: datasource {ds_id} not found or does not belong to this tenant")
+        if storage_ids:
+            from app.models.storage_provider import StorageProvider
+            for st_id in storage_ids:
+                sp = db.query(StorageProvider).filter(
+                    StorageProvider.id == st_id,
+                    StorageProvider.project_id == project.id
+                ).first()
+                if not sp:
+                    raise HTTPException(403, f"Access denied: storage provider {st_id} not found or does not belong to this tenant")
 
 
 # =============================================================================
@@ -330,7 +350,11 @@ async def get_engine(
 @router.post("/", response_model=EdgeEngineResponse, status_code=201)
 async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new engine record (manual mode - does not deploy code)."""
-    _validate_resource_ownership(db, ctx, payload.edge_provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id)
+    _validate_resource_ownership(
+        db, ctx, 
+        payload.edge_provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id,
+        payload.datasource_ids, payload.storage_ids
+    )
     if payload.edge_provider_id:
         provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.edge_provider_id).first()
         if not provider:
@@ -358,6 +382,7 @@ async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db)
         edge_db_id=payload.edge_db_id,
         edge_cache_id=payload.edge_cache_id,
         edge_queue_id=payload.edge_queue_id,
+        edge_auth_id=payload.edge_auth_id,
         engine_config=config_with_key,
         is_active=payload.is_active,
         is_imported=payload.is_imported,
@@ -368,6 +393,23 @@ async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db)
     db.add(engine)
     db.commit()
     db.refresh(engine)
+
+    # Sync bindings for datasources
+    if payload.datasource_ids is not None:
+        from app.models.edge import engine_datasources
+        for ds_id in payload.datasource_ids:
+            db.execute(engine_datasources.insert().values(engine_id=engine.id, datasource_id=ds_id))
+
+    # Sync bindings for storages
+    if payload.storage_ids is not None:
+        from app.models.edge import engine_storages
+        for st_id in payload.storage_ids:
+            db.execute(engine_storages.insert().values(engine_id=engine.id, storage_id=st_id))
+
+    if payload.datasource_ids or payload.storage_ids:
+        db.commit()
+        db.refresh(engine)
+
     return serialize_engine(engine)
 
 
@@ -391,7 +433,11 @@ async def update_engine(
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
-    _validate_resource_ownership(db, ctx, payload.edge_provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id)
+    _validate_resource_ownership(
+        db, ctx, 
+        payload.edge_provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id,
+        payload.datasource_ids, payload.storage_ids
+    )
 
     if payload.edge_provider_id:
         provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == payload.edge_provider_id).first()
@@ -399,6 +445,11 @@ async def update_engine(
             raise HTTPException(status_code=400, detail="Invalid edge_provider_id")
 
     update_data = payload.model_dump(exclude_unset=True)
+    
+    # Extract list bindings out of dict so we don't do setattr(engine, ...) on them
+    datasource_ids = update_data.pop('datasource_ids', None)
+    storage_ids = update_data.pop('storage_ids', None)
+    
     if 'engine_config' in update_data and update_data['engine_config'] is not None:
         update_data['engine_config'] = json.dumps(update_data['engine_config'])
         
@@ -411,6 +462,20 @@ async def update_engine(
         setattr(engine, key, value)
         
     engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+
+    # Sync bindings for datasources
+    if datasource_ids is not None:
+        from app.models.edge import engine_datasources
+        db.execute(engine_datasources.delete().where(engine_datasources.c.engine_id == engine.id))
+        for ds_id in datasource_ids:
+            db.execute(engine_datasources.insert().values(engine_id=engine.id, datasource_id=ds_id))
+
+    # Sync bindings for storages
+    if storage_ids is not None:
+        from app.models.edge import engine_storages
+        db.execute(engine_storages.delete().where(engine_storages.c.engine_id == engine.id))
+        for st_id in storage_ids:
+            db.execute(engine_storages.insert().values(engine_id=engine.id, storage_id=st_id))
 
     if toggled_is_active is not None:
         await engine_reconfigure.toggle_engine(engine, toggled_is_active, db)
@@ -450,6 +515,12 @@ async def reconfigure_engine(
     engine = query.first()
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
+
+    _validate_resource_ownership(
+        db, ctx,
+        edge_db_id=payload.edge_db_id, edge_cache_id=payload.edge_cache_id, edge_queue_id=payload.edge_queue_id,
+        datasource_ids=payload.datasource_ids, storage_ids=payload.storage_ids
+    )
 
     result = await engine_reconfigure.reconfigure(engine, payload, db)
     result["engine"] = serialize_engine(engine)

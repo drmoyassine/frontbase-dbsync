@@ -15,6 +15,7 @@ from app.services.sync.schemas.datasource import TableSchema
 from app.services.sync.adapters import get_adapter
 from app.services.sync.config import settings
 from app.services.sync.redis_client import cache_get, cache_set, cache_delete_pattern
+from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.schema")
@@ -22,30 +23,24 @@ logger = logging.getLogger("app.routers.datasources.schema")
 
 @router.get("/{datasource_id}/tables/", response_model=List[str])
 async def get_datasource_tables(
-    datasource_id: str,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Get list of tables/resources from a datasource."""
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
-    
     try:
         adapter = get_adapter(datasource)
         async with adapter:
             return await adapter.get_tables()
     except Exception as e:
-        logger.error(f"Error fetching tables for {datasource_id}: {str(e)}")
+        logger.error(f"Error fetching tables for {datasource.id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch tables: {str(e)}")
 
 
 @router.get("/{datasource_id}/tables/{table}/schema/", response_model=TableSchema)
 async def get_table_schema(
-    datasource_id: str,
     table: str,
     refresh: bool = False,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -54,24 +49,18 @@ async def get_table_schema(
     Schema is cached in SQLite for instant subsequent loads.
     Use ?refresh=true to force a fresh fetch from the source.
     """
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
-    
     # Check for cached schema (unless refresh requested)
     if not refresh:
         cache_result = await db.execute(
             select(TableSchemaCache).where(
-                TableSchemaCache.datasource_id == datasource_id,
+                TableSchemaCache.datasource_id == datasource.id,
                 TableSchemaCache.table_name == table
             )
         )
         cached = cache_result.scalar_one_or_none()
         if cached:
             import json
-            logger.debug(f"Schema cache hit for {datasource_id}/{table}")
+            logger.debug(f"Schema cache hit for {datasource.id}/{table}")
             
             # Defensive: handle columns/foreign_keys as string (legacy) or list
             columns = cached.columns or []
@@ -100,13 +89,13 @@ async def get_table_schema(
         if refresh:
             await db.execute(
                 delete(TableSchemaCache).where(
-                    TableSchemaCache.datasource_id == datasource_id,
+                    TableSchemaCache.datasource_id == datasource.id,
                     TableSchemaCache.table_name == table
                 )
             )
         
         new_cache = TableSchemaCache(
-            datasource_id=datasource_id,
+            datasource_id=datasource.id,
             table_name=table,
             columns=schema["columns"],
             foreign_keys=schema.get("foreign_keys", [])
@@ -114,18 +103,22 @@ async def get_table_schema(
         db.add(new_cache)
         await db.commit()
         
-        logger.info(f"Schema fetched and cached for {datasource_id}/{table}")
+        logger.info(f"Schema fetched and cached for {datasource.id}/{table}")
         return TableSchema(**schema)
     except Exception as e:
-        logger.error(f"Error fetching schema for {datasource_id} table {table}: {str(e)}")
+        logger.error(f"Error fetching schema for {datasource.id} table {table}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch schema: {str(e)}")
 
 
 # Session endpoints for draft layout/config
 @router.post("/{datasource_id}/tables/{table_name}/session/")
-async def save_table_session(datasource_id: str, table_name: str, session_data: Dict[str, Any]):
+async def save_table_session(
+    table_name: str,
+    session_data: Dict[str, Any],
+    datasource: Datasource = Depends(get_scoped_datasource)
+):
     """Save draft layout/config to Redis session (optional - gracefully degrades if Redis unavailable)."""
-    key = f"session:{datasource_id}:{table_name}"
+    key = f"session:{datasource.id}:{table_name}"
     ttl = settings.sync_state_ttl
     success = await cache_set(settings.redis_url, key, session_data, ttl=ttl)
     if not success:
@@ -135,16 +128,22 @@ async def save_table_session(datasource_id: str, table_name: str, session_data: 
 
 
 @router.get("/{datasource_id}/tables/{table_name}/session/")
-async def get_table_session(datasource_id: str, table_name: str):
+async def get_table_session(
+    table_name: str,
+    datasource: Datasource = Depends(get_scoped_datasource)
+):
     """Retrieve draft layout/config from Redis session."""
-    key = f"session:{datasource_id}:{table_name}"
+    key = f"session:{datasource.id}:{table_name}"
     data = await cache_get(settings.redis_url, key)
     return data or {}
 
 
 @router.delete("/{datasource_id}/tables/{table_name}/session/")
-async def clear_table_session(datasource_id: str, table_name: str):
+async def clear_table_session(
+    table_name: str,
+    datasource: Datasource = Depends(get_scoped_datasource)
+):
     """Clear draft layout/config from Redis session."""
-    key = f"session:{datasource_id}:{table_name}"
+    key = f"session:{datasource.id}:{table_name}"
     await cache_delete_pattern(settings.redis_url, key)
     return {"status": "ok"}

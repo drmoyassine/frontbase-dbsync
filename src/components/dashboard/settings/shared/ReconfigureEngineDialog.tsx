@@ -9,7 +9,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { API_BASE, fetchGPUCatalog, type CatalogModel } from './edgeConstants';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
     DialogHeader, DialogTitle, DialogTrigger,
@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Settings2, Loader2, Check, AlertTriangle, Search, X, Brain, Plus } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -27,6 +28,8 @@ import {
     useEdgeQueues,
     EdgeEngine,
 } from '@/hooks/useEdgeInfrastructure';
+import api from '@/services/api-service';
+import { datasourcesApi } from '@/modules/dbsync/api/datasources';
 
 
 
@@ -40,10 +43,48 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
     const { data: edgeCaches = [] } = useEdgeCaches();
     const { data: edgeQueues = [] } = useEdgeQueues();
 
+    // Fetch datasources for multi-select
+    const { data: datasources = [] } = useQuery({
+        queryKey: ['datasources-list'],
+        queryFn: () => datasourcesApi.list().then(r => r.data),
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    // Fetch storage providers for multi-select
+    const { data: storageProviders = [] } = useQuery({
+        queryKey: ['storage-providers'],
+        queryFn: async () => {
+            const res = await api.get('/api/storage/providers/');
+            return res.data;
+        },
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    // Fetch project settings (for auth detection)
+    const { data: project } = useQuery({
+        queryKey: ['project-settings'],
+        queryFn: async () => {
+            const res = await api.get('/api/project/');
+            return res.data;
+        },
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    const hasAuth = !!(project?.supabaseUrl || project?.supabase_url);
+
     const [open, setOpen] = useState(false);
     const [selectedDbId, setSelectedDbId] = useState<string>(engine.edge_db_id || 'none');
     const [selectedCacheId, setSelectedCacheId] = useState<string>(engine.edge_cache_id || 'none');
     const [selectedQueueId, setSelectedQueueId] = useState<string>(engine.edge_queue_id || 'none');
+    const [selectedDatasourceIds, setSelectedDatasourceIds] = useState<string[]>(engine.datasource_ids || []);
+    const [selectedStorageIds, setSelectedStorageIds] = useState<string[]>(engine.storage_ids || []);
+    const [selectedAuthId, setSelectedAuthId] = useState<string>(engine.edge_auth_id || 'none');
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -67,6 +108,9 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
             setSelectedDbId(engine.edge_db_id || 'none');
             setSelectedCacheId(engine.edge_cache_id || 'none');
             setSelectedQueueId(engine.edge_queue_id || 'none');
+            setSelectedDatasourceIds(engine.datasource_ids || []);
+            setSelectedStorageIds(engine.storage_ids || []);
+            setSelectedAuthId(engine.edge_auth_id || 'none');
             setSaved(false);
             setError(null);
             setStatusMsg(null);
@@ -125,12 +169,19 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
         });
     }, []);
 
+    const arraysEqual = (a: any[], b: any[]) => {
+        if (a.length !== b.length) return false;
+        const sortedA = [...a].sort();
+        const sortedB = [...b].sort();
+        return sortedA.every((val, index) => val === sortedB[index]);
+    };
+
     const handleSave = async () => {
         setSaving(true);
         setError(null);
         setStatusMsg(null);
         try {
-            // 1. Reconfigure DB/Cache/Queue bindings
+            // 1. Reconfigure DB/Cache/Queue/Auth/Datasource/Storage bindings
             const res = await fetch(`${API_BASE}/api/edge-engines/${engine.id}/reconfigure`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -138,6 +189,9 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
                     edge_db_id: selectedDbId === 'none' ? null : selectedDbId,
                     edge_cache_id: selectedCacheId === 'none' ? null : selectedCacheId,
                     edge_queue_id: selectedQueueId === 'none' ? null : selectedQueueId,
+                    edge_auth_id: selectedAuthId === 'none' ? null : selectedAuthId,
+                    datasource_ids: selectedDatasourceIds,
+                    storage_ids: selectedStorageIds,
                 }),
             });
             const data = await res.json();
@@ -197,7 +251,10 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
     const hasBindingChanges =
         (selectedDbId !== (engine.edge_db_id || 'none')) ||
         (selectedCacheId !== (engine.edge_cache_id || 'none')) ||
-        (selectedQueueId !== (engine.edge_queue_id || 'none'));
+        (selectedQueueId !== (engine.edge_queue_id || 'none')) ||
+        (selectedAuthId !== (engine.edge_auth_id || 'none')) ||
+        (!arraysEqual(selectedDatasourceIds, engine.datasource_ids || [])) ||
+        (!arraysEqual(selectedStorageIds, engine.storage_ids || []));
 
     const hasModelChanges = modelsToAdd.length > 0 || modelsToRemove.size > 0;
     const hasChanges = hasBindingChanges || hasModelChanges;
@@ -267,6 +324,75 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
                                 ))}
                             </SelectContent>
                         </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Edge Authentication</Label>
+                        <Select value={selectedAuthId} onValueChange={setSelectedAuthId}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">None (No Authentication)</SelectItem>
+                                {hasAuth && (
+                                    <SelectItem value="supabase">Supabase Auth</SelectItem>
+                                )}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Bound Data Sources</Label>
+                        <div className="border rounded-md p-3 max-h-[150px] overflow-y-auto space-y-2 bg-muted/20">
+                            {datasources.length === 0 ? (
+                                <p className="text-xs text-muted-foreground text-center py-2">No data sources configured.</p>
+                            ) : (
+                                datasources.map((ds: any) => (
+                                    <div key={ds.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`ds-${ds.id}`}
+                                            checked={selectedDatasourceIds.includes(ds.id)}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                    setSelectedDatasourceIds(prev => [...prev, ds.id]);
+                                                } else {
+                                                    setSelectedDatasourceIds(prev => prev.filter(id => id !== ds.id));
+                                                }
+                                            }}
+                                        />
+                                        <label htmlFor={`ds-${ds.id}`} className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
+                                            {ds.name} <span className="text-muted-foreground font-normal">({ds.type})</span>
+                                        </label>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label>Bound Storage Providers</Label>
+                        <div className="border rounded-md p-3 max-h-[150px] overflow-y-auto space-y-2 bg-muted/20">
+                            {storageProviders.length === 0 ? (
+                                <p className="text-xs text-muted-foreground text-center py-2">No storage providers configured.</p>
+                            ) : (
+                                storageProviders.map((sp: any) => (
+                                    <div key={sp.id} className="flex items-center space-x-2">
+                                        <Checkbox
+                                            id={`sp-${sp.id}`}
+                                            checked={selectedStorageIds.includes(sp.id)}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                    setSelectedStorageIds(prev => [...prev, sp.id]);
+                                                } else {
+                                                    setSelectedStorageIds(prev => prev.filter(id => id !== sp.id));
+                                                }
+                                            }}
+                                        />
+                                        <label htmlFor={`sp-${sp.id}`} className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">
+                                            {sp.name} <span className="text-muted-foreground font-normal">({sp.provider})</span>
+                                        </label>
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
 
                     {/* ── AI Models (CF only) ─────────────────────── */}

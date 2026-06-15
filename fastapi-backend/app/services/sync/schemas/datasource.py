@@ -162,6 +162,7 @@ class DatasourceResponse(BaseModel):
     """Schema for datasource response."""
     id: str
     name: str
+    project_id: Optional[str] = None
     type: DatasourceType
     host: Optional[str] = None
     port: Optional[int] = None

@@ -248,6 +248,7 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session, ctx: 
         existing.edge_db_id = edge_db_id  # type: ignore[assignment]
         existing.edge_cache_id = edge_cache_id  # type: ignore[assignment]
         existing.edge_queue_id = edge_queue_id  # type: ignore[assignment]
+        existing.edge_auth_id = payload.edge_auth_id  # type: ignore[assignment]
         existing.engine_config = engine_cfg  # type: ignore[assignment]
         existing.updated_at = now  # type: ignore[assignment]
         if payload.compute_type == "community":
@@ -274,6 +275,7 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session, ctx: 
             edge_db_id=edge_db_id,
             edge_cache_id=edge_cache_id,
             edge_queue_id=edge_queue_id,
+            edge_auth_id=payload.edge_auth_id,
             engine_config=engine_cfg,
             is_active=True,
             is_shared=payload.compute_type == "community",
@@ -285,6 +287,23 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session, ctx: 
         db.commit()
         db.refresh(engine)
         engine_id = str(engine.id)
+
+    # Sync bindings for datasources
+    if payload.datasource_ids is not None:
+        from app.models.edge import engine_datasources
+        db.execute(engine_datasources.delete().where(engine_datasources.c.engine_id == engine.id))
+        for ds_id in payload.datasource_ids:
+            db.execute(engine_datasources.insert().values(engine_id=engine.id, datasource_id=ds_id))
+
+    # Sync bindings for storages
+    if payload.storage_ids is not None:
+        from app.models.edge import engine_storages
+        db.execute(engine_storages.delete().where(engine_storages.c.engine_id == engine.id))
+        for st_id in payload.storage_ids:
+            db.execute(engine_storages.insert().values(engine_id=engine.id, storage_id=st_id))
+
+    db.commit()
+    db.refresh(engine)
 
     # --- Deploy via shared engine_deploy.redeploy() ---
     try:

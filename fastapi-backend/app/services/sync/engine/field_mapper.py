@@ -29,7 +29,7 @@ class FieldMapper:
     
     def master_to_slave(self, record: Dict[str, Any], slave_record: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Transform a master record to slave format using ExpressionEngine.
+        Transform a master record to slave format using ExpressionEngine or legacy rules.
         """
         result = {}
         
@@ -39,12 +39,18 @@ class FieldMapper:
             
             value = record.get(mapping.master_column)
             
-            # Apply transform via ExpressionEngine if specified
+            # Apply transform via ExpressionEngine or legacy rules if specified
             if mapping.transform:
-                # If transform starts with template: or contains {{ or is @
-                # it's a dynamic expression. Otherwise it might be a legacy simple transform.
-                # ExpressionEngine handles both.
-                value = self.engine.evaluate(mapping.transform, record, slave_record)
+                if mapping.transform == "upper":
+                    value = str(value).upper() if value is not None else value
+                elif mapping.transform == "lower":
+                    value = str(value).lower() if value is not None else value
+                elif mapping.transform.startswith("default:"):
+                    default_val = mapping.transform.split(":", 1)[1]
+                    if value is None or value == "":
+                        value = default_val
+                else:
+                    value = self.engine.evaluate(mapping.transform, record, slave_record)
             
             result[mapping.slave_column] = value
         
@@ -107,7 +113,16 @@ class FieldMapper:
             
             # Apply transform for comparison
             if mapping.transform:
-                master_val = self.engine.evaluate(mapping.transform, master_record, slave_record)
+                if mapping.transform == "upper":
+                    master_val = str(master_val).upper() if master_val is not None else master_val
+                elif mapping.transform == "lower":
+                    master_val = str(master_val).lower() if master_val is not None else master_val
+                elif mapping.transform.startswith("default:"):
+                    default_val = mapping.transform.split(":", 1)[1]
+                    if master_val is None or master_val == "":
+                        master_val = default_val
+                else:
+                    master_val = self.engine.evaluate(mapping.transform, master_record, slave_record)
             
             # Compare values
             if not self._values_equal(master_val, slave_val):

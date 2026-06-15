@@ -30,6 +30,11 @@ export interface EdgeEngine {
     edge_cache_name?: string;
     edge_queue_id: string | null;
     edge_queue_name?: string;
+    edge_auth_id: string | null;
+    datasource_ids?: string[];
+    storage_ids?: string[];
+    datasources?: { id: string; name: string; type: string }[];
+    storages?: { id: string; name: string; provider: string }[];
     engine_config?: any;
     gpu_models?: {
         id: string;

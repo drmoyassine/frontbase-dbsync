@@ -250,23 +250,41 @@ async def reconfigure(
     # 1. Resolve provider type
     provider_type = _resolve_provider_type(engine, db)
 
-    # 2. Build new bindings
-    new_bindings = build_engine_secrets(
-        db,
-        edge_db_id=payload.edge_db_id,
-        edge_cache_id=payload.edge_cache_id,
-        edge_queue_id=payload.edge_queue_id,
-        engine_id=str(engine.id),
-        deploy_provider=provider_type,
-    )
-
-    # 3. Update local DB record (must happen BEFORE redeploy for non-CF engines)
+    # 2. Update local DB record and bindings (must happen BEFORE secrets_builder run)
     engine.edge_db_id = payload.edge_db_id  # type: ignore[assignment]
     engine.edge_cache_id = payload.edge_cache_id  # type: ignore[assignment]
     engine.edge_queue_id = payload.edge_queue_id  # type: ignore[assignment]
+    
+    if payload.edge_auth_id is not None:
+        engine.edge_auth_id = payload.edge_auth_id  # type: ignore[assignment]
+        
+    # Diff-sync datasources
+    if payload.datasource_ids is not None:
+        from app.models.edge import engine_datasources
+        db.execute(engine_datasources.delete().where(engine_datasources.c.engine_id == engine.id))
+        for ds_id in payload.datasource_ids:
+            db.execute(engine_datasources.insert().values(engine_id=engine.id, datasource_id=ds_id))
+
+    # Diff-sync storages
+    if payload.storage_ids is not None:
+        from app.models.edge import engine_storages
+        db.execute(engine_storages.delete().where(engine_storages.c.engine_id == engine.id))
+        for st_id in payload.storage_ids:
+            db.execute(engine_storages.insert().values(engine_id=engine.id, storage_id=st_id))
+
     engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
     db.commit()
     db.refresh(engine)
+
+    # 3. Build new bindings (now reading from the updated DB)
+    new_bindings = build_engine_secrets(
+        db,
+        edge_db_id=str(engine.edge_db_id) if engine.edge_db_id is not None else None,
+        edge_cache_id=str(engine.edge_cache_id) if engine.edge_cache_id is not None else None,
+        edge_queue_id=str(engine.edge_queue_id) if engine.edge_queue_id is not None else None,
+        engine_id=str(engine.id),
+        deploy_provider=provider_type,
+    )
 
     # 4. Push env vars via provider-specific path
     settings_patched = False

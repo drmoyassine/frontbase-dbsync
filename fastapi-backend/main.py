@@ -154,6 +154,84 @@ def _ensure_local_edge():
         db.close()
 
 
+def _backfill_engine_bindings():
+    """Idempotent backfill to bind existing datasources and storage providers to existing engines.
+
+    If an engine has no entries in `engine_datasources` or `engine_storages` (Phase 2 tables),
+    bind it to all active datasources/storages belonging to the same project.
+
+    Supports both cloud/multi-tenant (project-scoped) and self-host/single-tenant (project_id IS NULL) deployments.
+    """
+    from app.database.config import SessionLocal
+    from app.models.edge import EdgeEngine, engine_datasources, engine_storages
+    from app.services.sync.models.datasource import Datasource
+    from app.models.storage_provider import StorageProvider
+    import sqlalchemy as sa
+
+    db = SessionLocal()
+    try:
+        engines = db.query(EdgeEngine).all()
+        for engine in engines:
+            try:
+                # Check if this engine already has any datasources bound
+                ds_stmt = sa.select(engine_datasources.c.datasource_id).where(engine_datasources.c.engine_id == engine.id)
+                existing_ds_ids = list(db.execute(ds_stmt).scalars().all())
+
+                if not existing_ds_ids:
+                    # Query all active datasources belonging to the same project (works with None for self-host)
+                    datasources = db.query(Datasource).filter(
+                        sa.and_(
+                            Datasource.project_id == engine.project_id,
+                            sa.or_(Datasource.is_active == True, Datasource.is_active == None)
+                        )
+                    ).all()
+                    
+                    bound_count = 0
+                    for ds in datasources:
+                        try:
+                            # Use a nested transaction/savepoint to ignore duplicate inserts gracefully
+                            with db.begin_nested():
+                                db.execute(engine_datasources.insert().values(engine_id=engine.id, datasource_id=ds.id))
+                            bound_count += 1
+                        except sa.exc.IntegrityError:
+                            pass
+                    if bound_count > 0:
+                        logger.info(f"[Startup] Bound {bound_count} existing datasources to engine '{engine.name}' ({engine.id})")
+
+                # Check if this engine already has any storage providers bound
+                store_stmt = sa.select(engine_storages.c.storage_id).where(engine_storages.c.engine_id == engine.id)
+                existing_store_ids = list(db.execute(store_stmt).scalars().all())
+
+                if not existing_store_ids:
+                    # Query all active storage providers belonging to the same project (works with None for self-host)
+                    storages = db.query(StorageProvider).filter(
+                        sa.and_(
+                            StorageProvider.project_id == engine.project_id,
+                            sa.or_(StorageProvider.is_active == True, StorageProvider.is_active == None)
+                        )
+                    ).all()
+                    
+                    bound_count = 0
+                    for sp in storages:
+                        try:
+                            with db.begin_nested():
+                                db.execute(engine_storages.insert().values(engine_id=engine.id, storage_id=sp.id))
+                            bound_count += 1
+                        except sa.exc.IntegrityError:
+                            pass
+                    if bound_count > 0:
+                        logger.info(f"[Startup] Bound {bound_count} existing storage providers to engine '{engine.name}' ({engine.id})")
+
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                logger.warning(f"[Startup] Bindings backfill for engine '{engine.name}' failed: {e}")
+    except Exception as e:
+        logger.error(f"[Startup] Global engine bindings backfill task failed: {e}")
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(fastapi_app: FastAPI):
     """Application lifespan handler - initializes ALL databases on startup."""
@@ -186,6 +264,13 @@ async def lifespan(fastapi_app: FastAPI):
         logger.info("[Main App Startup] ✅ Core tables initialized successfully")
     except Exception as e:
         logger.error(f"[Main App Startup] ❌ Core DB init failed: {e}")
+
+    # Run engine bindings backfill for existing deployed engines
+    try:
+        _backfill_engine_bindings()
+        logger.info("[Main App Startup] ✅ Engine bindings backfill completed")
+    except Exception as e:
+        logger.warning(f"[Main App Startup] Engine bindings backfill failed (non-fatal): {e}")
     
     # Seed the Local Edge system engine (dev / self-host only)
     try:

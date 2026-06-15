@@ -21,11 +21,18 @@ def event_loop():
 @pytest.fixture(autouse=True)
 async def setup_database():
     """Create tables before each test and drop after."""
+    from app.database.config import Base as MainBase
+    import app.models.models  # noqa
+    from app.services.sync.database import init_db, Base
+    
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(MainBase.metadata.create_all)
+        
+    await init_db()
     yield
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(MainBase.metadata.drop_all)
 
 
 @pytest.fixture

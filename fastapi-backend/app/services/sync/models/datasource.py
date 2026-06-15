@@ -7,7 +7,7 @@ from typing import Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.services.sync.models.view import DatasourceView
-from sqlalchemy import String, Text, DateTime, Enum as SQLEnum
+from sqlalchemy import String, Text, DateTime, Enum as SQLEnum, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 import uuid
@@ -30,13 +30,17 @@ class Datasource(Base):
     """Datasource model for storing database connection configurations."""
     
     __tablename__ = "datasources"
+    __table_args__ = (
+        UniqueConstraint("project_id", "name"),
+    )
     
     id: Mapped[str] = mapped_column(
         String(36), 
         primary_key=True, 
         default=lambda: str(uuid.uuid4())
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    project_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     type: Mapped[DatasourceType] = mapped_column(
         SQLEnum(DatasourceType, native_enum=False, length=50), 
         nullable=False

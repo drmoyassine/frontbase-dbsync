@@ -17,6 +17,9 @@ class EdgeEngineCreate(BaseModel):
     edge_db_id: Optional[str] = None
     edge_cache_id: Optional[str] = None
     edge_queue_id: Optional[str] = None
+    edge_auth_id: Optional[str] = None
+    datasource_ids: Optional[List[str]] = None
+    storage_ids: Optional[List[str]] = None
     engine_config: Optional[dict] = None  # Engine-specific metadata (e.g. worker_name)
     is_active: bool = Field(default=True)
     is_imported: bool = Field(default=False)
@@ -31,6 +34,9 @@ class EdgeEngineUpdate(BaseModel):
     edge_db_id: Optional[str] = None
     edge_cache_id: Optional[str] = None
     edge_queue_id: Optional[str] = None
+    edge_auth_id: Optional[str] = None
+    datasource_ids: Optional[List[str]] = None
+    storage_ids: Optional[List[str]] = None
     engine_config: Optional[dict] = None
     is_active: Optional[bool] = None
     is_imported: Optional[bool] = None
@@ -61,6 +67,11 @@ class EdgeEngineResponse(BaseModel):
     edge_cache_name: Optional[str] = None
     edge_queue_id: Optional[str] = None
     edge_queue_name: Optional[str] = None
+    edge_auth_id: Optional[str] = None
+    datasource_ids: List[str] = []
+    storage_ids: List[str] = []
+    datasources: List[dict] = []  # [{ id, name, type }]
+    storages: List[dict] = []     # [{ id, name, provider }]
     engine_config: Optional[dict] = None
     gpu_models: List[GPUModelSummary] = []
     is_active: bool
@@ -92,6 +103,9 @@ class ReconfigureRequest(BaseModel):
     edge_db_id: Optional[str] = None   # null = detach DB
     edge_cache_id: Optional[str] = None  # null = detach cache
     edge_queue_id: Optional[str] = None  # null = detach queue
+    edge_auth_id: Optional[str] = None
+    datasource_ids: Optional[List[str]] = None
+    storage_ids: Optional[List[str]] = None
 
 
 class BatchRequest(BaseModel):
@@ -129,6 +143,9 @@ class GenericDeployRequest(BaseModel):
     edge_db_id: Optional[str] = None
     edge_cache_id: Optional[str] = None
     edge_queue_id: Optional[str] = None
+    edge_auth_id: Optional[str] = None
+    datasource_ids: Optional[List[str]] = None
+    storage_ids: Optional[List[str]] = None
     compute_type: Optional[str] = None  # "community" → sets is_shared=True
 
     @field_validator("worker_name")

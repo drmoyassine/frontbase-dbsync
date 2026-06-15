@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.sync.database import get_db
 from app.services.sync.models.datasource import Datasource
 from app.services.sync.adapters import get_adapter
+from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.migration")
@@ -18,19 +19,13 @@ logger = logging.getLogger("app.routers.datasources.migration")
 
 @router.get("/{datasource_id}/check-migration")
 async def check_datasource_migration(
-    datasource_id: str,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Check if Frontbase migration has been applied to a Supabase datasource.
     Returns status of required RPC functions.
     """
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
-    
     # Only applicable for Supabase
     if datasource.type.value != "supabase":
         return {"applicable": False, "reason": "Migration only applies to Supabase datasources"}
@@ -44,25 +39,19 @@ async def check_datasource_migration(
             else:
                 return {"applicable": False, "reason": "Adapter does not support migration check"}
     except Exception as e:
-        logger.error(f"Error checking migration for {datasource_id}: {str(e)}")
+        logger.error(f"Error checking migration for {datasource.id}: {str(e)}")
         return {"applicable": True, "applied": False, "error": str(e)}
 
 
 @router.post("/{datasource_id}/apply-migration")
 async def apply_datasource_migration(
-    datasource_id: str,
+    datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Apply Frontbase migration SQL to a Supabase datasource.
     Creates required RPC functions for schema introspection, user management, etc.
     """
-    result = await db.execute(select(Datasource).where(Datasource.id == datasource_id))
-    datasource = result.scalar_one_or_none()
-    
-    if not datasource:
-        raise HTTPException(status_code=404, detail="Datasource not found")
-    
     # Only applicable for Supabase
     if datasource.type.value != "supabase":
         raise HTTPException(status_code=400, detail="Migration only applies to Supabase datasources")
@@ -96,5 +85,5 @@ async def apply_datasource_migration(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error applying migration for {datasource_id}: {str(e)}")
+        logger.error(f"Error applying migration for {datasource.id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to apply migration: {str(e)}")

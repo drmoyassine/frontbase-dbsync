@@ -87,6 +87,54 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
         for m in (engine.gpu_models or [])
     ]
 
+    # Resolve engine-specific bindings (datasources & storages)
+    from sqlalchemy.orm import object_session
+    import sqlalchemy as sa
+
+    db = object_session(engine)
+    datasource_ids = []
+    storage_ids = []
+    datasources_data = []
+    storages_data = []
+
+    if db is not None:
+        try:
+            from app.models.edge import engine_datasources, engine_storages
+            from app.services.sync.models.datasource import Datasource
+            from app.models.storage_provider import StorageProvider
+
+            # Query datasource IDs
+            ds_stmt = sa.select(engine_datasources.c.datasource_id).where(engine_datasources.c.engine_id == engine.id)
+            datasource_ids = list(db.execute(ds_stmt).scalars().all())
+
+            # Query storage IDs
+            store_stmt = sa.select(engine_storages.c.storage_id).where(engine_storages.c.engine_id == engine.id)
+            storage_ids = list(db.execute(store_stmt).scalars().all())
+
+            if datasource_ids:
+                ds_list = db.query(Datasource).filter(Datasource.id.in_(datasource_ids)).all()
+                datasources_data = [
+                    {
+                        "id": str(ds.id),
+                        "name": str(ds.name),
+                        "type": str(ds.type.value) if ds.type else ""
+                    }
+                    for ds in ds_list
+                ]
+
+            if storage_ids:
+                sp_list = db.query(StorageProvider).filter(StorageProvider.id.in_(storage_ids)).all()
+                storages_data = [
+                    {
+                        "id": str(sp.id),
+                        "name": str(sp.name),
+                        "provider": str(sp.provider)
+                    }
+                    for sp in sp_list
+                ]
+        except Exception as e:
+            print(f"[Serializer] Failed to resolve bindings for engine {engine.id}: {e}")
+
     return {
         "id": str(engine.id),
         "name": str(engine.name),
@@ -100,6 +148,11 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
         "edge_cache_name": edge_cache_name,
         "edge_queue_id": str(engine.edge_queue_id) if engine.edge_queue_id is not None else None,
         "edge_queue_name": edge_queue_name,
+        "edge_auth_id": str(engine.edge_auth_id) if engine.edge_auth_id is not None else None,
+        "datasource_ids": datasource_ids,
+        "storage_ids": storage_ids,
+        "datasources": datasources_data,
+        "storages": storages_data,
         "engine_config": config,
         "gpu_models": gpu_models_data,
         "is_active": bool(engine.is_active),

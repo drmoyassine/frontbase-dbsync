@@ -29,6 +29,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_DATASOURCES',
     'FRONTBASE_AGENT_PROFILES',
     'FRONTBASE_SECURITY',
+    'FRONTBASE_STORAGE',
 ])
 
 
@@ -381,44 +382,39 @@ def _build_auth_config(db: Session, engine_id: str | None) -> dict:
     return auth
 
 
-def _build_datasources_config(db: Session) -> dict:
+def _build_datasources_config(db: Session, engine_id: str | None) -> dict:
     """Build FRONTBASE_DATASOURCES JSON blob.
 
     Maps datasource IDs → credentials needed for proxy-strategy data fetching.
     Only includes datasources that use non-Supabase providers (proxy strategy).
 
     Shape: { "<datasource_id>": { "type": "neon", "connectionString": "...", ... } }
-    
-    Uses direct sqlite3 for unified.db (same pattern as data_request.py).
     """
-    import os
-    import sqlite3
+    if not engine_id:
+        return {}
+
+    from app.models.edge import engine_datasources
+    from app.services.sync.models.datasource import Datasource
+    import sqlalchemy as sa
     from ..core.security import decrypt_field
 
     datasources: dict[str, dict] = {}
 
-    # unified.db is at fastapi-backend/unified.db
-    db_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        'unified.db'
-    )
-
-    if not os.path.exists(db_path):
-        return datasources
-
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.execute(
-            "SELECT id, name, type, host, port, database, username, password_encrypted, "
-            "api_url, api_key_encrypted, extra_config "
-            "FROM datasources WHERE is_active = 1"
-        )
-        rows = cursor.fetchall()
-        conn.close()
+        # Query datasource IDs bound to this engine
+        stmt = sa.select(engine_datasources.c.datasource_id).where(engine_datasources.c.engine_id == engine_id)
+        bound_ids = db.execute(stmt).scalars().all()
+        if not bound_ids:
+            return datasources
 
-        for row in rows:
-            ds_type = str(row['type'])
+        # Query the actual Datasource records
+        datasources_list = db.query(Datasource).filter(
+            Datasource.id.in_(bound_ids),
+            Datasource.is_active == True
+        ).all()
+
+        for ds in datasources_list:
+            ds_type = str(ds.type.value) if ds.type else ''
 
             # Supabase uses direct strategy (browser → PostgREST), skip
             if ds_type == 'supabase':
@@ -428,11 +424,11 @@ def _build_datasources_config(db: Session) -> dict:
 
             # Build connection string for SQL databases
             if ds_type in ('neon', 'postgres', 'mysql'):
-                user = str(row['username'] or '')
-                password = decrypt_field(str(row['password_encrypted'])) if row['password_encrypted'] else ''
-                host = str(row['host'] or '')
-                port = str(row['port'] or '5432')
-                database = str(row['database'] or '')
+                user = str(ds.username or '')
+                password = decrypt_field(str(ds.password_encrypted)) if ds.password_encrypted else ''
+                host = str(ds.host or '')
+                port = str(ds.port or '5432')
+                database = str(ds.database or '')
 
                 if ds_type == 'mysql':
                     entry['connectionString'] = f"mysql://{user}:{password}@{host}:{port}/{database}"
@@ -445,29 +441,115 @@ def _build_datasources_config(db: Session) -> dict:
                     entry['httpUrl'] = f"https://{host}"
 
             # API key for HTTP-based providers
-            if row['api_key_encrypted']:
-                api_key = decrypt_field(str(row['api_key_encrypted']))
+            if ds.api_key_encrypted:
+                api_key = decrypt_field(str(ds.api_key_encrypted))
                 if api_key:
                     entry['apiKey'] = api_key
 
-            if row['api_url']:
-                entry['apiUrl'] = str(row['api_url'])
+            if ds.api_url:
+                entry['apiUrl'] = str(ds.api_url)
 
             # Extra config (JSON string with provider-specific fields)
-            if row['extra_config']:
+            if ds.extra_config:
                 try:
-                    extra = json.loads(str(row['extra_config']))
+                    extra = json.loads(str(ds.extra_config))
                     if isinstance(extra, dict):
                         entry.update(extra)
                 except (json.JSONDecodeError, TypeError):
                     pass
 
-            datasources[str(row['id'])] = entry
+            datasources[str(ds.id)] = entry
 
     except Exception as e:
         print(f"[SecretsBuilder] Could not build datasources config: {e}")
 
     return datasources
+
+
+def _build_storage_config(db: Session, engine_id: str | None) -> dict:
+    """Build FRONTBASE_STORAGE JSON blob.
+
+    Maps storage provider IDs → credentials needed for file storage operations at the edge.
+    
+    Shape: {
+        "<storage_provider_id>": {
+            "provider": "supabase" | "cloudflare" | "vercel" | "netlify",
+            "credentials": { ... }
+        }
+    }
+    """
+    if not engine_id:
+        return {}
+
+    from app.models.edge import engine_storages
+    from app.models.storage_provider import StorageProvider
+    from app.core.credential_resolver import get_provider_context_by_id
+    import sqlalchemy as sa
+
+    storage_config: dict = {}
+
+    try:
+        # Query storage IDs bound to this engine
+        stmt = sa.select(engine_storages.c.storage_id).where(engine_storages.c.engine_id == engine_id)
+        bound_ids = db.execute(stmt).scalars().all()
+        if not bound_ids:
+            return storage_config
+
+        providers = db.query(StorageProvider).filter(
+            StorageProvider.id.in_(bound_ids),
+            StorageProvider.is_active == True
+        ).all()
+
+        for sp in providers:
+            try:
+                ctx = get_provider_context_by_id(db, str(sp.provider_account_id))
+            except Exception:
+                continue
+
+            provider_type = str(sp.provider)
+            entry: dict = {
+                "provider": provider_type,
+                "credentials": {}
+            }
+
+            if provider_type == "supabase":
+                entry["credentials"]["url"] = ctx.get("api_url", "")
+                entry["credentials"]["authKey"] = ctx.get("service_role_key", "") or ctx.get("anon_key", "")
+            elif provider_type == "cloudflare":
+                entry["credentials"]["apiToken"] = ctx.get("api_token", "")
+                # Resolve account_id from context or fetch via API if possible
+                account_id = ctx.get("account_id", "")
+                if not account_id:
+                    try:
+                        import httpx
+                        resp = httpx.get(
+                            "https://api.cloudflare.com/client/v4/accounts",
+                            headers={"Authorization": f"Bearer {ctx.get('api_token', '')}"},
+                            params={"per_page": 1},
+                        )
+                        if resp.is_success:
+                            accounts = resp.json().get("result", [])
+                            if accounts:
+                                account_id = accounts[0]["id"]
+                    except Exception:
+                        pass
+                entry["credentials"]["accountId"] = account_id
+            elif provider_type == "vercel":
+                entry["credentials"]["apiToken"] = ctx.get("api_token", "")
+            elif provider_type == "netlify":
+                entry["credentials"]["apiToken"] = ctx.get("api_token", "")
+                try:
+                    sp_config = json.loads(str(sp.config or "{}"))
+                    entry["credentials"]["siteId"] = sp_config.get("site_id", "")
+                except Exception:
+                    pass
+
+            storage_config[str(sp.id)] = entry
+
+    except Exception as e:
+        print(f"[SecretsBuilder] Could not build storage config: {e}")
+
+    return storage_config
 
 
 def _build_security_config(db: Session, engine_id: str | None = None) -> dict:
@@ -690,9 +772,14 @@ def build_engine_secrets(
             secrets['FRONTBASE_QUEUE'] = json.dumps(queue)
 
     # ─── FRONTBASE_DATASOURCES ──────────────────────────────────────────
-    datasources = _build_datasources_config(db)
+    datasources = _build_datasources_config(db, engine_id)
     if datasources:
         secrets['FRONTBASE_DATASOURCES'] = json.dumps(datasources)
+
+    # ─── FRONTBASE_STORAGE ───────────────────────────────────────────────
+    storage = _build_storage_config(db, engine_id)
+    if storage:
+        secrets['FRONTBASE_STORAGE'] = json.dumps(storage)
 
     # ─── FRONTBASE_AGENT_PROFILES ─────────────────────────────────────────
     agent_profiles = _build_agent_profiles_config(db, engine_id)

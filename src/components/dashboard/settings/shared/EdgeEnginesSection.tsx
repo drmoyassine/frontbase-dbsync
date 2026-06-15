@@ -237,10 +237,6 @@ export function EdgeEnginesSection() {
                                     const isReadOnlyForTenant = isCloud() && !isMaster && isCommunityShared;
                                     const canManage = !engine.is_system && !isReadOnlyForTenant;
 
-                                    // Point 2: Dynamic binding checks
-                                    const hasAuth = !!(project?.supabaseUrl || project?.supabase_url);
-                                    const authProvider = hasAuth ? 'Supabase' : 'None';
-
                                     return (
                                         <EdgeResourceRow
                                             key={engine.id}

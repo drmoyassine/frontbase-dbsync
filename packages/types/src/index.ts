@@ -43,6 +43,9 @@ export interface ComponentDataBinding {
     chartConfig?: {
         labelColumn?: string;
         valueColumn?: string;
+        groupBy?: string;
+        aggregation?: 'sum' | 'count';
+        variant?: 'vertical' | 'horizontal';
         maxRows?: number;
     };
 }

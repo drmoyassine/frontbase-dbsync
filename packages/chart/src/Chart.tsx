@@ -64,9 +64,34 @@ export function Chart({
     // React throws "Rendered more hooks than during the previous render".
     const chartData = useMemo(() => {
         if (!data || data.length === 0) return [];
-        const maxRows = binding?.chartConfig?.maxRows || 10;
+
+        const cfg = binding?.chartConfig;
+        const maxRows = cfg?.maxRows || 10;
+        const groupBy = cfg?.groupBy;
+
+        // Optional grouping: collapse rows sharing the same groupBy value and
+        // aggregate the value column (sum or count) into a single point per group.
+        if (groupBy) {
+            const valueKey = cfg?.valueColumn || Object.keys(data[0]).find((k) => k !== groupBy) || groupBy;
+            const aggregation = cfg?.aggregation || 'sum';
+            const groups = new Map<string, { sum: number; count: number }>();
+            for (const row of data) {
+                const key = String(row?.[groupBy] ?? '');
+                const num = Number(row?.[valueKey]) || 0;
+                const acc = groups.get(key) || { sum: 0, count: 0 };
+                acc.sum += num;
+                acc.count += 1;
+                groups.set(key, acc);
+            }
+            const aggregated = Array.from(groups.entries()).map(([key, acc]) => ({
+                [groupBy]: key,
+                [valueKey]: aggregation === 'count' ? acc.count : acc.sum,
+            }));
+            return aggregated.slice(0, maxRows);
+        }
+
         return data.slice(0, maxRows); // Limit to maxRows (default 10) for clean chart display
-    }, [data, binding?.chartConfig?.maxRows]);
+    }, [data, binding?.chartConfig]);
 
     // 1. Unconfigured State
     if (!binding?.tableName) {
@@ -135,8 +160,10 @@ export function Chart({
         }
 
         const keys = Object.keys(chartData[0]);
-        const xAxisKey = binding?.chartConfig?.labelColumn || keys[0];
-        const valueKey = binding?.chartConfig?.valueColumn || keys[1] || xAxisKey;
+        // When grouping, the group column becomes the category axis.
+        const xAxisKey = binding?.chartConfig?.groupBy || binding?.chartConfig?.labelColumn || keys[0];
+        const valueKey = binding?.chartConfig?.valueColumn || keys.find((k) => k !== xAxisKey) || xAxisKey;
+        const isHorizontal = binding?.chartConfig?.variant === 'horizontal';
 
         // Custom container styles to satisfy recharts sizing constraints
         const containerStyle = {
@@ -213,29 +240,42 @@ export function Chart({
                 return (
                     <div style={containerStyle}>
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-                                <XAxis 
-                                    dataKey={xAxisKey} 
-                                    stroke="hsl(var(--muted-foreground))" 
+                            <BarChart
+                                data={chartData}
+                                layout={isHorizontal ? 'vertical' : 'horizontal'}
+                                margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
+                            >
+                                <CartesianGrid
+                                    strokeDasharray="3 3"
+                                    vertical={isHorizontal}
+                                    horizontal={!isHorizontal}
+                                    stroke="hsl(var(--border))"
+                                />
+                                <XAxis
+                                    type={isHorizontal ? 'number' : 'category'}
+                                    dataKey={isHorizontal ? undefined : xAxisKey}
+                                    stroke="hsl(var(--muted-foreground))"
                                     fontSize={12}
                                     tickLine={false}
                                     axisLine={false}
                                 />
-                                <YAxis 
-                                    stroke="hsl(var(--muted-foreground))" 
+                                <YAxis
+                                    type={isHorizontal ? 'category' : 'number'}
+                                    dataKey={isHorizontal ? xAxisKey : undefined}
+                                    stroke="hsl(var(--muted-foreground))"
                                     fontSize={12}
                                     tickLine={false}
                                     axisLine={false}
+                                    width={isHorizontal ? 80 : undefined}
                                 />
-                                <Tooltip 
+                                <Tooltip
                                     contentStyle={{ background: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: '6px' }}
                                 />
                                 <Legend />
-                                <Bar 
-                                    dataKey={valueKey} 
-                                    fill="hsl(var(--primary))" 
-                                    radius={[4, 4, 0, 0]}
+                                <Bar
+                                    dataKey={valueKey}
+                                    fill="hsl(var(--primary))"
+                                    radius={isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]}
                                 />
                             </BarChart>
                         </ResponsiveContainer>

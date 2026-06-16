@@ -15,6 +15,18 @@ export interface ColumnOverride {
     displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
 }
 
+export type HiddenFilterOperator =
+  | 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte'
+  | 'contains' | 'in' | 'is_null' | 'not_null';
+
+export interface HiddenFilter {
+  id: string;
+  column: string;
+  operator: HiddenFilterOperator;
+  value?: string;
+  previewValue?: string;
+}
+
 /**
  * The unified data-binding object passed by the Builder at design time and
  * baked by the Edge publisher (carrying a `dataRequest`) at publish time.
@@ -39,6 +51,9 @@ export interface ComponentDataBinding {
         filters: Record<string, any>;
     };
     columnOverrides: Record<string, ColumnOverride>;
+    hiddenFilters?: HiddenFilter[];
+    _resolvedHiddenFilters?: any[];
+    _pendingHiddenFilters?: any[];
     dataRequest?: any;
     chartConfig?: {
         /** Column to group by — the X-axis / pie-slice category. */

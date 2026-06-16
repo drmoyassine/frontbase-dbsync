@@ -36,7 +36,7 @@ Frontbase is an open-source, edge-native platform for deploying AI-powered apps 
 
 For deep architectural explanations, deployments, and subsystem-specific workflows, **agents must review the following primary documents**:
 
-- **[`ARCHITECTURE.md`](./ARCHITECTURE.md)**: The central source of truth for Edge Delivery Architecture, Workflow Automation, Unified Databases, and Redis patterns.
+- **[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)**: The central source of truth for Edge Delivery Architecture, Workflow Automation, Unified Databases, and Redis patterns.
 - **[`fastapi-backend/README.md`](./fastapi-backend/README.md)**: Python dev setup, Alembic migration commands, and API routing schemas.
 - **[`services/edge/README.md`](./services/edge/README.md)**: Hono SSR dev setup, Drizzle SQLite migrations, and local tests.
 - **[`README.md`](./README.md)**: Root project orchestrations and Docker startup commands.

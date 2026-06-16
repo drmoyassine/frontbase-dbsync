@@ -15,6 +15,123 @@ BEGIN
 END;
 $$;
 
+-- 1.5 Shared Filter Builder
+CREATE OR REPLACE FUNCTION frontbase__build_where(filters jsonb)
+RETURNS text
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  where_conditions text := '';
+  parts text[];
+  filter_item jsonb;
+  filter_col text;
+  filter_type text;
+  filter_op text;
+  filter_value jsonb;
+  quoted_col text;
+  condition text;
+BEGIN
+  IF filters IS NULL OR jsonb_array_length(filters) = 0 THEN
+    RETURN '';
+  END IF;
+
+  FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
+  LOOP
+    filter_col := filter_item->>'column';
+    filter_type := filter_item->>'filterType';
+    filter_op := filter_item->>'op';
+    filter_value := filter_item->'value';
+    
+    IF filter_col IS NULL OR filter_col = '' OR (filter_value IS NULL AND COALESCE(filter_op, '') NOT IN ('is_null', 'not_null')) THEN
+      CONTINUE;
+    END IF;
+    
+    IF filter_col LIKE '%.%' THEN
+        parts := string_to_array(filter_col, '.');
+        quoted_col := format('%I.%I', parts[1], parts[2]);
+    ELSE
+        quoted_col := format('%I', filter_col);
+    END IF;
+
+    condition := NULL;
+    
+    IF filter_op IS NOT NULL AND filter_op <> '' THEN
+      CASE filter_op
+        WHEN 'eq'        THEN condition := format('%s = %L',  quoted_col, filter_value#>>'{}');
+        WHEN 'neq'       THEN condition := format('%s IS DISTINCT FROM %L', quoted_col, filter_value#>>'{}');
+        WHEN 'gt'        THEN condition := format('%s > %L',  quoted_col, filter_value#>>'{}');
+        WHEN 'gte'       THEN condition := format('%s >= %L', quoted_col, filter_value#>>'{}');
+        WHEN 'lt'        THEN condition := format('%s < %L',  quoted_col, filter_value#>>'{}');
+        WHEN 'lte'       THEN condition := format('%s <= %L', quoted_col, filter_value#>>'{}');
+        WHEN 'contains'  THEN condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}') || '%');
+        WHEN 'in'        THEN
+          IF jsonb_typeof(filter_value) = 'array' AND jsonb_array_length(filter_value) > 0 THEN
+            condition := format('%s IN (SELECT jsonb_array_elements_text(%L::jsonb))', quoted_col, filter_value::text);
+          END IF;
+        WHEN 'is_null'   THEN condition := format('%s IS NULL', quoted_col);
+        WHEN 'not_null'  THEN condition := format('%s IS NOT NULL', quoted_col);
+        ELSE condition := NULL;
+      END CASE;
+    ELSE
+      CASE filter_type
+      WHEN 'text' THEN
+        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
+          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}'::text[]) || '%');
+        END IF;
+      WHEN 'equal', 'dropdown', 'select' THEN
+        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
+          condition := format('%s::text = %L', quoted_col, filter_value#>>'{}'::text[]);
+        END IF;
+      WHEN 'multiselect' THEN
+        IF jsonb_typeof(filter_value) = 'array' AND jsonb_array_length(filter_value) > 0 THEN
+          condition := format('%s IN (SELECT jsonb_array_elements_text(%L::jsonb))', quoted_col, filter_value::text);
+        END IF;
+      WHEN 'number' THEN
+        IF filter_value->>'min' IS NOT NULL THEN
+          condition := format('%s >= %s', quoted_col, (filter_value->>'min')::numeric);
+        END IF;
+        IF filter_value->>'max' IS NOT NULL THEN
+          IF condition IS NOT NULL THEN
+            condition := condition || ' AND ';
+          END IF;
+          condition := COALESCE(condition, '') || format('%s <= %s', quoted_col, (filter_value->>'max')::numeric);
+        END IF;
+      WHEN 'dateRange' THEN
+        IF filter_value->>'lastDays' IS NOT NULL THEN
+          condition := format('%s >= NOW() - INTERVAL %L', quoted_col, (filter_value->>'lastDays')::int || ' days');
+        ELSE
+          IF filter_value->>'start' IS NOT NULL THEN
+            condition := format('%s >= %L', quoted_col, filter_value->>'start');
+          END IF;
+          IF filter_value->>'end' IS NOT NULL THEN
+            IF condition IS NOT NULL THEN
+              condition := condition || ' AND ';
+            END IF;
+            condition := COALESCE(condition, '') || format('%s <= %L', quoted_col, filter_value->>'end');
+          END IF;
+        END IF;
+      WHEN 'boolean' THEN
+        IF filter_value::text = 'true' OR filter_value::text = 'false' THEN
+          condition := format('%s = %s', quoted_col, filter_value::boolean);
+        END IF;
+      ELSE
+        condition := NULL;
+      END CASE;
+    END IF;
+    
+    IF condition IS NOT NULL AND condition != '' THEN
+      IF where_conditions = '' THEN
+        where_conditions := condition;
+      ELSE
+        where_conditions := where_conditions || ' AND ' || condition;
+      END IF;
+    END IF;
+  END LOOP;
+  
+  RETURN where_conditions;
+END;
+$$;
+
 -- 2. Advanced Rows Fetching (Sorting, Pagination, Joins)
 -- Usage example:
 -- select frontbase_get_rows(
@@ -52,10 +169,6 @@ DECLARE
   where_clause text := '';
   filter_item jsonb;
   filter_col text;
-  filter_type text;
-  filter_value jsonb;
-  condition text;
-  quoted_col text;
   -- Auto-join variables
   joined_tables text[] := ARRAY[]::text[];
   ref_table text;
@@ -180,92 +293,14 @@ BEGIN
   END IF;
   
   -- Step 5: Build WHERE clause from filters
-  FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
-  LOOP
-    filter_col := filter_item->>'column';
-    filter_type := filter_item->>'filterType';
-    filter_value := filter_item->'value';
-    
-    -- Skip if no column or value
-    IF filter_col IS NULL OR filter_col = '' OR filter_value IS NULL THEN
-      CONTINUE;
+  DECLARE
+    filter_conds text;
+  BEGIN
+    filter_conds := frontbase__build_where(filters);
+    IF filter_conds != '' THEN
+      where_clause := 'WHERE ' || filter_conds;
     END IF;
-    
-    -- Handle schema/table qualification for column
-    DECLARE
-        parts text[];
-    BEGIN
-        IF filter_col LIKE '%.%' THEN
-            parts := string_to_array(filter_col, '.');
-            quoted_col := format('%I.%I', parts[1], parts[2]);
-        ELSE
-            quoted_col := format('%I', filter_col);
-        END IF;
-    END;
-
-    -- Build condition based on filter type
-    condition := NULL;
-    
-    CASE filter_type
-      WHEN 'text' THEN
-        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}'::text[]) || '%');
-        END IF;
-        
-      WHEN 'dropdown' THEN
-        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%s = %L', quoted_col, filter_value#>>'{}'::text[]);
-        END IF;
-        
-      WHEN 'multiselect' THEN
-        IF jsonb_array_length(filter_value) > 0 THEN
-          condition := format('%s IN (SELECT jsonb_array_elements_text(%L::jsonb))', quoted_col, filter_value::text);
-        END IF;
-        
-      WHEN 'number' THEN
-        IF filter_value->>'min' IS NOT NULL THEN
-          condition := format('%s >= %s', quoted_col, (filter_value->>'min')::numeric);
-        END IF;
-        IF filter_value->>'max' IS NOT NULL THEN
-          IF condition IS NOT NULL THEN
-            condition := condition || ' AND ';
-          END IF;
-          condition := COALESCE(condition, '') || format('%s <= %s', quoted_col, (filter_value->>'max')::numeric);
-        END IF;
-        
-      WHEN 'dateRange' THEN
-        IF filter_value->>'lastDays' IS NOT NULL THEN
-          condition := format('%s >= NOW() - INTERVAL %L', quoted_col, (filter_value->>'lastDays')::int || ' days');
-        ELSE
-          IF filter_value->>'start' IS NOT NULL THEN
-            condition := format('%s >= %L', quoted_col, filter_value->>'start');
-          END IF;
-          IF filter_value->>'end' IS NOT NULL THEN
-            IF condition IS NOT NULL THEN
-              condition := condition || ' AND ';
-            END IF;
-            condition := COALESCE(condition, '') || format('%s <= %L', quoted_col, filter_value->>'end');
-          END IF;
-        END IF;
-        
-      WHEN 'boolean' THEN
-        IF filter_value::text = 'true' OR filter_value::text = 'false' THEN
-          condition := format('%s = %s', quoted_col, filter_value::boolean);
-        END IF;
-        
-      ELSE
-        condition := NULL;
-    END CASE;
-    
-    -- Append condition to WHERE clause
-    IF condition IS NOT NULL AND condition != '' THEN
-      IF where_clause = '' THEN
-        where_clause := 'WHERE ' || condition;
-      ELSE
-        where_clause := where_clause || ' AND ' || condition;
-      END IF;
-    END IF;
-  END LOOP;
+  END;
   
   -- Step 6: Build ORDER BY clause
   IF sort_col IS NOT NULL AND sort_col != '' THEN
@@ -378,14 +413,10 @@ DECLARE
   where_clause text := '';
   search_where text := '';
   filter_where text := '';
-  col text;
-  first_col boolean := true;
   filter_item jsonb;
   filter_col text;
-  filter_type text;
-  filter_value jsonb;
-  condition text;
-  quoted_col text;
+  col text;
+  first_col boolean := true;
   -- Auto-join variables
   joined_tables text[] := ARRAY[]::text[];
   ref_table text;
@@ -492,56 +523,7 @@ BEGIN
   END IF;
 
   -- Step 5: Build Filter Conditions
-  FOR filter_item IN SELECT * FROM jsonb_array_elements(filters)
-  LOOP
-    filter_col := filter_item->>'column';
-    filter_type := filter_item->>'filterType';
-    filter_value := filter_item->'value';
-    
-    IF filter_col IS NULL OR filter_col = '' OR filter_value IS NULL THEN
-      CONTINUE;
-    END IF;
-    
-    DECLARE
-        parts text[];
-    BEGIN
-        IF filter_col LIKE '%.%' THEN
-            parts := string_to_array(filter_col, '.');
-            quoted_col := format('%I.%I', parts[1], parts[2]);
-        ELSE
-            quoted_col := format('%I', filter_col);
-        END IF;
-    END;
-
-    condition := NULL;
-    
-    CASE filter_type
-      WHEN 'text' THEN
-        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-          condition := format('%s ILIKE %L', quoted_col, '%' || (filter_value#>>'{}'::text[]) || '%');
-        END IF;
-      WHEN 'equal', 'dropdown', 'select' THEN
-        IF filter_value::text != 'null' AND filter_value::text != '""' THEN
-           condition := format('%s::text = %L', quoted_col, filter_value#>>'{}'::text[]);
-        END IF;
-      WHEN 'multiselect' THEN
-        IF jsonb_typeof(filter_value) = 'array' AND jsonb_array_length(filter_value) > 0 THEN
-          condition := format('%s IN (SELECT jsonb_array_elements_text(%L::jsonb))', quoted_col, filter_value::text);
-        END IF;
-      WHEN 'boolean' THEN
-        IF filter_value::text = 'true' OR filter_value::text = 'false' THEN
-          condition := format('%s = %s', quoted_col, filter_value::boolean);
-        END IF;
-    END CASE;
-    
-    IF condition IS NOT NULL AND condition != '' THEN
-      IF filter_where = '' THEN
-        filter_where := condition;
-      ELSE
-        filter_where := filter_where || ' AND ' || condition;
-      END IF;
-    END IF;
-  END LOOP;
+  filter_where := frontbase__build_where(filters);
 
   -- Step 6: Combine clauses
   IF search_where != '' OR filter_where != '' THEN
@@ -829,8 +811,8 @@ DECLARE
   filter_col text;
   filter_type text;
   filter_value jsonb;
-  condition text;
   quoted_col text;
+  condition text;
   col text;
   first_col boolean := true;
   -- Auto-join variables
@@ -1402,5 +1384,56 @@ BEGIN
     'success_count', success_count,
     'error_count', error_count
   );
+END;
+$$;
+
+-- 9. Aggregate Data
+-- ============================================================
+-- Aggregates data for charts and visualizations
+-- ============================================================
+CREATE OR REPLACE FUNCTION frontbase_aggregate(
+  table_name   text,
+  category_col text,
+  aggregation  text  DEFAULT 'count',          -- count|sum|average|min|max
+  value_col    text  DEFAULT NULL,
+  filters      jsonb DEFAULT '[]'::jsonb,       -- same objects as frontbase_get_rows
+  sort         text  DEFAULT 'none',            -- none|asc|desc (by aggregated value)
+  row_limit    int   DEFAULT 10
+) RETURNS json
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  measure text;
+  where_clause text := '';
+  filter_conds text := '';
+  order_clause text := '';
+  result json;
+BEGIN
+  -- measure
+  IF aggregation = 'count' OR value_col IS NULL THEN
+    measure := 'COUNT(*)';
+  ELSIF aggregation IN ('sum','average') THEN
+    measure := format('%s(NULLIF(CAST(%I AS TEXT), '''')::numeric)',
+                      CASE aggregation WHEN 'sum' THEN 'SUM' ELSE 'AVG' END, value_col);
+  ELSIF aggregation IN ('min','max') THEN
+    measure := format('%s(%I)', upper(aggregation), value_col);
+  ELSE
+    measure := 'COUNT(*)';
+  END IF;
+
+  -- WHERE
+  filter_conds := frontbase__build_where(filters);
+  IF filter_conds != '' THEN
+    where_clause := 'WHERE ' || filter_conds;
+  END IF;
+
+  IF sort = 'asc'  THEN order_clause := ' ORDER BY value ASC NULLS LAST';
+  ELSIF sort = 'desc' THEN order_clause := ' ORDER BY value DESC NULLS LAST'; END IF;
+
+  EXECUTE format(
+    'SELECT json_agg(t) FROM (SELECT %I AS category, %s AS value FROM %I %s GROUP BY %I %s LIMIT %s) t',
+    category_col, measure, table_name, where_clause, category_col, order_clause, GREATEST(1, LEAST(row_limit, 1000))
+  ) INTO result;
+
+  RETURN COALESCE(result, '[]'::json);
 END;
 $$;

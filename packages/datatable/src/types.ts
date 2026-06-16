@@ -104,6 +104,8 @@ export interface DataTableBinding {
 
     // Pre-computed data request (edge mode)
     dataRequest?: DataRequest;
+    _resolvedHiddenFilters?: any[];
+    _pendingHiddenFilters?: any[];
 }
 
 // =============================================================================

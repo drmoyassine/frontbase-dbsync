@@ -3,8 +3,8 @@
  * Configuration UI for the Chart component
  */
 
-import React, { useState, useEffect } from 'react';
-import { Type, Hash, Calendar, ToggleLeft, HelpCircle } from 'lucide-react';
+import React from 'react';
+import { HelpCircle } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -16,6 +16,9 @@ import { TableSelector } from '@/components/data-binding/TableSelector';
 import { ComponentDataBinding } from '@/hooks/data/useSimpleData';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { DefaultSortColumnSelector } from '@/components/builder/data-table/DataTablePropertiesPanel';
+import { useBindingColumns } from '@/hooks/data/useBindingColumns';
+import { ColumnSelect } from '@/components/builder/data-binding/ColumnSelect';
+import { HiddenFiltersEditor } from '@/components/builder/data-binding/HiddenFiltersEditor';
 
 interface ChartPropertiesProps {
     componentId: string;
@@ -25,17 +28,6 @@ interface ChartPropertiesProps {
     updateComponentProp: (key: string, value: any) => void;
 }
 
-type ColumnInfo = { name: string; type: string };
-
-/** Small type icon shown beside each column option (matches data-table field UX). */
-const ColumnTypeIcon: React.FC<{ type: string }> = ({ type }) => {
-    const t = (type || '').toLowerCase();
-    const cls = 'h-3.5 w-3.5 text-muted-foreground shrink-0';
-    if (/(int|numeric|decimal|float|double|real|money|serial)/.test(t)) return <Hash className={cls} />;
-    if (/(date|time)/.test(t)) return <Calendar className={cls} />;
-    if (/(bool)/.test(t)) return <ToggleLeft className={cls} />;
-    return <Type className={cls} />;
-};
 
 /** Label with an inline help tooltip, matching the screenshot's "?" affordance. */
 const FieldLabel: React.FC<{ children: React.ReactNode; hint?: string }> = ({ children, hint }) => (
@@ -54,41 +46,6 @@ const FieldLabel: React.FC<{ children: React.ReactNode; hint?: string }> = ({ ch
     </div>
 );
 
-/** Column dropdown with type icons. Pass `allowNone` for an optional "Select Column" clear option. */
-const ColumnSelect: React.FC<{
-    value: string;
-    columns: ColumnInfo[];
-    placeholder: string;
-    allowNone?: boolean;
-    onChange: (value: string) => void;
-}> = ({ value, columns, placeholder, allowNone, onChange }) => {
-    const NONE = '__none__';
-    return (
-        <Select
-            value={value || (allowNone ? NONE : '')}
-            onValueChange={(v) => onChange(v === NONE ? '' : v)}
-        >
-            <SelectTrigger>
-                <SelectValue placeholder={placeholder} />
-            </SelectTrigger>
-            <SelectContent>
-                {allowNone && (
-                    <SelectItem value={NONE}>
-                        <span className="text-muted-foreground">{placeholder}</span>
-                    </SelectItem>
-                )}
-                {columns.map((col) => (
-                    <SelectItem key={col.name} value={col.name}>
-                        <span className="flex items-center gap-2">
-                            <ColumnTypeIcon type={col.type} />
-                            {col.name}
-                        </span>
-                    </SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
-    );
-};
 
 export const ChartProperties: React.FC<ChartPropertiesProps> = ({
     componentId,
@@ -98,9 +55,7 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
     updateComponentProp
 }) => {
     const { globalSchema } = useDataBindingStore();
-    const [columns, setColumns] = useState<ColumnInfo[]>([]);
-
-    const defaultBinding: ComponentDataBinding = {
+    const effectiveBinding = binding || {
         componentId: componentId,
         dataSourceId: '',
         tableName: '',
@@ -115,8 +70,9 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
             maxRows: 10
         }
     };
+    const columns = useBindingColumns(effectiveBinding.tableName, effectiveBinding.dataSourceId);
 
-    const effectiveBinding = binding || defaultBinding;
+
     const chartType = props.chartType || 'bar';
 
     const updateBinding = (updates: Partial<ComponentDataBinding>) => {
@@ -133,45 +89,6 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
         });
     };
 
-    // Load columns for the field selectors
-    useEffect(() => {
-        if (!effectiveBinding.tableName) return;
-
-        const fetchColumns = async () => {
-            const allColumns: ColumnInfo[] = [];
-            const dataSourceId = effectiveBinding.dataSourceId;
-            const tableName = effectiveBinding.tableName;
-
-            if (dataSourceId && dataSourceId !== 'backend') {
-                try {
-                    const response = await fetch(
-                        `/api/sync/datasources/${dataSourceId}/tables/${tableName}/schema`
-                    );
-                    if (response.ok) {
-                        const schemaData = await response.json();
-                        (schemaData.columns || []).forEach((col: any) => {
-                            allColumns.push({
-                                name: col.column_name || col.name,
-                                type: col.data_type || col.type || 'text',
-                            });
-                        });
-                    }
-                } catch (error) {
-                    console.error('[ChartProperties] Failed to fetch schema:', error);
-                }
-            } else {
-                const gTable = globalSchema.tables.find((t: any) => t.table_name === tableName);
-                if (gTable && gTable.columns) {
-                    gTable.columns.forEach((c: any) => {
-                        allColumns.push({ name: c.column_name, type: c.data_type });
-                    });
-                }
-            }
-            setColumns(allColumns);
-        };
-
-        fetchColumns();
-    }, [effectiveBinding.tableName, effectiveBinding.dataSourceId, globalSchema]);
 
     return (
         <Tabs defaultValue="binding" className="w-full">
@@ -404,6 +321,15 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
                                 </div>
                             )}
                         </div>
+
+                        {/* Hidden Filters */}
+                        <HiddenFiltersEditor
+                            tableName={binding.tableName}
+                            dataSourceId={binding.dataSourceId}
+                            columns={columns}
+                            value={binding.hiddenFilters || []}
+                            onChange={(hiddenFilters) => updateBinding({ hiddenFilters })}
+                        />
 
                         {/* Refresh Interval */}
                         <div className="space-y-3 p-4 border rounded-lg">

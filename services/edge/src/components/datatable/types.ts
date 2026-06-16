@@ -41,6 +41,14 @@ export interface FilterConfig {
     };
 }
 
+export interface HiddenFilter {
+    id: string;
+    column: string;
+    operator: string;
+    value?: string;
+    previewValue?: string;
+}
+
 export interface DataTableBinding {
     tableName?: string;
     datasourceId?: string;
@@ -50,6 +58,9 @@ export interface DataTableBinding {
     sorting?: { enabled: boolean; column?: string; direction?: 'asc' | 'desc' };
     filtering?: { searchEnabled: boolean; filtersEnabled?: boolean; filters?: Record<string, any> };
     frontendFilters?: FilterConfig[];
+    hiddenFilters?: HiddenFilter[];
+    _resolvedHiddenFilters?: any[];
+    _pendingHiddenFilters?: any[];
     dataRequest?: {
         url: string;
         method: string;

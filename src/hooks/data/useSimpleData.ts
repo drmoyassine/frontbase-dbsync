@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useTableData, useTableSchema, useGlobalSchema, useRpcData } from '@/hooks/useDatabase';
 import { debug } from '@/lib/debug';
+import { resolveHiddenFilters } from '@/lib/data-binding/resolveHiddenFilters';
 
 export interface FilterConfig {
     id: string;
@@ -11,6 +12,18 @@ export interface FilterConfig {
     options?: string[];
     value?: any;
     label?: string;
+}
+
+export type HiddenFilterOperator =
+  | 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte'
+  | 'contains' | 'in' | 'is_null' | 'not_null';
+
+export interface HiddenFilter {
+  id: string;
+  column: string;
+  operator: HiddenFilterOperator;
+  value?: string;
+  previewValue?: string;
 }
 
 export interface ComponentDataBinding {
@@ -41,6 +54,7 @@ export interface ComponentDataBinding {
     columnOrder?: string[];
     searchColumns?: string[];
     frontendFilters?: FilterConfig[];
+    hiddenFilters?: HiddenFilter[];
     rpcName?: string;
     params?: Record<string, any>;
     fieldMapping?: Record<string, string>;
@@ -127,6 +141,18 @@ export function useSimpleData({
         };
     }, [binding, filters, sorting, pagination, searchQuery]);
 
+    const resolvedHiddenFilters = useMemo(() => {
+        if (!binding?.hiddenFilters) return [];
+        // Basic context for builder preview
+        const ctx = {
+            url: Object.fromEntries(new URLSearchParams(window.location.search)),
+            system: {
+                date: new Date().toISOString(),
+            }
+        };
+        return resolveHiddenFilters(binding.hiddenFilters, ctx, { dropUnresolved: true });
+    }, [binding?.hiddenFilters]);
+
     // React Query Hooks
     const {
         data: globalSchema,
@@ -195,21 +221,28 @@ export function useSimpleData({
             }
 
             // Add filters (excluding search which is handled separately)
+            const filterList: any[] = [];
             if (queryParams?.filters) {
-                const filterList = Object.entries(queryParams.filters)
+                Object.entries(queryParams.filters)
                     .filter(([k, v]) => k !== 'search' && v != null && v !== '')
-                    .map(([field, value]) => {
+                    .forEach(([field, value]) => {
                         // Handle filter object format { filterType, value }
-                        // value is guaranteed non-null after filter above
                         if (value && typeof value === 'object' && 'value' in (value as Record<string, unknown>)) {
                             const filterObj = value as { value: unknown };
-                            return { field, operator: '==', value: filterObj.value };
+                            filterList.push({ field, operator: '==', value: filterObj.value });
+                        } else {
+                            filterList.push({ field, operator: '==', value });
                         }
-                        return { field, operator: '==', value };
                     });
-                if (filterList.length > 0) {
-                    params.append('filters', JSON.stringify(filterList));
-                }
+            }
+
+            // Append hidden filters
+            if (resolvedHiddenFilters.length > 0) {
+                filterList.push(...resolvedHiddenFilters);
+            }
+
+            if (filterList.length > 0) {
+                params.append('filters', JSON.stringify(filterList));
             }
 
             // Build select param for related columns (format: "programs(degree_name,type)")

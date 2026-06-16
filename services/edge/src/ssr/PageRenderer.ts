@@ -110,6 +110,76 @@ async function resolveProps(
 }
 
 /**
+ * Resolve hidden filters at SSR time.
+ * Splitting them into resolved (server-side) and pending (client-side) filters.
+ */
+async function resolveHiddenFiltersSSR(
+    binding: Record<string, any>,
+    context: TemplateContext
+): Promise<{ resolved: any[]; pending: any[] }> {
+    const hiddenFilters = binding.hiddenFilters || [];
+    const resolved: any[] = [];
+    const pending: any[] = [];
+
+    for (const filter of hiddenFilters) {
+        const value = filter.value;
+        const operator = filter.operator;
+
+        if (operator === 'is_null' || operator === 'not_null') {
+            resolved.push({
+                column: filter.column,
+                op: operator,
+            });
+            continue;
+        }
+
+        if (typeof value !== 'string') {
+            resolved.push({
+                column: filter.column,
+                op: operator,
+                value: value
+            });
+            continue;
+        }
+
+        const containsClientScope = /\{\{\s*(session|local)\./.test(value);
+
+        if (containsClientScope) {
+            pending.push(filter);
+        } else if (value.includes('{{') || value.includes('{%')) {
+            try {
+                const rendered = await liquid.parseAndRender(value, context);
+                if (rendered !== undefined && rendered !== null && String(rendered).trim() !== '') {
+                    let resolvedVal: any = rendered;
+                    if (operator === 'in') {
+                        resolvedVal = String(rendered).split(',').map(s => s.trim()).filter(Boolean);
+                    }
+                    resolved.push({
+                        column: filter.column,
+                        op: operator,
+                        value: resolvedVal
+                    });
+                }
+            } catch (error) {
+                console.error(`[SSR Hidden Filter] Failed to render template: ${value}`, error);
+            }
+        } else {
+            let resolvedVal: any = value;
+            if (operator === 'in') {
+                resolvedVal = String(value).split(',').map(s => s.trim()).filter(Boolean);
+            }
+            resolved.push({
+                column: filter.column,
+                op: operator,
+                value: resolvedVal
+            });
+        }
+    }
+
+    return { resolved, pending };
+}
+
+/**
  * Render a single component to HTML.
  * NOW ASYNC due to LiquidJS template resolution.
  */
@@ -234,7 +304,12 @@ async function renderComponent(
         case 'data':
             // Merge binding into props so renderDataComponent can access it
             if (binding) {
-                resolvedProps.binding = binding;
+                const { resolved, pending } = await resolveHiddenFiltersSSR(binding, context);
+                resolvedProps.binding = {
+                    ...binding,
+                    _resolvedHiddenFilters: resolved,
+                    _pendingHiddenFilters: pending
+                };
             }
             return combinedCSS + renderDataComponent(type, id, resolvedProps, childrenHtml);
 

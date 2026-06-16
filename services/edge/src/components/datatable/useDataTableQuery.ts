@@ -5,6 +5,7 @@
  * Works alongside server-side Redis caching (60s TTL).
  */
 
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { DataTableBinding } from './types';
 
@@ -18,7 +19,20 @@ interface UseDataTableQueryOptions {
     filters: Record<string, any>;
     initialData?: any[];
     initialTotal?: number;
+    resolvedHiddenFilters?: any[];
 }
+
+/**
+ * Resolves variables in a template string on the client using the global VariableStore.
+ */
+function resolveClientTemplate(template: string, store: { get(scope: string, key: string): any }): string {
+    return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, expr) => {
+        const [scope, ...rest] = String(expr).trim().split('.');
+        const val = store.get(scope, rest.join('.'));
+        return val !== undefined && val !== null ? String(val) : '';
+    });
+}
+
 
 interface DataTableResult {
     rows: any[];
@@ -81,7 +95,7 @@ async function fetchTableData(options: UseDataTableQueryOptions): Promise<DataTa
             rpcBody.sort_dir = effectiveSortDir;
         }
 
-        rpcBody.filters = filterList;
+        rpcBody.filters = [...filterList, ...(options.resolvedHiddenFilters || [])];
 
         // Strategy factory: route based on publish-time decision
         const strategy = binding.dataRequest?.fetchStrategy || 'proxy';
@@ -177,6 +191,57 @@ async function fetchTableData(options: UseDataTableQueryOptions): Promise<DataTa
 export function useDataTableQuery(options: UseDataTableQueryOptions) {
     const { binding, page, sortColumn, sortDirection, search, filters, initialData = [], initialTotal = 0 } = options;
 
+    const [storeVersion, setStoreVersion] = useState(0);
+
+    useEffect(() => {
+        const store = typeof window !== 'undefined' ? (window as any).__VARIABLE_STORE__ : null;
+        if (!store) return;
+        return store.subscribe(() => {
+            setStoreVersion((v) => v + 1);
+        });
+    }, []);
+
+    const resolvedHiddenFilters = useMemo(() => {
+        const resolvedList = [...(binding._resolvedHiddenFilters || [])];
+        const pendingList = binding._pendingHiddenFilters || [];
+        const store = typeof window !== 'undefined' ? (window as any).__VARIABLE_STORE__ : null;
+
+        for (const filter of pendingList) {
+            const operator = filter.operator;
+            if (operator === 'is_null' || operator === 'not_null') {
+                resolvedList.push({
+                    column: filter.column,
+                    op: operator,
+                });
+                continue;
+            }
+
+            const value = filter.value;
+            let resolvedVal: any = '';
+            if (typeof value === 'string') {
+                if (store) {
+                    resolvedVal = resolveClientTemplate(value, store);
+                } else {
+                    resolvedVal = filter.previewValue || '';
+                }
+            } else {
+                resolvedVal = value;
+            }
+
+            if (resolvedVal !== undefined && resolvedVal !== null && String(resolvedVal).trim() !== '') {
+                if (operator === 'in') {
+                    resolvedVal = String(resolvedVal).split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
+                resolvedList.push({
+                    column: filter.column,
+                    op: operator,
+                    value: resolvedVal
+                });
+            }
+        }
+        return resolvedList;
+    }, [binding._resolvedHiddenFilters, binding._pendingHiddenFilters, storeVersion]);
+
     const tableName = binding.dataRequest?.queryConfig?.tableName || binding.tableName || 'unknown';
 
     const queryKey = [
@@ -186,14 +251,15 @@ export function useDataTableQuery(options: UseDataTableQueryOptions) {
         sortColumn,
         sortDirection,
         search,
-        JSON.stringify(filters)
+        JSON.stringify(filters),
+        JSON.stringify(resolvedHiddenFilters)
     ];
 
     const isDefaultState = page === 0 && !sortColumn && !search && Object.keys(filters).length === 0;
 
     const query = useQuery({
         queryKey,
-        queryFn: () => fetchTableData(options),
+        queryFn: () => fetchTableData({ ...options, resolvedHiddenFilters }),
         staleTime: 5 * 60 * 1000, // 5 minutes per AGENTS.md Section 7.2
         gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
         refetchOnWindowFocus: false,

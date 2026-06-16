@@ -22,7 +22,7 @@ _SQL_FUNC = {"sum": "SUM", "average": "AVG", "min": "MIN", "max": "MAX"}
 
 def _q_ident(name: str) -> str:
     """Double-quote a SQL identifier, supporting a dotted table.column form."""
-    return ".".join('"' + part.replace('"', '""') + '"' for part in str(name).split("."))
+    return ".".join('"' + part.replace('"', '""') + '"' for part in name.split("."))
 
 
 def _q_lit(value: Any) -> str:
@@ -46,7 +46,7 @@ def _build_where(filters: Optional[List[Dict[str, Any]]]) -> str:
         col = f.get("column") or f.get("field")
         if not col:
             continue
-        op = (f.get("operator") or f.get("filterType") or "==").lower()
+        op = (f.get("operator") or f.get("op") or f.get("filterType") or "==").lower()
         val = f.get("value")
 
         # Valueless operators
@@ -91,11 +91,18 @@ def build_aggregate_sql(
     filters: Optional[List[Dict[str, Any]]] = None,
     sort: str = "none",
     limit: int = 10,
+    where_marker: bool = False,
 ) -> str:
     """Build a `SELECT <category> AS category, <agg> AS value ... GROUP BY` query.
 
     The result rows are shaped {category, value} so the chart can render them
     directly with no further aggregation.
+
+    When `where_marker` is True a `/*__HF__*/` token is emitted inside the WHERE
+    clause. Hidden filters are NOT baked here (their dynamic `{{ }}` values can't
+    be resolved at publish time); instead the runtime replaces the marker with
+    already-resolved, safely-escaped conditions. A `WHERE 1=1` anchor is added so
+    the runtime can always append `AND …` uniformly.
     """
     agg = (aggregation or "count").lower()
     if agg not in _AGG_FUNCS:
@@ -117,6 +124,10 @@ def build_aggregate_sql(
 
     where_sql = _build_where(filters)
 
+    if where_marker:
+        # Anchor + token so the runtime can append resolved hidden filters.
+        where_sql = (where_sql + " /*__HF__*/") if where_sql else " WHERE 1=1 /*__HF__*/"
+
     order_sql = ""
     if sort == "asc":
         order_sql = " ORDER BY value ASC NULLS LAST"
@@ -124,7 +135,7 @@ def build_aggregate_sql(
         order_sql = " ORDER BY value DESC NULLS LAST"
 
     try:
-        lim = max(1, min(int(limit or 10), 1000))
+        lim = max(1, min(limit or 10, 1000))
     except (TypeError, ValueError):
         lim = 10
 

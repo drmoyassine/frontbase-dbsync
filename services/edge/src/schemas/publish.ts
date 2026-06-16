@@ -83,6 +83,18 @@ export const DataRequestSchema = z.object({
 
 export type DataRequest = z.infer<typeof DataRequestSchema>;
 
+export const HiddenFilterOperatorSchema = z.enum([
+    'eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'in', 'is_null', 'not_null',
+]);
+
+export const HiddenFilterSchema = z.object({
+    id: z.string(),
+    column: z.string(),
+    operator: HiddenFilterOperatorSchema,
+    value: z.string().optional(),
+    previewValue: z.string().optional(),
+});
+
 export const ComponentBindingSchema = z.object({
     componentId: z.string().nullish(),
     datasourceId: z.string().nullish(),
@@ -116,6 +128,7 @@ export const ComponentBindingSchema = z.object({
     dataSourceId: z.string().nullish(),  // camelCase alias
     // Dynamic feature configuration (for DataTable server-side features)
     frontendFilters: z.array(z.record(z.string(), z.unknown())).nullish(),
+    hiddenFilters: z.array(HiddenFilterSchema).nullish(),
     sorting: z.record(z.string(), z.unknown()).nullish(),
     pagination: z.record(z.string(), z.unknown()).nullish(),
     filtering: z.record(z.string(), z.unknown()).nullish(),

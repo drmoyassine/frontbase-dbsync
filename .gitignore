@@ -157,3 +157,5 @@ scratch_*
 /fix-*.js
 /fix-*.cjs
 /fix-*.ps1
+/docs/
+

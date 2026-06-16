@@ -16,6 +16,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, X, Search } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useBindingColumns } from '@/hooks/data/useBindingColumns';
+import { HiddenFiltersEditor } from '@/components/builder/data-binding/HiddenFiltersEditor';
 
 interface DataTablePropertiesPanelProps {
     componentId: string;
@@ -443,6 +445,8 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
         onBindingUpdate({ ...effectiveBinding, ...updates });
     };
 
+    const columns = useBindingColumns(effectiveBinding.tableName, effectiveBinding.dataSourceId);
+
     return (
         <Tabs defaultValue="binding" className="w-full">
             <TabsList className="grid w-full grid-cols-3">
@@ -645,6 +649,15 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                                 />
                             )}
                         </div>
+
+                        {/* Hidden Filters */}
+                        <HiddenFiltersEditor
+                            tableName={binding.tableName}
+                            dataSourceId={binding.dataSourceId}
+                            columns={columns}
+                            value={binding.hiddenFilters || []}
+                            onChange={(hiddenFilters) => updateBinding({ hiddenFilters })}
+                        />
 
                         {/* Refresh Interval */}
                         <div className="space-y-3 p-4 border rounded-lg">

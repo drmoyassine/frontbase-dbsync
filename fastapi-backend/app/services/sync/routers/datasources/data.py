@@ -5,7 +5,7 @@ Data read and search endpoints for datasources.
 import json
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select as sqlalchemy_select
@@ -240,7 +240,7 @@ async def get_datasource_table_data(
                 "offset": offset,
                 "limit": limit,
                 "has_more": has_more,
-                "timestamp_utc": datetime.utcnow().isoformat() + "Z"
+                "timestamp_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             }
     except Exception as e:
         import traceback
@@ -258,6 +258,7 @@ async def get_datasource_table_aggregate(
     sort: str = "none",
     limit: int = 10,
     filters: Optional[str] = None,
+    hidden_filters: Optional[str] = None,
     datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db),
 ):
@@ -275,6 +276,16 @@ async def get_datasource_table_aggregate(
         except Exception:
             parsed_filters = None
 
+    if hidden_filters:
+        try:
+            parsed_hidden = json.loads(hidden_filters)
+            if isinstance(parsed_hidden, list):
+                if parsed_filters is None:
+                    parsed_filters = []
+                parsed_filters.extend(parsed_hidden)
+        except Exception:
+            pass
+
     try:
         adapter = get_adapter(datasource)
         async with adapter:
@@ -291,7 +302,7 @@ async def get_datasource_table_aggregate(
                 "records": records,
                 "category": category,
                 "aggregation": aggregation,
-                "timestamp_utc": datetime.utcnow().isoformat() + "Z",
+                "timestamp_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             }
     except Exception as e:
         import traceback
@@ -313,8 +324,9 @@ def _aggregate_in_python(
     groups: Dict[str, Dict[str, float]] = {}
     for row in rows:
         key = str(row.get(category, ""))
+        val_item = row.get(value) if value else None
         try:
-            num = float(row.get(value)) if value and row.get(value) is not None else 0.0
+            num = float(val_item) if val_item is not None else 0.0
         except (TypeError, ValueError):
             num = 0.0
         acc = groups.setdefault(key, {"sum": 0.0, "count": 0.0, "min": float("inf"), "max": float("-inf")})
@@ -339,7 +351,7 @@ def _aggregate_in_python(
         result.sort(key=lambda r: r["value"])
     elif sort == "desc":
         result.sort(key=lambda r: r["value"], reverse=True)
-    return result[: max(1, min(int(limit or 10), 1000))]
+    return result[: max(1, min(limit or 10, 1000))]
 
 
 @router.get("/{datasource_id}/tables/{table}/distinct/{column}/")
@@ -524,7 +536,7 @@ async def search_all_datasources(
                                 if matched_fields:
                                     all_matches.append({
                                         "table": table,
-                                        "datasource_id": str(ds.id),
+                                        "datasource_id": ds.id,
                                         "datasource_name": ds.name,
                                         "record": record,
                                         "matched_fields": matched_fields,
@@ -543,7 +555,7 @@ async def search_all_datasources(
                                 if count > 0:
                                     return {
                                         "table": t_name,
-                                        "datasource_id": str(ds.id),
+                                        "datasource_id": ds.id,
                                         "datasource_name": ds.name,
                                         "count": count
                                     }

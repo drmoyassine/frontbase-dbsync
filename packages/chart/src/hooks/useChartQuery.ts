@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ComponentDataBinding } from '../types';
 
@@ -6,6 +7,100 @@ interface UseChartQueryProps {
     binding: ComponentDataBinding;
     initialData?: any[];
     enabled?: boolean;
+}
+
+/**
+ * Resolves variables in a template string on the client using the global VariableStore.
+ */
+function resolveClientTemplate(template: string, store: { get(scope: string, key: string): any }): string {
+    return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, expr) => {
+        const [scope, ...rest] = String(expr).trim().split('.');
+        const val = store.get(scope, rest.join('.'));
+        return val !== undefined && val !== null ? String(val) : '';
+    });
+}
+
+/** Quote a SQL identifier (supports dotted table.column), escaping embedded quotes. */
+function sqlIdent(name: string): string {
+    return String(name).split('.').map(p => '"' + p.replace(/"/g, '""') + '"').join('.');
+}
+
+/** Quote a SQL string literal, escaping single quotes. */
+function sqlLit(value: any): string {
+    return "'" + String(value).replace(/'/g, "''") + "'";
+}
+
+/**
+ * Build a ` AND <cond> AND <cond>` fragment from already-resolved hidden filters
+ * ({ column, op, value }). Mirrors the Postgres dialect of chart_aggregation.py
+ * so published-chart filtering matches the builder/datatable paths.
+ */
+function buildHiddenWhereSql(filters: any[]): string {
+    const conds: string[] = [];
+    for (const f of filters || []) {
+        const col = f?.column;
+        if (!col) continue;
+        const op = f.op || f.operator || 'eq';
+        const c = sqlIdent(col);
+        if (op === 'is_null') { conds.push(`${c} IS NULL`); continue; }
+        if (op === 'not_null') { conds.push(`${c} IS NOT NULL`); continue; }
+        const v = f.value;
+        if (v === undefined || v === null || v === '') continue;
+        switch (op) {
+            case 'eq': conds.push(`${c} = ${sqlLit(v)}`); break;
+            case 'neq': conds.push(`${c} IS DISTINCT FROM ${sqlLit(v)}`); break;
+            case 'gt': conds.push(`${c} > ${sqlLit(v)}`); break;
+            case 'gte': conds.push(`${c} >= ${sqlLit(v)}`); break;
+            case 'lt': conds.push(`${c} < ${sqlLit(v)}`); break;
+            case 'lte': conds.push(`${c} <= ${sqlLit(v)}`); break;
+            case 'contains': conds.push(`CAST(${c} AS TEXT) ILIKE ${sqlLit('%' + v + '%')}`); break;
+            case 'in': {
+                const arr = Array.isArray(v) ? v : String(v).split(',').map(s => s.trim()).filter(Boolean);
+                if (arr.length) conds.push(`${c} IN (${arr.map(sqlLit).join(', ')})`);
+                break;
+            }
+        }
+    }
+    return conds.length ? ' AND ' + conds.join(' AND ') : '';
+}
+
+/** Replace the publish-baked /*__HF__*​/ marker with resolved hidden-filter conditions. */
+function injectHiddenFilters(query: string, filters: any[]): string {
+    if (typeof query !== 'string' || !query.includes('/*__HF__*/')) return query;
+    const fragment = buildHiddenWhereSql(filters);
+    // Function replacement avoids `$`-pattern interpretation in the fragment.
+    return query.replace('/*__HF__*/', () => fragment);
+}
+
+/** Resolve raw hidden filters for builder preview (url/system context + previewValue). */
+function resolveBuilderHiddenFilters(hidden: any[] | undefined): any[] {
+    if (!hidden || hidden.length === 0) return [];
+    const url = typeof window !== 'undefined'
+        ? Object.fromEntries(new URLSearchParams(window.location.search))
+        : {};
+    const ctx: Record<string, any> = { url, system: { date: new Date().toISOString() } };
+    const out: any[] = [];
+    for (const f of hidden) {
+        const op = f.operator;
+        if (op === 'is_null' || op === 'not_null') { out.push({ column: f.column, op }); continue; }
+        let val = f.value;
+        if (typeof val === 'string' && val.includes('{{')) {
+            val = val.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m: string, expr: string) => {
+                let cur: any = ctx;
+                for (const part of String(expr).trim().split('.')) {
+                    if (cur == null) break;
+                    cur = cur[part];
+                }
+                return cur !== undefined && cur !== null ? String(cur) : '';
+            });
+            if (!val || !String(val).trim()) val = f.previewValue || '';
+        }
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+            if (op === 'in') val = String(val).split(',').map((s: string) => s.trim()).filter(Boolean);
+            out.push({ column: f.column, op, value: val });
+        }
+    }
+    return out;
 }
 
 function resolveEnvVars(template: string): string {
@@ -41,6 +136,11 @@ async function fetchAggregateFromBuilder(binding: ComponentDataBinding) {
     const filterList = buildFilterList(binding);
     if (filterList.length > 0) params.append('filters', JSON.stringify(filterList));
 
+    const hiddenFilters = binding._resolvedHiddenFilters || [];
+    if (hiddenFilters.length > 0) {
+        params.append('hidden_filters', JSON.stringify(hiddenFilters));
+    }
+
     const response = await fetch(
         `/api/sync/datasources/${binding.dataSourceId}/tables/${binding.tableName}/aggregate/?${params}`
     );
@@ -69,18 +169,13 @@ async function fetchFromBuilder(binding: ComponentDataBinding) {
         params.append('order', binding.sorting.direction || 'asc');
     }
 
-    // Add filters
-    if (binding.filtering?.filters) {
-        const filterList = Object.entries(binding.filtering.filters)
-            .filter(([_, v]) => v != null && v !== '')
-            .map(([field, value]) => ({
-                field,
-                operator: '==',
-                value: typeof value === 'object' && 'value' in value ? (value as any).value : value,
-            }));
-        if (filterList.length > 0) {
-            params.append('filters', JSON.stringify(filterList));
-        }
+    // Add filters & hidden filters
+    const filterList = [
+        ...buildFilterList(binding),
+        ...(binding._resolvedHiddenFilters || [])
+    ];
+    if (filterList.length > 0) {
+        params.append('filters', JSON.stringify(filterList));
     }
 
     const response = await fetch(
@@ -108,6 +203,14 @@ async function fetchFromEdge(binding: ComponentDataBinding) {
     // Supabase-direct, or a SQL queryConfig for the proxy). Send it as-is and
     // return the already-aggregated [{category, value}] rows.
     if (binding.chartConfig?.category && (queryConfig as any)?.isChartAggregate) {
+        // Inject already-resolved hidden filters into the baked GROUP BY SQL at the
+        // /*__HF__*/ marker. Values are resolved (server scopes at SSR, client scopes
+        // in the hook) and safely escaped here.
+        const resolvedHidden = (binding as any)._resolvedHiddenFilters || [];
+        const aggBody: Record<string, any> = { ...(dataRequest.body || {}) };
+        if (typeof aggBody.query === 'string') {
+            aggBody.query = injectHiddenFilters(aggBody.query, resolvedHidden);
+        }
         if (strategy === 'direct') {
             const url = resolveEnvVars(dataRequest.url);
             const headers: Record<string, string> = {};
@@ -117,7 +220,7 @@ async function fetchFromEdge(binding: ComponentDataBinding) {
             const response = await fetch(url, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify(dataRequest.body || {}),
+                body: JSON.stringify(aggBody),
             });
             if (!response.ok) {
                 throw new Error(`Failed to fetch chart data (HTTP ${response.status})`);
@@ -134,7 +237,7 @@ async function fetchFromEdge(binding: ComponentDataBinding) {
                     datasourceId,
                     method: 'POST',
                     queryConfig: dataRequest.queryConfig || {},
-                    body: dataRequest.body || {},
+                    body: aggBody,
                     resultPath: dataRequest.resultPath ?? '',
                     flattenRelations: false,
                 },
@@ -155,7 +258,7 @@ async function fetchFromEdge(binding: ComponentDataBinding) {
         joins: queryConfig?.joins || [],
         page: 1,
         page_size: limit,
-        filters: [],
+        filters: binding._resolvedHiddenFilters || [],
     };
 
     if (binding.sorting?.column) {
@@ -214,14 +317,77 @@ export function useChartQuery({
     initialData,
     enabled = true,
 }: UseChartQueryProps) {
+    const [storeVersion, setStoreVersion] = useState(0);
+
+    useEffect(() => {
+        const store = typeof window !== 'undefined' ? (window as any).__VARIABLE_STORE__ : null;
+        if (!store) return;
+        return store.subscribe(() => {
+            setStoreVersion((v) => v + 1);
+        });
+    }, []);
+
+    const resolvedHiddenFilters = useMemo(() => {
+        // Builder preview has no SSR-injected _resolved/_pending fields — resolve the
+        // raw authored hidden filters against the builder context (url/system).
+        if (mode === 'builder') {
+            return resolveBuilderHiddenFilters(binding.hiddenFilters);
+        }
+
+        const resolvedList = [...(binding._resolvedHiddenFilters || [])];
+        const pendingList = binding._pendingHiddenFilters || [];
+        const store = typeof window !== 'undefined' ? (window as any).__VARIABLE_STORE__ : null;
+
+        for (const filter of pendingList) {
+            const operator = filter.operator;
+            if (operator === 'is_null' || operator === 'not_null') {
+                resolvedList.push({
+                    column: filter.column,
+                    op: operator,
+                });
+                continue;
+            }
+
+            const value = filter.value;
+            let resolvedVal: any = '';
+            if (typeof value === 'string') {
+                if (store) {
+                    resolvedVal = resolveClientTemplate(value, store);
+                } else {
+                    resolvedVal = filter.previewValue || '';
+                }
+            } else {
+                resolvedVal = value;
+            }
+
+            if (resolvedVal !== undefined && resolvedVal !== null && String(resolvedVal).trim() !== '') {
+                if (operator === 'in') {
+                    resolvedVal = String(resolvedVal).split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
+                resolvedList.push({
+                    column: filter.column,
+                    op: operator,
+                    value: resolvedVal
+                });
+            }
+        }
+        return resolvedList;
+    }, [mode, binding.hiddenFilters, binding._resolvedHiddenFilters, binding._pendingHiddenFilters, storeVersion]);
+
     return useQuery({
-        queryKey: ['chart-data-v2', mode, binding.dataSourceId, binding.tableName, binding.sorting, binding.filtering, binding.chartConfig],
+        queryKey: ['chart-data-v2', mode, binding.dataSourceId, binding.tableName, binding.sorting, binding.filtering, binding.chartConfig, resolvedHiddenFilters],
         queryFn: async () => {
             if (!binding.tableName) return [];
             if (mode === 'builder') {
-                return fetchFromBuilder(binding);
+                return fetchFromBuilder({
+                    ...binding,
+                    _resolvedHiddenFilters: resolvedHiddenFilters
+                });
             } else {
-                return fetchFromEdge(binding);
+                return fetchFromEdge({
+                    ...binding,
+                    _resolvedHiddenFilters: resolvedHiddenFilters
+                });
             }
         },
         initialData: initialData,

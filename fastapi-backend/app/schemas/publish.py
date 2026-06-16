@@ -93,6 +93,7 @@ class ComponentBinding(BaseModel):
     
     # Dynamic feature configuration
     frontend_filters: Optional[List[Dict[str, Any]]] = Field(None, alias="frontendFilters")
+    hidden_filters: Optional[List[Dict[str, Any]]] = Field(None, alias="hiddenFilters")
     sorting: Optional[Dict[str, Any]] = None
     pagination: Optional[Dict[str, Any]] = None
     filtering: Optional[Dict[str, Any]] = None

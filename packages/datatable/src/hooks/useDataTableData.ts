@@ -1,3 +1,4 @@
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { DataTableBinding, DataFetcherConfig, DataFetcherResult, DataRequest } from '../types';
 
@@ -14,6 +15,17 @@ function resolveEnvVars(template: string): string {
         // Client-side: env vars should already be resolved in pre-rendered HTML
         return template;
     }
+}
+
+/**
+ * Resolves variables in a template string on the client using the global VariableStore.
+ */
+function resolveClientTemplate(template: string, store: { get(scope: string, key: string): any }): string {
+    return template.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m, expr) => {
+        const [scope, ...rest] = String(expr).trim().split('.');
+        const val = store.get(scope, rest.join('.'));
+        return val !== undefined && val !== null ? String(val) : '';
+    });
 }
 
 /**
@@ -73,8 +85,8 @@ async function fetchFromBuilder(config: DataFetcherConfig): Promise<DataFetcherR
  * - 'direct': browser → Supabase PostgREST (CORS-enabled, anonKey in headers)
  * - 'proxy': browser → edge /api/data/execute → datasource (credentials server-side)
  */
-async function fetchFromEdge(config: DataFetcherConfig): Promise<DataFetcherResult> {
-    const { binding, page, pageSize, sortColumn, sortDirection, filters, searchQuery } = config;
+async function fetchFromEdge(config: DataFetcherConfig & { resolvedHiddenFilters?: any[] }): Promise<DataFetcherResult> {
+    const { binding, page, pageSize, sortColumn, sortDirection, filters, searchQuery, resolvedHiddenFilters } = config;
     const dataRequest = binding.dataRequest;
 
     if (!dataRequest?.url && !dataRequest?.queryConfig) {
@@ -108,7 +120,7 @@ async function fetchFromEdge(config: DataFetcherConfig): Promise<DataFetcherResu
         joins: queryConfig?.joins || [],
         page: page + 1, // RPC uses 1-based pages
         page_size: pageSize,
-        filters: filterList,
+        filters: [...filterList, ...(resolvedHiddenFilters || [])],
     };
 
     if (searchQuery) {
@@ -201,6 +213,57 @@ export function useDataTableData({
     initialData,
     enabled = true,
 }: UseDataTableDataOptions) {
+    const [storeVersion, setStoreVersion] = useState(0);
+
+    useEffect(() => {
+        const store = typeof window !== 'undefined' ? (window as any).__VARIABLE_STORE__ : null;
+        if (!store) return;
+        return store.subscribe(() => {
+            setStoreVersion((v) => v + 1);
+        });
+    }, []);
+
+    const resolvedHiddenFilters = useMemo(() => {
+        const resolvedList = [...(binding._resolvedHiddenFilters || [])];
+        const pendingList = binding._pendingHiddenFilters || [];
+        const store = typeof window !== 'undefined' ? (window as any).__VARIABLE_STORE__ : null;
+
+        for (const filter of pendingList) {
+            const operator = filter.operator;
+            if (operator === 'is_null' || operator === 'not_null') {
+                resolvedList.push({
+                    column: filter.column,
+                    op: operator,
+                });
+                continue;
+            }
+
+            const value = filter.value;
+            let resolvedVal: any = '';
+            if (typeof value === 'string') {
+                if (store) {
+                    resolvedVal = resolveClientTemplate(value, store);
+                } else {
+                    resolvedVal = filter.previewValue || '';
+                }
+            } else {
+                resolvedVal = value;
+            }
+
+            if (resolvedVal !== undefined && resolvedVal !== null && String(resolvedVal).trim() !== '') {
+                if (operator === 'in') {
+                    resolvedVal = String(resolvedVal).split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
+                resolvedList.push({
+                    column: filter.column,
+                    op: operator,
+                    value: resolvedVal
+                });
+            }
+        }
+        return resolvedList;
+    }, [binding._resolvedHiddenFilters, binding._pendingHiddenFilters, storeVersion]);
+
     return useQuery({
         queryKey: [
             'datatable',
@@ -213,9 +276,10 @@ export function useDataTableData({
             sortDirection,
             filters,
             searchQuery,
+            resolvedHiddenFilters,
         ],
         queryFn: async () => {
-            const config: DataFetcherConfig = {
+            const config: DataFetcherConfig & { resolvedHiddenFilters?: any[] } = {
                 mode,
                 binding,
                 page,
@@ -224,6 +288,7 @@ export function useDataTableData({
                 sortDirection,
                 filters,
                 searchQuery,
+                resolvedHiddenFilters,
             };
 
             if (mode === 'builder') {

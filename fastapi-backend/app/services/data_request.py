@@ -110,7 +110,12 @@ def compute_data_request(binding: dict, datasource) -> Optional[dict]:
 
 
 def _chart_filters(binding: dict) -> list:
-    """Normalize a chart binding's filters into [{field, value}] for aggregation."""
+    """Normalize a chart binding's OWN filters into [{field, value}] for aggregation.
+
+    Hidden filters are deliberately NOT baked here: their dynamic `{{ }}` values
+    can't be resolved at publish time. They are injected at runtime via the
+    `/*__HF__*/` marker (see build_aggregate_sql(where_marker=True)).
+    """
     filters = []
     raw = (binding.get('filtering') or {}).get('filters') or {}
     if isinstance(raw, dict):
@@ -126,20 +131,21 @@ def _chart_filters(binding: dict) -> list:
 def _compute_supabase_chart_aggregate(binding: dict, datasource, chart_cfg: dict) -> Optional[dict]:
     """Bake a GROUP BY request for a chart, executed via the exec_sql RPC."""
     from app.services.chart_aggregation import build_aggregate_sql
-    table_name = binding.get('tableName') or binding.get('table_name')
+    table_name = str(binding.get('tableName') or binding.get('table_name') or '')
     ds_url = datasource.url if hasattr(datasource, 'url') else datasource.get('url', '')
     anon_key = datasource.anonKey if hasattr(datasource, 'anonKey') else datasource.get('anonKey', '')
-    if not ds_url or not ds_url.startswith('http'):
+    if not ds_url or not ds_url.startswith('http') or not table_name:
         return None
 
     sql = build_aggregate_sql(
         table_name,
-        chart_cfg.get('category'),
-        chart_cfg.get('aggregation', 'count'),
+        str(chart_cfg.get('category') or ''),
+        str(chart_cfg.get('aggregation', 'count')),
         chart_cfg.get('value'),
         _chart_filters(binding),
-        chart_cfg.get('sort', 'none'),
+        str(chart_cfg.get('sort', 'none')),
         chart_cfg.get('maxRows', 10),
+        where_marker=True,
     )
     return {
         'url': f"{ds_url}/rest/v1/rpc/exec_sql",
@@ -352,7 +358,8 @@ def _compute_supabase_request(binding: dict, datasource) -> Optional[dict]:
             'sortColumn': sort_col,
             'sortDirection': sort_dir,
             'searchColumns': binding.get('searchColumns', []),
-            'frontendFilters': frontend_filters
+            'frontendFilters': frontend_filters,
+            'hiddenFilters': binding.get('hiddenFilters', [])
         }
     }
 
@@ -374,13 +381,14 @@ def _compute_sql_request(binding: dict, datasource, ds_type: str) -> Optional[di
         from app.services.chart_aggregation import build_aggregate_sql
         datasource_id = datasource.id if hasattr(datasource, 'id') else datasource.get('id', '')
         sql = build_aggregate_sql(
-            table_name,
-            chart_cfg.get('category'),
-            chart_cfg.get('aggregation', 'count'),
+            str(table_name),
+            str(chart_cfg.get('category') or ''),
+            str(chart_cfg.get('aggregation', 'count')),
             chart_cfg.get('value'),
             _chart_filters(binding),
-            chart_cfg.get('sort', 'none'),
+            str(chart_cfg.get('sort', 'none')),
             chart_cfg.get('maxRows', 10),
+            where_marker=True,
         )
         return {
             'url': '',
@@ -433,6 +441,7 @@ def _compute_sql_request(binding: dict, datasource, ds_type: str) -> Optional[di
             'tableName': table_name,
             'sql': sql,
             'joins': joins,
+            'hiddenFilters': binding.get('hiddenFilters', [])
         }
     }
 

@@ -160,13 +160,13 @@ class SQLAdapter(DatabaseAdapter, ABC):
         filter_list = where if isinstance(where, list) else [{"field": k, "operator": "==", "value": v} for k, v in where.items()]
         
         for f in filter_list:
-            k = f.get("field")
+            k = f.get("field") or f.get("column")
             v = f.get("value")
-            op = f.get("operator", "==")
+            op = f.get("operator") or f.get("op") or "=="
             
             # Skip if field is missing. 
             # Skip if value is missing UNLESS it's an empty check operator (which doesn't need a value).
-            if not k or (v is None and op not in ["is_empty", "is_not_empty"]):
+            if not k or (v is None and op not in ["is_empty", "is_not_empty", "is_null", "not_null"]):
                 continue
             
             p_idx = len(params) + 1
@@ -177,20 +177,26 @@ class SQLAdapter(DatabaseAdapter, ABC):
             # Use CAST for string-based operators if the database might have typed columns (like Postgres)
             # This prevents 500 errors when comparing integer columns to ''
             # Apply CAST to all operators that receive string values from the UI
-            if op in ["==", "!=", "contains", "starts_with", "ends_with", "is_empty", "is_not_empty", "in", "not_in"]:
+            if op in ["==", "eq", "!=", "neq", "contains", "starts_with", "ends_with", "is_empty", "is_not_empty", "in", "not_in"]:
                 col_expr = f'CAST({col_expr} AS TEXT)'
 
-            if op == "==":
+            if op == "==" or op == "eq":
                 conditions.append(f'{col_expr} = {curr_placeholder}')
                 params.append(v)
-            elif op == "!=":
+            elif op == "!=" or op == "neq":
                 conditions.append(f'{col_expr} != {curr_placeholder}')
                 params.append(v)
-            elif op == ">":
+            elif op == ">" or op == "gt":
                 conditions.append(f'"{k}" > {curr_placeholder}')
                 params.append(v)
-            elif op == "<":
+            elif op == ">=" or op == "gte":
+                conditions.append(f'"{k}" >= {curr_placeholder}')
+                params.append(v)
+            elif op == "<" or op == "lt":
                 conditions.append(f'"{k}" < {curr_placeholder}')
+                params.append(v)
+            elif op == "<=" or op == "lte":
+                conditions.append(f'"{k}" <= {curr_placeholder}')
                 params.append(v)
             elif op == "contains":
                 conditions.append(f'{col_expr} LIKE {curr_placeholder}')
@@ -205,6 +211,10 @@ class SQLAdapter(DatabaseAdapter, ABC):
                 conditions.append(f'({col_expr} IS NULL OR {col_expr} = \'\')')
             elif op == "is_not_empty":
                 conditions.append(f'({col_expr} IS NOT NULL AND {col_expr} != \'\')')
+            elif op == "is_null":
+                conditions.append(f'{col_expr} IS NULL')
+            elif op == "not_null":
+                conditions.append(f'{col_expr} IS NOT NULL')
             elif op == "not_contains":
                 conditions.append(f'{col_expr} NOT LIKE {curr_placeholder}')
                 params.append(f"%{v}%")

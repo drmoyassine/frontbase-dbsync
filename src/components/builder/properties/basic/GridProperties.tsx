@@ -14,6 +14,8 @@ import { TableSelector } from '@/components/data-binding/TableSelector';
 import { CompactColumnConfigurator } from '@/components/builder/data-table/CompactColumnConfigurator';
 import { ComponentDataBinding } from '@/hooks/data/useSimpleData';
 import { DefaultSortColumnSelector } from '@/components/builder/data-table/DataTablePropertiesPanel';
+import { useBindingColumns } from '@/hooks/data/useBindingColumns';
+import { HiddenFiltersEditor } from '@/components/builder/data-binding/HiddenFiltersEditor';
 
 interface GridPropertiesProps {
     componentId: string;
@@ -47,6 +49,8 @@ export const GridProperties: React.FC<GridPropertiesProps> = ({
     const updateBinding = (updates: Partial<ComponentDataBinding>) => {
         onBindingUpdate({ ...effectiveBinding, ...updates });
     };
+
+    const columns = useBindingColumns(effectiveBinding.tableName, effectiveBinding.dataSourceId);
 
     return (
         <Tabs defaultValue="binding" className="w-full">
@@ -216,6 +220,15 @@ export const GridProperties: React.FC<GridPropertiesProps> = ({
                                 </div>
                             )}
                         </div>
+
+                        {/* Hidden Filters */}
+                        <HiddenFiltersEditor
+                            tableName={binding.tableName}
+                            dataSourceId={binding.dataSourceId}
+                            columns={columns}
+                            value={binding.hiddenFilters || []}
+                            onChange={(hiddenFilters) => updateBinding({ hiddenFilters })}
+                        />
 
                         {/* Refresh Interval */}
                         <div className="space-y-3 p-4 border rounded-lg">

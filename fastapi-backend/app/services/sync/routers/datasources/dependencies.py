@@ -42,5 +42,11 @@ async def get_scoped_datasource(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Datasource not found"
             )
+    elif ctx and ctx.is_master:
+        if datasource.project_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Datasource not found"
+            )
             
     return datasource

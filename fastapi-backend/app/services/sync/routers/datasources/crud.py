@@ -139,9 +139,12 @@ async def list_datasources(
         )
         project = project_result.scalar_one_or_none()
         if project:
-            query = query.where(Datasource.project_id == project.id)
+            query = query.where(Datasource.project_id == str(project.id))
         else:
             return []
+    elif ctx and ctx.is_master:
+        # Master admin: only their own (unassigned) datasources
+        query = query.where(Datasource.project_id == None)
             
     result = await db.execute(query.order_by(Datasource.created_at.desc()))
     datasources = result.scalars().all()
@@ -177,7 +180,13 @@ async def get_datasource(
             select(Project).where(Project.tenant_id == ctx.tenant_id)
         )
         project = project_result.scalar_one_or_none()
-        if not project or datasource.project_id != project.id:
+        if not project or datasource.project_id != str(project.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Datasource not found"
+            )
+    elif ctx and ctx.is_master:
+        if datasource.project_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Datasource not found"
@@ -210,7 +219,13 @@ async def update_datasource(
             select(Project).where(Project.tenant_id == ctx.tenant_id)
         )
         project = project_result.scalar_one_or_none()
-        if not project or datasource.project_id != project.id:
+        if not project or datasource.project_id != str(project.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Datasource not found"
+            )
+    elif ctx and ctx.is_master:
+        if datasource.project_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Datasource not found"
@@ -263,7 +278,13 @@ async def delete_datasource(
             select(Project).where(Project.tenant_id == ctx.tenant_id)
         )
         project = project_result.scalar_one_or_none()
-        if not project or datasource.project_id != project.id:
+        if not project or datasource.project_id != str(project.id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Datasource not found"
+            )
+    elif ctx and ctx.is_master:
+        if datasource.project_id is not None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Datasource not found"

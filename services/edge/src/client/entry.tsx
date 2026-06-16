@@ -126,6 +126,138 @@ function findComponentById(components: any[], id: string): any {
     return null;
 }
 
+class VariableStore {
+    local: Record<string, any> = {};
+    session: Record<string, any> = {};
+    cookies: Record<string, any> = {};
+    url: Record<string, any> = {};
+    app: Record<string, any> = {};
+    listeners: Set<() => void> = new Set();
+
+    constructor() {
+        this.hydrate();
+    }
+
+    hydrate() {
+        const pageData = (window as any).__PAGE_DATA__;
+        const root = pageData?.layoutData?.root || {};
+
+        // 1. Hydrate URL parameters
+        if (typeof window !== 'undefined') {
+            const searchParams = new URLSearchParams(window.location.search);
+            for (const [key, value] of searchParams.entries()) {
+                this.url[key] = value;
+            }
+        }
+
+        // 2. Hydrate cookies
+        if (typeof document !== 'undefined') {
+            const rawCookies = document.cookie.split(';');
+            for (const cookie of rawCookies) {
+                const parts = cookie.split('=');
+                if (parts.length === 2) {
+                    const key = parts[0].trim();
+                    const value = decodeURIComponent(parts[1].trim());
+                    this.cookies[key] = value;
+                }
+            }
+        }
+
+        // 3. Hydrate app variables (baked at publish time)
+        if (pageData && pageData.appVariables) {
+            this.app = { ...pageData.appVariables };
+        }
+
+        // 4. Hydrate session variables (from sessionStorage or defaults)
+        const sessionDefs = root.sessionVariables || {};
+        for (const [name, def] of Object.entries(sessionDefs)) {
+            const saved = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(`fb_session:${name}`) : null;
+            if (saved !== null) {
+                this.session[name] = this.castValue(saved, (def as any).type);
+            } else {
+                this.session[name] = (def as any).defaultValue;
+            }
+        }
+
+        // 5. Hydrate local variables (page state, initialized with defaults)
+        const localDefs = root.localVariables || {};
+        for (const [name, def] of Object.entries(localDefs)) {
+            this.local[name] = (def as any).defaultValue;
+        }
+    }
+
+    castValue(val: any, type: string): any {
+        if (val === null || val === undefined) return val;
+        if (type === 'boolean') {
+            return String(val) === 'true';
+        }
+        if (type === 'number') {
+            const num = Number(val);
+            return isNaN(num) ? 0 : num;
+        }
+        return String(val);
+    }
+
+    get(scope: string, key: string): any {
+        if (scope === 'local') return this.local[key];
+        if (scope === 'session') return this.session[key];
+        if (scope === 'cookies') return this.cookies[key];
+        if (scope === 'url') return this.url[key];
+        if (scope === 'app') return this.app[key];
+        return undefined;
+    }
+
+    set(scope: string, key: string, value: any) {
+        let changed = false;
+
+        if (scope === 'local') {
+            const prev = this.local[key];
+            this.local[key] = value;
+            changed = prev !== value;
+        } else if (scope === 'session') {
+            const prev = this.session[key];
+            this.session[key] = value;
+            if (typeof sessionStorage !== 'undefined') {
+                sessionStorage.setItem(`fb_session:${key}`, String(value));
+            }
+            changed = prev !== value;
+        } else if (scope === 'cookies') {
+            const prev = this.cookies[key];
+            this.cookies[key] = value;
+            if (typeof document !== 'undefined') {
+                document.cookie = `${key}=${encodeURIComponent(String(value))}; path=/; max-age=31536000; SameSite=Lax`;
+            }
+            changed = prev !== value;
+        } else if (scope === 'url') {
+            const prev = this.url[key];
+            this.url[key] = value;
+            if (typeof window !== 'undefined') {
+                const url = new URL(window.location.href);
+                url.searchParams.set(key, String(value));
+                window.history.replaceState(null, '', url.pathname + url.search);
+            }
+            changed = prev !== value;
+        }
+
+        if (changed) {
+            this.notify();
+        }
+    }
+
+    subscribe(listener: () => void): () => void {
+        this.listeners.add(listener);
+        return () => {
+            this.listeners.delete(listener);
+        };
+    }
+
+    notify() {
+        for (const listener of this.listeners) {
+            listener();
+        }
+    }
+}
+
 // Run hydration when DOM is ready
 if (typeof window !== 'undefined') {
     const initAll = () => {
@@ -276,137 +408,7 @@ if (typeof window !== 'undefined') {
     (window as any).__REACT_QUERY_CLIENT__ = queryClient;
 }
 
-class VariableStore {
-    local: Record<string, any> = {};
-    session: Record<string, any> = {};
-    cookies: Record<string, any> = {};
-    url: Record<string, any> = {};
-    app: Record<string, any> = {};
-    listeners: Set<() => void> = new Set();
 
-    constructor() {
-        this.hydrate();
-    }
-
-    hydrate() {
-        const pageData = (window as any).__PAGE_DATA__;
-        const root = pageData?.layoutData?.root || {};
-
-        // 1. Hydrate URL parameters
-        if (typeof window !== 'undefined') {
-            const searchParams = new URLSearchParams(window.location.search);
-            for (const [key, value] of searchParams.entries()) {
-                this.url[key] = value;
-            }
-        }
-
-        // 2. Hydrate cookies
-        if (typeof document !== 'undefined') {
-            const rawCookies = document.cookie.split(';');
-            for (const cookie of rawCookies) {
-                const parts = cookie.split('=');
-                if (parts.length === 2) {
-                    const key = parts[0].trim();
-                    const value = decodeURIComponent(parts[1].trim());
-                    this.cookies[key] = value;
-                }
-            }
-        }
-
-        // 3. Hydrate app variables (baked at publish time)
-        if (pageData && pageData.appVariables) {
-            this.app = { ...pageData.appVariables };
-        }
-
-        // 4. Hydrate session variables (from sessionStorage or defaults)
-        const sessionDefs = root.sessionVariables || {};
-        for (const [name, def] of Object.entries(sessionDefs)) {
-            const saved = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(`fb_session:${name}`) : null;
-            if (saved !== null) {
-                this.session[name] = this.castValue(saved, (def as any).type);
-            } else {
-                this.session[name] = (def as any).defaultValue;
-            }
-        }
-
-        // 5. Hydrate local variables (page state, initialized with defaults)
-        const localDefs = root.localVariables || {};
-        for (const [name, def] of Object.entries(localDefs)) {
-            this.local[name] = (def as any).defaultValue;
-        }
-    }
-
-    castValue(val: any, type: string): any {
-        if (val === null || val === undefined) return val;
-        if (type === 'boolean') {
-            return String(val) === 'true';
-        }
-        if (type === 'number') {
-            const num = Number(val);
-            return isNaN(num) ? 0 : num;
-        }
-        return String(val);
-    }
-
-    get(scope: string, key: string): any {
-        if (scope === 'local') return this.local[key];
-        if (scope === 'session') return this.session[key];
-        if (scope === 'cookies') return this.cookies[key];
-        if (scope === 'url') return this.url[key];
-        if (scope === 'app') return this.app[key];
-        return undefined;
-    }
-
-    set(scope: string, key: string, value: any) {
-        let changed = false;
-
-        if (scope === 'local') {
-            const prev = this.local[key];
-            this.local[key] = value;
-            changed = prev !== value;
-        } else if (scope === 'session') {
-            const prev = this.session[key];
-            this.session[key] = value;
-            if (typeof sessionStorage !== 'undefined') {
-                sessionStorage.setItem(`fb_session:${key}`, String(value));
-            }
-            changed = prev !== value;
-        } else if (scope === 'cookies') {
-            const prev = this.cookies[key];
-            this.cookies[key] = value;
-            if (typeof document !== 'undefined') {
-                document.cookie = `${key}=${encodeURIComponent(String(value))}; path=/; max-age=31536000; SameSite=Lax`;
-            }
-            changed = prev !== value;
-        } else if (scope === 'url') {
-            const prev = this.url[key];
-            this.url[key] = value;
-            if (typeof window !== 'undefined') {
-                const url = new URL(window.location.href);
-                url.searchParams.set(key, String(value));
-                window.history.replaceState(null, '', url.pathname + url.search);
-            }
-            changed = prev !== value;
-        }
-
-        if (changed) {
-            this.notify();
-        }
-    }
-
-    subscribe(listener: () => void): () => void {
-        this.listeners.add(listener);
-        return () => {
-            this.listeners.delete(listener);
-        };
-    }
-
-    notify() {
-        for (const listener of this.listeners) {
-            listener();
-        }
-    }
-}
 
 function getPath(obj: any, path: string): any {
     const parts = path.trim().split('.');

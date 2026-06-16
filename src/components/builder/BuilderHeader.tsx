@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useBuilderStore } from '@/stores/builder';
+import { useAuthStore } from '@/stores/auth';
 import { PageSelector } from './PageSelector';
 import { PageSettingsDrawer } from './PageSettingsDrawer';
 import { VersionHistoryDialog } from './settings/VersionHistoryDialog';
@@ -49,6 +50,7 @@ interface EdgeTarget {
   adapter_type: string;
   is_active: boolean;
   edge_db_id: string | null;
+  is_shared?: boolean;
 }
 
 export const BuilderHeader: React.FC<{
@@ -61,6 +63,8 @@ export const BuilderHeader: React.FC<{
   onToggleRightSidebar
 }) => {
     const navigate = useNavigate();
+    const { tenant, user } = useAuthStore();
+    const tenantSlug = tenant?.slug || user?.tenant_slug;
     const {
       project,
       currentPageId,
@@ -461,7 +465,7 @@ export const BuilderHeader: React.FC<{
                       // Prefer the stored previewUrl from the deployment record (tenant-aware)
                       // rather than computing from target.url which may be an internal worker URL.
                       const storedDep = currentPage?.deployments?.find((d: any) => d.engineId === target.id && d.status === 'published');
-                      const previewUrl = storedDep?.previewUrl || resolvePreviewUrl(target.url, pagePath);
+                      const previewUrl = storedDep?.previewUrl || resolvePreviewUrl(target.url, pagePath, target.is_shared, tenantSlug);
                       return (
                         <div
                           key={target.id}

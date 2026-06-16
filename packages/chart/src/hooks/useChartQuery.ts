@@ -211,6 +211,10 @@ async function fetchFromEdge(binding: ComponentDataBinding) {
         if (typeof aggBody.query === 'string') {
             aggBody.query = injectHiddenFilters(aggBody.query, resolvedHidden);
         }
+        if (Array.isArray(aggBody.filters)) {
+            aggBody.filters = [...aggBody.filters, ...resolvedHidden];
+        }
+
         if (strategy === 'direct') {
             const url = resolveEnvVars(dataRequest.url);
             const headers: Record<string, string> = {};

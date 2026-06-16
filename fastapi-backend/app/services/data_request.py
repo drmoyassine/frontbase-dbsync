@@ -129,26 +129,15 @@ def _chart_filters(binding: dict) -> list:
 
 
 def _compute_supabase_chart_aggregate(binding: dict, datasource, chart_cfg: dict) -> Optional[dict]:
-    """Bake a GROUP BY request for a chart, executed via the exec_sql RPC."""
-    from app.services.chart_aggregation import build_aggregate_sql
+    """Bake a GROUP BY request for a chart, executed via the frontbase_aggregate RPC."""
     table_name = str(binding.get('tableName') or binding.get('table_name') or '')
     ds_url = datasource.url if hasattr(datasource, 'url') else datasource.get('url', '')
     anon_key = datasource.anonKey if hasattr(datasource, 'anonKey') else datasource.get('anonKey', '')
     if not ds_url or not ds_url.startswith('http') or not table_name:
         return None
 
-    sql = build_aggregate_sql(
-        table_name,
-        str(chart_cfg.get('category') or ''),
-        str(chart_cfg.get('aggregation', 'count')),
-        chart_cfg.get('value'),
-        _chart_filters(binding),
-        str(chart_cfg.get('sort', 'none')),
-        chart_cfg.get('maxRows', 10),
-        where_marker=True,
-    )
     return {
-        'url': f"{ds_url}/rest/v1/rpc/exec_sql",
+        'url': f"{ds_url}/rest/v1/rpc/frontbase_aggregate",
         'method': 'POST',
         'fetchStrategy': 'direct',
         'headers': {
@@ -156,8 +145,16 @@ def _compute_supabase_chart_aggregate(binding: dict, datasource, chart_cfg: dict
             'Authorization': f"Bearer {anon_key}",
             'Content-Type': 'application/json',
         },
-        'body': {'query': sql},
-        'resultPath': '',  # exec_sql returns the json array directly
+        'body': {
+            'table_name': table_name,
+            'category_col': str(chart_cfg.get('category') or ''),
+            'aggregation': str(chart_cfg.get('aggregation', 'count')),
+            'value_col': chart_cfg.get('value'),
+            'filters': _chart_filters(binding),
+            'sort': str(chart_cfg.get('sort', 'none')),
+            'row_limit': chart_cfg.get('maxRows', 10),
+        },
+        'resultPath': '',  # frontbase_aggregate returns the json array directly
         'flattenRelations': False,
         'queryConfig': {'isChartAggregate': True},
     }

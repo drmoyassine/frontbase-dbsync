@@ -74,9 +74,15 @@ export function Chart({
         const maxRows = cfg?.maxRows || 10;
 
         // Current model: data is aggregated in the database and arrives already
-        // shaped as { category, value } — render it directly, no re-aggregation.
+        // shaped as { category, value }. Coerce string numbers to actual numbers
+        // because PostgREST serializes bigint (COUNT) as strings, which crashes Recharts.
         if (cfg?.category) {
-            return data.slice(0, maxRows);
+            return data.slice(0, maxRows).map((row: any) => ({
+                ...row,
+                value: typeof row.value === 'string' && !isNaN(Number(row.value))
+                    ? Number(row.value)
+                    : row.value
+            }));
         }
 
         // Legacy fallback: charts saved under the old label/value/groupBy model

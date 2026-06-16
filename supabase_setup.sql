@@ -1410,14 +1410,14 @@ DECLARE
 BEGIN
   -- measure
   IF aggregation = 'count' OR value_col IS NULL THEN
-    measure := 'COUNT(*)';
+    measure := 'COUNT(*)::numeric';
   ELSIF aggregation IN ('sum','average') THEN
     measure := format('%s(NULLIF(CAST(%I AS TEXT), '''')::numeric)',
                       CASE aggregation WHEN 'sum' THEN 'SUM' ELSE 'AVG' END, value_col);
   ELSIF aggregation IN ('min','max') THEN
-    measure := format('%s(%I)', upper(aggregation), value_col);
+    measure := format('(%s(%I))::numeric', upper(aggregation), value_col);
   ELSE
-    measure := 'COUNT(*)';
+    measure := 'COUNT(*)::numeric';
   END IF;
 
   -- WHERE

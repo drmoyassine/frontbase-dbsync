@@ -232,6 +232,39 @@ class SupabaseAdapter(SQLAdapter):
     # CRUD Operations (query logic delegated to supabase_query.py)
     # =========================================================================
     
+    async def aggregate(
+        self,
+        table: str,
+        category: str,
+        aggregation: str = "count",
+        value: Optional[str] = None,
+        filters: Optional[List[Dict[str, Any]]] = None,
+        sort: str = "none",
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Group by `category` and aggregate per group. Returns [{category, value}].
+
+        Uses the direct Postgres connection when available, otherwise runs the
+        GROUP BY query through the existing exec_sql RPC over PostgREST.
+        """
+        if self._has_db_connection and self._postgres_adapter:
+            return await self._postgres_adapter.aggregate(
+                table, category, aggregation, value, filters, sort, limit
+            )
+
+        from app.services.chart_aggregation import build_aggregate_sql
+        sql = build_aggregate_sql(table, category, aggregation, value, filters, sort, limit)
+        response = await self._ensure_client().post(
+            "/rest/v1/rpc/exec_sql",
+            json={"query": sql},
+        )
+        response.raise_for_status()
+        rows = response.json() or []
+        return [
+            {"category": r.get("category"), "value": float(r["value"]) if r.get("value") is not None else 0}
+            for r in rows
+        ]
+
     async def read_records(
         self,
         table: str,

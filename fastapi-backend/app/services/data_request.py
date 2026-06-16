@@ -109,11 +109,67 @@ def compute_data_request(binding: dict, datasource) -> Optional[dict]:
         return None
 
 
+def _chart_filters(binding: dict) -> list:
+    """Normalize a chart binding's filters into [{field, value}] for aggregation."""
+    filters = []
+    raw = (binding.get('filtering') or {}).get('filters') or {}
+    if isinstance(raw, dict):
+        for field, value in raw.items():
+            if value is None or value == '':
+                continue
+            if isinstance(value, dict) and 'value' in value:
+                value = value['value']
+            filters.append({'field': field, 'operator': '==', 'value': value})
+    return filters
+
+
+def _compute_supabase_chart_aggregate(binding: dict, datasource, chart_cfg: dict) -> Optional[dict]:
+    """Bake a GROUP BY request for a chart, executed via the exec_sql RPC."""
+    from app.services.chart_aggregation import build_aggregate_sql
+    table_name = binding.get('tableName') or binding.get('table_name')
+    ds_url = datasource.url if hasattr(datasource, 'url') else datasource.get('url', '')
+    anon_key = datasource.anonKey if hasattr(datasource, 'anonKey') else datasource.get('anonKey', '')
+    if not ds_url or not ds_url.startswith('http'):
+        return None
+
+    sql = build_aggregate_sql(
+        table_name,
+        chart_cfg.get('category'),
+        chart_cfg.get('aggregation', 'count'),
+        chart_cfg.get('value'),
+        _chart_filters(binding),
+        chart_cfg.get('sort', 'none'),
+        chart_cfg.get('maxRows', 10),
+    )
+    return {
+        'url': f"{ds_url}/rest/v1/rpc/exec_sql",
+        'method': 'POST',
+        'fetchStrategy': 'direct',
+        'headers': {
+            'apikey': anon_key,
+            'Authorization': f"Bearer {anon_key}",
+            'Content-Type': 'application/json',
+        },
+        'body': {'query': sql},
+        'resultPath': '',  # exec_sql returns the json array directly
+        'flattenRelations': False,
+        'queryConfig': {'isChartAggregate': True},
+    }
+
+
 def _compute_supabase_request(binding: dict, datasource) -> Optional[dict]:
     """Build RPC-based query config for DataTable (uses frontbase_get_rows)"""
     table_name = binding.get('tableName') or binding.get('table_name')
     if not table_name:
         return None
+
+    # Charts aggregate in the database (GROUP BY) so the published page renders
+    # correct totals rather than aggregating a fetched page in the browser.
+    chart_cfg = binding.get('chartConfig') or {}
+    if chart_cfg.get('category'):
+        agg_request = _compute_supabase_chart_aggregate(binding, datasource, chart_cfg)
+        if agg_request:
+            return agg_request
     
     # Get columns from columnOrder (builder uses columnOrder)
     raw_col_order = binding.get('columnOrder') or binding.get('columns')
@@ -310,7 +366,39 @@ def _compute_sql_request(binding: dict, datasource, ds_type: str) -> Optional[di
     table_name = binding.get('tableName') or binding.get('table_name')
     if not table_name:
         return None
-    
+
+    # Charts aggregate in the database (GROUP BY). For the proxy path we bake the
+    # SQL into queryConfig; the edge resolves credentials and executes it.
+    chart_cfg = binding.get('chartConfig') or {}
+    if chart_cfg.get('category'):
+        from app.services.chart_aggregation import build_aggregate_sql
+        datasource_id = datasource.id if hasattr(datasource, 'id') else datasource.get('id', '')
+        sql = build_aggregate_sql(
+            table_name,
+            chart_cfg.get('category'),
+            chart_cfg.get('aggregation', 'count'),
+            chart_cfg.get('value'),
+            _chart_filters(binding),
+            chart_cfg.get('sort', 'none'),
+            chart_cfg.get('maxRows', 10),
+        )
+        return {
+            'url': '',
+            'method': 'POST',
+            'fetchStrategy': 'proxy',
+            'datasourceId': str(datasource_id),
+            'headers': {},
+            'body': {'query': sql, 'params': []},
+            'resultPath': 'rows',
+            'flattenRelations': False,
+            'queryConfig': {
+                'isChartAggregate': True,
+                'datasourceType': ds_type,
+                'tableName': table_name,
+                'sql': sql,
+            },
+        }
+
     # Build JOIN clauses from foreign keys
     foreign_keys = binding.get('foreignKeys') or binding.get('foreign_keys') or []
     joins = []

@@ -72,12 +72,20 @@ export function Chart({
 
         const cfg = binding?.chartConfig as any;
         const maxRows = cfg?.maxRows || 10;
-        // Shim for charts saved under the old label/value/groupBy model.
-        const category = cfg?.category || cfg?.groupBy || cfg?.labelColumn || Object.keys(data[0])[0];
+
+        // Current model: data is aggregated in the database and arrives already
+        // shaped as { category, value } — render it directly, no re-aggregation.
+        if (cfg?.category) {
+            return data.slice(0, maxRows);
+        }
+
+        // Legacy fallback: charts saved under the old label/value/groupBy model
+        // still receive raw rows, so aggregate them client-side.
+        const category = cfg?.groupBy || cfg?.labelColumn || Object.keys(data[0])[0];
         const aggregation = cfg?.aggregation || 'count';
         const valueKey = cfg?.value || cfg?.valueColumn;
 
-        // Every chart is grouped by category and aggregated into one point per group.
+        // Group by category and aggregate into one point per group.
         const groups = new Map<string, { sum: number; count: number; min: number; max: number }>();
         for (const row of data) {
             const key = String(row?.[category] ?? '');
@@ -177,7 +185,9 @@ export function Chart({
 
         const cfg = binding?.chartConfig as any;
         // Category is the X-axis / pie label; value is always the aggregated measure.
-        const xAxisKey = cfg?.category || cfg?.groupBy || cfg?.labelColumn || Object.keys(chartData[0])[0];
+        // Server-aggregated rows use the literal 'category' key; legacy rows use the
+        // original column name.
+        const xAxisKey = cfg?.category ? 'category' : (cfg?.groupBy || cfg?.labelColumn || Object.keys(chartData[0])[0]);
         const valueKey = 'value';
         const isHorizontal = cfg?.variant === 'horizontal';
 

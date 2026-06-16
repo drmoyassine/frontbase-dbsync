@@ -212,6 +212,26 @@ class PostgresAdapter(SQLAdapter):
             ]
 
 
+    async def aggregate(
+        self,
+        table: str,
+        category: str,
+        aggregation: str = "count",
+        value: Optional[str] = None,
+        filters: Optional[List[Dict[str, Any]]] = None,
+        sort: str = "none",
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Group by `category` and aggregate per group. Returns [{category, value}]."""
+        from app.services.chart_aggregation import build_aggregate_sql
+        sql = build_aggregate_sql(table, category, aggregation, value, filters, sort, limit)
+        async with self._ensure_pool().acquire() as conn:
+            rows = await conn.fetch(sql)
+            return [
+                {"category": row["category"], "value": float(row["value"]) if row["value"] is not None else 0}
+                for row in rows
+            ]
+
     async def read_records(
         self,
         table: str,

@@ -65,6 +65,74 @@ class MySQLAdapter(SQLAdapter):
                 rows = await cur.fetchall()
                 return [row[0] for row in rows]
     
+    async def aggregate(
+        self,
+        table: str,
+        category: str,
+        aggregation: str = "count",
+        value: Optional[str] = None,
+        filters: Optional[List[Dict[str, Any]]] = None,
+        sort: str = "none",
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Group by `category` and aggregate per group (MySQL dialect). Returns [{category, value}]."""
+        def q_ident(name: str) -> str:
+            return "`" + str(name).replace("`", "``") + "`"
+
+        agg = (aggregation or "count").lower()
+        cat = q_ident(category)
+        if agg == "count" or not value:
+            measure = "COUNT(*)"
+        else:
+            col = q_ident(value)
+            fn = {"sum": "SUM", "average": "AVG", "min": "MIN", "max": "MAX"}.get(agg, "SUM")
+            measure = f"{fn}(CAST({col} AS DECIMAL(38,6)))" if agg in ("sum", "average") else f"{fn}({col})"
+
+        order_sql = ""
+        if sort == "asc":
+            order_sql = " ORDER BY `value` ASC"
+        elif sort == "desc":
+            order_sql = " ORDER BY `value` DESC"
+        try:
+            lim = max(1, min(int(limit or 10), 1000))
+        except (TypeError, ValueError):
+            lim = 10
+
+        where_sql = ""
+        params: List[Any] = []
+        conds = []
+        for f in (filters or []):
+            if not isinstance(f, dict):
+                continue
+            fcol = f.get("column") or f.get("field")
+            if not fcol:
+                continue
+            op = (f.get("operator") or f.get("filterType") or "==").lower()
+            fval = f.get("value")
+            if fval is None or fval == "":
+                continue
+            if op in ("==", "eq", "dropdown"):
+                conds.append(f"{q_ident(fcol)} = %s")
+                params.append(fval)
+            elif op in ("contains", "text", "ilike"):
+                conds.append(f"CAST({q_ident(fcol)} AS CHAR) LIKE %s")
+                params.append(f"%{fval}%")
+        if conds:
+            where_sql = " WHERE " + " AND ".join(conds)
+
+        sql = (
+            f"SELECT {cat} AS `category`, {measure} AS `value` "
+            f"FROM {q_ident(table)}{where_sql} GROUP BY {cat}{order_sql} LIMIT {lim}"
+        )
+        async with self._ensure_pool().acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute(sql, tuple(params))
+                rows = await cur.fetchall()
+                return [
+                    {"category": r.get("category"), "value": float(r["value"]) if r.get("value") is not None else 0}
+                    for r in rows
+                ]
+
     async def get_schema(self, table: str) -> Dict[str, Any]:
         """Get column information for a table, including foreign key relationships."""
         async with self._ensure_pool().acquire() as conn:

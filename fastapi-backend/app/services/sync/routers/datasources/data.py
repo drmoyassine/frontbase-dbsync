@@ -249,6 +249,99 @@ async def get_datasource_table_data(
         raise HTTPException(status_code=500, detail=f"Failed to fetch sample data: {str(e)}")
 
 
+@router.get("/{datasource_id}/tables/{table}/aggregate/")
+async def get_datasource_table_aggregate(
+    table: str,
+    category: str,
+    aggregation: str = "count",
+    value: Optional[str] = None,
+    sort: str = "none",
+    limit: int = 10,
+    filters: Optional[str] = None,
+    datasource: Datasource = Depends(get_scoped_datasource),
+    db: AsyncSession = Depends(get_db),
+):
+    """Group a table by `category` and aggregate a measure per group for charts.
+
+    Aggregation happens in the database (GROUP BY) so counts/sums are correct for
+    the whole table, not a fetched page. Returns rows shaped {category, value}.
+    """
+    parsed_filters = None
+    if filters:
+        try:
+            parsed_filters = json.loads(filters)
+            if not isinstance(parsed_filters, list):
+                parsed_filters = None
+        except Exception:
+            parsed_filters = None
+
+    try:
+        adapter = get_adapter(datasource)
+        async with adapter:
+            if hasattr(adapter, "aggregate"):
+                records = await adapter.aggregate(  # type: ignore[attr-defined]
+                    table, category, aggregation, value, parsed_filters, sort, limit
+                )
+            else:
+                # Fallback for adapters without native aggregation: read a bounded
+                # sample and aggregate in Python. Not exact for very large tables.
+                rows = await adapter.read_records(table, limit=10000, offset=0, where=parsed_filters)
+                records = _aggregate_in_python(rows, category, aggregation, value, sort, limit)
+            return {
+                "records": records,
+                "category": category,
+                "aggregation": aggregation,
+                "timestamp_utc": datetime.utcnow().isoformat() + "Z",
+            }
+    except Exception as e:
+        import traceback
+        logger.error(f"Error aggregating {datasource.id} table {table}: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to aggregate data: {str(e)}")
+
+
+def _aggregate_in_python(
+    rows: List[Dict[str, Any]],
+    category: str,
+    aggregation: str,
+    value: Optional[str],
+    sort: str,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """Fallback aggregation over already-fetched rows (mirrors the SQL semantics)."""
+    agg = (aggregation or "count").lower()
+    groups: Dict[str, Dict[str, float]] = {}
+    for row in rows:
+        key = str(row.get(category, ""))
+        try:
+            num = float(row.get(value)) if value and row.get(value) is not None else 0.0
+        except (TypeError, ValueError):
+            num = 0.0
+        acc = groups.setdefault(key, {"sum": 0.0, "count": 0.0, "min": float("inf"), "max": float("-inf")})
+        acc["sum"] += num
+        acc["count"] += 1
+        acc["min"] = min(acc["min"], num)
+        acc["max"] = max(acc["max"], num)
+
+    def reduce(a: Dict[str, float]) -> float:
+        if agg == "count":
+            return a["count"]
+        if agg == "average":
+            return a["sum"] / a["count"] if a["count"] else 0.0
+        if agg == "min":
+            return 0.0 if a["min"] == float("inf") else a["min"]
+        if agg == "max":
+            return 0.0 if a["max"] == float("-inf") else a["max"]
+        return a["sum"]
+
+    result = [{"category": k, "value": reduce(v)} for k, v in groups.items()]
+    if sort == "asc":
+        result.sort(key=lambda r: r["value"])
+    elif sort == "desc":
+        result.sort(key=lambda r: r["value"], reverse=True)
+    return result[: max(1, min(int(limit or 10), 1000))]
+
+
 @router.get("/{datasource_id}/tables/{table}/distinct/{column}/")
 async def get_distinct_values(
     table: str,

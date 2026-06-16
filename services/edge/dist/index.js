@@ -8287,6 +8287,62 @@ async function resolveProps(props, context) {
   }
   return resolved;
 }
+async function resolveHiddenFiltersSSR(binding, context) {
+  const hiddenFilters = binding.hiddenFilters || [];
+  const resolved = [];
+  const pending = [];
+  for (const filter of hiddenFilters) {
+    const value = filter.value;
+    const operator = filter.operator;
+    if (operator === "is_null" || operator === "not_null") {
+      resolved.push({
+        column: filter.column,
+        op: operator
+      });
+      continue;
+    }
+    if (typeof value !== "string") {
+      resolved.push({
+        column: filter.column,
+        op: operator,
+        value
+      });
+      continue;
+    }
+    const containsClientScope = /\{\{\s*(session|local)\./.test(value);
+    if (containsClientScope) {
+      pending.push(filter);
+    } else if (value.includes("{{") || value.includes("{%")) {
+      try {
+        const rendered = await liquid.parseAndRender(value, context);
+        if (rendered !== void 0 && rendered !== null && String(rendered).trim() !== "") {
+          let resolvedVal = rendered;
+          if (operator === "in") {
+            resolvedVal = String(rendered).split(",").map((s) => s.trim()).filter(Boolean);
+          }
+          resolved.push({
+            column: filter.column,
+            op: operator,
+            value: resolvedVal
+          });
+        }
+      } catch (error) {
+        console.error(`[SSR Hidden Filter] Failed to render template: ${value}`, error);
+      }
+    } else {
+      let resolvedVal = value;
+      if (operator === "in") {
+        resolvedVal = String(value).split(",").map((s) => s.trim()).filter(Boolean);
+      }
+      resolved.push({
+        column: filter.column,
+        op: operator,
+        value: resolvedVal
+      });
+    }
+  }
+  return { resolved, pending };
+}
 async function renderComponent(component, context, depth = 0) {
   const { id, type, props, styles, children, binding, visibilityCondition } = component;
   let isClientSideCondition = false;
@@ -8363,7 +8419,12 @@ async function renderComponent(component, context, depth = 0) {
       return combinedCSS + renderInteractiveComponent(type, id, resolvedProps, childrenHtml);
     case "data":
       if (binding) {
-        resolvedProps.binding = binding;
+        const { resolved, pending } = await resolveHiddenFiltersSSR(binding, context);
+        resolvedProps.binding = {
+          ...binding,
+          _resolvedHiddenFilters: resolved,
+          _pendingHiddenFilters: pending
+        };
       }
       return combinedCSS + renderDataComponent(type, id, resolvedProps, childrenHtml);
     case "layout":
@@ -9908,6 +9969,25 @@ var DataRequestSchema = z15.object({
   datasourceId: z15.string().nullish()
   // Datasource ID for proxy strategy (server-side credential resolution)
 });
+var HiddenFilterOperatorSchema = z15.enum([
+  "eq",
+  "neq",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "contains",
+  "in",
+  "is_null",
+  "not_null"
+]);
+var HiddenFilterSchema = z15.object({
+  id: z15.string(),
+  column: z15.string(),
+  operator: HiddenFilterOperatorSchema,
+  value: z15.string().optional(),
+  previewValue: z15.string().optional()
+});
 var ComponentBindingSchema = z15.object({
   componentId: z15.string().nullish(),
   datasourceId: z15.string().nullish(),
@@ -9942,6 +10022,7 @@ var ComponentBindingSchema = z15.object({
   // camelCase alias
   // Dynamic feature configuration (for DataTable server-side features)
   frontendFilters: z15.array(z15.record(z15.string(), z15.unknown())).nullish(),
+  hiddenFilters: z15.array(HiddenFilterSchema).nullish(),
   sorting: z15.record(z15.string(), z15.unknown()).nullish(),
   pagination: z15.record(z15.string(), z15.unknown()).nullish(),
   filtering: z15.record(z15.string(), z15.unknown()).nullish()

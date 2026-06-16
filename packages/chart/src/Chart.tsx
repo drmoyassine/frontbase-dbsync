@@ -13,7 +13,12 @@ function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+// Categorical palette — each category/bar/slice gets a distinct colour, cycling if needed.
+const COLORS = [
+    '#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8',
+    '#E1306C', '#2CA02C', '#17BECF', '#BCBD22', '#9467BD',
+    '#FF6B6B', '#1F77B4',
+];
 
 export function Chart({
     mode = 'builder',
@@ -65,32 +70,43 @@ export function Chart({
     const chartData = useMemo(() => {
         if (!data || data.length === 0) return [];
 
-        const cfg = binding?.chartConfig;
+        const cfg = binding?.chartConfig as any;
         const maxRows = cfg?.maxRows || 10;
-        const groupBy = cfg?.groupBy;
+        // Shim for charts saved under the old label/value/groupBy model.
+        const category = cfg?.category || cfg?.groupBy || cfg?.labelColumn || Object.keys(data[0])[0];
+        const aggregation = cfg?.aggregation || 'count';
+        const valueKey = cfg?.value || cfg?.valueColumn;
 
-        // Optional grouping: collapse rows sharing the same groupBy value and
-        // aggregate the value column (sum or count) into a single point per group.
-        if (groupBy) {
-            const valueKey = cfg?.valueColumn || Object.keys(data[0]).find((k) => k !== groupBy) || groupBy;
-            const aggregation = cfg?.aggregation || 'sum';
-            const groups = new Map<string, { sum: number; count: number }>();
-            for (const row of data) {
-                const key = String(row?.[groupBy] ?? '');
-                const num = Number(row?.[valueKey]) || 0;
-                const acc = groups.get(key) || { sum: 0, count: 0 };
-                acc.sum += num;
-                acc.count += 1;
-                groups.set(key, acc);
-            }
-            const aggregated = Array.from(groups.entries()).map(([key, acc]) => ({
-                [groupBy]: key,
-                [valueKey]: aggregation === 'count' ? acc.count : acc.sum,
-            }));
-            return aggregated.slice(0, maxRows);
+        // Every chart is grouped by category and aggregated into one point per group.
+        const groups = new Map<string, { sum: number; count: number; min: number; max: number }>();
+        for (const row of data) {
+            const key = String(row?.[category] ?? '');
+            const num = valueKey ? Number(row?.[valueKey]) || 0 : 0;
+            const acc = groups.get(key) || { sum: 0, count: 0, min: Infinity, max: -Infinity };
+            acc.sum += num;
+            acc.count += 1;
+            acc.min = Math.min(acc.min, num);
+            acc.max = Math.max(acc.max, num);
+            groups.set(key, acc);
         }
+        const reduce = (a: { sum: number; count: number; min: number; max: number }) => {
+            switch (aggregation) {
+                case 'count': return a.count;
+                case 'average': return a.count ? a.sum / a.count : 0;
+                case 'min': return a.min === Infinity ? 0 : a.min;
+                case 'max': return a.max === -Infinity ? 0 : a.max;
+                default: return a.sum;
+            }
+        };
+        const points = Array.from(groups.entries())
+            .map(([key, acc]) => ({ [category]: key, value: reduce(acc) }));
 
-        return data.slice(0, maxRows); // Limit to maxRows (default 10) for clean chart display
+        // Sort by aggregated value before trimming, so asc/desc gives a true top/bottom-N.
+        const sort = cfg?.sort || 'none';
+        if (sort === 'asc') points.sort((a, b) => a.value - b.value);
+        else if (sort === 'desc') points.sort((a, b) => b.value - a.value);
+
+        return points.slice(0, maxRows);
     }, [data, binding?.chartConfig]);
 
     // 1. Unconfigured State
@@ -159,11 +175,11 @@ export function Chart({
             );
         }
 
-        const keys = Object.keys(chartData[0]);
-        // When grouping, the group column becomes the category axis.
-        const xAxisKey = binding?.chartConfig?.groupBy || binding?.chartConfig?.labelColumn || keys[0];
-        const valueKey = binding?.chartConfig?.valueColumn || keys.find((k) => k !== xAxisKey) || xAxisKey;
-        const isHorizontal = binding?.chartConfig?.variant === 'horizontal';
+        const cfg = binding?.chartConfig as any;
+        // Category is the X-axis / pie label; value is always the aggregated measure.
+        const xAxisKey = cfg?.category || cfg?.groupBy || cfg?.labelColumn || Object.keys(chartData[0])[0];
+        const valueKey = 'value';
+        const isHorizontal = cfg?.variant === 'horizontal';
 
         // Custom container styles to satisfy recharts sizing constraints
         const containerStyle = {
@@ -274,9 +290,12 @@ export function Chart({
                                 <Legend />
                                 <Bar
                                     dataKey={valueKey}
-                                    fill="hsl(var(--primary))"
                                     radius={isHorizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]}
-                                />
+                                >
+                                    {chartData.map((_: any, index: number) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Bar>
                             </BarChart>
                         </ResponsiveContainer>
                     </div>

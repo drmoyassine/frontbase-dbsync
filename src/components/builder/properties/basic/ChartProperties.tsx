@@ -111,8 +111,7 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
         sorting: { enabled: false },
         refreshInterval: -1,
         chartConfig: {
-            labelColumn: '',
-            valueColumn: '',
+            aggregation: 'count',
             maxRows: 10
         }
     };
@@ -128,7 +127,7 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
         onBindingUpdate({
             ...effectiveBinding,
             chartConfig: {
-                ...(effectiveBinding.chartConfig || { labelColumn: '', valueColumn: '', maxRows: 10 }),
+                ...(effectiveBinding.chartConfig || { aggregation: 'count', maxRows: 10 }),
                 ...updates
             }
         });
@@ -201,8 +200,7 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
                                     columnOrder: [],
                                     sorting: { enabled: false, column: undefined, direction: 'asc' },
                                     chartConfig: {
-                                        labelColumn: '',
-                                        valueColumn: '',
+                                        aggregation: 'count',
                                         maxRows: 10
                                     }
                                 });
@@ -252,68 +250,77 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
                                 </div>
                             )}
 
-                            {/* Label Field */}
+                            {/* Category */}
                             <div className="space-y-1.5">
-                                <FieldLabel hint="The column used for category labels (X-axis / pie slices).">
-                                    Label Field
+                                <FieldLabel hint="Column to group by — becomes the X-axis labels / pie slices.">
+                                    Category
                                 </FieldLabel>
                                 <ColumnSelect
-                                    value={effectiveBinding.chartConfig?.labelColumn || ''}
+                                    value={effectiveBinding.chartConfig?.category || ''}
                                     columns={columns}
                                     placeholder="Select Column"
-                                    onChange={(value) => updateChartConfig({ labelColumn: value })}
+                                    onChange={(value) => updateChartConfig({ category: value })}
                                 />
                             </div>
 
-                            {/* Value Field */}
+                            {/* Aggregation */}
                             <div className="space-y-1.5">
-                                <FieldLabel hint="The numeric column plotted as the value (Y-axis / slice size).">
-                                    Value Field
+                                <FieldLabel hint="How to summarise each category. Count tallies rows; the rest summarise the Value column.">
+                                    Aggregation
                                 </FieldLabel>
-                                <ColumnSelect
-                                    value={effectiveBinding.chartConfig?.valueColumn || ''}
-                                    columns={columns}
-                                    placeholder="Select Column"
-                                    onChange={(value) => updateChartConfig({ valueColumn: value })}
-                                />
+                                <Select
+                                    value={effectiveBinding.chartConfig?.aggregation || 'count'}
+                                    onValueChange={(value: 'count' | 'sum' | 'average' | 'min' | 'max') =>
+                                        updateChartConfig({ aggregation: value })
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="count">Count</SelectItem>
+                                        <SelectItem value="sum">Sum</SelectItem>
+                                        <SelectItem value="average">Average</SelectItem>
+                                        <SelectItem value="min">Min</SelectItem>
+                                        <SelectItem value="max">Max</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
 
-                            {/* Group By */}
-                            <div className="space-y-1.5">
-                                <FieldLabel hint="Optional. Combine rows that share this column's value and aggregate the Value Field.">
-                                    Group By
-                                </FieldLabel>
-                                <ColumnSelect
-                                    value={effectiveBinding.chartConfig?.groupBy || ''}
-                                    columns={columns}
-                                    placeholder="Select Column"
-                                    allowNone
-                                    onChange={(value) => updateChartConfig({ groupBy: value })}
-                                />
-                            </div>
-
-                            {/* Aggregation (only relevant once grouping is set) */}
-                            {effectiveBinding.chartConfig?.groupBy && (
+                            {/* Value — only when the aggregation needs a column */}
+                            {(effectiveBinding.chartConfig?.aggregation || 'count') !== 'count' && (
                                 <div className="space-y-1.5">
-                                    <FieldLabel hint="How to combine the Value Field within each group.">
-                                        Aggregation
-                                    </FieldLabel>
-                                    <Select
-                                        value={effectiveBinding.chartConfig?.aggregation || 'sum'}
-                                        onValueChange={(value: 'sum' | 'count') =>
-                                            updateChartConfig({ aggregation: value })
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="sum">Sum</SelectItem>
-                                            <SelectItem value="count">Count</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                    <FieldLabel hint="The numeric column to aggregate.">Value</FieldLabel>
+                                    <ColumnSelect
+                                        value={effectiveBinding.chartConfig?.value || ''}
+                                        columns={columns}
+                                        placeholder="Select Column"
+                                        onChange={(value) => updateChartConfig({ value })}
+                                    />
                                 </div>
                             )}
+
+                            {/* Sort */}
+                            <div className="space-y-1.5">
+                                <FieldLabel hint="Order categories by their aggregated value.">
+                                    Sort
+                                </FieldLabel>
+                                <Select
+                                    value={effectiveBinding.chartConfig?.sort || 'none'}
+                                    onValueChange={(value: 'none' | 'asc' | 'desc') =>
+                                        updateChartConfig({ sort: value })
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">No sort</SelectItem>
+                                        <SelectItem value="desc">Descending (high → low)</SelectItem>
+                                        <SelectItem value="asc">Ascending (low → high)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                     )}
 

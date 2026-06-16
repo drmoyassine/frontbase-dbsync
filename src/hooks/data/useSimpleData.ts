@@ -45,10 +45,14 @@ export interface ComponentDataBinding {
     params?: Record<string, any>;
     fieldMapping?: Record<string, string>;
     chartConfig?: {
-        labelColumn?: string;
-        valueColumn?: string;
-        groupBy?: string;
-        aggregation?: 'sum' | 'count';
+        /** Column to group by — the X-axis / pie-slice category. */
+        category?: string;
+        /** Aggregation applied per category. 'count' needs no value column. */
+        aggregation?: 'count' | 'sum' | 'average' | 'min' | 'max';
+        /** Numeric column to aggregate. Required for everything except 'count'. */
+        value?: string;
+        /** Sort categories by aggregated value. */
+        sort?: 'none' | 'asc' | 'desc';
         variant?: 'vertical' | 'horizontal';
         maxRows?: number;
     };

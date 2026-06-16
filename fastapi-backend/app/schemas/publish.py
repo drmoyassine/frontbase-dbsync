@@ -102,6 +102,7 @@ class ComponentBinding(BaseModel):
     primary_key: Optional[str] = Field(None, alias="primaryKey")
     foreign_keys: Optional[List[Any]] = Field(None, alias="foreignKeys")
     data_request: Optional[DataRequest] = Field(None, alias="dataRequest")
+    chart_config: Optional[Dict[str, Any]] = Field(None, alias="chartConfig")
     
     # Form-specific fields (baked at publish time)
     field_overrides: Optional[Dict[str, Any]] = Field(None, alias="fieldOverrides")

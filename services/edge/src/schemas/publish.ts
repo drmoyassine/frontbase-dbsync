@@ -122,6 +122,7 @@ export const ComponentBindingSchema = z.object({
         referencedColumn: z.string(),
     }).passthrough()).nullish(),
     dataRequest: DataRequestSchema.nullish(),
+    chartConfig: z.record(z.string(), z.unknown()).nullish(),
     // Form-specific fields
     fieldOverrides: z.record(z.string(), z.unknown()).nullish(),
     fieldOrder: z.array(z.string()).nullish(),

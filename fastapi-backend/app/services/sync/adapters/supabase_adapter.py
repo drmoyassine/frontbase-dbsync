@@ -412,14 +412,29 @@ class SupabaseAdapter(SQLAdapter):
     async def check_migration_status(self) -> Dict[str, Any]:
         """Check if Frontbase migration has been applied."""
         try:
-            response = await self._ensure_client().post(
+            # Check for base schema info function
+            schema_resp = await self._ensure_client().post(
                 "/rest/v1/rpc/frontbase_get_schema_info",
                 json={}
             )
-            if response.status_code == 200:
-                return {"applied": True, "functions": ["frontbase_get_schema_info"]}
+            # Check for the newer aggregate function (added in Phase 13)
+            agg_resp = await self._ensure_client().post(
+                "/rest/v1/rpc/frontbase_aggregate",
+                json={}
+            )
+            
+            # 400 Bad Request is fine (means params were wrong, but function exists)
+            # 404 Not Found means the function is missing
+            schema_exists = schema_resp.status_code != 404
+            agg_exists = agg_resp.status_code != 404
+            
+            if schema_exists and agg_exists:
+                return {"applied": True, "functions": ["frontbase_get_schema_info", "frontbase_aggregate"]}
             else:
-                return {"applied": False, "error": f"HTTP {response.status_code}"}
+                missing = []
+                if not schema_exists: missing.append("frontbase_get_schema_info")
+                if not agg_exists: missing.append("frontbase_aggregate")
+                return {"applied": False, "error": f"Missing functions: {', '.join(missing)}"}
         except Exception as e:
             return {"applied": False, "error": str(e)}
     

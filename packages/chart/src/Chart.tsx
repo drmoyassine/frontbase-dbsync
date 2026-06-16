@@ -79,6 +79,7 @@ export function Chart({
         if (cfg?.category) {
             return data.slice(0, maxRows).map((row: any) => ({
                 ...row,
+                category: row.category == null ? 'Unknown' : String(row.category),
                 value: typeof row.value === 'string' && !isNaN(Number(row.value))
                     ? Number(row.value)
                     : row.value

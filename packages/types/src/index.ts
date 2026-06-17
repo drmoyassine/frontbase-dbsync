@@ -51,6 +51,7 @@ export interface ComponentDataBinding {
         filters: Record<string, any>;
     };
     columnOverrides: Record<string, ColumnOverride>;
+    columnOrder?: string[];
     hiddenFilters?: HiddenFilter[];
     _resolvedHiddenFilters?: any[];
     _pendingHiddenFilters?: any[];

@@ -42,6 +42,24 @@ async function fetchFromBuilder(binding: ComponentDataBinding) {
         }
     }
 
+    // Build select param for related columns keyed as "table.column" in columnOrder.
+    // Format: "*,programs(degree_name,type)" — triggers LEFT JOIN in the backend.
+    if (binding.columnOrder && binding.columnOrder.length > 0) {
+        const relatedMap = new Map<string, string[]>();
+        binding.columnOrder.forEach((col: string) => {
+            if (col.includes('.')) {
+                const [table, column] = col.split('.');
+                if (!relatedMap.has(table)) relatedMap.set(table, []);
+                relatedMap.get(table)!.push(column);
+            }
+        });
+        if (relatedMap.size > 0) {
+            const selectParts = ['*'];
+            relatedMap.forEach((cols, table) => selectParts.push(`${table}(${cols.join(',')})`));
+            params.append('select', selectParts.join(','));
+        }
+    }
+
     const response = await fetch(
         `/api/sync/datasources/${binding.dataSourceId}/tables/${binding.tableName}/data?${params}`
     );
@@ -130,7 +148,7 @@ export function useGridQuery({
     enabled = true,
 }: UseGridQueryProps) {
     return useQuery({
-        queryKey: ['grid-data-v2', mode, binding.dataSourceId, binding.tableName, binding.sorting, binding.filtering],
+        queryKey: ['grid-data-v2', mode, binding.dataSourceId, binding.tableName, binding.sorting, binding.filtering, binding.columnOrder],
         queryFn: async () => {
             if (!binding.tableName) return [];
             if (mode === 'builder') {

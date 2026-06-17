@@ -77,11 +77,16 @@ export function Chart({
         // shaped as { category, value }. Coerce string numbers to actual numbers
         // because PostgREST serializes bigint (COUNT) as strings, which crashes Recharts.
         if (cfg?.category) {
-            return data.slice(0, maxRows).map((row: any) => ({
-                ...row,
-                category: row.category == null ? 'Unknown' : String(row.category),
-                value: Number(row.value) || 0
-            }));
+            return data.slice(0, maxRows)
+                .map((row: any) => ({
+                    category: row.category == null ? 'Unknown' : String(row.category),
+                    value: Number(row.value),
+                }))
+                // Reject non-finite values outright so NaN can never reach Recharts
+                // (a degenerate band/value axis is what produces "NaN" x/width on <rect>).
+                // If the rows aren't the expected {category,value} shape, this collapses
+                // to an empty set → a clean "No data available" instead of NaN garbage.
+                .filter((r: any) => Number.isFinite(r.value));
         }
 
         // Legacy fallback: charts saved under the old label/value/groupBy model
@@ -112,7 +117,8 @@ export function Chart({
             }
         };
         const points = Array.from(groups.entries())
-            .map(([key, acc]) => ({ [category]: key, value: reduce(acc) }));
+            .map(([key, acc]) => ({ [category]: key, value: reduce(acc) }))
+            .filter((p: any) => Number.isFinite(p.value));
 
         // Sort by aggregated value before trimming, so asc/desc gives a true top/bottom-N.
         const sort = cfg?.sort || 'none';

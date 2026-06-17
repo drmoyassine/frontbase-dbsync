@@ -85,6 +85,7 @@ export type DataRequest = z.infer<typeof DataRequestSchema>;
 
 export const HiddenFilterOperatorSchema = z.enum([
     'eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'in', 'is_null', 'not_null',
+    'is_before', 'is_after', 'is_on_or_before', 'is_on_or_after', 'is_within_last_days', 'is_today',
 ]);
 
 export const HiddenFilterSchema = z.object({

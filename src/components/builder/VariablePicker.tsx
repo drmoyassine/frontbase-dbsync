@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import ReactDOM from 'react-dom';
 import { useVariables, Variable, Filter } from '../../hooks/useVariables';
 import { cn } from '@/lib/utils';
 import { ChevronRight, ChevronLeft, FileText, User, Globe, Link, Clock, Database, Box, Cookie, Layers } from 'lucide-react';
@@ -184,23 +185,24 @@ export function VariablePicker({
     }, [onClose]);
 
     if (totalItems === 0 && !isLoading) {
-        return (
+        return ReactDOM.createPortal(
             <div
                 ref={listRef}
-                className="fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg max-h-80 min-w-[260px] max-w-[360px] overflow-y-auto"
+                className="variable-picker fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg max-h-80 min-w-[260px] max-w-[360px] overflow-y-auto"
                 style={{ top: position.top, left: position.left }}
             >
                 <div className="p-3 text-sm text-muted-foreground">
                     No variables found
                 </div>
-            </div>
+            </div>,
+            document.body
         );
     }
 
-    return (
+    return ReactDOM.createPortal(
         <div
             ref={listRef}
-            className="fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg max-h-80 min-w-[260px] max-w-[360px] overflow-y-auto"
+            className="variable-picker fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg max-h-80 min-w-[260px] max-w-[360px] overflow-y-auto"
             onMouseDown={(e) => e.preventDefault()}
             style={{ top: position.top, left: position.left }}
         >
@@ -318,6 +320,7 @@ export function VariablePicker({
                     )}
                 </>
             )}
-        </div>
+        </div>,
+        document.body
     );
 }

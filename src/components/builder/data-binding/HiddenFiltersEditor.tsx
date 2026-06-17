@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { ColumnInfo } from '@/hooks/data/useBindingColumns';
 import { ColumnSelect } from './ColumnSelect';
 import { VariableInput } from '@/components/builder/VariableInput';
@@ -20,6 +21,12 @@ const OPERATORS: { value: HiddenFilterOperator; label: string }[] = [
     { value: 'in', label: 'In list (comma separated)' },
     { value: 'is_null', label: 'Is empty' },
     { value: 'not_null', label: 'Is not empty' },
+    { value: 'is_before', label: 'Is before (ISO date)' },
+    { value: 'is_after', label: 'Is after (ISO date)' },
+    { value: 'is_on_or_before', label: 'Is on or before (ISO date)' },
+    { value: 'is_on_or_after', label: 'Is on or after (ISO date)' },
+    { value: 'is_within_last_days', label: 'Is within last N days' },
+    { value: 'is_today', label: 'Is today' },
 ];
 
 interface HiddenFiltersEditorProps {
@@ -120,14 +127,25 @@ export const HiddenFiltersEditor: React.FC<HiddenFiltersEditorProps> = ({
                                     </Select>
                                 </div>
 
-                                {filter.operator !== 'is_null' && filter.operator !== 'not_null' && (
-                                    <VariableInput
-                                        value={filter.value || ''}
-                                        onChange={(val) => updateFilter(idx, { value: val })}
-                                        placeholder={filter.operator === 'in' ? "val1, val2 (or @ for variables)" : "Value (or @ for variables)"}
-                                        className="h-8 text-sm"
-                                        allowedGroups={['page', 'user', 'visitor', 'system', 'url', 'local', 'session', 'cookies']}
-                                    />
+                                {filter.operator !== 'is_null' && filter.operator !== 'not_null' && filter.operator !== 'is_today' && (
+                                    filter.operator === 'is_within_last_days' ? (
+                                        <Input
+                                            type="number"
+                                            value={filter.value || ''}
+                                            onChange={(e) => updateFilter(idx, { value: e.target.value })}
+                                            placeholder="Number of days (e.g. 7)"
+                                            className="h-8 text-sm"
+                                            min="1"
+                                        />
+                                    ) : (
+                                        <VariableInput
+                                            value={filter.value || ''}
+                                            onChange={(val) => updateFilter(idx, { value: val })}
+                                            placeholder={filter.operator === 'in' ? "val1, val2 (or @ for variables)" : "Value (or @ for variables)"}
+                                            className="h-8 text-sm"
+                                            allowedGroups={['page', 'user', 'visitor', 'system', 'url', 'local', 'session', 'cookies']}
+                                        />
+                                    )
                                 )}
                             </div>
                             <Button

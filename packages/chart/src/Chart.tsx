@@ -222,17 +222,18 @@ export function Chart({
                                     tickLine={false}
                                     axisLine={false}
                                 />
-                                <YAxis 
-                                    stroke="hsl(var(--muted-foreground))" 
+                                <YAxis
+                                    stroke="hsl(var(--muted-foreground))"
                                     fontSize={12}
                                     tickLine={false}
                                     axisLine={false}
+                                    width={60}
                                 />
-                                <Tooltip 
+                                <Tooltip
                                     contentStyle={{ background: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: '6px' }}
                                 />
                                 <Legend />
-                                <Line 
+                                <Line
                                     type="monotone" 
                                     dataKey={valueKey} 
                                     stroke="hsl(var(--primary))" 
@@ -303,7 +304,10 @@ export function Chart({
                                     fontSize={12}
                                     tickLine={false}
                                     axisLine={false}
-                                    width={isHorizontal ? 80 : undefined}
+                                    // Explicit width required: React 19 drops Recharts 2.x defaultProps
+                                    // (YAxis default width:60), leaving the left offset null and the
+                                    // X band scale at [null,null] → NaN bar x/width.
+                                    width={isHorizontal ? 80 : 60}
                                 />
                                 <Tooltip
                                     contentStyle={{ background: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: '6px' }}

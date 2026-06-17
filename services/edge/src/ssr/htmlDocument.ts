@@ -9,7 +9,7 @@ import { TrackingConfig } from './lib/tracking.js';
 import { FALLBACK_CSS } from './baseStyles.js';
 
 // Cache-busting version - update this when hydration scripts change
-const HYDRATE_VERSION = '20260617b';
+const HYDRATE_VERSION = '20260617c';
 
 // Default favicon path constant
 const DEFAULT_FAVICON = '/static/icon.png';

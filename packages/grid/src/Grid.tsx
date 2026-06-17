@@ -185,17 +185,17 @@ export function Grid({
             );
         }
         
-        return allColumns.slice(0, 4); // Default to first 4 columns
+        return allColumns;
     };
 
     const getColumnDisplayName = (columnName: string) => {
-        return binding?.columnOverrides?.[columnName]?.displayName || 
+        return binding?.columnOverrides?.[columnName]?.displayName ||
                columnName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     };
 
     const visibleColumns = getVisibleColumns();
     const primaryColumn = visibleColumns[0];
-    const secondaryColumns = visibleColumns.slice(1, 3);
+    const secondaryColumns = visibleColumns.slice(1);
 
     return (
         <div className={cn(gridLayoutClass, className)} style={safeStyle}>

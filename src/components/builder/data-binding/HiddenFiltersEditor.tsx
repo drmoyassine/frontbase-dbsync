@@ -81,7 +81,7 @@ export const HiddenFiltersEditor: React.FC<HiddenFiltersEditorProps> = ({
             <div className="flex items-center justify-between">
                 <Label className="font-semibold block">Hidden Filters</Label>
                 <Button variant="outline" size="sm" onClick={addFilter} className="h-7 text-xs">
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Add filter
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add
                 </Button>
             </div>
 
@@ -101,25 +101,26 @@ export const HiddenFiltersEditor: React.FC<HiddenFiltersEditorProps> = ({
             {(value || []).length > 0 && (
                 <div className="space-y-3 pt-2">
                     {(value || []).map((filter, idx) => (
-                        <div key={filter.id} className="flex gap-2 items-start bg-muted/10 p-2 rounded-md border">
+                        <div key={filter.id} className="flex gap-2 items-start bg-muted/20 p-2 rounded-md border">
                             <div className="flex-1 space-y-2">
                                 <div className="grid grid-cols-2 gap-2">
                                     <ColumnSelect
                                         value={filter.column}
                                         columns={columns}
                                         placeholder="Select column"
+                                        className="h-8 text-xs bg-background"
                                         onChange={(val) => updateFilter(idx, { column: val })}
                                     />
                                     <Select
                                         value={filter.operator}
                                         onValueChange={(val: HiddenFilterOperator) => updateFilter(idx, { operator: val })}
                                     >
-                                        <SelectTrigger>
+                                        <SelectTrigger className="h-8 text-xs bg-background">
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
                                             {OPERATORS.map((op) => (
-                                                <SelectItem key={op.value} value={op.value}>
+                                                <SelectItem key={op.value} value={op.value} className="text-xs">
                                                     {op.label}
                                                 </SelectItem>
                                             ))}
@@ -134,7 +135,7 @@ export const HiddenFiltersEditor: React.FC<HiddenFiltersEditorProps> = ({
                                             value={filter.value || ''}
                                             onChange={(e) => updateFilter(idx, { value: e.target.value })}
                                             placeholder="Number of days (e.g. 7)"
-                                            className="h-8 text-sm"
+                                            className="h-8 text-xs bg-background"
                                             min="1"
                                         />
                                     ) : (
@@ -142,7 +143,7 @@ export const HiddenFiltersEditor: React.FC<HiddenFiltersEditorProps> = ({
                                             value={filter.value || ''}
                                             onChange={(val) => updateFilter(idx, { value: val })}
                                             placeholder={filter.operator === 'in' ? "val1, val2 (or @ for variables)" : "Value (or @ for variables)"}
-                                            className="h-8 text-sm"
+                                            className="h-8 text-xs bg-background"
                                             allowedGroups={['page', 'user', 'visitor', 'system', 'url', 'local', 'session', 'cookies']}
                                         />
                                     )

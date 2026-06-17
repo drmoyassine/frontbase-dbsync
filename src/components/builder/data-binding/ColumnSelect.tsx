@@ -17,15 +17,16 @@ export const ColumnSelect: React.FC<{
     columns: ColumnInfo[];
     placeholder: string;
     allowNone?: boolean;
+    className?: string;
     onChange: (value: string) => void;
-}> = ({ value, columns, placeholder, allowNone, onChange }) => {
+}> = ({ value, columns, placeholder, allowNone, className, onChange }) => {
     const NONE = '__none__';
     return (
         <Select
             value={value || (allowNone ? NONE : '')}
             onValueChange={(v) => onChange(v === NONE ? '' : v)}
         >
-            <SelectTrigger>
+            <SelectTrigger className={className}>
                 <SelectValue placeholder={placeholder} />
             </SelectTrigger>
             <SelectContent>

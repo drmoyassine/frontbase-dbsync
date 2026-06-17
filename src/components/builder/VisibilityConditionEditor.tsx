@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, AlertCircle, Code, Eye } from 'lucide-react';
 import { VariableInput } from './VariableInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 const OPERATORS = [
     { value: '==', label: 'equals' },
@@ -105,9 +106,22 @@ export function VisibilityConditionEditor({ value, onChange }: VisibilityConditi
     const [mode, setMode] = useState<'visual' | 'code'>('visual');
     const [canParse, setCanParse] = useState(true);
     const [rows, setRows] = useState<ConditionRow[]>([]);
+    // Tracks the string we last emitted so the sync effect below can ignore our
+    // own updates. Without this, every keystroke re-parses the serialized value
+    // into rows with fresh ids, remounting the inputs — which wiped the open
+    // variable picker (and stole focus) inside the condition fields.
+    const lastEmitted = useRef<string | null>(null);
 
-    // Sync state from value when value changes externally
+    const emit = (newRows: ConditionRow[]) => {
+        const serialized = serializeConditionRows(newRows);
+        lastEmitted.current = serialized;
+        setRows(newRows);
+        onChange(serialized);
+    };
+
+    // Sync state from value only when it changes externally (not from our own emit).
     useEffect(() => {
+        if (value === lastEmitted.current) return;
         const parsed = parseConditionString(value);
         if (parsed !== null) {
             setRows(parsed);
@@ -121,20 +135,15 @@ export function VisibilityConditionEditor({ value, onChange }: VisibilityConditi
     const handleRowChange = (index: number, updates: Partial<ConditionRow>) => {
         const newRows = [...rows];
         newRows[index] = { ...newRows[index], ...updates };
-        setRows(newRows);
-        onChange(serializeConditionRows(newRows));
+        emit(newRows);
     };
 
     const handleAddRow = () => {
-        const newRows = [...rows, { id: crypto.randomUUID(), lhs: '', operator: '==', rhs: '' }];
-        setRows(newRows);
-        onChange(serializeConditionRows(newRows));
+        emit([...rows, { id: crypto.randomUUID(), lhs: '', operator: '==', rhs: '' }]);
     };
 
     const handleRemoveRow = (index: number) => {
-        const newRows = rows.filter((_, i) => i !== index);
-        setRows(newRows);
-        onChange(serializeConditionRows(newRows));
+        emit(rows.filter((_, i) => i !== index));
     };
 
     const handleResetToVisual = () => {
@@ -145,33 +154,60 @@ export function VisibilityConditionEditor({ value, onChange }: VisibilityConditi
     };
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-3 p-4 border rounded-lg">
             <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Visibility Condition</Label>
-                <div className="flex bg-muted rounded-md p-0.5 border">
-                    <Button
-                        type="button"
-                        variant={mode === 'visual' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="h-6 text-xs px-2"
-                        disabled={!canParse}
-                        onClick={() => setMode('visual')}
-                    >
-                        <Eye className="h-3 w-3 mr-1" />
-                        Visual
-                    </Button>
-                    <Button
-                        type="button"
-                        variant={mode === 'code' ? 'secondary' : 'ghost'}
-                        size="sm"
-                        className="h-6 text-xs px-2"
-                        onClick={() => setMode('code')}
-                    >
-                        <Code className="h-3 w-3 mr-1" />
-                        Code
-                    </Button>
+                <Label className="font-semibold block">Visibility Condition</Label>
+                <div className="flex items-center gap-2">
+                    <TooltipProvider delayDuration={300}>
+                        <div className="flex bg-muted rounded-md p-0.5 border">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant={mode === 'visual' ? 'secondary' : 'ghost'}
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        disabled={!canParse}
+                                        onClick={() => setMode('visual')}
+                                    >
+                                        <Eye className="h-3.5 w-3.5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Visual builder</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant={mode === 'code' ? 'secondary' : 'ghost'}
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => setMode('code')}
+                                    >
+                                        <Code className="h-3.5 w-3.5" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Code editor</TooltipContent>
+                            </Tooltip>
+                        </div>
+                    </TooltipProvider>
+                    {mode === 'visual' && canParse && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleAddRow}
+                            className="h-7 text-xs"
+                        >
+                            <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                        </Button>
+                    )}
                 </div>
             </div>
+
+            <p className="text-xs text-muted-foreground">
+                Control when this component is shown. It renders only when the condition is true — based on user, page, URL, or session variables.
+            </p>
 
             {mode === 'visual' && canParse ? (
                 <div className="space-y-2">
@@ -222,15 +258,11 @@ export function VisibilityConditionEditor({ value, onChange }: VisibilityConditi
                         </div>
                     ))}
 
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleAddRow}
-                        className="w-full h-8 text-xs border-dashed"
-                    >
-                        <Plus className="h-3 w-3 mr-1" /> Add condition row
-                    </Button>
+                    {rows.length === 0 && (
+                        <p className="text-xs text-muted-foreground italic py-1">
+                            No conditions — always visible. Use <span className="font-medium">Add</span> to restrict visibility.
+                        </p>
+                    )}
                 </div>
             ) : (
                 <div className="space-y-2">

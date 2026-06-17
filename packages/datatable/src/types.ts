@@ -120,7 +120,7 @@ export interface DataTableProps {
     componentId?: string;
 
     /** Data binding configuration */
-    binding: DataTableBinding;
+    binding?: DataTableBinding | null;
 
     /** Initial data for SSR (edge mode) */
     initialData?: any[];

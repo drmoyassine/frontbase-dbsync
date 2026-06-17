@@ -18,6 +18,7 @@ import {
 import { DataTablePropertiesPanel } from '@/components/builder/data-table/DataTablePropertiesPanel';
 import { FormPropertiesPanel } from './form/FormPropertiesPanel';
 import { VariableInput } from './VariableInput';
+import { VisibilityConditionEditor } from './VisibilityConditionEditor';
 import { ActionConfigurator, ActionBinding } from '@/components/actions';
 
 // Basic Components
@@ -301,8 +302,9 @@ export const PropertiesPanel = () => {
 
       <div className="flex-1 overflow-y-auto">
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-4">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="options">Options</TabsTrigger>
             <TabsTrigger value="actions">Actions</TabsTrigger>
           </TabsList>
 
@@ -316,16 +318,14 @@ export const PropertiesPanel = () => {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="component-visibility-condition" className="text-sm font-medium">Visibility Condition <span className="text-muted-foreground text-xs">(@ for variables)</span></Label>
-              <VariableInput
-                value={selectedComponent.visibilityCondition || ''}
-                onChange={(value) => updateComponent(selectedComponentId, { visibilityCondition: value })}
-                placeholder="e.g. local.modalOpen == true"
-              />
-            </div>
-
             {renderPropertyFields()}
+          </TabsContent>
+
+          <TabsContent value="options" className="space-y-4">
+            <VisibilityConditionEditor
+              value={selectedComponent.visibilityCondition || ''}
+              onChange={(value) => updateComponent(selectedComponentId, { visibilityCondition: value })}
+            />
           </TabsContent>
 
           <TabsContent value="actions" className="space-y-4">

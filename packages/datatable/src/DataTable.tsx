@@ -29,16 +29,16 @@ export function DataTable({
     title,
 }: DataTableProps) {
     // State
-    const [currentPage, setCurrentPage] = useState(binding.pagination?.page || 0);
-    const [sortColumn, setSortColumn] = useState<string | null>(binding.sorting?.column || null);
-    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(binding.sorting?.direction || 'asc');
+    const [currentPage, setCurrentPage] = useState(binding?.pagination?.page || 0);
+    const [sortColumn, setSortColumn] = useState<string | null>(binding?.sorting?.column || null);
+    const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(binding?.sorting?.direction || 'asc');
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [filterValues, setFilterValues] = useState<Record<string, any>>({});
 
-    const pageSize = binding.pagination?.pageSize || 20;
-    const paginationEnabled = binding.pagination?.enabled !== false;
-    const sortingEnabled = binding.sorting?.enabled !== false;
+    const pageSize = binding?.pagination?.pageSize || 20;
+    const paginationEnabled = binding?.pagination?.enabled !== false;
+    const sortingEnabled = binding?.sorting?.enabled !== false;
 
     // Debounce search
     React.useEffect(() => {
@@ -66,7 +66,7 @@ export function DataTable({
         filters: filterValues,
         searchQuery: debouncedSearch,
         initialData: initialData.length > 0 ? initialData : undefined,
-        enabled: !!binding.tableName,
+        enabled: !!binding?.tableName,
     });
 
     const data = queryResult?.data || [];
@@ -75,20 +75,20 @@ export function DataTable({
     // Filter options fetching
     const { data: fetchedOptions = {} } = useFilterOptions({
         mode,
-        filters: binding.frontendFilters || [],
-        tableName: binding.tableName,
-        dataSourceId: binding.dataSourceId,
+        filters: binding?.frontendFilters || [],
+        tableName: binding?.tableName,
+        dataSourceId: binding?.dataSourceId,
         cascadingFilters: filterValues,
         searchQuery: debouncedSearch,
-        enabled: !!binding.tableName && (binding.frontendFilters?.length || 0) > 0,
+        enabled: !!binding?.tableName && (binding?.frontendFilters?.length || 0) > 0,
     });
 
     // Compute visible columns
     const columns = useMemo(() => {
-        const order = binding.columnOrder || [];
+        const order = binding?.columnOrder || [];
         if (order.length > 0) {
             return order.filter((col) => {
-                const override = binding.columnOverrides?.[col];
+                const override = binding?.columnOverrides?.[col];
                 return override?.visible !== false;
             });
         }
@@ -97,7 +97,7 @@ export function DataTable({
             return Object.keys(data[0]).filter((key) => !key.startsWith('_') && key !== 'id');
         }
         return [];
-    }, [binding.columnOrder, binding.columnOverrides, data]);
+    }, [binding?.columnOrder, binding?.columnOverrides, data]);
 
     // Handlers
     const handleSort = useCallback(
@@ -183,7 +183,7 @@ export function DataTable({
             )}
 
             {/* Search bar */}
-            {binding.filtering?.searchEnabled && (
+            {binding?.filtering?.searchEnabled && (
                 <div className="relative max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <input
@@ -200,7 +200,7 @@ export function DataTable({
             )}
 
             {/* Filter bar */}
-            {binding.frontendFilters && binding.frontendFilters.length > 0 && (
+            {binding?.frontendFilters && binding.frontendFilters.length > 0 && (
                 <FilterBar
                     filters={binding.frontendFilters}
                     filterValues={filterValues}
@@ -220,7 +220,7 @@ export function DataTable({
                 <table className="w-full text-sm">
                     <TableHeader
                         columns={columns}
-                        columnOverrides={binding.columnOverrides}
+                        columnOverrides={binding?.columnOverrides}
                         sortingEnabled={sortingEnabled}
                         sortColumn={sortColumn}
                         sortDirection={sortDirection}
@@ -230,7 +230,7 @@ export function DataTable({
                     <TableBody
                         data={data}
                         columns={columns}
-                        columnOverrides={binding.columnOverrides}
+                        columnOverrides={binding?.columnOverrides}
                     />
                 </table>
             </div>

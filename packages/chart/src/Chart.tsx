@@ -31,6 +31,7 @@ export function Chart({
     initialData,
     onConfigureBinding,
     configureOverlay,
+    title: titleProp,
 }: ChartProps) {
     // Cast to break cross-package csstype version incompatibility (see InfoList).
     const safeStyle = style as React.CSSProperties | undefined;
@@ -54,9 +55,11 @@ export function Chart({
         enabled: !!binding?.tableName,
     });
 
-    const title = binding?.tableName 
-        ? binding.tableName.replace(/_/g, ' ') 
-        : '';
+    const displayTitle = titleProp !== undefined && titleProp !== ''
+        ? titleProp
+        : (binding?.tableName 
+            ? binding.tableName.replace(/_/g, ' ') + ' Chart'
+            : '');
 
     // Card styling matching standard shadcn/ui Card structure
     const cardClass = "rounded-lg border bg-card text-card-foreground shadow-sm";
@@ -331,7 +334,7 @@ export function Chart({
     return (
         <div className={cn(cardClass, className)} style={safeStyle}>
             <div className={headerClass}>
-                <h3 className={titleClass}>{title} Chart</h3>
+                <h3 className={titleClass}>{displayTitle}</h3>
             </div>
             <div className={contentClass}>
                 {renderChartContent()}

@@ -14,6 +14,7 @@ export const ChartRenderer: React.FC<RendererProps> = ({ effectiveProps, combine
             style={inlineStyles}
             chartType={effectiveProps.chartType || 'bar'}
             onConfigureBinding={onConfigureBinding}
+            title={effectiveProps.title}
         />
     );
 };

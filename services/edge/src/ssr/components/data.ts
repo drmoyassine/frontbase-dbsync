@@ -410,9 +410,13 @@ function renderInfoList(id: string, props: Record<string, unknown>, propsJson: s
 
 function renderChart(id: string, props: Record<string, unknown>, propsJson: string): string {
     const binding = props.binding as Record<string, unknown> || {};
-    const title = binding.tableName 
-        ? escapeHtml(String(binding.tableName).replace(/_/g, ' '))
+    const customTitle = props.title !== undefined && props.title !== ''
+        ? escapeHtml(String(props.title))
         : '';
+    const fallbackTitle = binding.tableName 
+        ? escapeHtml(String(binding.tableName).replace(/_/g, ' ')) + ' Chart'
+        : 'Chart';
+    const displayTitle = customTitle || fallbackTitle;
     const height = props.height as string || '300px';
 
     const attrs = getCommonAttributes(
@@ -427,7 +431,7 @@ function renderChart(id: string, props: Record<string, unknown>, propsJson: stri
 
     return `<div ${attrs}>
         <div class="flex flex-col space-y-1.5 p-6 pb-4">
-            <h3 class="text-lg font-semibold capitalize">${title ? `${title} Chart` : 'Chart'}</h3>
+            <h3 class="text-lg font-semibold capitalize">${displayTitle}</h3>
         </div>
         <div class="p-6 pt-0">
             <div class="fb-chart-container fb-skeleton" style="height:${height};border-radius:0.5rem;display:flex;align-items:center;justify-content:center">

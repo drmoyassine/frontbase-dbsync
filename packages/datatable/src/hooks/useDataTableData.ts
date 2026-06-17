@@ -186,7 +186,7 @@ async function fetchFromEdge(config: DataFetcherConfig & { resolvedHiddenFilters
 
 interface UseDataTableDataOptions {
     mode: 'builder' | 'edge';
-    binding: DataTableBinding;
+    binding?: DataTableBinding | null;
     page: number;
     pageSize: number;
     sortColumn?: string | null;
@@ -224,6 +224,7 @@ export function useDataTableData({
     }, []);
 
     const resolvedHiddenFilters = useMemo(() => {
+        if (!binding) return [];
         const resolvedList = [...(binding._resolvedHiddenFilters || [])];
         const pendingList = binding._pendingHiddenFilters || [];
         const store = typeof window !== 'undefined' ? (window as any).__VARIABLE_STORE__ : null;
@@ -262,14 +263,14 @@ export function useDataTableData({
             }
         }
         return resolvedList;
-    }, [binding._resolvedHiddenFilters, binding._pendingHiddenFilters, storeVersion]);
+    }, [binding?._resolvedHiddenFilters, binding?._pendingHiddenFilters, storeVersion]);
 
     return useQuery({
         queryKey: [
             'datatable',
             mode,
-            binding.tableName,
-            binding.dataSourceId,
+            binding?.tableName,
+            binding?.dataSourceId,
             page,
             pageSize,
             sortColumn,
@@ -279,6 +280,7 @@ export function useDataTableData({
             resolvedHiddenFilters,
         ],
         queryFn: async () => {
+            if (!binding) return { data: [], total: 0 };
             const config: DataFetcherConfig & { resolvedHiddenFilters?: any[] } = {
                 mode,
                 binding,
@@ -290,7 +292,7 @@ export function useDataTableData({
                 searchQuery,
                 resolvedHiddenFilters,
             };
-
+ 
             if (mode === 'builder') {
                 return fetchFromBuilder(config);
             } else {
@@ -300,11 +302,11 @@ export function useDataTableData({
         initialData: initialData
             ? { data: initialData, total: initialData.length }
             : undefined,
-        enabled: enabled && !!binding.tableName,
+        enabled: enabled && !!binding?.tableName,
         staleTime: 60_000, // 1 minute
         refetchOnWindowFocus: false,
         retry: 1,
-        refetchInterval: binding.refreshInterval && binding.refreshInterval > 0
+        refetchInterval: binding?.refreshInterval && binding.refreshInterval > 0
             ? binding.refreshInterval * 1000
             : false,
     });

@@ -13,4 +13,6 @@ export interface ChartProps {
     initialData?: any[];
     onConfigureBinding?: () => void;
     configureOverlay?: React.ReactNode;
+    title?: string;
 }
+

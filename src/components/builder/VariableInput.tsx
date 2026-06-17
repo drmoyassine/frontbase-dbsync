@@ -204,7 +204,7 @@ export function VariableInput({
                 )}
             />
             {/* Variable hint */}
-            {!showPicker && !value && (
+            {!showPicker && !value && !placeholder && (
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
                     Type @ for variables
                 </div>

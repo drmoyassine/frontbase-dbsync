@@ -16,7 +16,11 @@
         "declaration": true,
         "declarationMap": true,
         "outDir": "./dist",
-        "rootDir": "./src"
+        "rootDir": "./src",
+        "baseUrl": ".",
+        "paths": {
+            "@frontbase/types": ["../types/src/index.ts"]
+        }
     },
     "include": [
         "src/**/*"

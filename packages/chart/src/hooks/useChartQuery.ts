@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ComponentDataBinding } from '../types';
+import { resolveDateOperator } from '@frontbase/types';
 
 interface UseChartQueryProps {
     mode: 'builder' | 'edge';
@@ -84,17 +85,6 @@ function resolveBuilderHiddenFilters(hidden: any[] | undefined): any[] {
         const op = f.operator;
         if (op === 'is_null' || op === 'not_null') { out.push({ column: f.column, op }); continue; }
 
-        if (op === 'is_today') {
-            const start = new Date();
-            start.setUTCHours(0, 0, 0, 0);
-            const end = new Date(start);
-            end.setUTCDate(end.getUTCDate() + 1);
-            out.push(
-                { column: f.column, op: 'gte', value: start.toISOString() },
-                { column: f.column, op: 'lt', value: end.toISOString() }
-            );
-            continue;
-        }
         let val = f.value;
         if (typeof val === 'string' && val.includes('{{')) {
             val = val.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_m: string, expr: string) => {
@@ -107,23 +97,14 @@ function resolveBuilderHiddenFilters(hidden: any[] | undefined): any[] {
             });
             if (!val || !String(val).trim()) val = f.previewValue || '';
         }
+
+        // Date operators desugar to lt/lte/gt/gte (UTC) via the shared helper.
+        const dateExpanded = resolveDateOperator({ column: f.column, op, value: val });
+        if (dateExpanded !== null) { out.push(...dateExpanded); continue; }
+
         if (val !== undefined && val !== null && String(val).trim() !== '') {
             if (op === 'in') val = String(val).split(',').map((s: string) => s.trim()).filter(Boolean);
-
-            if (op === 'is_before') out.push({ column: f.column, op: 'lt', value: val });
-            else if (op === 'is_after') out.push({ column: f.column, op: 'gt', value: val });
-            else if (op === 'is_on_or_before') out.push({ column: f.column, op: 'lte', value: val });
-            else if (op === 'is_on_or_after') out.push({ column: f.column, op: 'gte', value: val });
-            else if (op === 'is_within_last_days') {
-                const days = parseInt(val || '0', 10);
-                if (!isNaN(days) && days > 0) {
-                    const date = new Date();
-                    date.setUTCDate(date.getUTCDate() - days);
-                    out.push({ column: f.column, op: 'gte', value: date.toISOString() });
-                }
-            } else {
-                out.push({ column: f.column, op, value: val });
-            }
+            out.push({ column: f.column, op, value: val });
         }
     }
     return out;
@@ -378,18 +359,6 @@ export function useChartQuery({
                 continue;
             }
 
-            if (operator === 'is_today') {
-                const start = new Date();
-                start.setUTCHours(0, 0, 0, 0);
-                const end = new Date(start);
-                end.setUTCDate(end.getUTCDate() + 1);
-                resolvedList.push(
-                    { column: filter.column, op: 'gte', value: start.toISOString() },
-                    { column: filter.column, op: 'lt', value: end.toISOString() }
-                );
-                continue;
-            }
-
             const value = filter.value;
             let resolvedVal: any = '';
             if (typeof value === 'string') {
@@ -402,29 +371,19 @@ export function useChartQuery({
                 resolvedVal = value;
             }
 
+            // Date operators desugar to lt/lte/gt/gte (UTC) via the shared helper,
+            // which also emits the two-bound range for is_today.
+            const dateExpanded = resolveDateOperator({ column: filter.column, op: operator, value: resolvedVal });
+            if (dateExpanded !== null) {
+                resolvedList.push(...dateExpanded);
+                continue;
+            }
+
             if (resolvedVal !== undefined && resolvedVal !== null && String(resolvedVal).trim() !== '') {
                 if (operator === 'in') {
                     resolvedVal = String(resolvedVal).split(',').map((s: string) => s.trim()).filter(Boolean);
                 }
-
-                if (operator === 'is_before') resolvedList.push({ column: filter.column, op: 'lt', value: resolvedVal });
-                else if (operator === 'is_after') resolvedList.push({ column: filter.column, op: 'gt', value: resolvedVal });
-                else if (operator === 'is_on_or_before') resolvedList.push({ column: filter.column, op: 'lte', value: resolvedVal });
-                else if (operator === 'is_on_or_after') resolvedList.push({ column: filter.column, op: 'gte', value: resolvedVal });
-                else if (operator === 'is_within_last_days') {
-                    const days = parseInt(resolvedVal || '0', 10);
-                    if (!isNaN(days) && days > 0) {
-                        const date = new Date();
-                        date.setUTCDate(date.getUTCDate() - days);
-                        resolvedList.push({ column: filter.column, op: 'gte', value: date.toISOString() });
-                    }
-                } else {
-                    resolvedList.push({
-                        column: filter.column,
-                        op: operator,
-                        value: resolvedVal
-                    });
-                }
+                resolvedList.push({ column: filter.column, op: operator, value: resolvedVal });
             }
         }
         return resolvedList;

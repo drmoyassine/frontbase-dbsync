@@ -9981,7 +9981,13 @@ var HiddenFilterOperatorSchema = z15.enum([
   "contains",
   "in",
   "is_null",
-  "not_null"
+  "not_null",
+  "is_before",
+  "is_after",
+  "is_on_or_before",
+  "is_on_or_after",
+  "is_within_last_days",
+  "is_today"
 ]);
 var HiddenFilterSchema = z15.object({
   id: z15.string(),

@@ -1,4 +1,5 @@
 import { HiddenFilter } from '@/hooks/data/useSimpleData';
+import { resolveDateOperator } from '@frontbase/types';
 
 export interface WireFilter {
     column: string;
@@ -39,34 +40,11 @@ export function resolveHiddenFilters(
             }
         }
 
-        const op = filter.operator;
-        let resolvedValue = finalValue;
-        
-        if (op === 'is_before') return [{ column: filter.column, op: 'lt', value: resolvedValue }];
-        if (op === 'is_after') return [{ column: filter.column, op: 'gt', value: resolvedValue }];
-        if (op === 'is_on_or_before') return [{ column: filter.column, op: 'lte', value: resolvedValue }];
-        if (op === 'is_on_or_after') return [{ column: filter.column, op: 'gte', value: resolvedValue }];
+        // Date operators desugar to standard lt/lte/gt/gte (UTC) via the shared helper.
+        const dateExpanded = resolveDateOperator({ column: filter.column, op: filter.operator, value: finalValue });
+        if (dateExpanded !== null) return dateExpanded;
 
-        if (op === 'is_within_last_days') {
-            const days = parseInt(resolvedValue || '0', 10);
-            if (isNaN(days) || days <= 0) return []; // Invalid, drop it
-            const date = new Date();
-            date.setUTCDate(date.getUTCDate() - days);
-            return [{ column: filter.column, op: 'gte', value: date.toISOString() }];
-        }
-
-        if (op === 'is_today') {
-            const start = new Date();
-            start.setUTCHours(0, 0, 0, 0);
-            const end = new Date(start);
-            end.setUTCDate(end.getUTCDate() + 1);
-            return [
-                { column: filter.column, op: 'gte', value: start.toISOString() },
-                { column: filter.column, op: 'lt', value: end.toISOString() }
-            ];
-        }
-
-        return [{ column: filter.column, op: filter.operator, value: resolvedValue }];
+        return [{ column: filter.column, op: filter.operator, value: finalValue }];
     }).flat().filter(f => {
         // Drop unresolved unless it's is_null/not_null
         if (f.op === 'is_null' || f.op === 'not_null') return true;

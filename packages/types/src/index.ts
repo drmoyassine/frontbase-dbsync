@@ -79,32 +79,62 @@ export interface WireFilter {
     value?: any;
 }
 
-export function resolveDateOperator(filter: { column: string; op?: string; value?: any }): WireFilter[] {
+/** Hidden-filter operators that are UI sugar for date/time ranges. */
+export const DATE_OPERATORS = [
+    'is_before', 'is_after', 'is_on_or_before', 'is_on_or_after',
+    'is_within_last_days', 'is_today',
+] as const;
+
+/**
+ * Desugar a date/time hidden-filter operator into standard wire operators
+ * (lt/lte/gt/gte) carrying concrete ISO-8601 values, evaluated in **UTC**.
+ *
+ * This is the single source of truth for date-operator handling; every resolve
+ * site (builder preview, edge runtime, datatable & chart packages) must call it
+ * rather than re-implementing the mapping.
+ *
+ * `value` must already be template-resolved by the caller.
+ *
+ * Returns:
+ *  - `null` when `op` is not a date operator — the caller handles it normally.
+ *  - `[]`   when it is a date operator but resolves to nothing (empty absolute
+ *           value, or a non-positive/invalid day count) — i.e. the filter is dropped.
+ *  - one WireFilter for absolute/relative bounds, or **two** for a full-day range
+ *    (`is_today`).
+ */
+export function resolveDateOperator(filter: { column: string; op?: string; value?: any }): WireFilter[] | null {
     const { column, op, value } = filter;
-    
-    if (op === 'is_before') return [{ column, op: 'lt', value }];
-    if (op === 'is_after') return [{ column, op: 'gt', value }];
-    if (op === 'is_on_or_before') return [{ column, op: 'lte', value }];
-    if (op === 'is_on_or_after') return [{ column, op: 'gte', value }];
 
-    if (op === 'is_within_last_days') {
-        const days = parseInt(value || '0', 10);
-        if (isNaN(days) || days <= 0) return []; // Invalid, drop it
-        const date = new Date();
-        date.setUTCDate(date.getUTCDate() - days);
-        return [{ column, op: 'gte', value: date.toISOString() }];
+    switch (op) {
+        case 'is_before':
+        case 'is_after':
+        case 'is_on_or_before':
+        case 'is_on_or_after': {
+            if (value === undefined || value === null || String(value).trim() === '') return [];
+            const mapped = op === 'is_before' ? 'lt'
+                : op === 'is_after' ? 'gt'
+                : op === 'is_on_or_before' ? 'lte'
+                : 'gte';
+            return [{ column, op: mapped, value }];
+        }
+        case 'is_within_last_days': {
+            const days = parseInt(value ?? '0', 10);
+            if (isNaN(days) || days <= 0) return []; // invalid — drop it
+            const date = new Date();
+            date.setUTCDate(date.getUTCDate() - days);
+            return [{ column, op: 'gte', value: date.toISOString() }];
+        }
+        case 'is_today': {
+            const start = new Date();
+            start.setUTCHours(0, 0, 0, 0);
+            const end = new Date(start);
+            end.setUTCDate(end.getUTCDate() + 1);
+            return [
+                { column, op: 'gte', value: start.toISOString() },
+                { column, op: 'lt', value: end.toISOString() },
+            ];
+        }
+        default:
+            return null;
     }
-
-    if (op === 'is_today') {
-        const start = new Date();
-        start.setUTCHours(0, 0, 0, 0);
-        const end = new Date(start);
-        end.setUTCDate(end.getUTCDate() + 1);
-        return [
-            { column, op: 'gte', value: start.toISOString() },
-            { column, op: 'lt', value: end.toISOString() }
-        ];
-    }
-
-    return [{ column, op, value }];
 }

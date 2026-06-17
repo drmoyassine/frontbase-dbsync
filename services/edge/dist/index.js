@@ -6957,7 +6957,9 @@ function renderInfoList(id, props, propsJson) {
 }
 function renderChart(id, props, propsJson) {
   const binding = props.binding || {};
-  const title = binding.tableName ? escapeHtml3(String(binding.tableName).replace(/_/g, " ")) : "";
+  const customTitle = props.title !== void 0 && props.title !== "" ? escapeHtml3(String(props.title)) : "";
+  const fallbackTitle = binding.tableName ? escapeHtml3(String(binding.tableName).replace(/_/g, " ")) + " Chart" : "Chart";
+  const displayTitle = customTitle || fallbackTitle;
   const height = props.height || "300px";
   const attrs = getCommonAttributes3(
     id,
@@ -6970,7 +6972,7 @@ function renderChart(id, props, propsJson) {
   );
   return `<div ${attrs}>
         <div class="flex flex-col space-y-1.5 p-6 pb-4">
-            <h3 class="text-lg font-semibold capitalize">${title ? `${title} Chart` : "Chart"}</h3>
+            <h3 class="text-lg font-semibold capitalize">${displayTitle}</h3>
         </div>
         <div class="p-6 pt-0">
             <div class="fb-chart-container fb-skeleton" style="height:${height};border-radius:0.5rem;display:flex;align-items:center;justify-content:center">
@@ -8966,7 +8968,7 @@ body { margin: 0; font-family: system-ui, -apple-system, sans-serif; line-height
 `;
 
 // src/ssr/htmlDocument.ts
-var HYDRATE_VERSION = "20260404a";
+var HYDRATE_VERSION = "20260617c";
 var DEFAULT_FAVICON = "/static/icon.png";
 function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, faviconUrl = DEFAULT_FAVICON, authConfig) {
   const title = page.title || page.name;
@@ -10015,6 +10017,7 @@ var ComponentBindingSchema = z15.object({
     referencedColumn: z15.string()
   }).passthrough()).nullish(),
   dataRequest: DataRequestSchema.nullish(),
+  chartConfig: z15.record(z15.string(), z15.unknown()).nullish(),
   // Form-specific fields
   fieldOverrides: z15.record(z15.string(), z15.unknown()).nullish(),
   fieldOrder: z15.array(z15.string()).nullish(),

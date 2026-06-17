@@ -75,11 +75,17 @@ export const PropertiesPanel = () => {
   const { setComponentBinding, initialize } = useDataBindingStore();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState('general');
 
   // Initialize data binding store when panel opens
   React.useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // Reset tab to 'general' when component changes
+  React.useEffect(() => {
+    setActiveTab('general');
+  }, [selectedComponentId]);
 
   if (!selectedComponentId || !currentPageId) {
     return (
@@ -118,8 +124,13 @@ export const PropertiesPanel = () => {
     setShowDeleteDialog(false);
   };
 
-  const renderPropertyFields = () => {
+  const renderPropertyFields = (tab: string) => {
     const { type, props, styles = {} } = selectedComponent;
+
+    const isMultiTabComponent = ['DataTable', 'Chart', 'Grid', 'KPICard', 'Form', 'InfoList', 'Button'].includes(type);
+    if (!isMultiTabComponent && tab !== 'general') {
+      return null;
+    }
 
     switch (type) {
       // === CONTAINER ===
@@ -152,7 +163,7 @@ export const PropertiesPanel = () => {
 
       // === ACTIONS ===
       case 'Button':
-        return <ButtonProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} />;
+        return <ButtonProperties activeTab={tab} componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} />;
 
       case 'Link':
         return <LinkProperties props={props} updateComponentProp={updateComponentProp} />;
@@ -195,6 +206,7 @@ export const PropertiesPanel = () => {
       case 'Chart':
         return (
           <ChartProperties
+            activeTab={tab}
             componentId={selectedComponentId!}
             binding={selectedComponent?.props?.binding}
             onBindingUpdate={(binding) => {
@@ -209,6 +221,7 @@ export const PropertiesPanel = () => {
       case 'Grid':
         return (
           <GridProperties
+            activeTab={tab}
             componentId={selectedComponentId!}
             binding={selectedComponent?.props?.binding}
             onBindingUpdate={(binding) => {
@@ -223,6 +236,7 @@ export const PropertiesPanel = () => {
       case 'KPICard':
         return (
           <KPICardProperties
+            activeTab={tab}
             componentId={selectedComponentId!}
             binding={selectedComponent?.props?.binding}
             onBindingUpdate={(binding) => {
@@ -238,6 +252,7 @@ export const PropertiesPanel = () => {
         const dataTableBinding = selectedComponent?.props?.binding;
         return (
           <DataTablePropertiesPanel
+            activeTab={tab}
             componentId={selectedComponentId!}
             binding={dataTableBinding}
             onBindingUpdate={(binding) => {
@@ -248,10 +263,10 @@ export const PropertiesPanel = () => {
         );
 
       case 'Form':
-        return <FormPropertiesPanel componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} type="Form" />;
+        return <FormPropertiesPanel activeTab={tab} componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} type="Form" />;
 
       case 'InfoList':
-        return <FormPropertiesPanel componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} type="InfoList" />;
+        return <FormPropertiesPanel activeTab={tab} componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} type="InfoList" />;
 
       // === DISPLAY PROPERTIES (fallback for some types) ===
       case 'Card':
@@ -301,7 +316,7 @@ export const PropertiesPanel = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <Tabs defaultValue="general" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 mb-4">
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="options">Options</TabsTrigger>
@@ -318,10 +333,11 @@ export const PropertiesPanel = () => {
               />
             </div>
 
-            {renderPropertyFields()}
+            {renderPropertyFields('general')}
           </TabsContent>
 
           <TabsContent value="options" className="space-y-4">
+            {renderPropertyFields('options')}
             <VisibilityConditionEditor
               value={selectedComponent.visibilityCondition || ''}
               onChange={(value) => updateComponent(selectedComponentId, { visibilityCondition: value })}
@@ -329,6 +345,7 @@ export const PropertiesPanel = () => {
           </TabsContent>
 
           <TabsContent value="actions" className="space-y-4">
+            {renderPropertyFields('actions')}
             <ActionConfigurator
               componentId={selectedComponentId || ''}
               componentType={selectedComponent.type}

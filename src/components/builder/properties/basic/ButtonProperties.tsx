@@ -10,19 +10,26 @@ import { ActionProperties } from '../ActionProperties';
 import { IconPicker } from '../IconPicker';
 
 interface ButtonPropertiesProps {
+    activeTab: string;
     componentId: string;
     props: Record<string, any>;
     updateComponentProp: (key: string, value: any) => void;
 }
 
 export const ButtonProperties: React.FC<ButtonPropertiesProps> = ({
+    activeTab,
     componentId,
     props,
     updateComponentProp
 }) => {
+    if (activeTab !== 'general') {
+        return null;
+    }
+
     return (
         <>
             <ActionProperties
+                activeTab={activeTab}
                 componentId={componentId}
                 props={props}
                 updateComponentProp={updateComponentProp}

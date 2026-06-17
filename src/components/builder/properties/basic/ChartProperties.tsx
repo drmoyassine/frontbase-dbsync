@@ -5,7 +5,6 @@
 
 import React from 'react';
 import { HelpCircle } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
@@ -21,6 +20,7 @@ import { ColumnSelect } from '@/components/builder/data-binding/ColumnSelect';
 import { HiddenFiltersEditor } from '@/components/builder/data-binding/HiddenFiltersEditor';
 
 interface ChartPropertiesProps {
+    activeTab: string;
     componentId: string;
     binding: ComponentDataBinding | null;
     onBindingUpdate: (binding: ComponentDataBinding) => void;
@@ -48,6 +48,7 @@ const FieldLabel: React.FC<{ children: React.ReactNode; hint?: string }> = ({ ch
 
 
 export const ChartProperties: React.FC<ChartPropertiesProps> = ({
+    activeTab,
     componentId,
     binding,
     onBindingUpdate,
@@ -90,167 +91,162 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
     };
 
 
-    return (
-        <Tabs defaultValue="binding" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="binding">Data</TabsTrigger>
-                <TabsTrigger value="options" disabled={!binding}>Options</TabsTrigger>
-            </TabsList>
+    if (activeTab === 'general') {
+        return (
+            <div className="space-y-4">
+                <div>
+                    <DataSourceSelector
+                        value={effectiveBinding.dataSourceId}
+                        onValueChange={(value) => updateBinding({ dataSourceId: value })}
+                    />
+                </div>
 
-            {/* Data Binding Tab */}
-            <TabsContent value="binding" className="space-y-4 p-4">
-                <div className="space-y-4">
-                    <div>
-                        <DataSourceSelector
-                            value={effectiveBinding.dataSourceId}
-                            onValueChange={(value) => updateBinding({ dataSourceId: value })}
-                        />
-                    </div>
+                <div>
+                    <TableSelector
+                        value={effectiveBinding.tableName}
+                        onValueChange={(value) => {
+                            updateBinding({
+                                tableName: value,
+                                columnOverrides: {},
+                                columnOrder: [],
+                                sorting: { enabled: false, column: undefined, direction: 'asc' },
+                                chartConfig: {
+                                    aggregation: 'count',
+                                    maxRows: 10
+                                }
+                            });
+                        }}
+                        dataSourceId={effectiveBinding.dataSourceId}
+                    />
+                </div>
 
-                    <div>
-                        <TableSelector
-                            value={effectiveBinding.tableName}
-                            onValueChange={(value) => {
-                                updateBinding({
-                                    tableName: value,
-                                    columnOverrides: {},
-                                    columnOrder: [],
-                                    sorting: { enabled: false, column: undefined, direction: 'asc' },
-                                    chartConfig: {
-                                        aggregation: 'count',
-                                        maxRows: 10
-                                    }
-                                });
-                            }}
-                            dataSourceId={effectiveBinding.dataSourceId}
-                        />
-                    </div>
+                {effectiveBinding.tableName && binding && (
+                    <div className="space-y-4 pt-4 border-t">
+                        {/* Chart Style */}
+                        <div className="space-y-1.5">
+                            <FieldLabel>Chart Style</FieldLabel>
+                            <Select
+                                value={chartType}
+                                onValueChange={(value) => updateComponentProp('chartType', value)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="bar">Bar</SelectItem>
+                                    <SelectItem value="line">Line</SelectItem>
+                                    <SelectItem value="pie">Pie</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                    {effectiveBinding.tableName && binding && (
-                        <div className="space-y-4 pt-4 border-t">
-                            {/* Chart Style */}
+                        {/* Variant (bar charts only) */}
+                        {chartType === 'bar' && (
                             <div className="space-y-1.5">
-                                <FieldLabel>Chart Style</FieldLabel>
+                                <FieldLabel>Variant</FieldLabel>
                                 <Select
-                                    value={chartType}
-                                    onValueChange={(value) => updateComponentProp('chartType', value)}
+                                    value={effectiveBinding.chartConfig?.variant || 'vertical'}
+                                    onValueChange={(value: 'vertical' | 'horizontal') =>
+                                        updateChartConfig({ variant: value })
+                                    }
                                 >
                                     <SelectTrigger>
-                                        <SelectValue />
+                                        <SelectValue placeholder="Select" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="bar">Bar</SelectItem>
-                                        <SelectItem value="line">Line</SelectItem>
-                                        <SelectItem value="pie">Pie</SelectItem>
+                                        <SelectItem value="vertical">Vertical</SelectItem>
+                                        <SelectItem value="horizontal">Horizontal</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
+                        )}
 
-                            {/* Variant (bar charts only) */}
-                            {chartType === 'bar' && (
-                                <div className="space-y-1.5">
-                                    <FieldLabel>Variant</FieldLabel>
-                                    <Select
-                                        value={effectiveBinding.chartConfig?.variant || 'vertical'}
-                                        onValueChange={(value: 'vertical' | 'horizontal') =>
-                                            updateChartConfig({ variant: value })
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="vertical">Vertical</SelectItem>
-                                            <SelectItem value="horizontal">Horizontal</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
+                        {/* Category */}
+                        <div className="space-y-1.5">
+                            <FieldLabel hint="Column to group by — becomes the X-axis labels / pie slices.">
+                                Category
+                            </FieldLabel>
+                            <ColumnSelect
+                                value={effectiveBinding.chartConfig?.category || ''}
+                                columns={columns}
+                                placeholder="Select Column"
+                                onChange={(value) => updateChartConfig({ category: value })}
+                            />
+                        </div>
 
-                            {/* Category */}
+                        {/* Aggregation */}
+                        <div className="space-y-1.5">
+                            <FieldLabel hint="How to summarise each category. Count tallies rows; the rest summarise the Value column.">
+                                Aggregation
+                            </FieldLabel>
+                            <Select
+                                value={effectiveBinding.chartConfig?.aggregation || 'count'}
+                                onValueChange={(value: 'count' | 'sum' | 'average' | 'min' | 'max') =>
+                                    updateChartConfig({ aggregation: value })
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="count">Count</SelectItem>
+                                    <SelectItem value="sum">Sum</SelectItem>
+                                    <SelectItem value="average">Average</SelectItem>
+                                    <SelectItem value="min">Min</SelectItem>
+                                    <SelectItem value="max">Max</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Value — only when the aggregation needs a column */}
+                        {(effectiveBinding.chartConfig?.aggregation || 'count') !== 'count' && (
                             <div className="space-y-1.5">
-                                <FieldLabel hint="Column to group by — becomes the X-axis labels / pie slices.">
-                                    Category
-                                </FieldLabel>
+                                <FieldLabel hint="The numeric column to aggregate.">Value</FieldLabel>
                                 <ColumnSelect
-                                    value={effectiveBinding.chartConfig?.category || ''}
+                                    value={effectiveBinding.chartConfig?.value || ''}
                                     columns={columns}
                                     placeholder="Select Column"
-                                    onChange={(value) => updateChartConfig({ category: value })}
+                                    onChange={(value) => updateChartConfig({ value })}
                                 />
                             </div>
+                        )}
 
-                            {/* Aggregation */}
-                            <div className="space-y-1.5">
-                                <FieldLabel hint="How to summarise each category. Count tallies rows; the rest summarise the Value column.">
-                                    Aggregation
-                                </FieldLabel>
-                                <Select
-                                    value={effectiveBinding.chartConfig?.aggregation || 'count'}
-                                    onValueChange={(value: 'count' | 'sum' | 'average' | 'min' | 'max') =>
-                                        updateChartConfig({ aggregation: value })
-                                    }
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="count">Count</SelectItem>
-                                        <SelectItem value="sum">Sum</SelectItem>
-                                        <SelectItem value="average">Average</SelectItem>
-                                        <SelectItem value="min">Min</SelectItem>
-                                        <SelectItem value="max">Max</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            {/* Value — only when the aggregation needs a column */}
-                            {(effectiveBinding.chartConfig?.aggregation || 'count') !== 'count' && (
-                                <div className="space-y-1.5">
-                                    <FieldLabel hint="The numeric column to aggregate.">Value</FieldLabel>
-                                    <ColumnSelect
-                                        value={effectiveBinding.chartConfig?.value || ''}
-                                        columns={columns}
-                                        placeholder="Select Column"
-                                        onChange={(value) => updateChartConfig({ value })}
-                                    />
-                                </div>
-                            )}
-
-                            {/* Sort */}
-                            <div className="space-y-1.5">
-                                <FieldLabel hint="Order categories by their aggregated value.">
-                                    Sort
-                                </FieldLabel>
-                                <Select
-                                    value={effectiveBinding.chartConfig?.sort || 'none'}
-                                    onValueChange={(value: 'none' | 'asc' | 'desc') =>
-                                        updateChartConfig({ sort: value })
-                                    }
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">No sort</SelectItem>
-                                        <SelectItem value="desc">Descending (high → low)</SelectItem>
-                                        <SelectItem value="asc">Ascending (low → high)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                        {/* Sort */}
+                        <div className="space-y-1.5">
+                            <FieldLabel hint="Order categories by their aggregated value.">
+                                Sort
+                            </FieldLabel>
+                            <Select
+                                value={effectiveBinding.chartConfig?.sort || 'none'}
+                                onValueChange={(value: 'none' | 'asc' | 'desc') =>
+                                    updateChartConfig({ sort: value })
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">No sort</SelectItem>
+                                    <SelectItem value="desc">Descending (high → low)</SelectItem>
+                                    <SelectItem value="asc">Ascending (low → high)</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {!binding && (
-                        <div className="pt-4 mt-4 border-t border-dashed text-center text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg">
-                            <p>Select a Data Source and Table above to configure chart data.</p>
-                        </div>
-                    )}
-                </div>
-            </TabsContent>
+                {!binding && (
+                    <div className="pt-4 mt-4 border-t border-dashed text-center text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg">
+                        <p>Select a Data Source and Table above to configure chart data.</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
 
-            {/* Options Tab */}
-            <TabsContent value="options" className="space-y-4 p-4">
+    if (activeTab === 'options') {
+        return (
+            <div className="space-y-4">
                 {binding ? (
                     <div className="space-y-6">
                         {/* Display */}
@@ -352,11 +348,13 @@ export const ChartProperties: React.FC<ChartPropertiesProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground bg-muted/20 border border-dashed rounded-lg">
                         Configure data binding first to enable options.
                     </div>
                 )}
-            </TabsContent>
-        </Tabs>
-    );
+            </div>
+        );
+    }
+
+    return null;
 };

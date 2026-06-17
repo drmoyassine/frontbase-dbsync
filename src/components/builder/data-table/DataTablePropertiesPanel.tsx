@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
@@ -20,6 +19,7 @@ import { useBindingColumns } from '@/hooks/data/useBindingColumns';
 import { HiddenFiltersEditor } from '@/components/builder/data-binding/HiddenFiltersEditor';
 
 interface DataTablePropertiesPanelProps {
+    activeTab: string;
     componentId: string;
     binding: ComponentDataBinding | null;
     onBindingUpdate: (binding: ComponentDataBinding) => void;
@@ -422,6 +422,7 @@ export const DefaultSortColumnSelector: React.FC<DefaultSortColumnSelectorProps>
 };
 
 export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> = ({
+    activeTab,
     componentId,
     binding,
     onBindingUpdate
@@ -447,66 +448,60 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
 
     const columns = useBindingColumns(effectiveBinding.tableName, effectiveBinding.dataSourceId);
 
-    return (
-        <Tabs defaultValue="binding" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="binding">Data</TabsTrigger>
-                <TabsTrigger value="options" disabled={!binding}>Options</TabsTrigger>
-                <TabsTrigger value="actions" disabled={!binding}>Actions</TabsTrigger>
-            </TabsList>
-
-            {/* Data Binding Tab */}
-            <TabsContent value="binding" className="space-y-4 p-4">
-                <div className="space-y-4">
-                    <div>
-                        <DataSourceSelector
-                            value={effectiveBinding.dataSourceId}
-                            onValueChange={(value) => updateBinding({ dataSourceId: value })}
-                        />
-                    </div>
-
-                    <div>
-                        <TableSelector
-                            value={effectiveBinding.tableName}
-                            onValueChange={(value) => {
-                                // When table changes, reset all schema-dependent fields
-                                updateBinding({
-                                    tableName: value,
-                                    columnOverrides: {},       // Clear column display settings
-                                    columnOrder: [],           // Clear column order
-                                    searchColumns: undefined,  // Clear search column selection
-                                    frontendFilters: [],       // Clear configured filters
-                                    sorting: { enabled: true, column: undefined, direction: 'asc' }, // Reset sort
-                                });
-                            }}
-                            dataSourceId={effectiveBinding.dataSourceId}
-                        />
-                    </div>
-
-                    {effectiveBinding.tableName && binding && (
-                        <div className="pt-4 border-t">
-                            <Label className="text-base font-semibold mb-3 block">Columns</Label>
-                            <CompactColumnConfigurator
-                                tableName={effectiveBinding.tableName}
-                                dataSourceId={effectiveBinding.dataSourceId}
-                                columnOverrides={effectiveBinding.columnOverrides || {}}
-                                columnOrder={effectiveBinding.columnOrder}
-                                onColumnOverridesChange={(overrides) => updateBinding({ columnOverrides: overrides })}
-                                onColumnOrderChange={(order) => updateBinding({ columnOrder: order })}
-                            />
-                        </div>
-                    )}
-
-                    {!binding && (
-                        <div className="pt-4 mt-4 border-t border-dashed text-center text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg">
-                            <p>Select a Data Source and Table above to configure columns and other properties.</p>
-                        </div>
-                    )}
+    if (activeTab === 'general') {
+        return (
+            <div className="space-y-4">
+                <div>
+                    <DataSourceSelector
+                        value={effectiveBinding.dataSourceId}
+                        onValueChange={(value) => updateBinding({ dataSourceId: value })}
+                    />
                 </div>
-            </TabsContent>
 
-            {/* Options Tab */}
-            <TabsContent value="options" className="space-y-4 p-4">
+                <div>
+                    <TableSelector
+                        value={effectiveBinding.tableName}
+                        onValueChange={(value) => {
+                            // When table changes, reset all schema-dependent fields
+                            updateBinding({
+                                tableName: value,
+                                columnOverrides: {},       // Clear column display settings
+                                columnOrder: [],           // Clear column order
+                                searchColumns: undefined,  // Clear search column selection
+                                frontendFilters: [],       // Clear configured filters
+                                sorting: { enabled: true, column: undefined, direction: 'asc' }, // Reset sort
+                            });
+                        }}
+                        dataSourceId={effectiveBinding.dataSourceId}
+                    />
+                </div>
+
+                {effectiveBinding.tableName && binding && (
+                    <div className="pt-4 border-t">
+                        <Label className="text-base font-semibold mb-3 block">Columns</Label>
+                        <CompactColumnConfigurator
+                            tableName={effectiveBinding.tableName}
+                            dataSourceId={effectiveBinding.dataSourceId}
+                            columnOverrides={effectiveBinding.columnOverrides || {}}
+                            columnOrder={effectiveBinding.columnOrder}
+                            onColumnOverridesChange={(overrides) => updateBinding({ columnOverrides: overrides })}
+                            onColumnOrderChange={(order) => updateBinding({ columnOrder: order })}
+                        />
+                    </div>
+                )}
+
+                {!binding && (
+                    <div className="pt-4 mt-4 border-t border-dashed text-center text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg">
+                        <p>Select a Data Source and Table above to configure columns and other properties.</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    if (activeTab === 'options') {
+        return (
+            <div className="space-y-4">
                 {binding ? (
                     <div className="space-y-6">
                         {/* Pagination - FIRST */}
@@ -680,18 +675,13 @@ export const DataTablePropertiesPanel: React.FC<DataTablePropertiesPanelProps> =
                         </div>
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground bg-muted/20 border border-dashed rounded-lg">
                         Configure data binding first to enable options.
                     </div>
                 )}
-            </TabsContent>
+            </div>
+        );
+    }
 
-            {/* Actions Tab */}
-            <TabsContent value="actions" className="space-y-4 p-4">
-                <div className="text-sm text-muted-foreground text-center py-4">
-                    Actions configuration coming soon.
-                </div>
-            </TabsContent>
-        </Tabs>
-    );
+    return null;
 };

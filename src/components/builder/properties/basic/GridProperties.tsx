@@ -4,7 +4,6 @@
  */
 
 import React from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
@@ -18,6 +17,7 @@ import { useBindingColumns } from '@/hooks/data/useBindingColumns';
 import { HiddenFiltersEditor } from '@/components/builder/data-binding/HiddenFiltersEditor';
 
 interface GridPropertiesProps {
+    activeTab: string;
     componentId: string;
     binding: ComponentDataBinding | null;
     onBindingUpdate: (binding: ComponentDataBinding) => void;
@@ -26,6 +26,7 @@ interface GridPropertiesProps {
 }
 
 export const GridProperties: React.FC<GridPropertiesProps> = ({
+    activeTab,
     componentId,
     binding,
     onBindingUpdate,
@@ -52,39 +53,52 @@ export const GridProperties: React.FC<GridPropertiesProps> = ({
 
     const columns = useBindingColumns(effectiveBinding.tableName, effectiveBinding.dataSourceId);
 
-    return (
-        <Tabs defaultValue="binding" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="binding">Data</TabsTrigger>
-                <TabsTrigger value="options" disabled={!binding}>Options</TabsTrigger>
-            </TabsList>
+    if (activeTab === 'general') {
+        return (
+            <div className="space-y-4">
+                <div>
+                    <DataSourceSelector
+                        value={effectiveBinding.dataSourceId}
+                        onValueChange={(value) => updateBinding({ dataSourceId: value })}
+                    />
+                </div>
 
-            {/* Data Binding Tab */}
-            <TabsContent value="binding" className="space-y-4 p-4">
-                <div className="space-y-4">
-                    <div>
-                        <DataSourceSelector
-                            value={effectiveBinding.dataSourceId}
-                            onValueChange={(value) => updateBinding({ dataSourceId: value })}
-                        />
-                    </div>
+                <div>
+                    <TableSelector
+                        value={effectiveBinding.tableName}
+                        onValueChange={(value) => {
+                            updateBinding({
+                                tableName: value,
+                                columnOverrides: {},
+                                columnOrder: [],
+                                sorting: { enabled: false, column: undefined, direction: 'asc' },
+                            });
+                        }}
+                        dataSourceId={effectiveBinding.dataSourceId}
+                    />
+                </div>
 
-                    <div>
-                        <TableSelector
-                            value={effectiveBinding.tableName}
-                            onValueChange={(value) => {
-                                updateBinding({
-                                    tableName: value,
-                                    columnOverrides: {},
-                                    columnOrder: [],
-                                    sorting: { enabled: false, column: undefined, direction: 'asc' },
-                                });
-                            }}
-                            dataSourceId={effectiveBinding.dataSourceId}
-                        />
-                    </div>
+                {effectiveBinding.tableName && binding && (
+                    <div className="space-y-4 pt-4 border-t">
+                        {/* Grid Columns Layout Selector */}
+                        <div className="space-y-2">
+                            <Label htmlFor="grid-columns" className="font-semibold block text-sm">Grid Layout Columns</Label>
+                            <Select
+                                value={(props.columns || 3).toString()}
+                                onValueChange={(value) => updateComponentProp('columns', parseInt(value))}
+                            >
+                                <SelectTrigger id="grid-columns">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="1">1 Column</SelectItem>
+                                    <SelectItem value="2">2 Columns</SelectItem>
+                                    <SelectItem value="3">3 Columns</SelectItem>
+                                    <SelectItem value="4">4 Columns</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                    {effectiveBinding.tableName && binding && (
                         <div className="pt-4 border-t">
                             <Label className="text-base font-semibold mb-3 block">Columns</Label>
                             <CompactColumnConfigurator
@@ -96,42 +110,23 @@ export const GridProperties: React.FC<GridPropertiesProps> = ({
                                 onColumnOrderChange={(order) => updateBinding({ columnOrder: order })}
                             />
                         </div>
-                    )}
+                    </div>
+                )}
 
-                    {!binding && (
-                        <div className="pt-4 mt-4 border-t border-dashed text-center text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg">
-                            <p>Select a Data Source and Table above to configure grid data.</p>
-                        </div>
-                    )}
-                </div>
-            </TabsContent>
+                {!binding && (
+                    <div className="pt-4 mt-4 border-t border-dashed text-center text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg">
+                        <p>Select a Data Source and Table above to configure grid data.</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
 
-            {/* Options Tab */}
-            <TabsContent value="options" className="space-y-4 p-4">
+    if (activeTab === 'options') {
+        return (
+            <div className="space-y-4">
                 {binding ? (
                     <div className="space-y-6">
-                        {/* Grid General Config */}
-                        <div className="space-y-3 p-4 border rounded-lg">
-                            <Label className="font-semibold block">Grid Layout</Label>
-                            <div className="space-y-2">
-                                <Label htmlFor="grid-columns">Columns</Label>
-                                <Select
-                                    value={(props.columns || 3).toString()}
-                                    onValueChange={(value) => updateComponentProp('columns', parseInt(value))}
-                                >
-                                    <SelectTrigger id="grid-columns">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="1">1 Column</SelectItem>
-                                        <SelectItem value="2">2 Columns</SelectItem>
-                                        <SelectItem value="3">3 Columns</SelectItem>
-                                        <SelectItem value="4">4 Columns</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-
                         {/* Pagination */}
                         <div className="space-y-3 p-4 border rounded-lg">
                             <div className="flex items-center justify-between">
@@ -251,11 +246,13 @@ export const GridProperties: React.FC<GridPropertiesProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground bg-muted/20 border border-dashed rounded-lg">
                         Configure data binding first to enable options.
                     </div>
                 )}
-            </TabsContent>
-        </Tabs>
-    );
+            </div>
+        );
+    }
+
+    return null;
 };

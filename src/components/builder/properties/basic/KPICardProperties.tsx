@@ -4,7 +4,6 @@
  */
 
 import React from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,6 +16,7 @@ import { useBindingColumns } from '@/hooks/data/useBindingColumns';
 import { HiddenFiltersEditor } from '@/components/builder/data-binding/HiddenFiltersEditor';
 
 interface KPICardPropertiesProps {
+    activeTab: string;
     componentId: string;
     binding: ComponentDataBinding | null;
     onBindingUpdate: (binding: ComponentDataBinding) => void;
@@ -25,6 +25,7 @@ interface KPICardPropertiesProps {
 }
 
 export const KPICardProperties: React.FC<KPICardPropertiesProps> = ({
+    activeTab,
     componentId,
     binding,
     onBindingUpdate,
@@ -51,62 +52,57 @@ export const KPICardProperties: React.FC<KPICardPropertiesProps> = ({
 
     const columns = useBindingColumns(effectiveBinding.tableName, effectiveBinding.dataSourceId);
 
-    return (
-        <Tabs defaultValue="binding" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="binding">Data</TabsTrigger>
-                <TabsTrigger value="options" disabled={!binding}>Options</TabsTrigger>
-            </TabsList>
-
-            {/* Data Binding Tab */}
-            <TabsContent value="binding" className="space-y-4 p-4">
-                <div className="space-y-4">
-                    <div>
-                        <DataSourceSelector
-                            value={effectiveBinding.dataSourceId}
-                            onValueChange={(value) => updateBinding({ dataSourceId: value })}
-                        />
-                    </div>
-
-                    <div>
-                        <TableSelector
-                            value={effectiveBinding.tableName}
-                            onValueChange={(value) => {
-                                updateBinding({
-                                    tableName: value,
-                                    columnOverrides: {},
-                                    columnOrder: [],
-                                    sorting: { enabled: false, column: undefined, direction: 'asc' },
-                                });
-                            }}
-                            dataSourceId={effectiveBinding.dataSourceId}
-                        />
-                    </div>
-
-                    {effectiveBinding.tableName && binding && (
-                        <div className="pt-4 border-t">
-                            <Label className="text-base font-semibold mb-3 block">Columns</Label>
-                            <CompactColumnConfigurator
-                                tableName={effectiveBinding.tableName}
-                                dataSourceId={effectiveBinding.dataSourceId}
-                                columnOverrides={effectiveBinding.columnOverrides || {}}
-                                columnOrder={effectiveBinding.columnOrder}
-                                onColumnOverridesChange={(overrides) => updateBinding({ columnOverrides: overrides })}
-                                onColumnOrderChange={(order) => updateBinding({ columnOrder: order })}
-                            />
-                        </div>
-                    )}
-
-                    {!binding && (
-                        <div className="pt-4 mt-4 border-t border-dashed text-center text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg">
-                            <p>Select a Data Source and Table above to configure KPI card data.</p>
-                        </div>
-                    )}
+    if (activeTab === 'general') {
+        return (
+            <div className="space-y-4">
+                <div>
+                    <DataSourceSelector
+                        value={effectiveBinding.dataSourceId}
+                        onValueChange={(value) => updateBinding({ dataSourceId: value })}
+                    />
                 </div>
-            </TabsContent>
 
-            {/* Options Tab */}
-            <TabsContent value="options" className="space-y-4 p-4">
+                <div>
+                    <TableSelector
+                        value={effectiveBinding.tableName}
+                        onValueChange={(value) => {
+                            updateBinding({
+                                tableName: value,
+                                columnOverrides: {},
+                                columnOrder: [],
+                                sorting: { enabled: false, column: undefined, direction: 'asc' },
+                            });
+                        }}
+                        dataSourceId={effectiveBinding.dataSourceId}
+                    />
+                </div>
+
+                {effectiveBinding.tableName && binding && (
+                    <div className="pt-4 border-t">
+                        <Label className="text-base font-semibold mb-3 block">Columns</Label>
+                        <CompactColumnConfigurator
+                            tableName={effectiveBinding.tableName}
+                            dataSourceId={effectiveBinding.dataSourceId}
+                            columnOverrides={effectiveBinding.columnOverrides || {}}
+                            columnOrder={effectiveBinding.columnOrder}
+                            onColumnOverridesChange={(overrides) => updateBinding({ columnOverrides: overrides })}
+                            onColumnOrderChange={(order) => updateBinding({ columnOrder: order })}
+                        />
+                    </div>
+                )}
+
+                {!binding && (
+                    <div className="pt-4 mt-4 border-t border-dashed text-center text-sm text-muted-foreground bg-muted/20 p-4 rounded-lg">
+                        <p>Select a Data Source and Table above to configure KPI card data.</p>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    if (activeTab === 'options') {
+        return (
+            <div className="space-y-4">
                 {binding ? (
                     <div className="space-y-6">
                         {/* Sorting */}
@@ -192,11 +188,13 @@ export const KPICardProperties: React.FC<KPICardPropertiesProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <div className="text-center py-8 text-muted-foreground">
+                    <div className="text-center py-8 text-muted-foreground bg-muted/20 border border-dashed rounded-lg">
                         Configure data binding first to enable options.
                     </div>
                 )}
-            </TabsContent>
-        </Tabs>
-    );
+            </div>
+        );
+    }
+
+    return null;
 };

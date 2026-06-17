@@ -7,7 +7,7 @@ Extracted: convert_component, convert_to_publish_schema → services/publish_ser
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Any
 import asyncio
 import httpx
@@ -168,6 +168,10 @@ async def publish_to_target(
             print(f"[publish] Resolved tenant_slug='{tenant_slug}' from project '{page.project.name}'")
         tenant_id_str = str(page.project.tenant_id) if page.project and page.project.tenant_id else None
 
+        page_slug = str(page.slug)
+        page_is_homepage = bool(page.is_homepage)
+        page_is_public = bool(page.is_public)
+
         db.expunge(page)
         db.expunge(engine)
         datasources = get_datasources_for_publish(db)
@@ -213,15 +217,15 @@ async def publish_to_target(
                 is_shared = getattr(engine, "is_shared", False)
                 if is_shared and tenant_slug and tenant_slug != "_default":
                     base_domain = os.environ.get("FRONTBASE_BASE_DOMAIN", "frontbase.dev")
-                    page_path = f"/{page.slug}" if not bool(page.is_homepage) else ""
+                    page_path = f"/{page_slug}" if not page_is_homepage else ""
                     computed_preview_url = f"https://{tenant_slug}.{base_domain}{page_path}"
                 else:
-                    computed_preview_url = _res_json.get("previewUrl") or f"{engine_url.rstrip('/')}/{page.slug}"
+                    computed_preview_url = _res_json.get("previewUrl") or f"{engine_url.rstrip('/')}/{page_slug}"
             
         # Update the DB
         deploy_db = SessionLocal()
         try:
-            now_str = datetime.utcnow().isoformat() + "Z"
+            now_str = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             existing = deploy_db.query(PageDeployment).filter(
                 PageDeployment.page_id == page_id,
                 PageDeployment.edge_engine_id == engine_id
@@ -258,8 +262,8 @@ async def publish_to_target(
             
         if success:
             # Option B: sync project settings for private pages
-            if not bool(page.is_public):
-                await _sync_settings_to_engine(str(engine_url), auth_headers, tenant_slug=tenant_slug)
+            if not page_is_public:
+                await _sync_settings_to_engine(engine_url, auth_headers, tenant_slug=tenant_slug)
 
             return {
                 "success": True,
@@ -370,6 +374,9 @@ async def publish_to_targets_batch(
             tenant_slug = str(page.project.tenant.slug)
             print(f"[publish:batch] Resolved tenant_slug='{tenant_slug}'")
 
+        page_slug = str(page.slug)
+        page_is_homepage = bool(page.is_homepage)
+
         db.expunge(page)
         datasources = get_datasources_for_publish(db)
     finally:
@@ -407,10 +414,10 @@ async def publish_to_targets_batch(
                 _res_json = resp.json() if resp.status_code == 200 else {}
                 if info.get("is_shared") and tenant_slug and tenant_slug != "_default":
                     base_domain = os.environ.get("FRONTBASE_BASE_DOMAIN", "frontbase.dev")
-                    page_path = f"/{page.slug}" if not bool(page.is_homepage) else ""
+                    page_path = f"/{page_slug}" if not page_is_homepage else ""
                     computed_preview_url = f"https://{tenant_slug}.{base_domain}{page_path}"
                 else:
-                    computed_preview_url = _res_json.get("previewUrl") or f"{str(info['url']).rstrip('/')}/{page.slug}"
+                    computed_preview_url = _res_json.get("previewUrl") or f"{str(info['url']).rstrip('/')}/{page_slug}"
             
             return {"engineId": eid, "name": info["name"], "success": ok, "error": err, "previewUrl": computed_preview_url}
         except Exception as exc:
@@ -424,7 +431,7 @@ async def publish_to_targets_batch(
     # 4. RECORD all deployments in a single DB transaction
     deploy_db = SessionLocal()
     try:
-        now_str = datetime.utcnow().isoformat() + "Z"
+        now_str = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         for r in results:
             eid = str(r["engineId"])
             deploy_status = "published" if r["success"] else "failed"

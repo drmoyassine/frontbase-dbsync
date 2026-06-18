@@ -167,6 +167,7 @@ def _backfill_engine_bindings():
     from app.services.sync.models.datasource import Datasource
     from app.models.storage_provider import StorageProvider
     import sqlalchemy as sa
+    import sqlalchemy.exc
 
     db = SessionLocal()
     try:
@@ -291,10 +292,11 @@ async def lifespan(fastapi_app: FastAPI):
     # Seed default subscription plans (cloud only)
     if is_cloud():
         try:
-            from app.services.plan_limits import seed_default_plans
+            from app.services.plan_limits import seed_default_plans, prune_deprecated_plan_limits
             from app.database.config import SessionLocal
             db = SessionLocal()
             seed_default_plans(db)
+            prune_deprecated_plan_limits(db)
             db.close()
         except Exception as e:
             logger.warning(f"[Main App Startup] Plan seed failed (non-fatal): {e}")
@@ -874,6 +876,8 @@ class TrailingSlashMiddleware:
         "/api/agent",
         "/api/tenants",
         "/api/admin/tenants",
+        "/api/admin/plans",
+        "/api/admin/plan-requests",
     ]
     
     def __init__(self, app: ASGIApp):

@@ -58,6 +58,7 @@ export const COMPONENT_REGISTRY: Record<string, React.FC<any>> = {
     LogoCloud: LandingRenderers.LogoCloudRenderer,
     FeatureSection: LandingRenderers.FeatureSectionRenderer,
     Footer: LandingRenderers.FooterRenderer,
+    Pricing: LandingRenderers.PricingRenderer,
 
     // Data Components
     DataTable: DataRenderers.DataTableRenderer,

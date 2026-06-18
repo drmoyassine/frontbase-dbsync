@@ -1,0 +1,378 @@
+import React, { useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+    Layers, Plus, X, Loader2, Pencil, Trash2, Check, Star, Globe, Inbox,
+    ArrowUpCircle, ArrowDownCircle, RefreshCw,
+} from 'lucide-react';
+import {
+    adminPlansApi, Plan, LimitDef, PlanWritePayload, PlanChangeRequestAdmin,
+} from '@/services/adminPlansApi';
+import { toast } from 'sonner';
+
+const UNLIMITED = -1;
+
+const emptyDraft = (): PlanWritePayload => ({
+    slug: '', name: '', description: '', infra_mode: 'byo', price_display: '', price_period: '',
+    limits: {}, features: [], is_public: false, is_active: true, is_default: false,
+    highlighted: false, badge: '', sort_order: 0,
+});
+
+const CATEGORY_LABELS: Record<string, string> = {
+    capacity: 'Capacity',
+    operational: 'Operational (optional — ∞ = disabled)',
+    feature: 'Features',
+};
+
+export function PlansManager() {
+    const queryClient = useQueryClient();
+    const [tab, setTab] = useState<'plans' | 'requests'>('plans');
+    const [isEditorOpen, setEditorOpen] = useState(false);
+    const [editing, setEditing] = useState<Plan | null>(null);
+    const [draft, setDraft] = useState<PlanWritePayload>(emptyDraft());
+
+    const { data: plansData, isLoading } = useQuery({
+        queryKey: ['admin-plans'],
+        queryFn: () => adminPlansApi.listPlans(),
+        staleTime: 30_000,
+    });
+    const { data: registryData } = useQuery({
+        queryKey: ['admin-plan-limit-registry'],
+        queryFn: () => adminPlansApi.getLimitRegistry(),
+        staleTime: Infinity,
+    });
+    const { data: requestsData, isLoading: requestsLoading } = useQuery({
+        queryKey: ['admin-plan-requests'],
+        queryFn: () => adminPlansApi.listRequests('pending'),
+        enabled: tab === 'requests',
+        staleTime: 15_000,
+    });
+
+    const plans = plansData?.plans ?? [];
+    const registry = registryData?.limits ?? [];
+    const requests = requestsData?.requests ?? [];
+
+    const invalidatePlans = () => queryClient.invalidateQueries({ queryKey: ['admin-plans'] });
+
+    const saveMutation = useMutation({
+        mutationFn: (payload: PlanWritePayload) =>
+            editing ? adminPlansApi.updatePlan(editing.id, payload) : adminPlansApi.createPlan(payload),
+        onSuccess: () => {
+            toast.success(editing ? 'Plan updated' : 'Plan created');
+            setEditorOpen(false); setEditing(null); invalidatePlans();
+        },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to save plan'),
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => adminPlansApi.deletePlan(id),
+        onSuccess: () => { toast.success('Plan deactivated'); invalidatePlans(); },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to delete plan'),
+    });
+
+    const reviewMutation = useMutation({
+        mutationFn: ({ id, action, note }: { id: string; action: 'approve' | 'reject'; note?: string }) =>
+            action === 'approve' ? adminPlansApi.approveRequest(id, note) : adminPlansApi.rejectRequest(id, note),
+        onSuccess: (_d, v) => {
+            toast.success(v.action === 'approve' ? 'Request approved' : 'Request rejected');
+            queryClient.invalidateQueries({ queryKey: ['admin-plan-requests'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
+        },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to review request'),
+    });
+
+    const openCreate = () => { setEditing(null); setDraft(emptyDraft()); setEditorOpen(true); };
+    const openEdit = (p: Plan) => {
+        setEditing(p);
+        setDraft({
+            slug: p.slug, name: p.name, description: p.description ?? '', infra_mode: p.infra_mode,
+            price_display: p.price_display ?? '', price_period: p.price_period ?? '',
+            limits: { ...p.limits }, features: [...p.features], is_public: p.is_public,
+            is_active: p.is_active, is_default: p.is_default, highlighted: p.highlighted,
+            badge: p.badge ?? '', sort_order: p.sort_order,
+        });
+        setEditorOpen(true);
+    };
+
+    return (
+        <div className="space-y-6 max-w-7xl mx-auto">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Subscription Plans</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        Define tiers, configure limits, and review tenant upgrade / downgrade requests.
+                    </p>
+                </div>
+                {tab === 'plans' && (
+                    <button onClick={openCreate}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg text-sm font-medium transition-colors">
+                        <Plus className="w-4 h-4" /> New Plan
+                    </button>
+                )}
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
+                {([['plans', 'Plans', Layers], ['requests', 'Change Requests', Inbox]] as const).map(([key, label, Icon]) => (
+                    <button key={key} onClick={() => setTab(key)}
+                        className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                            tab === key ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+                        <Icon className="w-4 h-4" />{label}
+                        {key === 'requests' && requests.length > 0 && (
+                            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-500">{requests.length}</span>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {tab === 'plans' ? (
+                isLoading ? (
+                    <Centered><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></Centered>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {plans.map(p => (
+                            <PlanCard key={p.id} plan={p} registry={registry}
+                                onEdit={() => openEdit(p)}
+                                onDelete={() => {
+                                    if (confirm(`Deactivate plan '${p.name}'?`)) deleteMutation.mutate(p.id);
+                                }} />
+                        ))}
+                        {plans.length === 0 && <p className="text-slate-500 text-sm">No plans yet. Create one to get started.</p>}
+                    </div>
+                )
+            ) : (
+                <RequestsQueue requests={requests} loading={requestsLoading}
+                    onReview={(id, action, note) => reviewMutation.mutate({ id, action, note })}
+                    onRefresh={() => queryClient.invalidateQueries({ queryKey: ['admin-plan-requests'] })} />
+            )}
+
+            {isEditorOpen && (
+                <PlanEditor
+                    draft={draft} setDraft={setDraft} registry={registry} isEdit={!!editing}
+                    saving={saveMutation.isPending}
+                    onClose={() => { setEditorOpen(false); setEditing(null); }}
+                    onSave={() => saveMutation.mutate(draft)} />
+            )}
+        </div>
+    );
+}
+
+function Centered({ children }: { children: React.ReactNode }) {
+    return <div className="flex items-center justify-center py-20">{children}</div>;
+}
+
+function Pill({ children, tone }: { children: React.ReactNode; tone: string }) {
+    return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${tone}`}>{children}</span>;
+}
+
+function PlanCard({ plan, registry, onEdit, onDelete }: {
+    plan: Plan; registry: LimitDef[]; onEdit: () => void; onDelete: () => void;
+}) {
+    return (
+        <div className={`bg-white dark:bg-slate-900 rounded-2xl border p-5 shadow-sm flex flex-col gap-3 ${
+            plan.highlighted ? 'border-primary-500 ring-1 ring-primary-500' : 'border-slate-200 dark:border-slate-800'}`}>
+            <div className="flex items-start justify-between">
+                <div>
+                    <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-900 dark:text-white">{plan.name}</h3>
+                        <span className="text-xs font-mono text-slate-400">{plan.slug}</span>
+                    </div>
+                    <p className="text-2xl font-bold mt-1">{plan.price_display}<span className="text-sm font-normal text-slate-400">{plan.price_period}</span></p>
+                </div>
+                <div className="flex gap-1">
+                    <button onClick={onEdit} title="Edit" className="p-1.5 text-slate-400 hover:text-primary-500 hover:bg-primary-500/10 rounded-lg"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={onDelete} title="Deactivate" className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+                <Pill tone={plan.infra_mode === 'managed' ? 'bg-violet-500/10 text-violet-500' : 'bg-slate-500/10 text-slate-400'}>
+                    {plan.infra_mode === 'managed' ? 'Managed' : 'BYO infra'}
+                </Pill>
+                {plan.is_default && <Pill tone="bg-emerald-500/10 text-emerald-500">Default</Pill>}
+                {plan.is_public ? <Pill tone="bg-blue-500/10 text-blue-500">Public</Pill> : <Pill tone="bg-slate-500/10 text-slate-400">Hidden</Pill>}
+                {!plan.is_active && <Pill tone="bg-red-500/10 text-red-500">Inactive</Pill>}
+                {plan.highlighted && <Pill tone="bg-primary-500/10 text-primary-500"><Star className="w-3 h-3" />{plan.badge || 'Featured'}</Pill>}
+                <Pill tone="bg-slate-500/10 text-slate-400">{plan.tenant_count ?? 0} tenants</Pill>
+            </div>
+            <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-1">
+                {registry.filter(def => def.category !== 'operational').map(def => {
+                    const v = plan.limits[def.key];
+                    const display = def.kind === 'bool' ? (v ? 'Yes' : 'No') : (v === UNLIMITED ? 'Unlimited' : `${v ?? def.default}${def.unit || ''}`);
+                    return (
+                        <div key={def.key} className="flex justify-between text-xs">
+                            <span className="text-slate-500">{def.label}</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">{display}</span>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+function PlanEditor({ draft, setDraft, registry, isEdit, saving, onClose, onSave }: {
+    draft: PlanWritePayload; setDraft: (d: PlanWritePayload) => void; registry: LimitDef[];
+    isEdit: boolean; saving: boolean; onClose: () => void; onSave: () => void;
+}) {
+    const set = (patch: Partial<PlanWritePayload>) => setDraft({ ...draft, ...patch });
+    const setLimit = (key: string, value: number | boolean) => set({ limits: { ...(draft.limits || {}), [key]: value } });
+    const limits = draft.limits || {};
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+                <div className="sticky top-0 bg-slate-50 dark:bg-slate-950 p-5 border-b border-slate-100 dark:border-slate-850 flex justify-between items-center">
+                    <h3 className="font-bold text-lg flex items-center gap-2"><Layers className="w-5 h-5 text-primary-500" />{isEdit ? 'Edit Plan' : 'New Plan'}</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X className="w-5 h-5" /></button>
+                </div>
+                <div className="p-6 space-y-5">
+                    <div className="grid grid-cols-2 gap-4">
+                        <Field label="Name"><input value={draft.name || ''} onChange={e => set({ name: e.target.value })} className={inputCls} placeholder="Pro" /></Field>
+                        <Field label="Slug"><input value={draft.slug || ''} disabled={isEdit} onChange={e => set({ slug: e.target.value })} className={`${inputCls} font-mono disabled:opacity-50`} placeholder="pro" /></Field>
+                        <Field label="Price (display)"><input value={draft.price_display || ''} onChange={e => set({ price_display: e.target.value })} className={inputCls} placeholder="$29" /></Field>
+                        <Field label="Period"><input value={draft.price_period || ''} onChange={e => set({ price_period: e.target.value })} className={inputCls} placeholder="/month" /></Field>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Field label="Infrastructure">
+                            <select value={draft.infra_mode || 'byo'} onChange={e => set({ infra_mode: e.target.value as 'managed' | 'byo' })} className={inputCls}>
+                                <option value="byo">BYO — tenant's own edge</option>
+                                <option value="managed">Managed — Frontbase-hosted</option>
+                            </select>
+                        </Field>
+                        <Field label="Description"><textarea value={draft.description || ''} onChange={e => set({ description: e.target.value })} className={inputCls} rows={1} /></Field>
+                    </div>
+
+                    {/* Limits editor — generated from the registry, grouped by category */}
+                    {(['capacity', 'operational', 'feature'] as const).map(category => {
+                        const defs = registry.filter(d => d.category === category);
+                        if (defs.length === 0) return null;
+                        return (
+                            <div key={category}>
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{CATEGORY_LABELS[category]}</p>
+                                <div className="space-y-2">
+                                    {defs.map(def => (
+                                        <div key={def.key} className="flex items-center justify-between gap-3 py-1">
+                                            <span className="text-sm text-slate-700 dark:text-slate-300">{def.label}</span>
+                                            {def.kind === 'bool' ? (
+                                                <input type="checkbox" checked={!!(limits[def.key] ?? def.default)}
+                                                    onChange={e => setLimit(def.key, e.target.checked)} className="w-4 h-4 accent-primary-600" />
+                                            ) : (
+                                                <LimitIntInput value={(limits[def.key] as number) ?? (def.default as number)} unit={def.unit}
+                                                    onChange={v => setLimit(def.key, v)} />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    {/* Marketing features */}
+                    <Field label="Pricing-card features (one per line; blank = auto from limits)">
+                        <textarea value={(draft.features || []).join('\n')} rows={3} className={inputCls}
+                            onChange={e => set({ features: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) })}
+                            placeholder={'Up to 10,000 executions/mo\nPrivate pages'} />
+                    </Field>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <Field label="Badge"><input value={draft.badge || ''} onChange={e => set({ badge: e.target.value })} className={inputCls} placeholder="Most popular" /></Field>
+                        <Field label="Sort order"><input type="number" value={draft.sort_order ?? 0} onChange={e => set({ sort_order: Number(e.target.value) })} className={inputCls} /></Field>
+                    </div>
+                    <div className="flex flex-wrap gap-4">
+                        <Toggle label="Public (pricing page)" checked={!!draft.is_public} onChange={v => set({ is_public: v })} />
+                        <Toggle label="Active" checked={!!draft.is_active} onChange={v => set({ is_active: v })} />
+                        <Toggle label="Default plan" checked={!!draft.is_default} onChange={v => set({ is_default: v })} />
+                        <Toggle label="Highlighted" checked={!!draft.highlighted} onChange={v => set({ highlighted: v })} />
+                    </div>
+                </div>
+                <div className="sticky bottom-0 bg-white dark:bg-slate-900 p-5 border-t border-slate-100 dark:border-slate-850 flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
+                    <button onClick={onSave} disabled={saving || !draft.name || !draft.slug}
+                        className="px-5 py-2 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5">
+                        {saving && <Loader2 className="w-4 h-4 animate-spin" />}Save Plan
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function LimitIntInput({ value, unit, onChange }: { value: number; unit: string | null; onChange: (v: number) => void }) {
+    const unlimited = value === UNLIMITED;
+    return (
+        <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1 text-xs text-slate-400">
+                <input type="checkbox" checked={unlimited} onChange={e => onChange(e.target.checked ? UNLIMITED : 0)} className="w-3.5 h-3.5 accent-primary-600" />∞
+            </label>
+            <input type="number" disabled={unlimited} value={unlimited ? '' : value}
+                onChange={e => onChange(Number(e.target.value))}
+                className="w-28 text-sm text-right bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1.5 disabled:opacity-40" />
+            {unit && <span className="text-xs text-slate-400 w-6">{unit}</span>}
+        </div>
+    );
+}
+
+function RequestsQueue({ requests, loading, onReview, onRefresh }: {
+    requests: PlanChangeRequestAdmin[]; loading: boolean;
+    onReview: (id: string, action: 'approve' | 'reject', note?: string) => void; onRefresh: () => void;
+}) {
+    if (loading) return <Centered><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></Centered>;
+    if (requests.length === 0) {
+        return (
+            <div className="p-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-850 text-center space-y-3">
+                <Inbox className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
+                <h3 className="text-lg font-bold">No pending requests</h3>
+                <button onClick={onRefresh} className="text-sm text-primary-500 inline-flex items-center gap-1.5"><RefreshCw className="w-4 h-4" />Refresh</button>
+            </div>
+        );
+    }
+    return (
+        <div className="space-y-3">
+            {requests.map(r => (
+                <div key={r.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        {r.direction === 'upgrade'
+                            ? <ArrowUpCircle className="w-8 h-8 text-emerald-500 shrink-0" />
+                            : <ArrowDownCircle className="w-8 h-8 text-amber-500 shrink-0" />}
+                        <div>
+                            <p className="font-semibold text-slate-900 dark:text-white">{r.tenant_name || r.tenant_id}</p>
+                            <p className="text-sm text-slate-500">
+                                <span className="font-mono">{r.from_plan}</span> → <span className="font-mono font-semibold">{r.to_plan}</span>
+                                <span className="ml-2 text-xs uppercase">{r.direction}</span>
+                            </p>
+                            {r.note && <p className="text-xs text-slate-400 mt-1 italic">“{r.note}”</p>}
+                        </div>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                        <button onClick={() => onReview(r.id, 'reject', prompt('Reason (optional):') || undefined)}
+                            className="px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-500/10 rounded-lg">Reject</button>
+                        <button onClick={() => onReview(r.id, 'approve')}
+                            className="px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1.5"><Check className="w-4 h-4" />Approve</button>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+const inputCls = 'w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all';
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div>
+            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">{label}</label>
+            {children}
+        </div>
+    );
+}
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+    return (
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="w-4 h-4 accent-primary-600" />
+            {label}
+        </label>
+    );
+}
+
+export default PlansManager;

@@ -47,3 +47,24 @@ class TenantMember(Base):
     # Relationships
     tenant = relationship("Tenant", back_populates="members")
     user = relationship("User")
+
+
+class TenantInvite(Base):
+    """A pending invitation for someone to join a tenant as a team member.
+
+    Backs the tenant self-service "invite teammate" flow: an owner/admin creates
+    an invite (gated by the plan's ``team_members`` limit), the invitee accepts
+    via an emailed token link and is attached to this tenant on signup.
+    """
+    __tablename__ = 'tenant_invites'
+
+    id = Column(String, primary_key=True)
+    tenant_id = Column(String, ForeignKey('tenants.id'), nullable=False)
+    email = Column(String(255), nullable=False)
+    role = Column(String(20), default='editor')   # admin | editor | viewer (never owner)
+    token = Column(String(64), unique=True, nullable=False)
+    status = Column(String(20), default='pending')  # pending | accepted | revoked
+    invited_by = Column(String, nullable=False)     # user id of inviter
+    created_at = Column(String, nullable=False)
+    expires_at = Column(String, nullable=False)
+    accepted_at = Column(String, nullable=True)

@@ -18,7 +18,7 @@ import secrets
 import logging
 import uuid
 import ipaddress
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.config.edition import is_cloud
 from app.database.config import get_db, SessionLocal
@@ -68,6 +68,11 @@ class SignupRequest(BaseModel):
     password: str
     workspace_name: str
     slug: str
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+    password: str
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -879,6 +884,142 @@ async def signup(request: Request, body: SignupRequest, response: Response):
             "project_id": tenant_info["project_id"],
         },
         "message": "Workspace created successfully",
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Invite acceptance — join an EXISTING tenant via an emailed token
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _load_valid_invite(db, token: str):
+    """Return a pending, non-expired TenantInvite for the token, or None."""
+    from app.models.models import TenantInvite
+    inv = db.query(TenantInvite).filter(TenantInvite.token == token).first()
+    if not inv or str(inv.status) != "pending":
+        return None
+    try:
+        if datetime.fromisoformat(str(inv.expires_at)) < datetime.now(timezone.utc):
+            return None
+    except (ValueError, TypeError):
+        return None
+    return inv
+
+
+@router.get("/invite/{token}")
+async def get_invite(token: str):
+    """Public — return invite details for the accept page."""
+    if not is_cloud():
+        raise HTTPException(status_code=400, detail="Invites only available in cloud mode")
+    from app.database.config import SessionLocal
+    from app.models.models import Tenant
+    db = SessionLocal()
+    try:
+        inv = _load_valid_invite(db, token)
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invite is invalid, revoked, or expired")
+        tenant = db.query(Tenant).filter(Tenant.id == inv.tenant_id).first()
+        return {
+            "email": str(inv.email),
+            "role": str(inv.role),
+            "tenant_name": str(tenant.name) if tenant else None,
+            "tenant_slug": str(tenant.slug) if tenant else None,
+        }
+    finally:
+        db.close()
+
+
+@router.post("/accept-invite")
+async def accept_invite(request: Request, body: AcceptInviteRequest, response: Response):
+    """Public — create an account for the invited email and join the tenant."""
+    if not is_cloud():
+        raise HTTPException(status_code=400, detail="Invites only available in cloud mode")
+
+    from supertokens_python.recipe.emailpassword.asyncio import sign_up as st_sign_up
+    from supertokens_python.recipe.emailpassword.interfaces import SignUpOkResult, EmailAlreadyExistsError
+    from supertokens_python.recipe.session.asyncio import create_new_session
+    from supertokens_python.recipe.usermetadata.asyncio import update_user_metadata
+    from app.auth.supertokens_overrides import attach_user_to_tenant
+    from app.database.config import SessionLocal
+
+    # 1. Validate the invite
+    db = SessionLocal()
+    try:
+        inv = _load_valid_invite(db, body.token)
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invite is invalid, revoked, or expired")
+        invite_email = str(inv.email)
+        invite_role = str(inv.role)
+        tenant_id = str(inv.tenant_id)
+    finally:
+        db.close()
+
+    # 2. Create the SuperTokens user (email is fixed by the invite)
+    st_result = await st_sign_up("public", invite_email, body.password)
+    if isinstance(st_result, EmailAlreadyExistsError):
+        raise HTTPException(
+            status_code=409,
+            detail="An account with this email already exists. Please log in to accept the invite.",
+        )
+    if not isinstance(st_result, SignUpOkResult):
+        raise HTTPException(status_code=500, detail="Signup failed — unexpected error")
+    st_user = st_result.user
+    st_user_id = st_user.id
+
+    # 3. Attach to the existing tenant (hard team_members check) + mark invite accepted
+    db = SessionLocal()
+    try:
+        from app.models.models import TenantInvite
+        info = attach_user_to_tenant(
+            db, st_user_id=st_user_id, email=invite_email, tenant_id=tenant_id, role=invite_role,
+        )
+        inv = db.query(TenantInvite).filter(TenantInvite.token == body.token).first()
+        if inv is not None:
+            inv.status = "accepted"  # type: ignore[assignment]
+            inv.accepted_at = datetime.now(timezone.utc).isoformat()  # type: ignore[assignment]
+        db.commit()
+    except ValueError as e:
+        db.rollback()
+        try:
+            from supertokens_python.asyncio import delete_user
+            await delete_user(st_user_id)
+        except Exception:
+            logger.error(f"[Invite] Failed to rollback ST user {st_user_id}")
+        raise HTTPException(status_code=409, detail=str(e))
+    except Exception as e:
+        db.rollback()
+        try:
+            from supertokens_python.asyncio import delete_user
+            await delete_user(st_user_id)
+        except Exception:
+            logger.error(f"[Invite] Failed to rollback ST user {st_user_id}")
+        logger.error(f"[Invite] Attach failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to join workspace")
+    finally:
+        db.close()
+
+    # 4. Metadata + session with tenant claims
+    await update_user_metadata(st_user_id, {
+        "tenant_id": info["tenant_id"],
+        "tenant_slug": info["tenant_slug"],
+        "role": info["role"],
+    })
+    from supertokens_python.types import RecipeUserId
+    recipe_uid = st_user.login_methods[0].recipe_user_id if st_user.login_methods else RecipeUserId(st_user.id)
+    await create_new_session(
+        request, "public", recipe_uid,
+        access_token_payload={
+            "email": invite_email,
+            "tenant_id": info["tenant_id"],
+            "tenant_slug": info["tenant_slug"],
+            "role": info["role"],
+            "is_master": False,
+        },
+    )
+    logger.info(f"[Invite] {invite_email} joined tenant {info['tenant_slug']} as {info['role']}")
+    return {
+        "user": {"id": st_user_id, "email": invite_email, "tenant_id": info["tenant_id"],
+                 "tenant_slug": info["tenant_slug"], "role": info["role"], "is_master": False},
+        "message": "Joined workspace successfully",
     }
 
 

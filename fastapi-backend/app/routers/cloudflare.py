@@ -257,6 +257,13 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
                     project = get_project(db, ctx)
                     if project:
                         project_id = project.id
+                # Check edge_engines capacity quota limit (F1) — one-click deploy path
+                if ctx and ctx.tenant_id and not ctx.is_master and project_id is not None:
+                    from app.services.plan_limits import check_quota
+                    engine_count = db.query(EdgeEngine).filter(
+                        EdgeEngine.project_id == project_id
+                    ).count()
+                    check_quota(db, ctx, "edge_engines", engine_count)
                 engine = EdgeEngine(
                     id=str(uuid.uuid4()),
                     name=payload.worker_name,

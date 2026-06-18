@@ -17,7 +17,7 @@ class Page(Base):
     title = Column(String(200))
     description = Column(Text)
     keywords = Column(String(500))
-    is_public = Column(Boolean, default=False)
+    is_public = Column(Boolean, default=True)   # public by default — private is explicit (gates only fire on real private intent)
     is_homepage = Column(Boolean, default=False)
     layout_data = Column(Text, nullable=False)
     seo_data = Column(Text)

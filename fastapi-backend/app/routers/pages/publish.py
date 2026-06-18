@@ -130,6 +130,11 @@ async def publish_to_target(
         if not page:
             raise HTTPException(status_code=404, detail=f"Page not found: {page_id}")
             
+        # Check private_pages feature flag (F2)
+        if not bool(page.is_public):
+            from app.services.plan_limits import require_feature
+            require_feature(db, ctx, "private_pages")
+            
         engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
         if not engine:
             raise HTTPException(status_code=404, detail=f"Engine not found: {engine_id}")
@@ -333,6 +338,11 @@ async def publish_to_targets_batch(
         ).first()
         if not page:
             raise HTTPException(status_code=404, detail=f"Page not found: {page_id}")
+
+        # Check private_pages feature flag (F2)
+        if not bool(page.is_public):
+            from app.services.plan_limits import require_feature
+            require_feature(db, ctx, "private_pages")
 
         engines = db.query(EdgeEngine).filter(
             EdgeEngine.id.in_(engine_ids)

@@ -36,6 +36,7 @@ import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
+import AcceptInvitePage from "./pages/auth/AcceptInvitePage";
 
 // Other Pages
 import BuilderPage from "./pages/BuilderPage";
@@ -45,6 +46,7 @@ import EmbedAuthPage from "./pages/EmbedAuthPage";
 import NotFound from "./pages/NotFound";
 import { AdminRoute } from "./routes/adminRoutes";
 import { TenantsDirectory } from "./modules/admin/pages/TenantsDirectory";
+import { PlansManager } from "./modules/admin/pages/PlansManager";
 
 
 // Create QueryClient with cacheTime for persistence
@@ -140,6 +142,7 @@ const App = () => {
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
               {isCloud() && <Route path="/signup" element={<SignupPage />} />}
+              {isCloud() && <Route path="/accept-invite" element={<AcceptInvitePage />} />}
               <Route path="/embed/auth/:formId" element={<EmbedAuthPage />} />
 
               {/* Protected Routes - Require Authentication */}
@@ -168,6 +171,7 @@ const App = () => {
                   {/* Admin Tools Gated Routes */}
                   <Route element={<AdminRoute />}>
                     <Route path="/admin/tenants" element={<TenantsDirectory />} />
+                    <Route path="/admin/plans" element={<PlansManager />} />
                   </Route>
                 </Route>
 

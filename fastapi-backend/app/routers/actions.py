@@ -172,6 +172,14 @@ async def create_draft(
         if project:
             project_id = project.id
 
+    # Check workflows capacity quota limit (F1)
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        from app.services.plan_limits import check_quota
+        workflow_count = db.query(AutomationDraft).filter(
+            AutomationDraft.project_id == project_id
+        ).count()
+        check_quota(db, ctx, "workflows", workflow_count)
+
     db_draft = AutomationDraft(
         name=draft.name,
         description=draft.description,

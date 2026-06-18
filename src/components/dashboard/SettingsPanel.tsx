@@ -23,15 +23,21 @@ import { AdminInviteForm } from './settings/shared/AdminInviteForm';
 import { EdgeAPIKeysForm } from './settings/shared/EdgeAPIKeysForm';
 import { EdgeProvidersSection } from './settings/shared/EdgeProvidersSection';
 import { SecuritySettingsForm } from './settings/shared/SecuritySettingsForm';
+import { PlanUsageSection } from './settings/shared/PlanUsageSection';
+import { TenantTeamPanel } from './settings/shared/TenantTeamPanel';
+import { isCloud } from '@/lib/edition';
 
-const VALID_TABS = ['general', 'team', 'privacy', 'keys', 'accounts', 'security'] as const;
-type SettingsTab = typeof VALID_TABS[number];
+const CLOUD = isCloud();
+const VALID_TABS: string[] = CLOUD
+  ? ['general', 'plan', 'team', 'privacy', 'keys', 'accounts', 'security']
+  : ['general', 'team', 'privacy', 'keys', 'accounts', 'security'];
+type SettingsTab = string;
 
 export const SettingsPanel: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab');
-  const activeTab: SettingsTab = VALID_TABS.includes(rawTab as SettingsTab)
-    ? (rawTab as SettingsTab)
+  const activeTab: SettingsTab = rawTab && VALID_TABS.includes(rawTab)
+    ? rawTab
     : 'general';
 
   const handleTabChange = (value: string) => {
@@ -48,8 +54,9 @@ export const SettingsPanel: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-6 lg:w-[900px]">
+        <TabsList className={`grid w-full ${CLOUD ? 'grid-cols-7 lg:w-[1050px]' : 'grid-cols-6 lg:w-[900px]'}`}>
           <TabsTrigger value="general">General</TabsTrigger>
+          {CLOUD && <TabsTrigger value="plan">Plan & Usage</TabsTrigger>}
           <TabsTrigger value="team">Team</TabsTrigger>
           <TabsTrigger value="privacy">Privacy & Tracking</TabsTrigger>
           <TabsTrigger value="keys">API Keys</TabsTrigger>
@@ -78,22 +85,33 @@ export const SettingsPanel: React.FC = () => {
           </Card>
         </TabsContent>
 
+        {/* Plan & Usage Tab (cloud only) */}
+        {CLOUD && (
+          <TabsContent value="plan" className="space-y-6 mt-6">
+            <PlanUsageSection />
+          </TabsContent>
+        )}
+
         {/* Team Tab */}
         <TabsContent value="team" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Team Management
-              </CardTitle>
-              <CardDescription>
-                Invite colleagues to collaborate on this project.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <AdminInviteForm />
-            </CardContent>
-          </Card>
+          {CLOUD ? (
+            <TenantTeamPanel />
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Team Management
+                </CardTitle>
+                <CardDescription>
+                  Invite colleagues to collaborate on this project.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <AdminInviteForm />
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Privacy & Tracking Tab */}

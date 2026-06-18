@@ -368,6 +368,14 @@ async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db)
         if project:
             project_id = project.id
 
+    # Check edge_engines capacity quota limit (F1)
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        from app.services.plan_limits import check_quota
+        engine_count = db.query(EdgeEngine).filter(
+            EdgeEngine.project_id == project_id
+        ).count()
+        check_quota(db, ctx, "edge_engines", engine_count)
+
     # Inject system key into engine_config for M2M auth
     from ..services.edge_client import inject_system_key
     raw_config = json.dumps(payload.engine_config) if payload.engine_config else None

@@ -39,7 +39,7 @@ class PageCreateRequest(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     keywords: Optional[str] = None
-    is_public: Optional[bool] = Field(default=False, alias="isPublic")
+    is_public: Optional[bool] = Field(default=True, alias="isPublic")  # public by default; private is explicit (see private_pages gate)
     is_homepage: Optional[bool] = Field(default=False, alias="isHomepage")
     layout_data: Optional[Dict[str, Any]] = Field(default_factory=lambda: {"content": [], "root": {}}, alias="layoutData")
     

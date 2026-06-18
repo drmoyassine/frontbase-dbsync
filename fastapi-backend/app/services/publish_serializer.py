@@ -252,6 +252,33 @@ def convert_component(c: dict, datasources_list: list | None = None) -> dict:
         else:
             print(f"[convert_component] {comp_type} has no tableName({table_name}) or dsId({ds_id}), skipping enrichment")
 
+    # Step 3d: Handle Pricing component database plans injection
+    if comp_type == 'Pricing':
+        if 'props' not in result:
+            result['props'] = {}
+        props = result['props']
+        source = props.get('source', 'manual')
+        if source == 'frontbase_plans':
+            from app.database.config import SessionLocal as PubSessionLocal
+            from app.models.models import Plan
+            from app.services.plan_limits import plan_to_pricing_card
+            
+            pub_db = PubSessionLocal()
+            try:
+                plans = (
+                    pub_db.query(Plan)
+                    .filter(Plan.is_public == True, Plan.is_active == True)  # noqa: E712
+                    .order_by(Plan.sort_order, Plan.name)
+                    .all()
+                )
+                pricing_plans = [plan_to_pricing_card(p) for p in plans]
+                result['props']['plans'] = pricing_plans
+                print(f"[convert_component] Baked {len(pricing_plans)} public plans into Pricing component props.plans")
+            except Exception as e:
+                print(f"[convert_component] Error fetching public plans for Pricing component: {e}")
+            finally:
+                pub_db.close()
+
     # Step 4: Process children recursively
     result = process_component_children(
         result,

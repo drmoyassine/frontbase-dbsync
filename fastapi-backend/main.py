@@ -288,6 +288,17 @@ async def lifespan(fastapi_app: FastAPI):
     except Exception as e:
         logger.warning(f"[Main App Startup] Theme seed failed (non-fatal): {e}")
 
+    # Seed default subscription plans (cloud only)
+    if is_cloud():
+        try:
+            from app.services.plan_limits import seed_default_plans
+            from app.database.config import SessionLocal
+            db = SessionLocal()
+            seed_default_plans(db)
+            db.close()
+        except Exception as e:
+            logger.warning(f"[Main App Startup] Plan seed failed (non-fatal): {e}")
+
     # Load Redis settings for sync service
     try:
         from app.services.sync.redis_client import load_settings_from_db
@@ -893,6 +904,16 @@ if is_cloud():
         app.include_router(tenant_admin.router, prefix="/api/admin/tenants", tags=["Tenant Admin"])
     except ImportError:
         pass  # Tenant admin router not yet available
+    try:
+        from app.routers import admin_plans
+        app.include_router(admin_plans.router, prefix="/api/admin", tags=["Admin Plans"])
+    except ImportError:
+        pass  # Admin plans router not yet available
+    try:
+        from app.routers import plans_public
+        app.include_router(plans_public.router, prefix="/api/plans", tags=["Plans"])
+    except ImportError:
+        pass  # Public plans router not yet available
 app.include_router(auth.router)  # Auth (login, logout, /me) — works for both modes
 app.include_router(pages.router)
 app.include_router(project.router)

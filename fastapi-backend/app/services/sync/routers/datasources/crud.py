@@ -48,6 +48,17 @@ async def create_datasource(
                 detail="Tenant project not found"
             )
 
+    # Check datasources capacity quota limit (F1)
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        from app.database.config import SessionLocal as PubSessionLocal
+        from app.services.plan_limits import check_quota
+        from app.services.sync.models.datasource import Datasource as SyncDatasource
+        with PubSessionLocal() as sync_db:
+            ds_count = sync_db.query(SyncDatasource).filter(
+                SyncDatasource.project_id == project_id
+            ).count()
+            check_quota(sync_db, ctx, "datasources", ds_count)
+
     # Check for duplicate name within the same project scope
     existing_result = await db.execute(
         select(Datasource).where(

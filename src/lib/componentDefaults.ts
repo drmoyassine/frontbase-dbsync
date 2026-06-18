@@ -49,7 +49,45 @@ export function getDefaultProps(componentType: string): Record<string, any> {
     KPICard: { binding: null },
     Chart: { binding: null, chartType: 'bar' },
     Grid: { binding: null, columns: 3 },
-    Embed: { embedType: 'iframe', width: '100%', height: '400px', title: 'Embedded content', sandbox: 'allow-scripts allow-same-origin allow-forms', loading: 'lazy' }
+    Embed: { embedType: 'iframe', width: '100%', height: '400px', title: 'Embedded content', sandbox: 'allow-scripts allow-same-origin allow-forms', loading: 'lazy' },
+    Pricing: {
+      title: 'Simple, transparent pricing',
+      subtitle: 'No hidden fees. Cancel anytime.',
+      source: 'manual', // 'manual' | 'frontbase_plans'
+      plans: [
+        {
+          name: 'Starter',
+          price: 'Free',
+          period: '',
+          description: 'Basic features for personal use',
+          features: ['1 User', 'Basic Analytics', 'Standard Support'],
+          ctaText: 'Get Started',
+          ctaLink: '#',
+          highlighted: false
+        },
+        {
+          name: 'Pro',
+          price: '$29',
+          period: '/month',
+          description: 'Advanced features for scaling teams',
+          features: ['5 Users', 'Advanced Analytics', 'Priority Support', 'Custom Integration'],
+          ctaText: 'Start Trial',
+          ctaLink: '#',
+          highlighted: true,
+          badge: 'Most Popular'
+        },
+        {
+          name: 'Enterprise',
+          price: 'Custom',
+          period: '',
+          description: 'Bespoke solutions for large operations',
+          features: ['Unlimited Users', 'Dedicated Environment', '24/7 Support', 'Custom Agreements'],
+          ctaText: 'Contact Sales',
+          ctaLink: '#',
+          highlighted: false
+        }
+      ]
+    }
   };
 
   return defaults[componentType] || {};

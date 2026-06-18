@@ -51,6 +51,7 @@ class CreateTenantUserRequest(BaseModel):
     password: str
     username: Optional[str] = None
     role: str = "owner"  # owner | admin | editor | viewer
+    override_limit: bool = False  # master may deliberately exceed the tenant's team_members cap
 
 class UpdateTenantRequest(BaseModel):
     name: Optional[str] = None
@@ -89,17 +90,25 @@ class TenantDetailResponse(TenantResponse):
 import logging
 logger = logging.getLogger(__name__)
 
-PLAN_QUOTAS = {
-    "free": {
-        "executions_limit": 1000,
-    },
-    "pro": {
-        "executions_limit": 10000,
-    },
-    "enterprise": {
-        "executions_limit": 100000,
-    }
-}
+from app.services.plan_limits import get_plan, plan_limits
+
+
+def _executions_limit_for(db: Session, plan_slug: Optional[str]) -> int:
+    """Resolve the monthly shared-worker execution limit for a plan slug.
+
+    Only managed/shared tiers meter runtime (it's Frontbase's infra); BYO tiers
+    resolve to UNLIMITED (-1), which the usage bar renders as ∞.
+    """
+    return int(plan_limits(get_plan(db, plan_slug)).get("shared_worker_executions_monthly", -1))
+
+
+def _usage_stats(executions_current: int, executions_limit: int) -> "UsageStats":
+    pct = min(100.0, (executions_current / executions_limit) * 100.0) if executions_limit > 0 else 0.0
+    return UsageStats(
+        executions_current=executions_current,
+        executions_limit=executions_limit,
+        executions_percentage=pct,
+    )
 
 async def get_tenant_supabase_user_count(db: Session, tenant_id: str) -> int:
     """Fetch the number of users registered in the tenant's Supabase connection."""
@@ -218,18 +227,9 @@ async def list_tenants(
             Project.tenant_id == t.id,
             AutomationExecution.started_at >= start_of_month
         ).count()
-        
+
         plan = str(t.plan).lower() if getattr(t, 'plan', None) is not None else "free"
-        limit_info = PLAN_QUOTAS.get(plan, PLAN_QUOTAS["free"])
-        executions_limit = limit_info["executions_limit"]
-        
-        executions_percentage = min(100.0, (executions_current / executions_limit) * 100.0) if executions_limit > 0 else 0.0
-        
-        usage_stats = UsageStats(
-            executions_current=executions_current,
-            executions_limit=executions_limit,
-            executions_percentage=executions_percentage
-        )
+        usage_stats = _usage_stats(executions_current, _executions_limit_for(db, plan))
 
         result.append(TenantResponse(
             id=str(t.id),
@@ -310,18 +310,9 @@ async def get_tenant(
         Project.tenant_id == tenant_id,
         AutomationExecution.started_at >= start_of_month
     ).count()
-    
+
     plan = str(tenant.plan).lower() if getattr(tenant, 'plan', None) is not None else "free"
-    limit_info = PLAN_QUOTAS.get(plan, PLAN_QUOTAS["free"])
-    executions_limit = limit_info["executions_limit"]
-    
-    executions_percentage = min(100.0, (executions_current / executions_limit) * 100.0) if executions_limit > 0 else 0.0
-    
-    usage_stats = UsageStats(
-        executions_current=executions_current,
-        executions_limit=executions_limit,
-        executions_percentage=executions_percentage
-    )
+    usage_stats = _usage_stats(executions_current, _executions_limit_for(db, plan))
 
     return {
         "tenant": {
@@ -422,6 +413,28 @@ async def create_tenant_user(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
+    # Enforce the tenant's team_members cap (F1). This master endpoint is currently
+    # the ONLY path that adds a 2nd+ member to a tenant (new-tenant owners are
+    # created at signup; there is no tenant self-service "add teammate" yet), so the
+    # cap is enforced here rather than bypassed. The master operator may deliberately
+    # exceed it with override_limit=true (e.g. a comped seat).
+    # NOTE: when a tenant self-service teammate flow is added, also gate it there and
+    # at the membership-creation chokepoint (supertokens signup-into-existing-tenant).
+    if not body.override_limit:
+        from app.services.plan_limits import get_plan, plan_limits, UNLIMITED
+        member_count = db.query(TenantMember).filter(
+            TenantMember.tenant_id == tenant_id
+        ).count()
+        team_limit = plan_limits(get_plan(db, str(tenant.plan))).get("team_members", 1)
+        if isinstance(team_limit, int) and team_limit != UNLIMITED and member_count >= team_limit:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Tenant '{tenant.slug}' is on plan '{tenant.plan}', which allows "
+                    f"{team_limit} team member(s). Upgrade the plan or pass override_limit=true."
+                ),
+            )
+
     # Check email uniqueness
     existing_user = db.query(User).filter(User.email == body.email).first()
     if existing_user:
@@ -433,12 +446,13 @@ async def create_tenant_user(
 
     # Create user
     password_hash = hashlib.sha256(body.password.encode()).hexdigest()
+    # Note: tenant linkage is via the TenantMember row below, not User
+    # (the User model has no tenant_id column — mirrors provision_tenant).
     user = User(
         id=user_id,
         username=body.username or body.email.split("@")[0],
         email=body.email,
         password_hash=password_hash,
-        tenant_id=tenant_id,
         created_at=now,
         updated_at=now,
     )

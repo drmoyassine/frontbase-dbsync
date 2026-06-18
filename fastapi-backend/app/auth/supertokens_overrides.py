@@ -140,3 +140,65 @@ def provision_tenant(
         "project_id": project_id,
         "role": "owner",
     }
+
+
+def attach_user_to_tenant(
+    db: DBSession,
+    *,
+    st_user_id: str,
+    email: str,
+    tenant_id: str,
+    role: str,
+) -> dict:
+    """Attach a newly-signed-up user to an EXISTING tenant as a TenantMember.
+
+    Used by the invite-accept flow (joining a team) instead of ``provision_tenant``
+    (creating a new workspace).  Enforces the tenant's ``team_members`` cap at this
+    chokepoint — the authoritative point where a seat is actually consumed — so
+    concurrent invites can't exceed the plan limit.
+
+    Raises ValueError on a full workspace or missing tenant.
+    """
+    from datetime import datetime
+    import uuid as _uuid
+    from app.services.plan_limits import get_plan, plan_limits, UNLIMITED
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if tenant is None:
+        raise ValueError("Tenant no longer exists")
+
+    # Hard team_members enforcement (the chokepoint)
+    member_count = db.query(TenantMember).filter(TenantMember.tenant_id == tenant_id).count()
+    limit = plan_limits(get_plan(db, str(tenant.plan))).get("team_members", 1)
+    if isinstance(limit, int) and limit != UNLIMITED and member_count >= limit:
+        raise ValueError("This workspace has reached its team-member limit")
+
+    now = datetime.utcnow().isoformat()
+
+    # Sync user to public.users to satisfy FKs
+    user = User(
+        id=st_user_id,
+        username=email.split("@")[0] + "_" + st_user_id[:8],
+        email=email,
+        password_hash="[managed_by_supertokens]",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(user)
+
+    member = TenantMember(
+        id=str(_uuid.uuid4()),
+        tenant_id=tenant_id,
+        user_id=st_user_id,
+        role=role,
+        created_at=now,
+    )
+    db.add(member)
+    db.flush()
+    logger.info(f"[Invite] Attached user {st_user_id} to tenant {tenant_id} as {role}")
+
+    return {
+        "tenant_id": tenant_id,
+        "tenant_slug": str(tenant.slug),
+        "role": role,
+    }

@@ -5,3 +5,4 @@
 
 export { NavbarProperties } from './NavbarProperties';
 export { FooterProperties } from './FooterProperties';
+export { PricingProperties } from './PricingProperties';

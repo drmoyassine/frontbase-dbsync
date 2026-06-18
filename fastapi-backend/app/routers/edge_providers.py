@@ -260,6 +260,16 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
                 except Exception:
                     continue  # Skip accounts we can't decrypt
 
+    # Check connected_accounts capacity quota limit (F1)
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        from app.services.plan_limits import check_quota
+        proj = get_project(db, ctx)
+        if proj:
+            account_count = db.query(EdgeProviderAccount).filter(
+                EdgeProviderAccount.project_id == proj.id
+            ).count()
+            check_quota(db, ctx, "connected_accounts", account_count)
+
     now = datetime.datetime.utcnow().isoformat()
     
     credentials_str = None

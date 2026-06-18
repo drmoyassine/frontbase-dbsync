@@ -30,6 +30,7 @@ import {
     FolderGit2
 } from 'lucide-react';
 import { tenantAdminApi, TenantAdminResponse } from '@/services/tenantAdminApi';
+import { adminPlansApi } from '@/services/adminPlansApi';
 import { useAuthStore } from '@/stores/auth';
 import { toast } from 'sonner';
 
@@ -102,6 +103,16 @@ export function TenantsDirectory() {
     });
 
     const tenantsList = data?.tenants || [];
+
+    // Plan options sourced from the admin-configurable plans catalog (no hardcoded tiers)
+    const { data: plansData } = useQuery({
+        queryKey: ['admin-plans'],
+        queryFn: () => adminPlansApi.listPlans(),
+        staleTime: 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+    const planOptions = plansData?.plans ?? [];
 
     // Copy To Clipboard utility
     const copyToClipboard = (text: string, label: string) => {
@@ -320,9 +331,9 @@ export function TenantsDirectory() {
                         className="text-sm bg-slate-55 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer w-full md:w-40"
                     >
                         <option value="all">All Plans</option>
-                        <option value="free">Free</option>
-                        <option value="pro">Pro</option>
-                        <option value="enterprise">Enterprise</option>
+                        {planOptions.map(p => (
+                            <option key={p.id} value={p.slug}>{p.name}</option>
+                        ))}
                     </select>
                     <select
                         value={statusFilter}
@@ -464,7 +475,7 @@ export function TenantsDirectory() {
                                                     <div className="space-y-1.5 w-32">
                                                         <div className="flex justify-between text-xs font-medium text-slate-600 dark:text-slate-400">
                                                             <span className="font-bold text-slate-900 dark:text-white">{usage.executions_current.toLocaleString()}</span>
-                                                            <span className="text-slate-450 dark:text-slate-500">/ {usage.executions_limit.toLocaleString()}</span>
+                                                            <span className="text-slate-450 dark:text-slate-500">/ {usage.executions_limit < 0 ? '∞' : usage.executions_limit.toLocaleString()}</span>
                                                         </div>
                                                         <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden border border-slate-200 dark:border-slate-700">
                                                             <div 
@@ -641,9 +652,9 @@ export function TenantsDirectory() {
                                     onChange={(e) => setNewTenantPlan(e.target.value)}
                                     className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
                                 >
-                                    <option value="free">Free Tier</option>
-                                    <option value="pro">Pro Tier</option>
-                                    <option value="enterprise">Enterprise Tier</option>
+                                    {planOptions.map(p => (
+                                        <option key={p.id} value={p.slug}>{p.name}</option>
+                                    ))}
                                 </select>
                             </div>
 
@@ -791,9 +802,9 @@ export function TenantsDirectory() {
                                     onChange={(e) => setEditPlan(e.target.value)}
                                     className="w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4.5 py-3 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
                                 >
-                                    <option value="free">Free Tier</option>
-                                    <option value="pro">Pro Tier</option>
-                                    <option value="enterprise">Enterprise Tier</option>
+                                    {planOptions.map(p => (
+                                        <option key={p.id} value={p.slug}>{p.name}</option>
+                                    ))}
                                 </select>
                             </div>
 

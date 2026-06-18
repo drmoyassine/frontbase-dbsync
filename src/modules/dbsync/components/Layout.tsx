@@ -11,7 +11,8 @@ import {
     Workflow,
     Server,
     LogOut,
-    Shield
+    Shield,
+    Layers
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '@/stores/auth'
@@ -111,6 +112,20 @@ export function Layout() {
                             >
                                 <Shield className="w-5 h-5 text-amber-500" />
                                 <span className="font-medium">Tenants Table</span>
+                            </NavLink>
+                            <NavLink
+                                to="/admin/plans"
+                                className={({ isActive }) => `
+                                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                                    ${isActive
+                                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                                        : 'text-gray-650 hover:bg-gray-100 dark:text-gray-450 dark:hover:bg-gray-700 font-medium'
+                                    }
+                                `}
+                                onClick={() => setSidebarOpen(false)}
+                            >
+                                <Layers className="w-5 h-5 text-amber-500" />
+                                <span className="font-medium">Subscription Plans</span>
                             </NavLink>
                         </div>
                     )}

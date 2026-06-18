@@ -290,6 +290,7 @@ async def create_page_endpoint(
         # correctly in all subsequent queries. Must go into page_data BEFORE
         # calling create_page() — utils.create_page() reads project_id from the
         # dict directly (its own ctx param is unused in this path).
+        project_id = None
         if ctx and ctx.tenant_id and not ctx.is_master:
             project = (
                 db.query(Project)
@@ -297,7 +298,22 @@ async def create_page_endpoint(
                 .first()
             )
             if project:
-                page_data["project_id"] = str(project.id)
+                project_id = str(project.id)
+                page_data["project_id"] = project_id
+
+        # Check pages capacity quota limit (F1)
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            from app.services.plan_limits import check_quota
+            page_count = db.query(Page).filter(
+                Page.project_id == project_id,
+                Page.deleted_at == None
+            ).count()
+            check_quota(db, ctx, "pages", page_count)
+
+        # Check private_pages feature flag (F2)
+        if request.is_public is False:
+            from app.services.plan_limits import require_feature
+            require_feature(db, ctx, "private_pages")
 
         page = create_page(db, page_data)
         
@@ -335,6 +351,11 @@ async def update_page_endpoint(
             ).first()
             if not owned:
                 raise HTTPException(status_code=404, detail="Page not found")
+
+        # Check private_pages feature flag on update (F2)
+        if request.is_public is False:
+            from app.services.plan_limits import require_feature
+            require_feature(db, ctx, "private_pages")
 
         # Use model_dump with by_alias=False and exclude_unset=True
         page_data = request.model_dump(by_alias=False, exclude_unset=True)

@@ -53,6 +53,34 @@ async def update_project_endpoint(
     """Update project settings and sync to Edge for SSR self-sufficiency.
     Optimized: Releases DB connection before Edge sync HTTP call.
     """
+    # Check auth_providers feature flag (F2).
+    # The auth-provider binding is users_config.authDataSourceId (set by the
+    # Connect-auth-provider UI), per the [TEIRS] plan — NOT the project's own
+    # supabase_* data connection. Use a delta check so re-saving unchanged config
+    # or clearing the binding is never blocked (only newly setting/changing it is).
+    if ctx and ctx.tenant_id and not ctx.is_master and request.users_config is not None:
+        import json as _json
+        incoming = request.users_config
+        new_auth_ds = incoming.get("authDataSourceId") if isinstance(incoming, dict) else None
+        if new_auth_ds:
+            db_gate = SessionLocal()
+            try:
+                proj = get_project(db_gate, ctx)
+                current_auth_ds = None
+                cur_cfg = getattr(proj, "users_config", None) if proj is not None else None
+                if isinstance(cur_cfg, str):
+                    try:
+                        cur_cfg = _json.loads(cur_cfg)
+                    except (ValueError, TypeError):
+                        cur_cfg = None
+                if isinstance(cur_cfg, dict):
+                    current_auth_ds = cur_cfg.get("authDataSourceId")
+                if new_auth_ds != current_auth_ds:
+                    from app.services.plan_limits import require_feature
+                    require_feature(db_gate, ctx, "auth_providers")
+            finally:
+                db_gate.close()
+
     # 1. DB OPERATIONS
     db = SessionLocal()
     try:

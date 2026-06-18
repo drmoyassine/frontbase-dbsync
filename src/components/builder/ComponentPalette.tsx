@@ -100,7 +100,7 @@ const componentCategories = {
 
       { name: 'Hero', icon: Layout, description: 'Hero section with CTA', section: 'landing', isTemplate: true },
       { name: 'Features', icon: Layout, description: 'Feature cards grid', section: 'landing', isTemplate: true },
-      { name: 'Pricing', icon: DollarSign, description: 'Pricing table', section: 'landing', isTemplate: true },
+      { name: 'Pricing', icon: DollarSign, description: 'Pricing table', section: 'landing' },
       { name: 'CTA', icon: MousePointer, description: 'Call to action banner', section: 'landing', isTemplate: true },
       { name: 'Navbar', icon: Menu, description: 'Navigation bar', section: 'landing', isTemplate: true },
       { name: 'FAQ', icon: HelpCircle, description: 'FAQ accordion', section: 'landing', isTemplate: true },

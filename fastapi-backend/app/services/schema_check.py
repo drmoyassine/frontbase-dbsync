@@ -19,14 +19,28 @@ from ..database.config import Base
 
 logger = logging.getLogger(__name__)
 
+# Tables managed by the db-sync service, which has its OWN schema lifecycle (init_db /
+# its own migrations), separate from the main app's alembic chain. Excluded from this
+# check to avoid false positives on sync-managed drift (e.g. table_schema_cache columns).
+# If a sync table is added, add its name here.
+SYNC_MANAGED_TABLES: set[str] = {
+    "sync_configs", "field_mappings", "sync_jobs", "conflicts",
+    "datasource_views", "table_schema_cache", "datasources", "project_settings",
+}
+
 
 def verify_schema(engine) -> None:
-    """Raise RuntimeError if any ORM-declared column is missing from its DB table."""
+    """Raise RuntimeError if any ORM-declared column is missing from its DB table.
+
+    Only main-app tables are checked (sync-service tables manage their own schema).
+    """
     inspector = inspect(engine)
     db_tables = set(inspector.get_table_names())
 
     missing: list[str] = []
     for table_name, table in Base.metadata.tables.items():
+        if table_name in SYNC_MANAGED_TABLES:
+            continue
         if table_name not in db_tables:
             # create_all should have created it; an absent table is a different problem.
             continue

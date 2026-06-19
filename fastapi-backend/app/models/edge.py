@@ -41,9 +41,10 @@ class EdgeDatabase(Base):
     project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)            # True = pre-seeded, cannot be deleted
+    is_managed = Column(Boolean, default=False)            # True = Frontbase-provisioned (managed tier)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
-    
+
     # Relationships
     edge_engines = relationship("EdgeEngine", back_populates="edge_database")
     provider_account = relationship("EdgeProviderAccount", foreign_keys=[provider_account_id])
@@ -68,9 +69,10 @@ class EdgeCache(Base):
     project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)      # System caches are undeletable
+    is_managed = Column(Boolean, default=False)            # True = Frontbase-provisioned (managed tier)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
-    
+
     # Relationships
     edge_engines = relationship("EdgeEngine", back_populates="edge_cache")
     provider_account = relationship("EdgeProviderAccount", foreign_keys=[provider_account_id])
@@ -97,9 +99,10 @@ class EdgeQueue(Base):
     project_id = Column(String, ForeignKey('project.id'), nullable=True)
     is_default = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)
+    is_managed = Column(Boolean, default=False)            # True = Frontbase-provisioned (managed tier)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
-    
+
     # Relationships
     edge_engines = relationship("EdgeEngine", back_populates="edge_queue")
     provider_account = relationship("EdgeProviderAccount", foreign_keys=[provider_account_id])
@@ -150,6 +153,7 @@ class EdgeEngine(Base):
     is_system = Column(Boolean, default=False)           # True = pre-seeded, cannot be deleted
     is_imported = Column(Boolean, default=False)          # True = imported from provider, False = deployed from Frontbase
     is_shared = Column(Boolean, default=False)             # True = shared community engine, visible to all tenants
+    is_managed = Column(Boolean, default=False)            # True = Frontbase-provisioned (managed tier)
     bundle_checksum = Column(String(64), nullable=True)  # SHA-256 of deployed JS bundle
     config_checksum = Column(String(64), nullable=True)  # SHA-256 of local config (db+cache+adapter+secrets)
     last_deployed_at = Column(String, nullable=True)     # ISO timestamp of last successful deploy

@@ -360,4 +360,75 @@ async def revoke_tenant_addon(
     addon.status = "revoked"  # type: ignore[assignment]
     addon.updated_at = _now()  # type: ignore[assignment]
     db.commit()
+    # Deprovision the managed resources this add-on granted (best-effort).
+    await _deprovision_for_addon(db, str(addon.tenant_id), str(addon.addon_type))
+    db.commit()
     return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Managed provisioning (Frontbase-owned CF resources, gated by has_active_addon)
+# ---------------------------------------------------------------------------
+
+class ProvisionBody(BaseModel):
+    tenant_id: str
+    project_id: str
+    addon_type: str
+    name: Optional[str] = None
+
+
+@router.post("/managed/provision")
+async def provision_managed_resource(
+    body: ProvisionBody,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_master_admin),
+):
+    """Provision a Frontbase-managed resource for a tenant, gated by the matching add-on.
+
+    Code-complete against the Cloudflare contract; requires FB_OPERATOR_CF_* credentials
+    and live testing before the managed tier is enabled.
+    """
+    from app.services.plan_limits import has_active_addon
+    from app.services import managed_provisioner as mp
+
+    if not has_active_addon(db, body.tenant_id, body.addon_type):
+        raise HTTPException(status_code=403, detail=f"Tenant lacks an active '{body.addon_type}' add-on.")
+    if not mp.is_configured():
+        raise HTTPException(status_code=503, detail="Managed provisioning is not configured (operator credentials missing).")
+
+    label = body.name or f"{body.addon_type}-{body.tenant_id[:8]}"
+    try:
+        if body.addon_type == "managed_cache":
+            rid = await mp.provision_kv(db, tenant_id=body.tenant_id, project_id=body.project_id, title=label)
+            return {"success": True, "resource_id": rid, "type": "cache"}
+        if body.addon_type == "managed_edge_db":
+            rid = await mp.provision_d1(db, tenant_id=body.tenant_id, project_id=body.project_id, name=label)
+            return {"success": True, "resource_id": rid, "type": "state_db"}
+        # managed_domain / storage / queue: pending the engine-deploy / R2 / QStash integration.
+        raise HTTPException(status_code=501, detail=f"Provisioning for '{body.addon_type}' is not implemented yet.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Provisioning failed: {e}")
+
+
+async def _deprovision_for_addon(db: Session, tenant_id: str, addon_type: str) -> None:
+    """Best-effort deprovision of managed resources a tenant holds for an add-on type."""
+    from app.services import managed_provisioner as mp
+    from app.models.models import Project, EdgeDatabase, EdgeCache
+    if not mp.is_configured():
+        return
+    project_ids = [str(p.id) for p in db.query(Project).filter(Project.tenant_id == tenant_id).all()]
+    if not project_ids:
+        return
+    try:
+        if addon_type == "managed_edge_db":
+            for row in db.query(EdgeDatabase).filter(EdgeDatabase.project_id.in_(project_ids), EdgeDatabase.is_managed == True).all():  # noqa: E712
+                await mp.deprovision_d1(db, str(row.id))
+        elif addon_type == "managed_cache":
+            for row in db.query(EdgeCache).filter(EdgeCache.project_id.in_(project_ids), EdgeCache.is_managed == True).all():  # noqa: E712
+                await mp.deprovision_kv(db, str(row.id))
+    except Exception as e:
+        # Deprovision failures must not block add-on revocation; log and continue.
+        import logging
+        logging.getLogger(__name__).warning("[managed] deprovision for %s failed: %s", addon_type, e)

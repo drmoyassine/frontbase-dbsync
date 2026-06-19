@@ -41,6 +41,13 @@ def ensure_multiproject_schema(engine) -> None:
         if "project_ids" not in cols:
             statements.append("ALTER TABLE tenant_invites ADD COLUMN project_ids TEXT")
 
+    # is_managed flag on edge resources (managed-tier, Frontbase-provisioned)
+    for tname in ("edge_engines", "edge_databases", "edge_caches", "edge_queues"):
+        if tname in tables:
+            cols = {c["name"] for c in inspector.get_columns(tname)}
+            if "is_managed" not in cols:
+                statements.append(f"ALTER TABLE {tname} ADD COLUMN is_managed BOOLEAN DEFAULT 0")
+
     if not statements:
         return
     with engine.connect() as conn:

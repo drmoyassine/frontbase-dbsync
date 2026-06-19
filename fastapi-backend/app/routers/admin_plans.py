@@ -375,6 +375,11 @@ class ProvisionBody(BaseModel):
     project_id: str
     addon_type: str
     name: Optional[str] = None
+    # managed_domain only:
+    hostname: Optional[str] = None
+    zone_id: Optional[str] = None
+    service: Optional[str] = None      # CF Worker (engine) name to attach the domain to
+    engine_id: Optional[str] = None
 
 
 @router.post("/managed/provision")
@@ -404,7 +409,17 @@ async def provision_managed_resource(
         if body.addon_type == "managed_edge_db":
             rid = await mp.provision_d1(db, tenant_id=body.tenant_id, project_id=body.project_id, name=label)
             return {"success": True, "resource_id": rid, "type": "state_db"}
-        # managed_domain / storage / queue: pending the engine-deploy / R2 / QStash integration.
+        if body.addon_type == "managed_domain":
+            if not (body.hostname and body.zone_id and body.service and body.engine_id):
+                raise HTTPException(status_code=400, detail="managed_domain requires hostname, zone_id, service, engine_id.")
+            res = await mp.provision_domain(
+                db, tenant_id=body.tenant_id, project_id=body.project_id, engine_id=body.engine_id,
+                hostname=body.hostname, zone_id=body.zone_id, service=body.service,
+            )
+            return {"success": True, **res, "type": "domain"}
+        if body.addon_type == "managed_queue":
+            rid = await mp.provision_queue(db, tenant_id=body.tenant_id, project_id=body.project_id, name=label)
+            return {"success": True, "resource_id": rid, "type": "queue"}
         raise HTTPException(status_code=501, detail=f"Provisioning for '{body.addon_type}' is not implemented yet.")
     except HTTPException:
         raise

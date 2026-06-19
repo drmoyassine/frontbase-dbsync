@@ -309,9 +309,10 @@ async def create_page_endpoint(
                 Page.deleted_at == None
             ).count()
             check_quota(db, ctx, "pages", page_count)
-            # Multi-project: locked projects are read-only (downgrade over-cap).
-            from app.services.project_setup import require_project_writable
+            # Multi-project: locked projects read-only + per-project role (editor+ to write).
+            from app.services.project_setup import require_project_writable, require_project_role
             require_project_writable(db, ctx)
+            require_project_role(db, ctx, "editor")
 
         # Check private_pages feature flag (F2)
         if request.is_public is False:
@@ -354,9 +355,10 @@ async def update_page_endpoint(
             ).first()
             if not owned:
                 raise HTTPException(status_code=404, detail="Page not found")
-            # Multi-project: locked projects are read-only (downgrade over-cap).
-            from app.services.project_setup import require_project_writable
+            # Multi-project: locked read-only + editor+ role to write.
+            from app.services.project_setup import require_project_writable, require_project_role
             require_project_writable(db, ctx)
+            require_project_role(db, ctx, "editor")
 
         # Check private_pages feature flag on update (F2)
         if request.is_public is False:

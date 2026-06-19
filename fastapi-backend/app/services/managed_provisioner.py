@@ -146,6 +146,78 @@ async def provision_r2(db: Session, *, tenant_id: str, project_id: str, name: st
     return name
 
 
+async def provision_domain(
+    db: Session, *, tenant_id: str, project_id: str, engine_id: str,
+    hostname: str, zone_id: str, service: str,
+) -> dict[str, Any]:
+    """Attach a CF Workers Custom Domain to a managed engine (managed_domain add-on).
+
+    Requires the operator CF account and a zone (zone_id) for the domain in that account.
+    Records the hostname on the engine's ``engine_config.custom_domain``.
+    """
+    import json as _json
+    from app.models.models import EdgeEngine
+    result = await _cf(
+        "PUT", "accounts/{account_id}/workers/domains",
+        json_body={"environment": "production", "hostname": hostname, "zone_id": zone_id, "service": service},
+    )
+    engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
+    if engine is not None:
+        cfg = {}
+        if engine.engine_config is not None:
+            try:
+                cfg = _json.loads(str(engine.engine_config))
+            except (ValueError, TypeError):
+                cfg = {}
+        cfg["custom_domain"] = hostname
+        engine.engine_config = _json.dumps(cfg)  # type: ignore[assignment]
+        db.commit()
+    logger.info("[managed] attached custom domain %s to engine %s (tenant %s)", hostname, engine_id, tenant_id)
+    return {"hostname": hostname, "cf_domain_id": result.get("id")}
+
+
+async def provision_queue(db: Session, *, tenant_id: str, project_id: str, name: str) -> str:
+    """Provision a managed queue (Upstash QStash) — managed_queue add-on.
+
+    Upstash QStash is token-based. Requires ``FB_OPERATOR_UPSTASH_EMAIL`` /
+    ``FB_OPERATOR_UPSTASH_API_KEY``; mints a dedicated QStash token + records an
+    is_managed EdgeQueue pointing at the QStash endpoint.
+    """
+    import os as _os
+    from app.models.models import EdgeQueue
+    email = _os.getenv("FB_OPERATOR_UPSTASH_EMAIL")
+    key = _os.getenv("FB_OPERATOR_UPSTASH_API_KEY")
+    if not email or not key:
+        raise ManagedProvisioningNotConfigured(
+            "Managed queue requires FB_OPERATOR_UPSTASH_EMAIL + FB_OPERATOR_UPSTASH_API_KEY."
+        )
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            "https://sync.upstash.com/qstash/v2/tokens",
+            auth=(email, key),
+            json={"note": name},
+        )
+    data = resp.json() if resp.content else {}
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Upstash QStash token create failed: {resp.status_code} {data}")
+    token = str(data.get("token") or "")
+    row = EdgeQueue(
+        id=str(uuid.uuid4()),
+        name=name,
+        provider="qstash",
+        queue_url="https://qstash.upstash.io",
+        queue_token=token,
+        project_id=project_id,
+        is_managed=True,
+        created_at=_now(),
+        updated_at=_now(),
+    )
+    db.add(row)
+    db.commit()
+    logger.info("[managed] provisioned QStash token for tenant %s", tenant_id)
+    return str(row.id)
+
+
 # ---------------------------------------------------------------------------
 # Deprovision (on add-on revoke / tenant termination)
 # ---------------------------------------------------------------------------

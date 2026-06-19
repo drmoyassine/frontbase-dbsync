@@ -40,6 +40,10 @@ export const projectsApi = {
         return res.data;
     },
     // Shareable-resource grants (datasource / connected-account → project)
+    listProjectDatasources: async (projectId: string): Promise<{ granted: { id: string; name: string }[]; available: { id: string; name: string }[] }> => {
+        const res = await api.get(`/api/projects/${projectId}/datasources`);
+        return res.data;
+    },
     grantDatasource: async (projectId: string, datasourceId: string): Promise<{ success: boolean }> => {
         const res = await api.post(`/api/projects/${projectId}/datasources`, { resource_id: datasourceId });
         return res.data;

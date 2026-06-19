@@ -11,6 +11,7 @@ tenant↔project model, the single project becomes the default).
 """
 
 import logging
+from typing import Optional
 
 from sqlalchemy import inspect
 
@@ -158,6 +159,55 @@ def require_project_writable(db, ctx) -> None:
         raise HTTPException(
             status_code=403,
             detail="This project is locked (read-only). Upgrade your plan to re-activate it.",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Per-project roles (owner/admin account = full; members = project_members role)
+# ---------------------------------------------------------------------------
+
+_ROLE_RANK = {"viewer": 1, "editor": 2, "admin": 3}
+
+
+def effective_project_role(db, ctx) -> Optional[str]:
+    """The user's role for the active project: 'admin' for owner/admin accounts, their
+    project_members role for members, or None if they have no access."""
+    if not ctx or not getattr(ctx, "tenant_id", None):
+        return None
+    if getattr(ctx, "role", None) in ("owner", "admin", "master"):
+        return "admin"
+    from app.models.models import ProjectMember
+    pid = getattr(ctx, "active_project_id", None)
+    if not pid:
+        return None
+    row = (
+        db.query(ProjectMember)
+        .filter(
+            ProjectMember.tenant_id == ctx.tenant_id,
+            ProjectMember.project_id == pid,
+            ProjectMember.user_id == ctx.user_id,
+        )
+        .first()
+    )
+    return str(row.role) if row is not None else None
+
+
+def require_project_role(db, ctx, min_role: str) -> None:
+    """403 if the user's effective project role is below ``min_role`` (viewer < editor < admin).
+
+    Owner/admin accounts pass as 'admin'. Used to enforce editor+ for writes (viewers are
+    read-only). No-op for self-host / master (no project membership model there).
+    """
+    from fastapi import HTTPException
+    if ctx is None or getattr(ctx, "is_master", False) or not getattr(ctx, "tenant_id", None):
+        return  # self-host / master: no per-project membership to enforce
+    eff = effective_project_role(db, ctx)
+    if eff is None:
+        raise HTTPException(status_code=403, detail="You do not have access to this project.")
+    if _ROLE_RANK.get(eff, 0) < _ROLE_RANK.get(min_role, 0):
+        raise HTTPException(
+            status_code=403,
+            detail=f"This action requires the {min_role} role in this project.",
         )
 
 

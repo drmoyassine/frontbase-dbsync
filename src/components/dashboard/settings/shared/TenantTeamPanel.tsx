@@ -11,7 +11,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Mail, X, UserPlus, Check } from 'lucide-react';
+import { Loader2, Mail, X, UserPlus, Check, Database } from 'lucide-react';
 import { tenantTeamApi } from '@/services/tenantTeamApi';
 import { tenantPlanApi } from '@/services/tenantPlanApi';
 import { projectsApi } from '@/services/projectsApi';
@@ -187,6 +187,7 @@ export const TenantTeamPanel: React.FC = () => {
             </Card>
 
             {activeProjectId && <ProjectMembersCard projectId={activeProjectId} canManage={canManage} />}
+            {activeProjectId && <SharedDataSourcesCard projectId={activeProjectId} canManage={canManage} />}
         </div>
     );
 };
@@ -258,6 +259,74 @@ const ProjectMembersCard: React.FC<{ projectId: string; canManage: boolean }> = 
                             {addMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Grant'}
                         </Button>
                     </form>
+                )}
+            </CardContent>
+        </Card>
+    );
+};
+
+/** Shared data sources for the active project — grant/revoke cross-project sharing. */
+const SharedDataSourcesCard: React.FC<{ projectId: string; canManage: boolean }> = ({ projectId, canManage }) => {
+    const queryClient = useQueryClient();
+    const [pick, setPick] = useState('');
+    const { data, isLoading } = useQuery({
+        queryKey: ['project-datasources', projectId],
+        queryFn: () => projectsApi.listProjectDatasources(projectId),
+        staleTime: 30_000,
+    });
+
+    const refresh = () => queryClient.invalidateQueries({ queryKey: ['project-datasources', projectId] });
+    const grantMutation = useMutation({
+        mutationFn: () => projectsApi.grantDatasource(projectId, pick),
+        onSuccess: () => { toast.success('Data source shared'); setPick(''); refresh(); },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to share'),
+    });
+    const revokeMutation = useMutation({
+        mutationFn: (id: string) => projectsApi.revokeDatasource(projectId, id),
+        onSuccess: () => { toast.success('Removed'); refresh(); },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to remove'),
+    });
+
+    const granted = data?.granted ?? [];
+    const available = data?.available ?? [];
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5" />Shared Data Sources</CardTitle>
+                <CardDescription>Data sources this project can use. Share across projects without duplicating connections.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {isLoading ? (
+                    <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                ) : granted.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No shared data sources yet.</p>
+                ) : (
+                    <ul className="divide-y divide-border rounded-lg border border-border">
+                        {granted.map((d) => (
+                            <li key={d.id} className="flex items-center justify-between px-4 py-2.5">
+                                <span className="truncate text-sm">{d.name}</span>
+                                {canManage && (
+                                    <Button variant="ghost" size="sm" onClick={() => revokeMutation.mutate(d.id)} disabled={revokeMutation.isPending}>
+                                        <X className="w-4 h-4 mr-1" />Remove
+                                    </Button>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+
+                {canManage && available.length > 0 && (
+                    <div className="flex gap-2">
+                        <select value={pick} onChange={(e) => setPick(e.target.value)}
+                            className="flex-1 h-10 rounded-md border border-input bg-background px-3 text-sm">
+                            <option value="">Share a data source…</option>
+                            {available.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                        <Button onClick={() => pick && grantMutation.mutate()} disabled={!pick || grantMutation.isPending}>
+                            {grantMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Share'}
+                        </Button>
+                    </div>
                 )}
             </CardContent>
         </Card>

@@ -179,6 +179,9 @@ async def create_draft(
             AutomationDraft.project_id == project_id
         ).count()
         check_quota(db, ctx, "workflows", workflow_count)
+        # Multi-project: per-project role — editor+ to create workflows (viewer read-only).
+        from app.services.project_setup import require_project_role
+        require_project_role(db, ctx, "editor")
 
     db_draft = AutomationDraft(
         name=draft.name,

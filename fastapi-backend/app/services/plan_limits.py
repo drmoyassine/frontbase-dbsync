@@ -409,7 +409,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
         "infra_mode": "managed", "price_display": "$1.99", "price_period": "/mo",
         "is_public": True, "highlighted": True, "badge": "Best value", "sort_order": 1,
         "limits": {
-            "projects": 1,
+            "projects": 3,
             "pages": 50, "workflows": 25, "datasources": 3, "connected_accounts": 3,
             "edge_engines": 1, "team_members": 3,
             "deploys_monthly": 500, "log_retention_hours": 2160, "shared_worker_executions_monthly": 10000,

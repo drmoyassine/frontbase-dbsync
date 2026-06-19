@@ -198,8 +198,19 @@ async def delete_project(
             raise HTTPException(status_code=404, detail="Project not found")
         if bool(project.is_default):
             raise HTTPException(status_code=400, detail="The default project cannot be deleted")
-        # Note: callers should ensure the project is empty (no pages/engines) first;
-        # cascade behaviour for a non-empty project is a separate decision (see plan).
+        # Decision: a project must be EMPTY before it can be deleted (never destroy work).
+        # The caller deletes/moves its pages first. Engines/datasources are unscoped, not deleted.
+        from app.models.models import Page
+        page_count = (
+            db.query(Page)
+            .filter(Page.project_id == project_id, Page.deleted_at == None)  # noqa: E711
+            .count()
+        )
+        if page_count > 0:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Delete this project's {page_count} page(s) first — projects must be empty to be deleted (no data loss).",
+            )
         db.delete(project)
         db.commit()
         return {"success": True}
@@ -380,6 +391,39 @@ def _resource_belongs_to_tenant(db: Session, model, resource_id: str, tenant_id:
 
 
 # ---- Datasources (shareable, per-project capped on grant) ----
+
+@router.get("/{project_id}/datasources")
+async def list_project_datasources(
+    project_id: str,
+    ctx: TenantContext = Depends(require_tenant_context),
+):
+    """Datasources for the active project: ``granted`` (shared in, revocable) and
+    ``available`` (tenant datasources not yet in this project, grantable)."""
+    if ctx.is_master or not ctx.tenant_id:
+        raise HTTPException(status_code=404, detail="No tenant associated with this user")
+    from app.services.sync.models.datasource import Datasource
+    db = SessionLocal()
+    try:
+        _require_project(db, project_id, ctx)
+        tenant_project_ids = [
+            str(p.id) for p in db.query(Project).filter(Project.tenant_id == ctx.tenant_id).all()
+        ]
+        all_ds = (
+            db.query(Datasource).filter(Datasource.project_id.in_(tenant_project_ids)).all()
+            if tenant_project_ids else []
+        )
+        in_project = {str(d.id) for d in all_ds if str(d.project_id) == project_id}
+        granted_rows = (
+            db.query(ProjectDatasource).filter(ProjectDatasource.project_id == project_id).all()
+        )
+        granted_ids = {str(g.datasource_id) for g in granted_rows}
+        in_project |= granted_ids
+        granted = [{"id": str(d.id), "name": str(d.name)} for d in all_ds if str(d.id) in granted_ids]
+        available = [{"id": str(d.id), "name": str(d.name)} for d in all_ds if str(d.id) not in in_project]
+        return {"granted": granted, "available": available}
+    finally:
+        db.close()
+
 
 @router.post("/{project_id}/datasources", status_code=201)
 async def grant_datasource(project_id: str, body: GrantBody, ctx: TenantContext = Depends(require_tenant_context)):

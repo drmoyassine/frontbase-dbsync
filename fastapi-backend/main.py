@@ -650,66 +650,102 @@ if is_cloud():
     app.add_middleware(get_middleware())
 
 # --- Register Advanced Security Middlewares ---
+#
+# ip-blocklist and security-headers are pure-ASGI (not @app.middleware, which
+# wraps in Starlette's BaseHTTPMiddleware). Each nested BaseHTTPMiddleware spins
+# up a body-buffering task group around the response; when a route returns a
+# StreamingResponse (e.g. /api/agent/chat), that nesting collides with the
+# stream's disconnect listener and crashes with
+# "RuntimeError: Unexpected message received: http.request". Keeping these two
+# as pure ASGI leaves waf_middleware as the lone BaseHTTPMiddleware. Their
+# add_middleware calls stay in this source position so the resulting stack order
+# (and thus ProxyHeaders-before-ip-blocklist client-IP handling) is unchanged.
+from starlette.datastructures import MutableHeaders
+
 
 # 1. IP Blocklist Middleware (checks blocked ranges early)
-@app.middleware("http")
-async def ip_blocklist_middleware(request: Request, call_next):
-    if request.url.path in ("/health", "/health/", "/"):
-        return await call_next(request)
+class IPBlocklistMiddleware:
+    def __init__(self, app):
+        self.app = app
 
-    client_ip = request.client.host if request.client else None
-    if client_ip:
-        global _L1_LAST_LOADED
-        # Refresh at most once per 10s. An empty blocklist is the normal state
-        # (no banned IPs), so it must NOT force a reload — otherwise every request
-        # re-hits Redis, which adds a ~5s DNS timeout per request when Redis is
-        # unavailable (e.g. local dev). Advance the timestamp before the attempt
-        # so a failing load is also rate-limited rather than retried every request.
-        if time.time() - _L1_LAST_LOADED > 10.0:
-            _L1_LAST_LOADED = time.time()
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        if scope["path"] in ("/health", "/health/", "/"):
+            return await self.app(scope, receive, send)
+
+        client = scope.get("client")
+        client_ip = client[0] if client else None
+        if client_ip:
+            global _L1_LAST_LOADED
+            # Refresh at most once per 10s. An empty blocklist is the normal state
+            # (no banned IPs), so it must NOT force a reload — otherwise every request
+            # re-hits Redis, which adds a ~5s DNS timeout per request when Redis is
+            # unavailable (e.g. local dev). Advance the timestamp before the attempt
+            # so a failing load is also rate-limited rather than retried every request.
+            if time.time() - _L1_LAST_LOADED > 10.0:
+                _L1_LAST_LOADED = time.time()
+                try:
+                    await load_blocklist_async()
+                except Exception as e:
+                    logger.error(f"Error loading blocklist: {e}")
+
+            is_blocked = False
             try:
-                await load_blocklist_async()
-            except Exception as e:
-                logger.error(f"Error loading blocklist: {e}")
-                
-        is_blocked = False
-        try:
-            ip_obj = ipaddress.ip_address(client_ip)
-            for network in _L1_BLOCKLIST:
-                if ip_obj in network:
-                    is_blocked = True
-                    break
-        except Exception:
-            pass
-            
-        if is_blocked:
-            logger.warning(f"Blocked connection from banned client IP: {client_ip}")
-            return JSONResponse(status_code=403, content={"detail": "Forbidden: Access denied."})
-            
-    return await call_next(request)
+                ip_obj = ipaddress.ip_address(client_ip)
+                for network in _L1_BLOCKLIST:
+                    if ip_obj in network:
+                        is_blocked = True
+                        break
+            except Exception:
+                pass
+
+            if is_blocked:
+                logger.warning(f"Blocked connection from banned client IP: {client_ip}")
+                response = JSONResponse(status_code=403, content={"detail": "Forbidden: Access denied."})
+                return await response(scope, receive, send)
+
+        await self.app(scope, receive, send)
+
+app.add_middleware(IPBlocklistMiddleware)
 
 
 # 2. Security Headers Middleware
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["X-Frame-Options"] = "SAMEORIGIN"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    if os.getenv("DEPLOYMENT_MODE") == "production":
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        
-    # Content Security Policy for non-API requests (HTML content)
-    if not request.url.path.startswith("/api/"):
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: blob: https:; "
-            "font-src 'self' data: https:; "
-            "connect-src 'self' https:; "
-            "frame-ancestors 'self'"
-        )
-    return response
+class SecurityHeadersMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        is_api = scope["path"].startswith("/api/")
+        is_production = os.getenv("DEPLOYMENT_MODE") == "production"
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["X-Frame-Options"] = "SAMEORIGIN"
+                headers["X-Content-Type-Options"] = "nosniff"
+                if is_production:
+                    headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+                # Content Security Policy for non-API requests (HTML content)
+                if not is_api:
+                    headers["Content-Security-Policy"] = (
+                        "default-src 'self'; "
+                        "script-src 'self' 'unsafe-inline'; "
+                        "style-src 'self' 'unsafe-inline'; "
+                        "img-src 'self' data: blob: https:; "
+                        "font-src 'self' data: https:; "
+                        "connect-src 'self' https:; "
+                        "frame-ancestors 'self'"
+                    )
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 # 3. WAF Middleware (scans write payload requests)
@@ -736,9 +772,23 @@ async def waf_middleware(request: Request, call_next):
             content_type = request.headers.get("content-type", "")
             if "application/json" in content_type:
                 body_bytes = await request.body()
-                
+
+                # Reading the body drains the ASGI receive stream, so the
+                # downstream route would otherwise hang waiting for a body. Replay
+                # the buffered body exactly once, then delegate to the original
+                # receive. Delegating (rather than returning http.request forever)
+                # is essential for StreamingResponse routes: their disconnect
+                # listener must still receive http.disconnect, otherwise it raises
+                # "Unexpected message received: http.request".
+                original_receive = request._receive
+                _body_replayed = False
+
                 async def receive():
-                    return {"type": "http.request", "body": body_bytes, "more_body": False}
+                    nonlocal _body_replayed
+                    if not _body_replayed:
+                        _body_replayed = True
+                        return {"type": "http.request", "body": body_bytes, "more_body": False}
+                    return await original_receive()
                 request._receive = receive
                 
                 try:

@@ -134,6 +134,9 @@ async def publish_to_target(
         if ctx and ctx.tenant_id and not ctx.is_master:
             from app.services.project_setup import require_project_writable
             require_project_writable(db, ctx)
+            # Operational cap: deploys / republishes per month (publish-pipeline cost).
+            from app.services.plan_limits import check_quota, count_deploys_this_month
+            check_quota(db, ctx, "deploys_monthly", count_deploys_this_month(db, ctx.tenant_id))
 
         # Check private_pages feature flag (F2)
         if not bool(page.is_public):
@@ -343,6 +346,13 @@ async def publish_to_targets_batch(
         ).first()
         if not page:
             raise HTTPException(status_code=404, detail=f"Page not found: {page_id}")
+
+        # Multi-project + operational caps (same gates as single-target publish).
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            from app.services.project_setup import require_project_writable
+            require_project_writable(db, ctx)
+            from app.services.plan_limits import check_quota, count_deploys_this_month
+            check_quota(db, ctx, "deploys_monthly", count_deploys_this_month(db, ctx.tenant_id))
 
         # Check private_pages feature flag (F2)
         if not bool(page.is_public):

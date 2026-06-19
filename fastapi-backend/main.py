@@ -316,6 +316,17 @@ async def lifespan(fastapi_app: FastAPI):
         except Exception as e:
             logger.warning(f"[Main App Startup] Multi-project setup failed (non-fatal): {e}")
 
+    # Prune execution history per plan retention (also scheduled via celery beat)
+    if is_cloud():
+        try:
+            from app.services.log_retention import prune_old_executions
+            from app.database.config import SessionLocal
+            db = SessionLocal()
+            prune_old_executions(db)
+            db.close()
+        except Exception as e:
+            logger.warning(f"[Main App Startup] Retention prune failed (non-fatal): {e}")
+
     # Load Redis settings for sync service
     try:
         from app.services.sync.redis_client import load_settings_from_db

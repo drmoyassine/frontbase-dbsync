@@ -17,13 +17,6 @@ import json
 import logging
 from typing import AsyncGenerator, Any
 
-from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.providers.anthropic import AnthropicProvider
-from pydantic_ai.providers.google import GoogleProvider
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -31,6 +24,10 @@ from .agent_tools import register_workspace_tools
 from ..core.security import get_provider_creds
 from ..models.models import EdgeProviderAccount
 from ..database.config import SessionLocal
+
+# pydantic_ai is an OPTIONAL dependency (the Master Admin Workspace Agent). It is imported
+# lazily inside _build_model / execute_agent_turn so the app — and the test suite — import and
+# run without it. The agent endpoints degrade gracefully (error event) when it is absent.
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +115,13 @@ def _resolve_llm_credentials(
 
 def _build_model(api_key: str, model_id: str, provider_type: str) -> Any:
     """Build a PydanticAI model object for the given provider."""
+    from pydantic_ai.models.openai import OpenAIModel
+    from pydantic_ai.models.anthropic import AnthropicModel
+    from pydantic_ai.models.google import GoogleModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+    from pydantic_ai.providers.google import GoogleProvider
+
     if provider_type == "anthropic":
         return AnthropicModel(
             model_id,
@@ -189,6 +193,8 @@ async def execute_agent_turn(
         return
 
     # Create agent with tools
+    from pydantic_ai import Agent
+
     agent = Agent(
         model,
         system_prompt=system_prompt or WORKSPACE_SYSTEM_PROMPT,

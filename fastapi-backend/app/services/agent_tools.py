@@ -11,7 +11,6 @@ import json
 import logging
 from typing import Any
 
-from pydantic_ai import Agent, RunContext
 from sqlalchemy.orm import Session
 
 from ..models.models import Page, EdgeEngine, EdgeProviderAccount
@@ -189,8 +188,12 @@ def _providers_list_impl(db: Session) -> dict[str, Any]:
 # PydanticAI Tool Registration
 # =============================================================================
 
-def register_workspace_tools(agent: Agent) -> None:
-    """Register all workspace tools on a PydanticAI agent."""
+def register_workspace_tools(agent: Any) -> None:
+    """Register all workspace tools on a PydanticAI agent.
+
+    ``agent`` is a ``pydantic_ai.Agent`` at runtime; typed ``Any`` so this module imports
+    without the optional ``pydantic_ai`` dependency (the AI agent feature degrades gracefully).
+    """
 
     @agent.tool_plain
     def pages_list() -> str:

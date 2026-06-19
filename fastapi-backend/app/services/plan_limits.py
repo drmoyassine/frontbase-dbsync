@@ -178,6 +178,26 @@ def has_active_addon(db: Session, tenant_id: str, addon_type: str) -> bool:
     return addon_type in get_active_addons(db, tenant_id)
 
 
+def count_deploys_this_month(db: Session, tenant_id: str) -> int:
+    """Distinct (page → engine) publish targets deployed this month for the tenant.
+
+    Each publish updates ``PageDeployment.published_at``; the (page, engine) row is
+    unique, so this counts distinct publish *targets* touched this month — redeploys
+    of the same target within the month count once (encourages iteration, caps breadth).
+    Drives the ``deploys_monthly`` operational cap.
+    """
+    from app.models.models import PageDeployment, Page, Project
+    now = datetime.now(timezone.utc)
+    start_of_month = datetime(now.year, now.month, 1, tzinfo=timezone.utc).isoformat()
+    return (
+        db.query(PageDeployment)
+        .join(Page, PageDeployment.page_id == Page.id)
+        .join(Project, Page.project_id == Project.id)
+        .filter(Project.tenant_id == tenant_id, PageDeployment.published_at >= start_of_month)
+        .count()
+    )
+
+
 # ---------------------------------------------------------------------------
 # Projects-cap reconciliation (downgrade locks excess projects; upgrade unlocks)
 # ---------------------------------------------------------------------------
@@ -379,7 +399,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "projects": 1,
             "pages": 10, "workflows": 5, "datasources": 1, "connected_accounts": 1,
             "edge_engines": 0, "team_members": 1,
-            "deploys_monthly": _OFF, "log_retention_hours": _OFF, "shared_worker_executions_monthly": _OFF,
+            "deploys_monthly": 50, "log_retention_hours": 720, "shared_worker_executions_monthly": 1000,
             "private_pages": False, "auth_providers": False, "remove_branding": False, "api_access": False,
         },
         "features": ["10 pages, 5 workflows", "Community / shared workers", "Public pages only"],
@@ -392,7 +412,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "projects": 1,
             "pages": 50, "workflows": 25, "datasources": 3, "connected_accounts": 3,
             "edge_engines": 1, "team_members": 3,
-            "deploys_monthly": _OFF, "log_retention_hours": _OFF, "shared_worker_executions_monthly": _OFF,
+            "deploys_monthly": 500, "log_retention_hours": 2160, "shared_worker_executions_monthly": 10000,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
         },
         "features": ["Managed dedicated engine + state DB", "Private / auth-gated pages", "Connect auth providers", "No infra setup"],
@@ -405,7 +425,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "projects": 3,
             "pages": 200, "workflows": 50, "datasources": 10, "connected_accounts": 10,
             "edge_engines": 3, "team_members": 10,
-            "deploys_monthly": _OFF, "log_retention_hours": _OFF, "shared_worker_executions_monthly": _OFF,
+            "deploys_monthly": 5000, "log_retention_hours": 8760, "shared_worker_executions_monthly": _OFF,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
         },
         "features": ["Bring your own edge", "200 pages, 50 workflows", "Private pages & auth"],

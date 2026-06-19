@@ -327,6 +327,18 @@ async def lifespan(fastapi_app: FastAPI):
         except Exception as e:
             logger.warning(f"[Main App Startup] Retention prune failed (non-fatal): {e}")
 
+    # Fail fast on schema drift: halt startup if the ORM expects a column the DB lacks
+    # (e.g. a model column added without a migration). FB_ALLOW_SCHEMA_DRIFT=1 to bypass.
+    try:
+        from app.services.schema_check import verify_schema
+        from app.database.config import engine
+        verify_schema(engine)
+        logger.info("[Main App Startup] ✅ Schema verification passed (no column drift)")
+    except RuntimeError:
+        raise  # hard stop — serving with a broken schema only produces 500s
+    except Exception as e:
+        logger.warning(f"[Main App Startup] Schema verification could not run (non-fatal): {e}")
+
     # Load Redis settings for sync service
     try:
         from app.services.sync.redis_client import load_settings_from_db

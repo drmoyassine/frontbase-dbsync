@@ -20,7 +20,12 @@ dnspython==2.8.0
 ecdsa==0.19.1
 email-validator==2.3.0
 fastapi>=0.135.0
-pydantic-ai>=1.81.0
+# pydantic-ai-slim, not the full `pydantic-ai` meta-package: the meta-package pulls
+# EVERY provider extra (temporal/bedrock/cohere/huggingface/...), which both bloats
+# the install and fails on Windows long-path installs (e.g. temporalio's deep .proto
+# tree). We only use OpenAI/Anthropic/Google; Ollama & workers_ai ride the OpenAI-
+# compatible API, so the openai extra covers them.
+pydantic-ai-slim[openai,anthropic,google]>=1.81.0
 greenlet==3.3.0
 h11==0.16.0
 httpcore==1.0.9

@@ -110,6 +110,16 @@ function useSSEChat(apiUrl: string, bodyPayload: Record<string, unknown>) {
                                 next[lastIdx] = { ...next[lastIdx], content: accumulatedContent };
                                 return next;
                             });
+                        } else if (event.type === 'tool_result') {
+                            // Acknowledge the tool returned (keeps the contract honored end-to-end;
+                            // the assistant's follow-up text carries the actual answer)
+                            accumulatedContent += `\n  ✓ ${event.name}\n`;
+                            setMessages(prev => {
+                                const next = [...prev];
+                                const lastIdx = next.length - 1;
+                                next[lastIdx] = { ...next[lastIdx], content: accumulatedContent };
+                                return next;
+                            });
                         } else if (event.type === 'done') {
                             break;
                         }

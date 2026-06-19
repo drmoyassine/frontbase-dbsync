@@ -154,6 +154,34 @@ def _sse_event(data: dict) -> str:
     return f"data: {json.dumps(data)}\n\n"
 
 
+def _serialize_tool_args(part: Any) -> Any:
+    """Best-effort serialization of a ToolCallPart's args for the SSE ``tool_call`` event."""
+    try:
+        args_as_dict = getattr(part, "args_as_dict", None)
+        if callable(args_as_dict):
+            return args_as_dict()
+    except Exception:
+        pass
+    args = getattr(part, "args", None)
+    if isinstance(args, (dict, list, str)):
+        return args
+    return None
+
+
+def _serialize_tool_result(part: Any) -> str:
+    """Best-effort string serialization of a tool result part (ToolReturnPart / RetryPromptPart)."""
+    serialized = getattr(part, "serialized", None)
+    if isinstance(serialized, str) and serialized:
+        return serialized
+    content = getattr(part, "content", None)
+    if isinstance(content, str):
+        return content
+    try:
+        return json.dumps(content, default=str)
+    except Exception:
+        return str(content)
+
+
 async def execute_agent_turn(
     messages: list[dict],
     system_prompt: str | None = None,
@@ -237,13 +265,38 @@ async def execute_agent_turn(
 
     logger.info(f"[Agent] Streaming turn with {provider_type}/{resolved_model_id} | {len(history)} history msgs")
 
+    # Iterate the agent graph node-by-node so we can BOTH stream text deltas AND
+    # surface tool calls/results as discrete SSE events (the contract the frontend
+    # expects: text | tool_call | tool_result | done). The higher-level
+    # run_stream()/stream_text() abstracts tool activity away, which would leave the
+    # chat UI blind to tool steps — so we drop to the node stream instead.
     try:
-        async with agent.run_stream(
+        async with agent.iter(
             prompt,
             message_history=history if history else None,
-        ) as result:
-            async for text in result.stream_text(delta=True):
-                yield _sse_event({"type": "text", "content": text})
+        ) as agent_run:
+            async for node in agent_run:
+                if Agent.is_model_request_node(node):
+                    async with node.stream(agent_run.ctx) as stream:
+                        async for delta in stream.stream_text(delta=True):
+                            if delta:
+                                yield _sse_event({"type": "text", "content": delta})
+                elif Agent.is_call_tools_node(node):
+                    async with node.stream(agent_run.ctx) as tool_events:
+                        async for event in tool_events:
+                            kind = getattr(event, "event_kind", "")
+                            if kind == "function_tool_call":
+                                yield _sse_event({
+                                    "type": "tool_call",
+                                    "name": getattr(event.part, "tool_name", "tool"),
+                                    "args": _serialize_tool_args(event.part),
+                                })
+                            elif kind == "function_tool_result":
+                                yield _sse_event({
+                                    "type": "tool_result",
+                                    "name": getattr(event.part, "tool_name", "tool"),
+                                    "result": _serialize_tool_result(event.part),
+                                })
     except Exception as e:
         logger.error(f"[Agent] Stream error: {e}")
         yield _sse_event({"type": "text", "content": f"Agent error: {str(e)}"})

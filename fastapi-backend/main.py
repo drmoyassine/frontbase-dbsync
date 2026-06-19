@@ -651,15 +651,15 @@ if is_cloud():
 
 # --- Register Advanced Security Middlewares ---
 #
-# ip-blocklist and security-headers are pure-ASGI (not @app.middleware, which
-# wraps in Starlette's BaseHTTPMiddleware). Each nested BaseHTTPMiddleware spins
-# up a body-buffering task group around the response; when a route returns a
-# StreamingResponse (e.g. /api/agent/chat), that nesting collides with the
-# stream's disconnect listener and crashes with
-# "RuntimeError: Unexpected message received: http.request". Keeping these two
-# as pure ASGI leaves waf_middleware as the lone BaseHTTPMiddleware. Their
-# add_middleware calls stay in this source position so the resulting stack order
-# (and thus ProxyHeaders-before-ip-blocklist client-IP handling) is unchanged.
+# All three are pure-ASGI (not @app.middleware, which wraps in Starlette's
+# BaseHTTPMiddleware). A BaseHTTPMiddleware wraps the response in a body-buffering
+# task group; when a route returns a StreamingResponse (e.g. /api/agent/chat) that
+# collides with the stream's disconnect listener and crashes with
+# "RuntimeError: Unexpected message received: http.request" — even with a single
+# BaseHTTPMiddleware once it reads the request body. Keeping all of these pure-ASGI
+# leaves zero BaseHTTPMiddleware in the stack. Their add_middleware calls stay in
+# this source position so the resulting stack order (and thus
+# ProxyHeaders-before-ip-blocklist client-IP handling) is unchanged.
 from starlette.datastructures import MutableHeaders
 
 
@@ -749,127 +749,153 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 
 # 3. WAF Middleware (scans write payload requests)
-@app.middleware("http")
-async def waf_middleware(request: Request, call_next):
-    if request.method in ("POST", "PUT", "DELETE"):
-        if is_waf_enabled():
-            client_ip = request.client.host if request.client else "unknown"
-            
-            # Check Admin Exemption first
-            is_admin = False
-            admin_user_id = None
+#
+# Pure-ASGI, NOT BaseHTTPMiddleware. A BaseHTTPMiddleware that reads the request
+# body (via request.body()) and then lets a route return a StreamingResponse
+# crashes with "RuntimeError: Unexpected message received: http.request": its
+# internal _CachedRequest replays the buffered http.request into the stream's
+# disconnect listener. Reproduces even as the *only* BaseHTTPMiddleware. Buffer
+# the body off the raw ASGI receive instead, scan it, then replay it downstream
+# through a plain receive callable — no _CachedRequest, no crash.
+class WAFMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        if scope["method"] not in ("POST", "PUT", "DELETE") or not is_waf_enabled():
+            return await self.app(scope, receive, send)
+
+        request = Request(scope, receive)  # headers/cookies only — body not read here
+        content_type = request.headers.get("content-type", "")
+        if "application/json" not in content_type:
+            return await self.app(scope, receive, send)
+
+        client = scope.get("client")
+        client_ip = client[0] if client else "unknown"
+
+        # Check Admin Exemption first
+        is_admin = False
+        admin_user_id = None
+        try:
+            from app.routers.auth import get_session, SESSION_COOKIE_NAME
+            token = request.cookies.get(SESSION_COOKIE_NAME)
+            if token:
+                session = get_session(token)
+                if session:
+                    is_admin = True
+                    admin_user_id = session.get("user_id", "admin-1")
+        except Exception:
+            pass
+
+        # Buffer the full request body off the raw ASGI receive stream.
+        body_chunks = []
+        more_body = True
+        while more_body:
+            message = await receive()
+            if message["type"] == "http.request":
+                body_chunks.append(message.get("body", b""))
+                more_body = message.get("more_body", False)
+            elif message["type"] == "http.disconnect":
+                more_body = False
+        body_bytes = b"".join(body_chunks)
+
+        try:
+            body_str = body_bytes.decode("utf-8")
+
+            # 1. Parse JSON or fall back to raw string
+            import json
             try:
-                from app.routers.auth import get_session, SESSION_COOKIE_NAME
-                token = request.cookies.get(SESSION_COOKIE_NAME)
-                if token:
-                    session = get_session(token)
-                    if session:
-                        is_admin = True
-                        admin_user_id = session.get("user_id", "admin-1")
+                body_data = json.loads(body_str)
+                string_values = _extract_string_values(body_data)
             except Exception:
-                pass
-                
-            content_type = request.headers.get("content-type", "")
-            if "application/json" in content_type:
-                body_bytes = await request.body()
+                string_values = [body_str]
 
-                # Reading the body drains the ASGI receive stream, so the
-                # downstream route would otherwise hang waiting for a body. Replay
-                # the buffered body exactly once, then delegate to the original
-                # receive. Delegating (rather than returning http.request forever)
-                # is essential for StreamingResponse routes: their disconnect
-                # listener must still receive http.disconnect, otherwise it raises
-                # "Unexpected message received: http.request".
-                original_receive = request._receive
-                _body_replayed = False
+            # 2. Score strings
+            matched_rules = set()
+            for val in string_values:
+                cleaned = _waf_decode(val)
+                if not cleaned:
+                    continue
+                for idx, (weight, regex, desc) in enumerate(WAF_RULES):
+                    if idx not in matched_rules and regex.search(cleaned):
+                        matched_rules.add(idx)
 
-                async def receive():
-                    nonlocal _body_replayed
-                    if not _body_replayed:
-                        _body_replayed = True
-                        return {"type": "http.request", "body": body_bytes, "more_body": False}
-                    return await original_receive()
-                request._receive = receive
-                
-                try:
-                    body_str = body_bytes.decode("utf-8")
-                    
-                    # 1. Parse JSON or fall back to raw string
-                    import json
+            total_score = sum(WAF_RULES[idx][0] for idx in matched_rules)
+
+            # 3. If score triggers threshold
+            if total_score >= WAF_BLOCK_THRESHOLD:
+                triggered_descs = [WAF_RULES[idx][2] for idx in matched_rules]
+                details_str = f"Triggered Rules: {', '.join(triggered_descs)} (score={total_score})"
+
+                if is_admin and admin_user_id:
+                    # Log audit warnings for admin, but allow the request to proceed
+                    logger.warning(f"WAF detected suspicious admin payload ({client_ip}): {details_str}. EXEMPTED.")
                     try:
-                        body_data = json.loads(body_str)
-                        string_values = _extract_string_values(body_data)
-                    except Exception:
-                        string_values = [body_str]
-                        
-                    # 2. Score strings
-                    matched_rules = set()
-                    for val in string_values:
-                        cleaned = _waf_decode(val)
-                        if not cleaned:
-                            continue
-                        for idx, (weight, regex, desc) in enumerate(WAF_RULES):
-                            if idx not in matched_rules and regex.search(cleaned):
-                                matched_rules.add(idx)
-                                
-                    total_score = sum(WAF_RULES[idx][0] for idx in matched_rules)
-                    
-                    # 3. If score triggers threshold
-                    if total_score >= WAF_BLOCK_THRESHOLD:
-                        triggered_descs = [WAF_RULES[idx][2] for idx in matched_rules]
-                        details_str = f"Triggered Rules: {', '.join(triggered_descs)} (score={total_score})"
-                        
-                        if is_admin and admin_user_id:
-                            # Log audit warnings for admin, but allow the request to proceed
-                            logger.warning(f"WAF detected suspicious admin payload ({client_ip}): {details_str}. EXEMPTED.")
-                            try:
-                                from app.routers.auth import log_security_event
-                                from app.database.config import SessionLocal
-                                db = SessionLocal()
-                                try:
-                                    await log_security_event(
-                                        db=db,
-                                        user_id=admin_user_id,
-                                        action="WAF_AUDIT_ADMIN",
-                                        ip_address=client_ip,
-                                        user_agent=request.headers.get("user-agent"),
-                                        details=details_str
-                                    )
-                                finally:
-                                    db.close()
-                            except Exception as audit_err:
-                                logger.error(f"Failed to log admin WAF event: {audit_err}")
-                        else:
-                            # Non-admin: BLOCK the request and log/record strike
-                            logger.warning(f"WAF blocked suspicious request from {client_ip}: {request.method} {request.url.path} (score={total_score}, threshold={WAF_BLOCK_THRESHOLD})")
-                            try:
-                                from app.routers.auth import log_security_event
-                                from app.database.config import SessionLocal
-                                db = SessionLocal()
-                                try:
-                                    await log_security_event(
-                                        db=db,
-                                        user_id="anonymous",
-                                        action="WAF_BLOCKED",
-                                        ip_address=client_ip,
-                                        user_agent=request.headers.get("user-agent"),
-                                        details=details_str
-                                    )
-                                    # Record strike & check for auto-ban
-                                    await record_waf_strike(client_ip)
-                                finally:
-                                    db.close()
-                            except Exception as audit_err:
-                                logger.error(f"Failed to log blocked WAF event: {audit_err}")
-                                
-                            return JSONResponse(
-                                status_code=400,
-                                content={"detail": "Request blocked by Web Application Firewall (WAF) due to suspicious patterns."}
+                        from app.routers.auth import log_security_event
+                        from app.database.config import SessionLocal
+                        db = SessionLocal()
+                        try:
+                            await log_security_event(
+                                db=db,
+                                user_id=admin_user_id,
+                                action="WAF_AUDIT_ADMIN",
+                                ip_address=client_ip,
+                                user_agent=request.headers.get("user-agent"),
+                                details=details_str
                             )
-                except Exception as e:
-                    logger.error(f"WAF evaluation error: {e}")
-                    
-    return await call_next(request)
+                        finally:
+                            db.close()
+                    except Exception as audit_err:
+                        logger.error(f"Failed to log admin WAF event: {audit_err}")
+                else:
+                    # Non-admin: BLOCK the request and log/record strike
+                    logger.warning(f"WAF blocked suspicious request from {client_ip}: {scope['method']} {request.url.path} (score={total_score}, threshold={WAF_BLOCK_THRESHOLD})")
+                    try:
+                        from app.routers.auth import log_security_event
+                        from app.database.config import SessionLocal
+                        db = SessionLocal()
+                        try:
+                            await log_security_event(
+                                db=db,
+                                user_id="anonymous",
+                                action="WAF_BLOCKED",
+                                ip_address=client_ip,
+                                user_agent=request.headers.get("user-agent"),
+                                details=details_str
+                            )
+                            # Record strike & check for auto-ban
+                            await record_waf_strike(client_ip)
+                        finally:
+                            db.close()
+                    except Exception as audit_err:
+                        logger.error(f"Failed to log blocked WAF event: {audit_err}")
+
+                    response = JSONResponse(
+                        status_code=400,
+                        content={"detail": "Request blocked by Web Application Firewall (WAF) due to suspicious patterns."}
+                    )
+                    return await response(scope, receive, send)
+        except Exception as e:
+            logger.error(f"WAF evaluation error: {e}")
+
+        # Replay the buffered body downstream exactly once, then delegate to the
+        # real receive so the route (and any StreamingResponse disconnect
+        # listener) still sees http.disconnect.
+        body_sent = False
+
+        async def replay_receive():
+            nonlocal body_sent
+            if not body_sent:
+                body_sent = True
+                return {"type": "http.request", "body": body_bytes, "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay_receive, send)
+
+app.add_middleware(WAFMiddleware)
 
 
 # Global exception handler — catch hidden 500s and log full tracebacks

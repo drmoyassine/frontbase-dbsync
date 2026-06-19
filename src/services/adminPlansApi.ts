@@ -30,6 +30,7 @@ export interface LimitDef {
     label: string;
     kind: 'int' | 'bool';
     category: 'capacity' | 'operational' | 'feature';
+    scope: 'project' | 'tenant';
     unit: string | null;
     default: number | boolean;
 }

@@ -64,6 +64,12 @@ api.interceptors.request.use(
       if (state.token) {
         config.headers['Authorization'] = `Bearer ${state.token}`;
       }
+      // Multi-project: target the active project. Read from localStorage to avoid a
+      // circular import with the project store; the store keeps this value in sync.
+      const activeProjectId = localStorage.getItem('activeProjectId');
+      if (activeProjectId) {
+        config.headers['X-Project-Id'] = activeProjectId;
+      }
     }
     return config;
   },

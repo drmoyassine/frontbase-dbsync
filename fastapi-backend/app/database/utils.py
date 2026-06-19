@@ -138,11 +138,40 @@ def update_page(db: Session, page_id: str, page_data: dict, ctx: TenantContext |
     return page
 
 def get_project(db: Session, ctx: TenantContext | None = None):
-    """Get the project (one per tenant)"""
-    query = db.query(Project)
-    if ctx and ctx.tenant_id:
-        query = query.filter(Project.tenant_id == ctx.tenant_id)
-    return query.first()
+    """Resolve the active project for the request.
+
+    Multi-project (plan-gated): if ``ctx.active_project_id`` is set, return that
+    project — but only if it belongs to the caller's tenant (security: the header
+    value is untrusted). Otherwise fall back to the tenant's default project.
+    For self-host (``ctx is None``) returns the single project (unchanged).
+
+    Under the current 1:1 tenant↔project invariant this always resolves to the one
+    project, so this is a behaviour-preserving no-op until multi-project UI ships.
+    Per-user project access filtering lands with Step G.
+    """
+    if ctx is None:
+        return db.query(Project).first()
+
+    if ctx.tenant_id:
+        # 1. Honour the active-project header, if it maps to a project in THIS tenant.
+        if ctx.active_project_id:
+            active = (
+                db.query(Project)
+                .filter(Project.id == ctx.active_project_id, Project.tenant_id == ctx.tenant_id)
+                .first()
+            )
+            if active:
+                return active
+        # 2. Fall back to the tenant's default project, then any project.
+        default = (
+            db.query(Project)
+            .filter(Project.tenant_id == ctx.tenant_id, Project.is_default == True)  # noqa: E712
+            .first()
+        )
+        if default:
+            return default
+        return db.query(Project).filter(Project.tenant_id == ctx.tenant_id).first()
+    return None
 
 def update_project(db: Session, project_data: dict, ctx: TenantContext | None = None):
     """Update the project"""
@@ -160,6 +189,7 @@ def update_project(db: Session, project_data: dict, ctx: TenantContext | None = 
             updated_at=get_current_timestamp(),
             tenant_id=ctx.tenant_id if ctx else None
         )
+        project.is_default = True  # type: ignore[assignment]  # lazy-created first project is the default
         db.add(project)
     else:
         # Update existing project

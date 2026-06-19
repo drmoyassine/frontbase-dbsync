@@ -138,8 +138,8 @@ def _tenant_usage(db, tenant_id: str) -> dict:
     """Live resource usage for the tenant (capacity keys we can count cheaply)."""
     from app.models.models import EdgeEngine, EdgeProviderAccount
     from app.services.sync.models.datasource import Datasource
-    import json
 
+    projects = db.query(Project).filter(Project.tenant_id == tenant_id).count()
     pages = db.query(Page).join(Project).filter(Project.tenant_id == tenant_id).count()
     workflows = db.query(AutomationDraft).join(Project).filter(Project.tenant_id == tenant_id).count()
     team_members = db.query(TenantMember).filter(TenantMember.tenant_id == tenant_id).count()
@@ -148,23 +148,14 @@ def _tenant_usage(db, tenant_id: str) -> dict:
     connected_accounts = db.query(EdgeProviderAccount).join(Project).filter(Project.tenant_id == tenant_id).count()
     datasources = db.query(Datasource).join(Project).filter(Project.tenant_id == tenant_id).count()
 
-    engines = db.query(EdgeEngine).join(Project).filter(Project.tenant_id == tenant_id).all()
-    custom_domains = 0
-    for e in engines:
-        if e.engine_config:
-            try:
-                cfg = json.loads(str(e.engine_config))
-                if cfg.get("custom_domain"):
-                    custom_domains += 1
-            except Exception:
-                pass
-
+    # NOTE: custom_domains is not a usage counter here — it's a managed add-on (managed tiers) /
+    # free BYO, not a capacity cap. See [TIERS] §4.4.
     return {
+        "projects": projects,
         "pages": pages,
         "workflows": workflows,
         "team_members": team_members,
         "edge_engines": edge_engines,
-        "custom_domains": custom_domains,
         "datasources": datasources,
         "connected_accounts": connected_accounts,
     }

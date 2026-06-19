@@ -63,6 +63,12 @@ class Project(Base):
     supabase_service_key_encrypted = Column(String)
     users_config = Column(Text)
     tenant_id = Column(String, ForeignKey('tenants.id'), nullable=True)  # null = self-host
+    # Multi-project (plan-gated): the auto-created "Free" project hosts the community
+    # engine; status locks over-cap projects read-only on downgrade. See
+    # [FEATURE] multi-project-plan-gated.md.
+    is_default = Column(Boolean, default=False)
+    status = Column(String(20), default='active')   # active | locked
+    created_by = Column(String, nullable=True)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
     

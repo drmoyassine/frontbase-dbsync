@@ -15,7 +15,10 @@ continue to work without modification.
 from .auth import User, UserSession, UserSetting, Project, AppVariable, IPBlocklist, AuditLog  # noqa: F401
 
 # Tenants (cloud multi-tenancy)
-from .tenant import Tenant, TenantMember, TenantInvite  # noqa: F401
+from .tenant import (  # noqa: F401
+    Tenant, TenantMember, TenantInvite,
+    ProjectMember, ProjectDatasource, ProjectStorage, ProjectConnectedAccount, TenantAddon,
+)
 
 # Plans & subscriptions (cloud)
 from .plan import Plan, PlanChangeRequest  # noqa: F401

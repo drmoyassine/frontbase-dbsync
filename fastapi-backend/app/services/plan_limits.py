@@ -33,6 +33,7 @@ class LimitDef(TypedDict):
     label: str
     kind: Literal["int", "bool"]
     category: Literal["capacity", "operational", "feature"]
+    scope: Literal["project", "tenant"]   # how the cap is counted — see LIMIT_REGISTRY notes
     unit: Optional[str]
     default: Any
 
@@ -49,24 +50,37 @@ class LimitDef(TypedDict):
 #                 ship DORMANT (seeded -1) and their enforcement plumbing is wired
 #                 only when we decide to turn them on.
 #   feature     — boolean on/off entitlements.
+#
+# Scope (how a cap is counted — from the multi-project binding model):
+#   project — counted within the active project (today: the tenant's single project).
+#             For shareable resources (datasources/storage), the count = grants to
+#             the active project. Full scope-aware counting activates with
+#             multi-project; under the current 1:1 tenant↔project it equals tenant-wide.
+#   tenant  — counted across the whole tenant.
+#
+# NOTE on `projects`: forward-declared — today tenant↔project is 1:1 with no
+# tenant-facing "create project" path, so it is NOT enforced yet. It activates with
+# the multi-project plan (gate at the project-create endpoint).
 LIMIT_REGISTRY: list[LimitDef] = [
-    # -- Capacity (enforced at launch) --
-    {"key": "pages", "label": "Pages", "kind": "int", "category": "capacity", "unit": None, "default": 10},
-    {"key": "workflows", "label": "Active workflows", "kind": "int", "category": "capacity", "unit": None, "default": 5},
-    {"key": "datasources", "label": "Data sources", "kind": "int", "category": "capacity", "unit": None, "default": 1},
-    {"key": "connected_accounts", "label": "Connected accounts", "kind": "int", "category": "capacity", "unit": None, "default": 1},
-    {"key": "edge_engines", "label": "Edge engines", "kind": "int", "category": "capacity", "unit": None, "default": 0},
-    {"key": "custom_domains", "label": "Custom domains", "kind": "int", "category": "capacity", "unit": None, "default": 0},
-    {"key": "team_members", "label": "Team members", "kind": "int", "category": "capacity", "unit": None, "default": 1},
+    # -- Capacity --
+    {"key": "projects", "label": "Projects", "kind": "int", "category": "capacity", "scope": "tenant", "unit": None, "default": 1},
+    {"key": "pages", "label": "Pages", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 10},
+    {"key": "workflows", "label": "Active workflows", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 5},
+    {"key": "datasources", "label": "Data sources", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 1},
+    {"key": "connected_accounts", "label": "Connected accounts", "kind": "int", "category": "capacity", "scope": "tenant", "unit": None, "default": 1},
+    {"key": "edge_engines", "label": "Edge engines", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 0},
+    {"key": "team_members", "label": "Team members", "kind": "int", "category": "capacity", "scope": "tenant", "unit": None, "default": 1},
+    # (custom_domains is intentionally NOT here — it's a managed add-on on managed tiers / free BYO.
+    #  See [TIERS] §4.4 + [FEATURE] multi-project-plan-gated.md §Custom domains.)
     # -- Operational (optional; dormant at launch, UNLIMITED = disabled) --
-    {"key": "deploys_monthly", "label": "Deploys / republishes per month", "kind": "int", "category": "operational", "unit": "/mo", "default": UNLIMITED},
-    {"key": "log_retention_hours", "label": "Log retention window (hours)", "kind": "int", "category": "operational", "unit": "h", "default": UNLIMITED},
-    {"key": "shared_worker_executions_monthly", "label": "Shared-worker executions per month (free/managed)", "kind": "int", "category": "operational", "unit": "/mo", "default": UNLIMITED},
-    # -- Feature flags --
-    {"key": "private_pages", "label": "Private / auth-gated pages", "kind": "bool", "category": "feature", "unit": None, "default": False},
-    {"key": "auth_providers", "label": "Connect auth provider", "kind": "bool", "category": "feature", "unit": None, "default": False},
-    {"key": "remove_branding", "label": "Remove Frontbase branding", "kind": "bool", "category": "feature", "unit": None, "default": False},
-    {"key": "api_access", "label": "API access (/v1)", "kind": "bool", "category": "feature", "unit": None, "default": False},
+    {"key": "deploys_monthly", "label": "Deploys / republishes per month", "kind": "int", "category": "operational", "scope": "tenant", "unit": "/mo", "default": UNLIMITED},
+    {"key": "log_retention_hours", "label": "Log retention window (hours)", "kind": "int", "category": "operational", "scope": "tenant", "unit": "h", "default": UNLIMITED},
+    {"key": "shared_worker_executions_monthly", "label": "Shared-worker executions per month (free/managed)", "kind": "int", "category": "operational", "scope": "tenant", "unit": "/mo", "default": UNLIMITED},
+    # -- Feature flags (plan-level entitlements; gated instances are project resources) --
+    {"key": "private_pages", "label": "Private / auth-gated pages", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
+    {"key": "auth_providers", "label": "Connect auth provider", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
+    {"key": "remove_branding", "label": "Remove Frontbase branding", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
+    {"key": "api_access", "label": "API access (/v1)", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
 ]
 
 _REGISTRY_BY_KEY: dict[str, LimitDef] = {d["key"]: d for d in LIMIT_REGISTRY}
@@ -277,14 +291,23 @@ def require_feature(db: Session, ctx: Any, key: str) -> None:
 #   basic: deploys_monthly 500
 _OFF = UNLIMITED  # operational cap disabled / not enforced for this plan
 
+# NOTE: all prices/limits below are EXAMPLE DEFAULTS. The master admin configures real plan
+# pricing + limits from the PlansManager UI (GET/POST/PUT /api/admin/plans). These seeds only run
+# when a slug is missing, so admin edits are never overwritten.
+#
+# Basic is `infra_mode: managed` and priced à-la-carte (managed edge+state-db base + optional
+# cache/queue/domain add-ons) — see [TIERS] §4.4. The add-on SKUs themselves are tracked in
+# `tenant_addons` (multi-project plan); Basic's `price_display` here is just the managed-base entry
+# price (example), editable in the UI.
 _SEED_PLANS: list[dict[str, Any]] = [
     {
         "slug": "free", "name": "Free", "description": "Get started on shared infrastructure.",
         "infra_mode": "managed", "price_display": "Free", "price_period": "",
         "is_default": True, "is_public": True, "sort_order": 0,
         "limits": {
+            "projects": 1,
             "pages": 10, "workflows": 5, "datasources": 1, "connected_accounts": 1,
-            "edge_engines": 0, "custom_domains": 0, "team_members": 1,
+            "edge_engines": 0, "team_members": 1,
             "deploys_monthly": _OFF, "log_retention_hours": _OFF, "shared_worker_executions_monthly": _OFF,
             "private_pages": False, "auth_providers": False, "remove_branding": False, "api_access": False,
         },
@@ -292,35 +315,38 @@ _SEED_PLANS: list[dict[str, Any]] = [
     },
     {
         "slug": "basic", "name": "Basic", "description": "Pro features on Frontbase-managed infrastructure — no setup.",
-        "infra_mode": "managed", "price_display": "$2.99", "price_period": "/engine/mo",
+        "infra_mode": "managed", "price_display": "$1.99", "price_period": "/mo",
         "is_public": True, "highlighted": True, "badge": "Best value", "sort_order": 1,
         "limits": {
+            "projects": 1,
             "pages": 50, "workflows": 25, "datasources": 3, "connected_accounts": 3,
-            "edge_engines": 1, "custom_domains": 1, "team_members": 3,
+            "edge_engines": 1, "team_members": 3,
             "deploys_monthly": _OFF, "log_retention_hours": _OFF, "shared_worker_executions_monthly": _OFF,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
         },
-        "features": ["Managed dedicated engine", "Private / auth-gated pages", "Connect auth providers", "No infra setup"],
+        "features": ["Managed dedicated engine + state DB", "Private / auth-gated pages", "Connect auth providers", "No infra setup"],
     },
     {
         "slug": "pro", "name": "Pro", "description": "Pro features on your own infrastructure.",
         "infra_mode": "byo", "price_display": "$29", "price_period": "/month",
         "is_public": True, "sort_order": 2,
         "limits": {
+            "projects": 3,
             "pages": 200, "workflows": 50, "datasources": 10, "connected_accounts": 10,
-            "edge_engines": 3, "custom_domains": 10, "team_members": 10,
+            "edge_engines": 3, "team_members": 10,
             "deploys_monthly": _OFF, "log_retention_hours": _OFF, "shared_worker_executions_monthly": _OFF,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
         },
-        "features": ["Bring your own edge", "200 pages, 50 workflows", "10 custom domains", "Private pages & auth"],
+        "features": ["Bring your own edge", "200 pages, 50 workflows", "Private pages & auth"],
     },
     {
         "slug": "enterprise", "name": "Enterprise", "description": "Unlimited scale on your own infrastructure.",
         "infra_mode": "byo", "price_display": "Custom", "price_period": "",
         "is_public": True, "sort_order": 3,
         "limits": {
+            "projects": UNLIMITED,
             "pages": UNLIMITED, "workflows": UNLIMITED, "datasources": UNLIMITED, "connected_accounts": UNLIMITED,
-            "edge_engines": UNLIMITED, "custom_domains": UNLIMITED, "team_members": UNLIMITED,
+            "edge_engines": UNLIMITED, "team_members": UNLIMITED,
             "deploys_monthly": _OFF, "log_retention_hours": _OFF, "shared_worker_executions_monthly": _OFF,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
         },
@@ -363,3 +389,34 @@ def seed_default_plans(db: Session) -> None:
     if created:
         db.commit()
         logger.info("[plan_limits] seeded %d default plans", created)
+
+
+def prune_deprecated_plan_limits(db: Session) -> None:
+    """Drop limit keys no longer in the registry from every plan's stored ``limits``.
+
+    Keeps existing seeded plans editable when a key is retired (e.g. ``custom_domains`` moved
+    to a managed add-on). Without this, ``validate_limits`` would reject admin edits of old
+    plans that still carry the deprecated key. Idempotent; runs at startup.
+    """
+    known = set(_REGISTRY_BY_KEY)
+    changed = 0
+    for plan in db.query(Plan).all():
+        raw = plan.limits
+        if raw is None:
+            continue
+        try:
+            data = json.loads(str(raw))
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        stale = [k for k in data if k not in known]
+        if not stale:
+            continue
+        for k in stale:
+            data.pop(k, None)
+        plan.limits = json.dumps(data)  # type: ignore[assignment]
+        changed += 1
+    if changed:
+        db.commit()
+        logger.info("[plan_limits] pruned deprecated keys from %d plan(s)", changed)

@@ -128,6 +128,7 @@ def provision_tenant(
         created_at=now,
         updated_at=now,
     )
+    project.is_default = True  # type: ignore[assignment]  # signup auto-provisioned default project
     db.add(project)
 
     db.flush()  # Validate FK constraints before commit

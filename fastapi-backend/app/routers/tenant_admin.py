@@ -384,6 +384,7 @@ async def create_tenant(
         created_at=now,
         updated_at=now,
     )
+    project.is_default = True  # type: ignore[assignment]  # auto-provisioned default project
     db.add(project)
 
     db.commit()

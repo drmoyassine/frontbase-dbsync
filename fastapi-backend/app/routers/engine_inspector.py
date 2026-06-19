@@ -554,38 +554,15 @@ async def inspect_engine_domains(engine_id: str, db: Session = Depends(get_db), 
 
 @router.post("/{engine_id}/inspect/domains")
 async def add_engine_domain(engine_id: str, body: _AddDomainBody, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
-    """Add a custom domain to this engine."""
+    """Add a custom domain to this engine.
+
+    Custom domains are intentionally NOT quota-gated: on BYO tiers they're configured via the
+    tenant's own provider (free, bypassable, no COGS); on managed tiers they're a paid add-on
+    (`managed_domain`, gated at provisioning via `tenant_addons`). See [TIERS] §4.4.
+    """
     from ..services import domain_manager as dm
 
     engine, provider, creds = _get_creds(engine_id, db, tenant_ctx)
-
-    # Check custom_domains capacity quota limit (F1)
-    if tenant_ctx and tenant_ctx.tenant_id and not tenant_ctx.is_master:
-        from app.services.plan_limits import check_quota
-        project = get_project(db, tenant_ctx)
-        if project:
-            engines = db.query(EdgeEngine).filter(EdgeEngine.project_id == project.id).all()
-            custom_domains_count = 0
-            for e in engines:
-                if e.engine_config is not None:
-                    try:
-                        cfg = json.loads(str(e.engine_config))
-                        if cfg.get("custom_domain"):
-                            custom_domains_count += 1
-                    except Exception:
-                        pass
-            
-            engine_has_domain = False
-            if engine.engine_config is not None:
-                try:
-                    cfg = json.loads(str(engine.engine_config))
-                    if cfg.get("custom_domain"):
-                        engine_has_domain = True
-                except Exception:
-                    pass
-            
-            if not engine_has_domain:
-                check_quota(db, tenant_ctx, "custom_domains", custom_domains_count)
 
     result = await dm.add_domain(engine, creds, provider, body.domain, db=db)
     return result.to_dict()

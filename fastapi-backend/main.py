@@ -301,6 +301,18 @@ async def lifespan(fastapi_app: FastAPI):
         except Exception as e:
             logger.warning(f"[Main App Startup] Plan seed failed (non-fatal): {e}")
 
+    # Multi-project: ensure schema columns + backfill default projects (cloud only)
+    if is_cloud():
+        try:
+            from app.services.project_setup import ensure_multiproject_schema, backfill_default_projects
+            from app.database.config import engine, SessionLocal
+            ensure_multiproject_schema(engine)
+            db = SessionLocal()
+            backfill_default_projects(db)
+            db.close()
+        except Exception as e:
+            logger.warning(f"[Main App Startup] Multi-project setup failed (non-fatal): {e}")
+
     # Load Redis settings for sync service
     try:
         from app.services.sync.redis_client import load_settings_from_db
@@ -918,6 +930,11 @@ if is_cloud():
         app.include_router(plans_public.router, prefix="/api/plans", tags=["Plans"])
     except ImportError:
         pass  # Public plans router not yet available
+    try:
+        from app.routers import projects
+        app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
+    except ImportError:
+        pass  # Projects router not yet available
 app.include_router(auth.router)  # Auth (login, logout, /me) — works for both modes
 app.include_router(pages.router)
 app.include_router(project.router)

@@ -31,6 +31,9 @@ class TenantContext:
     tenant_slug: Optional[str]  # None for master admin / self-host
     role: str                   # owner | admin | editor | viewer | master
     is_master: bool
+    # Multi-project: the project the request targets (from the X-Project-Id header).
+    # Untrusted — get_project() validates it belongs to the tenant before use.
+    active_project_id: Optional[str] = None
 
 
 async def get_tenant_context(request: Request) -> Optional[TenantContext]:
@@ -76,6 +79,7 @@ async def get_tenant_context(request: Request) -> Optional[TenantContext]:
                 tenant_slug=payload.get("tenant_slug"),
                 role=payload.get("role", "owner"),
                 is_master=bool(payload.get("is_master", False)),
+                active_project_id=request.headers.get("x-project-id"),
             )
     except Exception:
         pass  # No SuperTokens session — try master admin cookie

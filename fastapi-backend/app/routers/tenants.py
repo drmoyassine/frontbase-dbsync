@@ -208,6 +208,19 @@ async def get_my_plan(ctx: TenantContext = Depends(require_tenant_context)):
         db.close()
 
 
+@router.get("/me/addons")
+async def get_my_addons(ctx: TenantContext = Depends(require_tenant_context)):
+    """Active managed add-ons for the current tenant (managed-infra entitlements)."""
+    if ctx.is_master or not ctx.tenant_id:
+        raise HTTPException(status_code=404, detail="No tenant associated with this user")
+    from app.services.plan_limits import get_active_addons
+    db = SessionLocal()
+    try:
+        return {"addons": get_active_addons(db, str(ctx.tenant_id))}
+    finally:
+        db.close()
+
+
 @router.post("/me/plan-request", status_code=201)
 async def request_plan_change(
     body: PlanChangeRequestBody,

@@ -27,4 +27,23 @@ export const projectsApi = {
         const res = await api.delete(`/api/projects/${id}`);
         return res.data;
     },
+    listMembers: async (projectId: string): Promise<{ members: ProjectMemberEntry[] }> => {
+        const res = await api.get(`/api/projects/${projectId}/members`);
+        return res.data;
+    },
+    addMember: async (projectId: string, userId: string, role: 'admin' | 'editor' | 'viewer'): Promise<{ success: boolean }> => {
+        const res = await api.post(`/api/projects/${projectId}/members`, { user_id: userId, role });
+        return res.data;
+    },
+    removeMember: async (projectId: string, userId: string): Promise<{ success: boolean }> => {
+        const res = await api.delete(`/api/projects/${projectId}/members/${userId}`);
+        return res.data;
+    },
 };
+
+export interface ProjectMemberEntry {
+    user_id: string;
+    email?: string | null;
+    role: string;
+    implicit: boolean;
+}

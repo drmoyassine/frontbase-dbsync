@@ -45,6 +45,10 @@ export const tenantPlanApi = {
         const res = await api.delete(`/api/tenants/me/plan-request/${requestId}`);
         return res.data;
     },
+    getMyAddons: async (): Promise<{ addons: Record<string, number> }> => {
+        const res = await api.get('/api/tenants/me/addons');
+        return res.data;
+    },
     listPublicPlans: async (): Promise<{ plans: PublicPricingPlan[]; detailed: Plan[] }> => {
         const res = await api.get('/api/plans/public');
         return res.data;

@@ -13,10 +13,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database.utils import get_db
-from app.models.models import Plan, PlanChangeRequest, Tenant
+from app.models.models import Plan, PlanChangeRequest, Tenant, TenantAddon
 from app.routers.tenant_admin import require_master_admin
 from app.services.plan_limits import (
     LIMIT_REGISTRY,
+    MANAGED_ADDON_TYPES,
     apply_plan,
     serialize_plan,
     validate_limits,
@@ -266,3 +267,97 @@ async def reject_plan_request(
     r.reviewed_at = _now()  # type: ignore[assignment]
     db.commit()
     return {"success": True, "request": _serialize_request(db, r)}
+
+
+# ---------------------------------------------------------------------------
+# Managed add-ons (à-la-carte managed-infra entitlements)
+# ---------------------------------------------------------------------------
+
+class AddonWriteBody(BaseModel):
+    tenant_id: str
+    addon_type: str
+    quantity: int = 1
+
+
+def _serialize_addon(a: TenantAddon) -> dict:
+    return {
+        "id": str(a.id),
+        "tenant_id": str(a.tenant_id),
+        "addon_type": str(a.addon_type),
+        "quantity": int(a.quantity) if a.quantity is not None else 1,  # type: ignore[arg-type]
+        "status": str(a.status),
+        "created_at": str(a.created_at),
+        "updated_at": str(a.updated_at),
+    }
+
+
+@router.get("/tenant-addons")
+async def list_tenant_addons(
+    tenant_id: str,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_master_admin),
+):
+    rows = (
+        db.query(TenantAddon)
+        .filter(TenantAddon.tenant_id == tenant_id)
+        .order_by(TenantAddon.created_at.desc())
+        .all()
+    )
+    return {"addons": [_serialize_addon(a) for a in rows]}
+
+
+@router.post("/tenant-addons", status_code=201)
+async def grant_tenant_addon(
+    body: AddonWriteBody,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_master_admin),
+):
+    """Grant (or top up) a managed add-on for a tenant. No payment gateway yet —
+    master-admin-granted; billing will plug in here later."""
+    if body.addon_type not in MANAGED_ADDON_TYPES:
+        raise HTTPException(status_code=400, detail=f"Unknown add-on type '{body.addon_type}'")
+    if not db.query(Tenant).filter(Tenant.id == body.tenant_id).first():
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    existing = (
+        db.query(TenantAddon)
+        .filter(
+            TenantAddon.tenant_id == body.tenant_id,
+            TenantAddon.addon_type == body.addon_type,
+            TenantAddon.status == "active",
+        )
+        .first()
+    )
+    now = _now()
+    if existing:
+        existing.quantity = body.quantity  # type: ignore[assignment]
+        existing.updated_at = now  # type: ignore[assignment]
+        addon = existing
+    else:
+        addon = TenantAddon(
+            id=str(uuid.uuid4()),
+            tenant_id=body.tenant_id,
+            addon_type=body.addon_type,
+            quantity=body.quantity,
+            status="active",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(addon)
+    db.commit()
+    db.refresh(addon)
+    return {"addon": _serialize_addon(addon)}
+
+
+@router.delete("/tenant-addons/{addon_id}")
+async def revoke_tenant_addon(
+    addon_id: str,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_master_admin),
+):
+    addon = db.query(TenantAddon).filter(TenantAddon.id == addon_id).first()
+    if not addon:
+        raise HTTPException(status_code=404, detail="Add-on not found")
+    addon.status = "revoked"  # type: ignore[assignment]
+    addon.updated_at = _now()  # type: ignore[assignment]
+    db.commit()
+    return {"success": True}

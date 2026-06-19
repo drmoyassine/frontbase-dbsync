@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
-import { LogOut, FolderKanban, Plus, Check, Loader2, ChevronDown } from 'lucide-react';
+import { LogOut, FolderKanban, Plus, Check, Loader2, ChevronDown, Lock } from 'lucide-react';
 import { isCloud } from '@/lib/edition';
 import {
     useActiveProject, selectShowSelector, selectCanCreate,
@@ -105,11 +105,17 @@ const ProjectSelector: React.FC = () => {
 
     return (
         <>
+            {active?.status === 'locked' && (
+                <span className="hidden sm:inline text-xs px-2 py-1 rounded-full bg-amber-500/15 text-amber-600 font-medium">
+                    “{active.name}” is locked — read-only (upgrade to re-activate)
+                </span>
+            )}
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="h-9 gap-1.5 font-semibold">
                         {loading && !active ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderKanban className="h-4 w-4 text-primary" />}
                         <span className="max-w-[180px] truncate">{active?.name || 'Select project'}</span>
+                        {active?.status === 'locked' && <Lock className="h-3.5 w-3.5 text-amber-500" />}
                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     </Button>
                 </DropdownMenuTrigger>
@@ -120,6 +126,7 @@ const ProjectSelector: React.FC = () => {
                             <span className="flex items-center gap-2 truncate">
                                 {p.name}
                                 {p.is_default && <span className="text-[10px] text-muted-foreground">default</span>}
+                                {p.status === 'locked' && <Lock className="h-3 w-3 text-amber-500" />}
                             </span>
                             {p.id === activeProjectId && <Check className="h-4 w-4 text-primary" />}
                         </DropdownMenuItem>

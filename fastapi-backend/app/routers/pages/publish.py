@@ -129,7 +129,12 @@ async def publish_to_target(
         
         if not page:
             raise HTTPException(status_code=404, detail=f"Page not found: {page_id}")
-            
+
+        # Multi-project: locked projects are read-only (downgrade over-cap).
+        if ctx and ctx.tenant_id and not ctx.is_master:
+            from app.services.project_setup import require_project_writable
+            require_project_writable(db, ctx)
+
         # Check private_pages feature flag (F2)
         if not bool(page.is_public):
             from app.services.plan_limits import require_feature

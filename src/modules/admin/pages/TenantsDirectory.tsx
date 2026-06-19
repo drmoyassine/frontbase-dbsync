@@ -843,6 +843,8 @@ export function TenantsDirectory() {
                                 </button>
                             </div>
                         </form>
+
+                        <TenantAddonsManager tenantId={selectedTenant.id} />
                     </div>
                 </div>
             )}
@@ -851,3 +853,65 @@ export function TenantsDirectory() {
 }
 
 export default TenantsDirectory;
+
+
+/** Managed add-ons grant/revoke for a tenant (admin, inside the edit modal). */
+const ADDON_TYPES: { value: string; label: string }[] = [
+    { value: 'managed_edge_db', label: 'Managed edge + state DB' },
+    { value: 'managed_cache', label: 'Managed cache' },
+    { value: 'managed_queue', label: 'Managed queue' },
+    { value: 'managed_domain', label: 'Managed custom domain' },
+];
+
+function TenantAddonsManager({ tenantId }: { tenantId: string }) {
+    const queryClient = useQueryClient();
+    const [addonType, setAddonType] = useState('managed_cache');
+    const { data, isLoading } = useQuery({
+        queryKey: ['admin-tenant-addons', tenantId],
+        queryFn: () => adminPlansApi.listTenantAddons(tenantId),
+        enabled: !!tenantId,
+        staleTime: 30_000,
+    });
+    const grantMutation = useMutation({
+        mutationFn: () => adminPlansApi.grantTenantAddon(tenantId, addonType, 1),
+        onSuccess: () => { toast.success('Add-on granted'); queryClient.invalidateQueries({ queryKey: ['admin-tenant-addons', tenantId] }); },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to grant add-on'),
+    });
+    const revokeMutation = useMutation({
+        mutationFn: (id: string) => adminPlansApi.revokeTenantAddon(id),
+        onSuccess: () => { toast.success('Add-on revoked'); queryClient.invalidateQueries({ queryKey: ['admin-tenant-addons', tenantId] }); },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to revoke add-on'),
+    });
+    const active = (data?.addons ?? []).filter((a) => a.status === 'active');
+
+    return (
+        <div className="p-6 pt-4 border-t border-slate-100 dark:border-slate-850 space-y-3">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Managed add-ons</p>
+            {isLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+            ) : active.length === 0 ? (
+                <p className="text-sm text-slate-500">No active add-ons.</p>
+            ) : (
+                <ul className="space-y-1.5">
+                    {active.map((a) => (
+                        <li key={a.id} className="flex items-center justify-between text-sm">
+                            <span>{a.addon_type.replace(/^managed_/, '').replace(/_/g, ' ')} <span className="text-slate-400">×{a.quantity}</span></span>
+                            <button type="button" onClick={() => revokeMutation.mutate(a.id)} disabled={revokeMutation.isPending}
+                                className="text-xs text-red-500 hover:underline disabled:opacity-50">Revoke</button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+            <div className="flex gap-2">
+                <select value={addonType} onChange={(e) => setAddonType(e.target.value)}
+                    className="flex-1 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2">
+                    {ADDON_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <button type="button" onClick={() => grantMutation.mutate()} disabled={grantMutation.isPending}
+                    className="px-3 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1.5">
+                    {grantMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}Grant
+                </button>
+            </div>
+        </div>
+    );
+}

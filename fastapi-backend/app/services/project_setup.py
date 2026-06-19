@@ -132,6 +132,28 @@ def get_default_project_id(db, tenant_id: str):
     return str(p.id) if p else None
 
 
+def require_project_writable(db, ctx) -> None:
+    """403 if the caller's active project is locked (read-only after a downgrade).
+
+    A locked project allows reads/serving but blocks creates/updates/publishes until
+    the tenant upgrades and ``reconcile_projects_cap`` re-activates it.
+    """
+    from fastapi import HTTPException
+    from app.models.models import Project
+    if not ctx or not getattr(ctx, "tenant_id", None) or not getattr(ctx, "active_project_id", None):
+        return
+    p = (
+        db.query(Project)
+        .filter(Project.id == ctx.active_project_id, Project.tenant_id == ctx.tenant_id)
+        .first()
+    )
+    if p is not None and str(p.status) == "locked":
+        raise HTTPException(
+            status_code=403,
+            detail="This project is locked (read-only). Upgrade your plan to re-activate it.",
+        )
+
+
 def assert_community_engine_in_default_project(db, tenant_id: str, project_id, is_shared: bool) -> None:
     """A shared/community engine may only live in the tenant's DEFAULT project.
 

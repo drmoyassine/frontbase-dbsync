@@ -86,4 +86,25 @@ export const adminPlansApi = {
         const res = await api.post(`/api/admin/plan-requests/${requestId}/reject`, { admin_note: adminNote });
         return res.data;
     },
+
+    listTenantAddons: async (tenantId: string): Promise<{ addons: TenantAddonEntry[] }> => {
+        const res = await api.get('/api/admin/tenant-addons', { params: { tenant_id: tenantId } });
+        return res.data;
+    },
+    grantTenantAddon: async (tenantId: string, addonType: string, quantity: number): Promise<{ addon: TenantAddonEntry }> => {
+        const res = await api.post('/api/admin/tenant-addons', { tenant_id: tenantId, addon_type: addonType, quantity });
+        return res.data;
+    },
+    revokeTenantAddon: async (addonId: string): Promise<{ success: boolean }> => {
+        const res = await api.delete(`/api/admin/tenant-addons/${addonId}`);
+        return res.data;
+    },
 };
+
+export interface TenantAddonEntry {
+    id: string;
+    tenant_id: string;
+    addon_type: string;
+    quantity: number;
+    status: string;
+}

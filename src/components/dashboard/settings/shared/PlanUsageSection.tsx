@@ -32,6 +32,11 @@ export const PlanUsageSection: React.FC = () => {
         queryFn: () => tenantPlanApi.getMyPlan(),
         staleTime: 30_000,
     });
+    const { data: addonsData } = useQuery({
+        queryKey: ['my-addons'],
+        queryFn: () => tenantPlanApi.getMyAddons(),
+        staleTime: 60_000,
+    });
     const { data: publicData } = useQuery({
         queryKey: ['public-plans'],
         queryFn: () => tenantPlanApi.listPublicPlans(),
@@ -131,6 +136,37 @@ export const PlanUsageSection: React.FC = () => {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Managed add-ons (managed tiers) */}
+            {data?.plan?.infra_mode === 'managed' && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="text-lg">Managed add-ons</CardTitle>
+                        <CardDescription>
+                            Frontbase-managed infrastructure included with your plan. Add-ons are granted by your account manager.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {(() => {
+                            const addons = addonsData?.addons ?? {};
+                            const entries = Object.entries(addons);
+                            if (entries.length === 0) {
+                                return <p className="text-sm text-muted-foreground">No managed add-ons active.</p>;
+                            }
+                            return (
+                                <ul className="text-sm space-y-1">
+                                    {entries.map(([type, qty]) => (
+                                        <li key={type} className="flex justify-between">
+                                            <span className="capitalize text-muted-foreground">{type.replace(/^managed_/, '').replace(/_/g, ' ')}</span>
+                                            <span className="font-medium">×{qty}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            );
+                        })()}
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Plan picker */}
             {pickerOpen && (

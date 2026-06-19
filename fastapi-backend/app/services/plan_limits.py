@@ -21,7 +21,7 @@ from typing import Any, Literal, Optional, TypedDict
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.models import Plan, Tenant
+from app.models.models import Plan, Tenant, TenantAddon
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,8 @@ def apply_plan(db: Session, tenant_id: str, slug: str) -> Tenant:
     """The single seam for changing a tenant's plan.
 
     Called by the master-admin change-request approval today; a future billing
-    provider plugs in here too.  Caller commits.
+    provider plugs in here too. After updating the plan, reconciles the projects
+    cap: locks excess projects on a downgrade, unlocks on an upgrade. Caller commits.
     """
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if tenant is None:
@@ -141,7 +142,77 @@ def apply_plan(db: Session, tenant_id: str, slug: str) -> Tenant:
         raise HTTPException(status_code=400, detail=f"Unknown plan '{slug}'")
     tenant.plan = slug  # type: ignore[assignment]
     tenant.updated_at = datetime.now(timezone.utc).isoformat()  # type: ignore[assignment]
+    reconcile_projects_cap(db, tenant)
     return tenant
+
+
+# ---------------------------------------------------------------------------
+# Managed add-ons (à-la-carte managed-infra entitlements; managed tiers only)
+# ---------------------------------------------------------------------------
+
+MANAGED_ADDON_TYPES: tuple[str, ...] = (
+    "managed_edge_db", "managed_cache", "managed_queue", "managed_domain",
+)
+
+
+def get_active_addons(db: Session, tenant_id: str) -> dict[str, int]:
+    """Active managed add-ons for a tenant: {addon_type: total_quantity}."""
+    rows = (
+        db.query(TenantAddon)
+        .filter(TenantAddon.tenant_id == tenant_id, TenantAddon.status == "active")
+        .all()
+    )
+    out: dict[str, int] = {}
+    for r in rows:
+        key = str(r.addon_type)
+        out[key] = out.get(key, 0) + (int(r.quantity) if r.quantity is not None else 1)  # type: ignore[arg-type]
+    return out
+
+
+def has_active_addon(db: Session, tenant_id: str, addon_type: str) -> bool:
+    """True if the tenant holds an active managed add-on of the given type.
+
+    The provisioning gate (managed cache/queue/domain/edge create requires the
+    matching add-on) calls this once the managed auto-provisioning pipeline ships.
+    """
+    return addon_type in get_active_addons(db, tenant_id)
+
+
+# ---------------------------------------------------------------------------
+# Projects-cap reconciliation (downgrade locks excess projects; upgrade unlocks)
+# ---------------------------------------------------------------------------
+
+def reconcile_projects_cap(db: Session, tenant: Tenant) -> None:
+    """Enforce the tenant's ``projects`` cap across their projects.
+
+    On a downgrade that leaves the tenant over the cap, the most recent non-default
+    projects are set to ``status='locked'`` (read-only) until they fit. On an upgrade
+    (or unlimited), all locked projects are re-activated. The default project is never
+    locked. Caller commits.
+    """
+    from app.models.models import Project
+    cap = plan_limits(get_plan(db, str(tenant.plan))).get("projects", 1)
+    projects = (
+        db.query(Project)
+        .filter(Project.tenant_id == tenant.id)
+        .order_by(Project.created_at)
+        .all()
+    )
+    if not isinstance(cap, int) or cap == UNLIMITED:
+        # Unlimited: unlock everything.
+        for p in projects:
+            if str(p.status) == "locked":
+                p.status = "active"  # type: ignore[assignment]
+        return
+    # Keep `cap` projects active (default always counts), lock the rest by recency.
+    active_targets = {str(p.id) for p in projects[:cap]}
+    for p in projects:
+        is_default = bool(p.is_default)
+        want_active = is_default or str(p.id) in active_targets
+        if want_active and str(p.status) == "locked":
+            p.status = "active"  # type: ignore[assignment]
+        elif (not want_active) and str(p.status) != "locked":
+            p.status = "locked"  # type: ignore[assignment]
 
 
 def serialize_plan(plan: Plan) -> dict[str, Any]:

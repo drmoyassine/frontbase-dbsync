@@ -15,7 +15,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database.config import SessionLocal
-from app.models.models import Project, TenantMember, ProjectMember, User
+from app.models.models import (
+    Project, TenantMember, ProjectMember, User,
+    ProjectDatasource, ProjectStorage, ProjectConnectedAccount,
+)
 from app.middleware.tenant_context import TenantContext, require_tenant_context
 from app.services.plan_limits import check_quota
 
@@ -335,3 +338,118 @@ async def remove_project_member(
         raise
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Shareable-resource grants (datasource / storage / connected-account → project)
+# ---------------------------------------------------------------------------
+
+class GrantBody(BaseModel):
+    resource_id: str
+
+
+def _require_manage(ctx: TenantContext) -> None:
+    if ctx.is_master or not ctx.tenant_id:
+        raise HTTPException(status_code=404, detail="No tenant associated with this user")
+    if ctx.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="Only owners/admins can manage shared resources")
+
+
+def _owned_or_granted_count(db: Session, project_id: str, model, grant_model, fk_attr: str) -> int:
+    """Resources a project can use: owned (project_id) + granted (grant table)."""
+    owned = db.query(model).filter(model.project_id == project_id).count()
+    granted = (
+        db.query(grant_model)
+        .filter(getattr(grant_model, fk_attr).isnot(None), grant_model.project_id == project_id)
+        .count()
+    )
+    return owned + granted
+
+
+def _resource_belongs_to_tenant(db: Session, model, resource_id: str, tenant_id: Optional[str]) -> bool:
+    if not tenant_id:
+        return False
+    r = db.query(model).filter(model.id == resource_id).first()
+    if not r:
+        return False
+    pid = getattr(r, "project_id", None)
+    if not pid:
+        return False
+    proj = db.query(Project).filter(Project.id == pid, Project.tenant_id == tenant_id).first()
+    return proj is not None
+
+
+# ---- Datasources (shareable, per-project capped on grant) ----
+
+@router.post("/{project_id}/datasources", status_code=201)
+async def grant_datasource(project_id: str, body: GrantBody, ctx: TenantContext = Depends(require_tenant_context)):
+    from app.services.sync.models.datasource import Datasource
+    _require_manage(ctx)
+    db = SessionLocal()
+    try:
+        _require_project(db, project_id, ctx)
+        if not _resource_belongs_to_tenant(db, Datasource, body.resource_id, ctx.tenant_id):
+            raise HTTPException(status_code=404, detail="Datasource not found in this workspace")
+        exists = db.query(ProjectDatasource).filter(
+            ProjectDatasource.project_id == project_id, ProjectDatasource.datasource_id == body.resource_id
+        ).first()
+        if not exists:
+            check_quota(db, ctx, "datasources", _owned_or_granted_count(db, project_id, Datasource, ProjectDatasource, "datasource_id"))
+            db.add(ProjectDatasource(id=str(uuid.uuid4()), tenant_id=ctx.tenant_id, project_id=project_id, datasource_id=body.resource_id, created_at=_now()))
+            db.commit()
+        return {"success": True}
+    except HTTPException:
+        raise
+    finally:
+        db.close()
+
+
+@router.delete("/{project_id}/datasources/{datasource_id}")
+async def revoke_datasource(project_id: str, datasource_id: str, ctx: TenantContext = Depends(require_tenant_context)):
+    _require_manage(ctx)
+    db = SessionLocal()
+    try:
+        row = db.query(ProjectDatasource).filter(ProjectDatasource.project_id == project_id, ProjectDatasource.datasource_id == datasource_id).first()
+        if row:
+            db.delete(row); db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+
+
+# ---- Connected accounts (shareable, per-tenant — grant is free) ----
+
+@router.post("/{project_id}/connected-accounts", status_code=201)
+async def grant_connected_account(project_id: str, body: GrantBody, ctx: TenantContext = Depends(require_tenant_context)):
+    from app.models.models import EdgeProviderAccount
+    _require_manage(ctx)
+    db = SessionLocal()
+    try:
+        _require_project(db, project_id, ctx)
+        if not _resource_belongs_to_tenant(db, EdgeProviderAccount, body.resource_id, ctx.tenant_id):
+            raise HTTPException(status_code=404, detail="Connected account not found in this workspace")
+        exists = db.query(ProjectConnectedAccount).filter(
+            ProjectConnectedAccount.project_id == project_id, ProjectConnectedAccount.account_id == body.resource_id
+        ).first()
+        if not exists:
+            db.add(ProjectConnectedAccount(id=str(uuid.uuid4()), tenant_id=ctx.tenant_id, project_id=project_id, account_id=body.resource_id, created_at=_now()))
+            db.commit()
+        return {"success": True}
+    except HTTPException:
+        raise
+    finally:
+        db.close()
+
+
+@router.delete("/{project_id}/connected-accounts/{account_id}")
+async def revoke_connected_account(project_id: str, account_id: str, ctx: TenantContext = Depends(require_tenant_context)):
+    _require_manage(ctx)
+    db = SessionLocal()
+    try:
+        row = db.query(ProjectConnectedAccount).filter(ProjectConnectedAccount.project_id == project_id, ProjectConnectedAccount.account_id == account_id).first()
+        if row:
+            db.delete(row); db.commit()
+        return {"success": True}
+    finally:
+        db.close()
+

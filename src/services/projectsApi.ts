@@ -39,6 +39,23 @@ export const projectsApi = {
         const res = await api.delete(`/api/projects/${projectId}/members/${userId}`);
         return res.data;
     },
+    // Shareable-resource grants (datasource / connected-account → project)
+    grantDatasource: async (projectId: string, datasourceId: string): Promise<{ success: boolean }> => {
+        const res = await api.post(`/api/projects/${projectId}/datasources`, { resource_id: datasourceId });
+        return res.data;
+    },
+    revokeDatasource: async (projectId: string, datasourceId: string): Promise<{ success: boolean }> => {
+        const res = await api.delete(`/api/projects/${projectId}/datasources/${datasourceId}`);
+        return res.data;
+    },
+    grantConnectedAccount: async (projectId: string, accountId: string): Promise<{ success: boolean }> => {
+        const res = await api.post(`/api/projects/${projectId}/connected-accounts`, { resource_id: accountId });
+        return res.data;
+    },
+    revokeConnectedAccount: async (projectId: string, accountId: string): Promise<{ success: boolean }> => {
+        const res = await api.delete(`/api/projects/${projectId}/connected-accounts/${accountId}`);
+        return res.data;
+    },
 };
 
 export interface ProjectMemberEntry {

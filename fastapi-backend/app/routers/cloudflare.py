@@ -264,6 +264,15 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
                         EdgeEngine.project_id == project_id
                     ).count()
                     check_quota(db, ctx, "edge_engines", engine_count)
+                    # Multi-project guards: shared engine only in default project; bound
+                    # db/cache/queue must be in the same project.
+                    from app.services.project_setup import (
+                        assert_community_engine_in_default_project, assert_engine_resources_same_project,
+                    )
+                    assert_community_engine_in_default_project(db, ctx.tenant_id, project_id, False)
+                    assert_engine_resources_same_project(
+                        db, project_id, edge_db_id, edge_cache_id, edge_queue_id
+                    )
                 engine = EdgeEngine(
                     id=str(uuid.uuid4()),
                     name=payload.worker_name,

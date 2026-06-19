@@ -304,11 +304,14 @@ async def lifespan(fastapi_app: FastAPI):
     # Multi-project: ensure schema columns + backfill default projects (cloud only)
     if is_cloud():
         try:
-            from app.services.project_setup import ensure_multiproject_schema, backfill_default_projects
+            from app.services.project_setup import (
+                ensure_multiproject_schema, backfill_default_projects, backfill_project_members,
+            )
             from app.database.config import engine, SessionLocal
             ensure_multiproject_schema(engine)
             db = SessionLocal()
             backfill_default_projects(db)
+            backfill_project_members(db)
             db.close()
         except Exception as e:
             logger.warning(f"[Main App Startup] Multi-project setup failed (non-fatal): {e}")

@@ -376,9 +376,15 @@ async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db)
         ).count()
         check_quota(db, ctx, "edge_engines", engine_count)
         # Multi-project: a shared/community engine may only live in the default project (Step E).
-        from app.services.project_setup import assert_community_engine_in_default_project
+        from app.services.project_setup import (
+            assert_community_engine_in_default_project, assert_engine_resources_same_project,
+        )
         assert_community_engine_in_default_project(
             db, ctx.tenant_id, project_id, bool(getattr(payload, "is_shared", False))
+        )
+        # Cross-project binding guard: bound db/cache/queue must be in the same project.
+        assert_engine_resources_same_project(
+            db, project_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id
         )
 
     # Inject system key into engine_config for M2M auth

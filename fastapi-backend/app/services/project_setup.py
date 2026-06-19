@@ -81,6 +81,46 @@ def backfill_default_projects(db) -> None:
         logger.info("[multi-project] flagged %d default project(s)", fixed)
 
 
+def backfill_project_members(db) -> None:
+    """Grant each non-owner/non-admin member access to all their tenant's projects.
+
+    Under the prior single-project model every member could see the one project.
+    Multi-project gates non-admins by ``project_members`` rows, so seed those rows
+    for existing members to preserve their access. Owners/admins are implicit and
+    need no rows. Idempotent: skips members who already have any project access.
+    """
+    import uuid
+    from datetime import datetime, timezone
+    from app.models.models import Project, TenantMember, ProjectMember
+
+    now = datetime.now(timezone.utc).isoformat()
+    added = 0
+    members = db.query(TenantMember).filter(~TenantMember.role.in_(["owner", "admin"])).all()
+    for m in members:
+        # Skip if the member already has any project access rows.
+        existing = (
+            db.query(ProjectMember)
+            .filter(ProjectMember.tenant_id == m.tenant_id, ProjectMember.user_id == m.user_id)
+            .count()
+        )
+        if existing:
+            continue
+        projects = db.query(Project).filter(Project.tenant_id == m.tenant_id).all()
+        for p in projects:
+            db.add(ProjectMember(
+                id=str(uuid.uuid4()),
+                tenant_id=str(m.tenant_id),
+                project_id=str(p.id),
+                user_id=str(m.user_id),
+                role=str(m.role) if m.role in ("admin", "editor", "viewer") else "viewer",
+                created_at=now,
+            ))
+            added += 1
+    if added:
+        db.commit()
+        logger.info("[multi-project] seeded %d project-member access row(s)", added)
+
+
 def get_default_project_id(db, tenant_id: str):
     """Return the tenant's default project id (or None)."""
     from app.models.models import Project
@@ -122,3 +162,23 @@ def assert_resource_same_project(resource_project_id, engine_project_id, label: 
             status_code=403,
             detail=f"{label} belongs to a different project and cannot be bound here.",
         )
+
+
+def assert_engine_resources_same_project(
+    db, engine_project_id, edge_db_id, edge_cache_id, edge_queue_id
+) -> None:
+    """Assert each bound backing resource (state-db/cache/queue) belongs to the same
+    project as the engine being created/updated. No-op for unbound or tenant-level
+    (project_id None) resources (legacy/back-compat)."""
+    from app.models.models import EdgeDatabase, EdgeCache, EdgeQueue
+    checks = (
+        (EdgeDatabase, edge_db_id, "State database"),
+        (EdgeCache, edge_cache_id, "Cache"),
+        (EdgeQueue, edge_queue_id, "Queue"),
+    )
+    for Model, rid, label in checks:
+        if not rid:
+            continue
+        res = db.query(Model).filter(Model.id == rid).first()
+        if res is not None:
+            assert_resource_same_project(getattr(res, "project_id", None), engine_project_id, label)

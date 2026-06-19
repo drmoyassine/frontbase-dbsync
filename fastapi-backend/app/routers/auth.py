@@ -13,6 +13,7 @@ from pydantic import BaseModel, EmailStr
 from app.middleware.tenant_context import TenantContext, get_tenant_context
 from typing import Optional, Literal, cast
 import os
+import json
 import hashlib
 import secrets
 import logging
@@ -950,6 +951,16 @@ async def accept_invite(request: Request, body: AcceptInviteRequest, response: R
         invite_email = str(inv.email)
         invite_role = str(inv.role)
         tenant_id = str(inv.tenant_id)
+        # Parse granted projects (JSON list); None → no explicit project rows.
+        raw_pids = getattr(inv, "project_ids", None)
+        invite_project_ids: list = []
+        if raw_pids:
+            try:
+                parsed = json.loads(str(raw_pids))
+                if isinstance(parsed, list):
+                    invite_project_ids = [str(p) for p in parsed]
+            except (ValueError, TypeError):
+                pass
     finally:
         db.close()
 
@@ -970,7 +981,8 @@ async def accept_invite(request: Request, body: AcceptInviteRequest, response: R
     try:
         from app.models.models import TenantInvite
         info = attach_user_to_tenant(
-            db, st_user_id=st_user_id, email=invite_email, tenant_id=tenant_id, role=invite_role,
+            db, st_user_id=st_user_id, email=invite_email, tenant_id=tenant_id,
+            role=invite_role, project_ids=invite_project_ids,
         )
         inv = db.query(TenantInvite).filter(TenantInvite.token == body.token).first()
         if inv is not None:

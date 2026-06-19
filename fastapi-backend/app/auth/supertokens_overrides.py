@@ -150,6 +150,7 @@ def attach_user_to_tenant(
     email: str,
     tenant_id: str,
     role: str,
+    project_ids: Optional[list] = None,
 ) -> dict:
     """Attach a newly-signed-up user to an EXISTING tenant as a TenantMember.
 
@@ -157,6 +158,9 @@ def attach_user_to_tenant(
     (creating a new workspace).  Enforces the tenant's ``team_members`` cap at this
     chokepoint — the authoritative point where a seat is actually consumed — so
     concurrent invites can't exceed the plan limit.
+
+    Also grants per-project access (ProjectMember rows) for the invited projects.
+    Owners/admins are implicit members of all projects, so no rows are added for them.
 
     Raises ValueError on a full workspace or missing tenant.
     """
@@ -195,6 +199,20 @@ def attach_user_to_tenant(
         created_at=now,
     )
     db.add(member)
+
+    # Per-project access (skip for owner/admin — implicit access to all projects).
+    if role not in ("owner", "admin") and project_ids:
+        from app.models.models import ProjectMember
+        for pid in project_ids:
+            db.add(ProjectMember(
+                id=str(_uuid.uuid4()),
+                tenant_id=tenant_id,
+                project_id=str(pid),
+                user_id=st_user_id,
+                role=role,
+                created_at=now,
+            ))
+
     db.flush()
     logger.info(f"[Invite] Attached user {st_user_id} to tenant {tenant_id} as {role}")
 

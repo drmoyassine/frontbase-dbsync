@@ -7,9 +7,10 @@ Registered only when DEPLOYMENT_MODE=cloud.
 import os
 import uuid
 import secrets
+import json
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from datetime import datetime, timezone, timedelta
 
 from app.database.config import SessionLocal
@@ -39,6 +40,7 @@ class PlanChangeRequestBody(BaseModel):
 class InviteCreateBody(BaseModel):
     email: EmailStr
     role: Literal["admin", "editor", "viewer"] = "editor"
+    project_ids: Optional[List[str]] = None   # projects granted on accept; None = all current projects
 
 
 INVITE_TTL_DAYS = 7
@@ -390,6 +392,11 @@ async def create_invite(
         check_quota(db, ctx, "team_members", used)
 
         now = datetime.now(timezone.utc)
+        # Resolve granted projects: explicit list, else all current projects (back-compat:
+        # inviting without specifying grants access to everything, as before multi-project).
+        granted = body.project_ids
+        if granted is None:
+            granted = [str(p.id) for p in db.query(Project).filter(Project.tenant_id == ctx.tenant_id).all()]
         invite = TenantInvite(
             id=str(uuid.uuid4()),
             tenant_id=str(ctx.tenant_id),
@@ -400,6 +407,7 @@ async def create_invite(
             invited_by=ctx.user_id,
             created_at=now.isoformat(),
             expires_at=(now + timedelta(days=INVITE_TTL_DAYS)).isoformat(),
+            project_ids=json.dumps(granted),
         )
         db.add(invite)
         db.commit()

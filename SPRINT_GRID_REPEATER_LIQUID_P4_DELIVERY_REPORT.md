@@ -1,10 +1,10 @@
 # Delivery Report — Grid/Repeater + Visual Liquid + Phase‑4 Tail
 
-> Implementation report for the sprint plan at
-> [`docs/plans/sprint_grid-repeater-liquid-p4.md`](docs/plans/sprint_grid-repeater-liquid-p4.md)
-> *(local working doc — `docs/` is gitignored).*
+> Implementation report for the sprint plan `docs/plans/sprint_grid-repeater-liquid-p4.md`
+> *(local working doc — `docs/` is gitignored, so it is not in version control and is
+> not linked here).*
 >
-> All 10 stages shipped. Verified on `main` @ `2026‑06‑20`.
+> All 10 stages shipped in commit `9a4bc9d` on `main` (2026‑06‑20).
 > Validation: `tsc --noEmit` clean across root app + `services/edge` + `@frontbase/form`
 > + `@frontbase/liquid-core`; 41 tests pass (34 new in `liquid-core`, incl. 4 parity + 1
 > DoS-limit; 7 pre-existing).

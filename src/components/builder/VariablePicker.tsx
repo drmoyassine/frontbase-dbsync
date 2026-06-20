@@ -16,25 +16,9 @@ import {
     logicAllowedForContext,
 } from '@/lib/liquid/syntaxContext';
 import { ChevronRight, ChevronLeft, FileText, User, Globe, Link, Clock, Database, Box, Cookie, Layers, Code2 } from 'lucide-react';
-
-/** A multi-line Liquid snippet offered in output contexts. caretOffset places
- * the caret at the first logical gap (NOT a literal placeholder — those are
- * invalid Liquid). */
-interface LogicSnippet {
-    label: string;
-    insert: string;
-    caretOffset: number;
-    description?: string;
-}
-
-const LOGIC_SNIPPETS: LogicSnippet[] = [
-    { label: 'If', insert: '{% if  %}\n  \n{% endif %}', caretOffset: 6, description: 'Conditional' },
-    { label: 'If / Else', insert: '{% if  %}\n  \n{% else %}\n  \n{% endif %}', caretOffset: 6, description: 'Conditional' },
-    { label: 'Unless', insert: '{% unless  %}\n  \n{% endunless %}', caretOffset: 10, description: 'Negated conditional' },
-    { label: 'For loop', insert: '{% for item in  %}\n  \n{% endfor %}', caretOffset: 15, description: 'Iterate a list' },
-    { label: 'Case / When', insert: '{% case  %}\n{% when  %}\n  \n{% endcase %}', caretOffset: 8, description: 'Switch' },
-    { label: 'Assign', insert: '{% assign  =  %}', caretOffset: 10, description: 'Set a variable' },
-];
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { LOGIC_SNIPPETS, LogicSnippet } from '@/lib/liquid/logicSnippets';
+import { LogicSnippetWizard } from './LogicSnippetWizard';
 
 interface VariablePickerProps {
     onSelect: (value: string, caretOffset?: number) => void;
@@ -83,6 +67,8 @@ export function VariablePicker({
     const allowFilters = showFilters && filtersAllowedForContext(syntaxContext);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [activeGroup, setActiveGroup] = useState<string | null>(null);
+    // Logic-snippet mini-wizard: when set, the wizard dialog is open for this snippet.
+    const [wizardSnippet, setWizardSnippet] = useState<LogicSnippet | null>(null);
     const listRef = useRef<HTMLDivElement>(null);
     const selectedRef = useRef<HTMLDivElement>(null);
 
@@ -234,12 +220,10 @@ export function VariablePicker({
 
     const handleSelect = useCallback((index: number) => {
         if (inLogicGroup) {
-            // Selecting a logic snippet — insert with caret at first gap.
+            // Selecting a logic snippet — open the mini-wizard to collect fields,
+            // then insert complete Liquid (no empty `{%  %}` gaps).
             const snippet = filteredSnippets[index];
-            if (snippet) {
-                onSelect(snippet.insert, snippet.caretOffset);
-                onClose();
-            }
+            if (snippet) setWizardSnippet(snippet);
             return;
         }
         if (!activeGroup) {
@@ -261,16 +245,21 @@ export function VariablePicker({
         }
     }, [inLogicGroup, activeGroup, filteredGroups, filteredVariables, filteredFilters, filteredSnippets, allowFilters, onSelect, onClose]);
 
-    // Close on click outside
+    // Close on click outside — but not while the snippet wizard dialog is open
+    // (the dialog renders in its own portal, which counts as "outside").
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
+            if (wizardSnippet) return;
+            const target = e.target as HTMLElement;
+            // Ignore clicks inside any Radix portal (dialog/select/tooltip content).
+            if (target.closest('[role="dialog"], [data-radix-popper-content-wrapper]')) return;
             if (listRef.current && !listRef.current.contains(e.target as Node)) {
                 onClose();
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [onClose]);
+    }, [onClose, wizardSnippet]);
 
     if (totalItems === 0 && !isLoading) {
         return ReactDOM.createPortal(
@@ -288,6 +277,7 @@ export function VariablePicker({
     }
 
     return ReactDOM.createPortal(
+        <>
         <div
             ref={listRef}
             className="variable-picker fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg max-h-80 min-w-[260px] max-w-[360px] overflow-y-auto"
@@ -381,25 +371,34 @@ export function VariablePicker({
 
                     {/* Logic snippets (when the Logic & Loops group is open) */}
                     {inLogicGroup && filteredSnippets.length > 0 && (
-                        <div className="py-1">
-                            {filteredSnippets.map((s, i) => (
-                                <div
-                                    key={s.label}
-                                    ref={i === selectedIndex ? selectedRef : null}
-                                    className={cn(
-                                        'px-3 py-2 cursor-pointer flex items-center gap-2 text-sm transition-colors',
-                                        i === selectedIndex && 'bg-accent'
-                                    )}
-                                    onClick={() => handleSelect(i)}
-                                    onMouseEnter={() => setSelectedIndex(i)}
-                                >
-                                    <span className="font-mono text-xs bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900">{s.label}</span>
-                                    {s.description && (
-                                        <span className="text-xs text-muted-foreground ml-auto whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px]">{s.description}</span>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
+                        <TooltipProvider delayDuration={300}>
+                            <div className="py-1">
+                                {filteredSnippets.map((s, i) => (
+                                    <Tooltip key={s.key}>
+                                        <TooltipTrigger asChild>
+                                            <div
+                                                ref={i === selectedIndex ? selectedRef : null}
+                                                className={cn(
+                                                    'px-3 py-2 cursor-pointer flex items-center gap-2 text-sm transition-colors',
+                                                    i === selectedIndex && 'bg-accent'
+                                                )}
+                                                onClick={() => handleSelect(i)}
+                                                onMouseEnter={() => setSelectedIndex(i)}
+                                            >
+                                                <span className="font-mono text-xs bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900">{s.label}</span>
+                                                {s.description && (
+                                                    <span className="text-xs text-muted-foreground ml-auto whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px]">{s.description}</span>
+                                                )}
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="right" className="max-w-[240px]">
+                                            <p className="font-medium">{s.tooltip}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">{s.example}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                ))}
+                            </div>
+                        </TooltipProvider>
                     )}
 
                     {/* Filters (only in root view) */}
@@ -433,7 +432,17 @@ export function VariablePicker({
                     )}
                 </>
             )}
-        </div>,
+        </div>
+        <LogicSnippetWizard
+            snippet={wizardSnippet}
+            open={!!wizardSnippet}
+            onClose={() => setWizardSnippet(null)}
+            onInsert={(text, caretOffset) => {
+                onSelect(text, caretOffset);
+                onClose();
+            }}
+        />
+        </>,
         document.body
     );
 }

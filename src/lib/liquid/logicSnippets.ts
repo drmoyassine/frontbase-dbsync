@@ -8,7 +8,7 @@
  * and get complete, correct Liquid.
  */
 
-export type SnippetFieldKind = 'condition' | 'variable' | 'text' | 'list' | 'content';
+export type SnippetFieldKind = 'condition' | 'variable' | 'text' | 'list' | 'content' | 'branches';
 
 export interface SnippetField {
     key: string;
@@ -30,7 +30,13 @@ export interface ConditionValue {
     rhs: string;
 }
 
-export type SnippetValues = Record<string, string | string[] | ConditionValue>;
+/** One branch of an if/elsif chain: the test and the content shown on match. */
+export interface BranchValue {
+    cond: ConditionValue;
+    body: string;
+}
+
+export type SnippetValues = Record<string, string | string[] | ConditionValue | BranchValue[]>;
 
 export interface SnippetBuildResult {
     /** The complete Liquid string to insert. */
@@ -50,6 +56,16 @@ export interface LogicSnippet {
     description: string;
     fields: SnippetField[];
     build: (values: SnippetValues) => SnippetBuildResult;
+    /**
+     * Niche tag — rendered under an "Advanced" subsection in the picker (not
+     * mixed with the everyday snippets). For break/continue/increment/etc.
+     */
+    advanced?: boolean;
+    /**
+     * Only meaningful inside a `{% for %}` loop (break/continue). Surfaces a
+     * "use inside a loop" hint; not AST-enforced (a stray tag renders empty).
+     */
+    requiresLoop?: boolean;
 }
 
 // ── Operators offered in the condition builder (plain-language labels) ────────
@@ -102,13 +118,24 @@ function asCondition(v: SnippetValues, key: string): ConditionValue {
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) return raw as ConditionValue;
     return { lhs: '', op: '==', rhs: '' };
 }
+function asBranches(v: SnippetValues, key: string): BranchValue[] {
+    const raw = v[key];
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .map((b): BranchValue => {
+            if (b && typeof b === 'object' && !Array.isArray(b) && 'cond' in b) return b as BranchValue;
+            return { cond: { lhs: '', op: '==', rhs: '' }, body: '' };
+        })
+        .filter(b => !!b.cond.lhs.trim()); // drop branches with no test
+}
 function asText(v: SnippetValues, key: string, fallback = ''): string {
     const raw = v[key];
     return typeof raw === 'string' && raw.trim() ? raw.trim() : fallback;
 }
 function asList(v: SnippetValues, key: string): string[] {
     const raw = v[key];
-    return Array.isArray(raw) ? raw.filter(x => x && x.trim()) : [];
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((x): x is string => typeof x === 'string' && !!x.trim());
 }
 
 // ── The snippets ─────────────────────────────────────────────────────────────
@@ -154,6 +181,41 @@ export const LOGIC_SNIPPETS: LogicSnippet[] = [
             }
             const prefix = `{% if ${cond} %}\n  `;
             return { text: `${prefix}\n{% else %}\n  \n{% endif %}`, caretOffset: prefix.length };
+        },
+    },
+    {
+        key: 'if_elsif',
+        label: 'If / Else if',
+        tooltip: 'Pick the first matching block from several tests.',
+        example: "e.g. show Gold / Silver / Bronze tiers, else Standard.",
+        description: 'Multi-branch',
+        fields: [
+            { key: 'branches', label: 'Branches (first match wins)', kind: 'branches' },
+            { key: 'else', label: 'If none match, show…', kind: 'content', optional: true, placeholder: "e.g. Standard" },
+        ],
+        build: (v) => {
+            const branches = asBranches(v, 'branches');
+            const els = asText(v, 'else');
+            if (branches.length === 0) {
+                const prefix = '{% if condition %}\n  ';
+                return { text: `${prefix}\n{% endif %}`, caretOffset: prefix.length };
+            }
+            const allInline = els || branches.every(b => b.body.trim());
+            const parts = branches.map((b, i) => {
+                const tag = i === 0 ? 'if' : 'elsif';
+                const c = serializeCondition(b.cond);
+                return allInline ? `{% ${tag} ${c} %}${b.body}` : `{% ${tag} ${c} %}\n  ${b.body}`;
+            });
+            const elsePart = els ? (allInline ? `{% else %}${els}` : `{% else %}\n  ${els}`) : '';
+            const closer = '{% endif %}';
+            if (allInline) {
+                return { text: `${parts.join('')}${elsePart}${closer}` };
+            }
+            // scaffold: caret into the first branch's body
+            const text = `${parts.join('\n')}${elsePart ? '\n' + elsePart : ''}\n${closer}`;
+            const firstCond = serializeCondition(branches[0].cond);
+            const caretOffset = `{% if ${firstCond} %}\n  `.length;
+            return { text, caretOffset };
         },
     },
     {
@@ -241,6 +303,97 @@ export const LOGIC_SNIPPETS: LogicSnippet[] = [
             return { text, caretOffset: text.length };
         },
     },
+    {
+        key: 'capture',
+        label: 'Capture',
+        tooltip: 'Save a block of content into a name you can reuse later.',
+        example: "e.g. capture greeting, then show it twice with {{ greeting }}.",
+        description: 'Set a variable',
+        fields: [
+            { key: 'name', label: 'Name', kind: 'text', placeholder: 'e.g. greeting' },
+            { key: 'value', label: 'Content to save', kind: 'content', optional: true, placeholder: 'e.g. Welcome back! (leave blank to fill on canvas)' },
+        ],
+        build: (v) => {
+            const name = asText(v, 'name', 'captured');
+            const value = asText(v, 'value');
+            if (value) {
+                return { text: `{% capture ${name} %}${value}{% endcapture %}` };
+            }
+            const prefix = `{% capture ${name} %}\n  `;
+            return { text: `${prefix}\n{% endcapture %}`, caretOffset: prefix.length };
+        },
+    },
+    {
+        key: 'cycle',
+        label: 'Cycle',
+        tooltip: 'Step through a fixed list of values, one per repeat of a loop.',
+        example: 'e.g. alternate row colours red, blue, red, blue across list rows.',
+        description: 'Alternate values',
+        advanced: true,
+        fields: [
+            { key: 'values', label: 'Values to cycle', kind: 'list', hint: 'One value per line' },
+        ],
+        build: (v) => {
+            const vals = asList(v, 'values').map(x => toOperandValue(x)).filter(Boolean);
+            const list = vals.length ? vals.join(', ') : "'first', 'second'";
+            const text = `{% cycle ${list} %}`;
+            return { text, caretOffset: text.length };
+        },
+    },
+    {
+        key: 'increment',
+        label: 'Increment',
+        tooltip: 'Add 1 to a named counter (kept in its own namespace, not readable with {{ }}).',
+        example: 'e.g. number items across the page with a shared counter.',
+        description: 'Counter',
+        advanced: true,
+        fields: [
+            { key: 'name', label: 'Counter name', kind: 'text', placeholder: 'e.g. counter' },
+        ],
+        build: (v) => {
+            const name = asText(v, 'name', 'counter');
+            const text = `{% increment ${name} %}`;
+            return { text, caretOffset: text.length };
+        },
+    },
+    {
+        key: 'decrement',
+        label: 'Decrement',
+        tooltip: 'Subtract 1 from a named counter (kept in its own namespace, not readable with {{ }}).',
+        example: 'e.g. count down remaining slots.',
+        description: 'Counter',
+        advanced: true,
+        fields: [
+            { key: 'name', label: 'Counter name', kind: 'text', placeholder: 'e.g. counter' },
+        ],
+        build: (v) => {
+            const name = asText(v, 'name', 'counter');
+            const text = `{% decrement ${name} %}`;
+            return { text, caretOffset: text.length };
+        },
+    },
+    {
+        key: 'break',
+        label: 'Break',
+        tooltip: 'Stop a For loop early (use only inside a loop).',
+        example: 'e.g. show only the first 3 items then stop.',
+        description: 'Loop control',
+        advanced: true,
+        requiresLoop: true,
+        fields: [],
+        build: () => ({ text: '{% break %}' }),
+    },
+    {
+        key: 'continue',
+        label: 'Continue',
+        tooltip: 'Skip to the next item in a For loop (use only inside a loop).',
+        example: 'e.g. skip items that are hidden.',
+        description: 'Loop control',
+        advanced: true,
+        requiresLoop: true,
+        fields: [],
+        build: () => ({ text: '{% continue %}' }),
+    },
 ];
 
 /** Whether a snippet's required fields are filled enough to insert. */
@@ -252,10 +405,13 @@ export function isSnippetValid(snippet: LogicSnippet, values: SnippetValues): bo
             const c = (raw as ConditionValue) || { lhs: '', op: '', rhs: '' };
             return !!c.lhs?.trim();
         }
+        if (f.kind === 'branches') {
+            return Array.isArray(raw) && raw.some((b: any) => b?.cond?.lhs?.trim());
+        }
         if (f.kind === 'list') {
             return Array.isArray(raw) && raw.some(x => x && x.trim());
         }
-        // text / variable — allow a default to satisfy required
+        // text / variable / content — allow a default to satisfy required
         const s = typeof raw === 'string' ? raw : '';
         return !!(s.trim() || f.default?.trim());
     });
@@ -266,6 +422,7 @@ export function initialSnippetValues(snippet: LogicSnippet): SnippetValues {
     const values: SnippetValues = {};
     for (const f of snippet.fields) {
         if (f.kind === 'condition') values[f.key] = { lhs: '', op: '==', rhs: '' };
+        else if (f.kind === 'branches') values[f.key] = [{ cond: { lhs: '', op: '==', rhs: '' }, body: '' }];
         else if (f.kind === 'list') values[f.key] = [''];
         else values[f.key] = f.default ?? '';
     }

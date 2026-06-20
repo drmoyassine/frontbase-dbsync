@@ -119,6 +119,8 @@ class TemplateFilter(BaseModel):
     name: str
     args: Optional[List[str]] = None
     description: str
+    # Picker category (Text/Numbers/Lists/Dates/Format). Absent → 'Format'.
+    category: Optional[str] = None
 
 class TemplateRegistryResponse(BaseModel):
     variables: List[TemplateVariable]
@@ -177,39 +179,67 @@ STATIC_VARIABLES = [
     TemplateVariable(path="cookies.*", type="string", source="cookies", description="Cookie value"),
 ]
 
-# Built-in and custom filters
+# Built-in and custom filters. Categorized; kept in sync with the frontend
+# offline fallback in src/hooks/useVariables.ts getDefaultVariables().
 TEMPLATE_FILTERS = [
-    # LiquidJS built-in
-    TemplateFilter(name="upcase", description="Convert to uppercase"),
-    TemplateFilter(name="downcase", description="Convert to lowercase"),
-    TemplateFilter(name="capitalize", description="Capitalize first letter"),
-    TemplateFilter(name="truncate", args=["length"], description="Truncate to length"),
-    TemplateFilter(name="strip", description="Remove whitespace"),
-    TemplateFilter(name="split", args=["delimiter"], description="Split into array"),
-    TemplateFilter(name="join", args=["separator"], description="Join array to string"),
-    TemplateFilter(name="first", description="First item of array"),
-    TemplateFilter(name="last", description="Last item of array"),
-    TemplateFilter(name="size", description="Length of array/string"),
-    TemplateFilter(name="plus", args=["number"], description="Add number"),
-    TemplateFilter(name="minus", args=["number"], description="Subtract number"),
-    TemplateFilter(name="times", args=["number"], description="Multiply by number"),
-    TemplateFilter(name="divided_by", args=["number"], description="Divide by number"),
-    TemplateFilter(name="round", description="Round to nearest integer"),
-    TemplateFilter(name="default", args=["value"], description="Default if empty"),
-    TemplateFilter(name="date", args=["format"], description="Format date"),
-    
-    # Custom Frontbase filters
-    TemplateFilter(name="money", args=["currency"], description="Format as currency ($29.99)"),
-    TemplateFilter(name="time_ago", description="Relative time (2 days ago)"),
-    TemplateFilter(name="timezone", args=["tz"], description="Convert timezone"),
-    TemplateFilter(name="date_format", args=["format"], description="Format date (short/long/iso)"),
-    TemplateFilter(name="json", description="JSON stringify"),
-    TemplateFilter(name="pluralize", args=["singular", "plural"], description="Pluralize based on count"),
-    TemplateFilter(name="escape_html", description="Escape HTML entities"),
-    TemplateFilter(name="truncate_words", args=["count"], description="Truncate by word count"),
-    TemplateFilter(name="slugify", description="Convert to URL slug"),
-    TemplateFilter(name="number", args=["locale"], description="Format number with commas"),
-    TemplateFilter(name="percent", args=["decimals"], description="Format as percentage"),
+    # ── Text ──────────────────────────────────────────────
+    TemplateFilter(name="upcase", description="Convert to UPPERCASE", category="Text"),
+    TemplateFilter(name="downcase", description="Convert to lowercase", category="Text"),
+    TemplateFilter(name="capitalize", description="Capitalize the first letter", category="Text"),
+    TemplateFilter(name="strip", description="Trim whitespace from both ends", category="Text"),
+    TemplateFilter(name="strip_html", description="Remove HTML tags", category="Text"),
+    TemplateFilter(name="newline_to_br", description="Turn line breaks into <br>", category="Text"),
+    TemplateFilter(name="truncate", args=["length"], description="Cut to a max length (with …)", category="Text"),
+    TemplateFilter(name="truncate_words", args=["count"], description="Cut to N words (with …)", category="Text"),
+    TemplateFilter(name="replace", args=["search", "replacement"], description="Replace all matches", category="Text"),
+    TemplateFilter(name="remove", args=["text"], description="Remove all matches", category="Text"),
+    TemplateFilter(name="append", args=["text"], description="Add text to the end", category="Text"),
+    TemplateFilter(name="prepend", args=["text"], description="Add text to the start", category="Text"),
+    TemplateFilter(name="slugify", description="Make a URL-friendly slug", category="Text"),
+    TemplateFilter(name="escape_html", description="Escape HTML special characters", category="Text"),
+    TemplateFilter(name="url_encode", description="URL-encode for use in links", category="Text"),
+
+    # ── Numbers ───────────────────────────────────────────
+    TemplateFilter(name="plus", args=["number"], description="Add", category="Numbers"),
+    TemplateFilter(name="minus", args=["number"], description="Subtract", category="Numbers"),
+    TemplateFilter(name="times", args=["number"], description="Multiply", category="Numbers"),
+    TemplateFilter(name="divided_by", args=["number"], description="Divide", category="Numbers"),
+    TemplateFilter(name="modulo", args=["number"], description="Remainder", category="Numbers"),
+    TemplateFilter(name="round", args=["decimals"], description="Round (default 0 decimals)", category="Numbers"),
+    TemplateFilter(name="ceil", description="Round up", category="Numbers"),
+    TemplateFilter(name="floor", description="Round down", category="Numbers"),
+    TemplateFilter(name="abs", description="Absolute value", category="Numbers"),
+    TemplateFilter(name="at_least", args=["number"], description="Minimum value", category="Numbers"),
+    TemplateFilter(name="at_most", args=["number"], description="Maximum value", category="Numbers"),
+    TemplateFilter(name="size", description="Length of text or list", category="Numbers"),
+
+    # ── Lists ─────────────────────────────────────────────
+    TemplateFilter(name="split", args=["delimiter"], description="Split text into a list", category="Lists"),
+    TemplateFilter(name="join", args=["separator"], description="Join a list into text", category="Lists"),
+    TemplateFilter(name="first", description="First item of a list", category="Lists"),
+    TemplateFilter(name="last", description="Last item of a list", category="Lists"),
+    TemplateFilter(name="map", args=["field"], description="Pick a field from each item (operates on a list)", category="Lists"),
+    TemplateFilter(name="where", args=["field", "value"], description="Keep items where field = value (operates on a list)", category="Lists"),
+    TemplateFilter(name="sort", args=["property"], description="Sort (by property)", category="Lists"),
+    TemplateFilter(name="sort_natural", args=["property"], description="Case-insensitive sort", category="Lists"),
+    TemplateFilter(name="reverse", description="Reverse a list or text", category="Lists"),
+    TemplateFilter(name="uniq", description="Remove duplicates (operates on a list)", category="Lists"),
+    TemplateFilter(name="compact", description="Remove blank items (operates on a list)", category="Lists"),
+    TemplateFilter(name="slice", args=["start", "length"], description="Take a slice", category="Lists"),
+
+    # ── Dates ─────────────────────────────────────────────
+    TemplateFilter(name="date", args=["format"], description="Format a date (strftime)", category="Dates"),
+    TemplateFilter(name="date_format", args=["format"], description="Format (short/long/iso/time)", category="Dates"),
+    TemplateFilter(name="time_ago", description="Relative time (2 days ago)", category="Dates"),
+    TemplateFilter(name="timezone", args=["tz"], description="Convert timezone", category="Dates"),
+
+    # ── Format ────────────────────────────────────────────
+    TemplateFilter(name="default", args=["value"], description="Fallback if empty", category="Format"),
+    TemplateFilter(name="json", description="Output as JSON", category="Format"),
+    TemplateFilter(name="money", args=["currency"], description="Currency ($29.99)", category="Format"),
+    TemplateFilter(name="number", args=["locale"], description="Number with separators (1,234)", category="Format"),
+    TemplateFilter(name="percent", args=["decimals"], description="Percentage", category="Format"),
+    TemplateFilter(name="pluralize", args=["singular", "plural"], description="Singular/plural by count", category="Format"),
 ]
 
 

@@ -88,6 +88,83 @@ describe('snippet build output', () => {
     });
 });
 
+describe('multi-branch if / elsif', () => {
+    it('inlines filled branches + else (no caret)', () => {
+        const r = byKey.if_elsif.build({
+            branches: [
+                { cond: { lhs: 'record.plan', op: '==', rhs: 'gold' }, body: 'Gold' },
+                { cond: { lhs: 'record.plan', op: '==', rhs: 'pro' }, body: 'Pro' },
+            ],
+            else: 'Standard',
+        });
+        expect(r.text).toBe("{% if record.plan == 'gold' %}Gold{% elsif record.plan == 'pro' %}Pro{% else %}Standard{% endif %}");
+        expect(r.caretOffset).toBeUndefined();
+    });
+
+    it('scaffolds with caret into first body when all bodies blank', () => {
+        const r = byKey.if_elsif.build({
+            branches: [
+                { cond: { lhs: 'record.plan', op: '==', rhs: 'gold' }, body: '' },
+                { cond: { lhs: 'record.plan', op: '==', rhs: 'pro' }, body: '' },
+            ],
+            else: '',
+        });
+        expect(r.text).toContain('{% if record.plan == \'gold\' %}');
+        expect(r.text).toContain('{% elsif record.plan == \'pro\' %}');
+        expect(r.caretOffset).toBeGreaterThan(0);
+    });
+
+    it('drops branch rows with no condition lhs', () => {
+        const r = byKey.if_elsif.build({
+            branches: [
+                { cond: { lhs: 'record.plan', op: '==', rhs: 'gold' }, body: 'Gold' },
+                { cond: { lhs: '', op: '==', rhs: '' }, body: 'dropped' },
+            ],
+            else: '',
+        });
+        expect(r.text).not.toContain('dropped');
+        expect(r.text).not.toContain('elsif');
+    });
+
+    it('is invalid without any branch lhs', () => {
+        expect(isSnippetValid(byKey.if_elsif, { branches: [{ cond: { lhs: '', op: '==', rhs: '' }, body: '' }] })).toBe(false);
+        expect(isSnippetValid(byKey.if_elsif, { branches: [{ cond: { lhs: 'a', op: '==', rhs: '' }, body: '' }] })).toBe(true);
+    });
+});
+
+describe('advanced tag snippets', () => {
+    it('capture inlines content / scaffolds when blank', () => {
+        expect(byKey.capture.build({ name: 'g', value: 'Hi' }).text).toBe('{% capture g %}Hi{% endcapture %}');
+        const blank = byKey.capture.build({ name: 'g', value: '' });
+        expect(blank.text).toBe('{% capture g %}\n  \n{% endcapture %}');
+        expect(blank.caretOffset).toBeGreaterThan(0);
+    });
+
+    it('cycle joins quoted values', () => {
+        expect(byKey.cycle.build({ values: ['red', 'blue'] }).text).toBe("{% cycle 'red', 'blue' %}");
+    });
+
+    it('increment / decrement', () => {
+        expect(byKey.increment.build({ name: 'c' }).text).toBe('{% increment c %}');
+        expect(byKey.decrement.build({ name: 'c' }).text).toBe('{% decrement c %}');
+    });
+
+    it('break / continue are zero-field and always valid', () => {
+        expect(byKey.break.build({}).text).toBe('{% break %}');
+        expect(byKey.continue.build({}).text).toBe('{% continue %}');
+        expect(isSnippetValid(byKey.break, {})).toBe(true);
+        expect(isSnippetValid(byKey.continue, {})).toBe(true);
+    });
+
+    it('advanced snippets are flagged advanced; break/continue require a loop', () => {
+        expect(byKey.cycle.advanced).toBe(true);
+        expect(byKey.break.requiresLoop).toBe(true);
+        expect(byKey.continue.requiresLoop).toBe(true);
+        expect(byKey.if.advanced).toBeUndefined();
+    });
+});
+
+
 describe('isSnippetValid', () => {
     it('requires a condition lhs', () => {
         expect(isSnippetValid(byKey.if, { cond: { lhs: '', op: '==', rhs: '' } })).toBe(false);

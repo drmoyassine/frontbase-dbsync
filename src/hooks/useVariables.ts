@@ -14,10 +14,15 @@ export interface Variable {
     description?: string;
 }
 
+export type FilterCategory = 'Text' | 'Numbers' | 'Lists' | 'Dates' | 'Format';
+
 export interface Filter {
     name: string;
     args?: string[];
     description: string;
+    /** Picker category. Absent → bucketed into 'Format' so a pre-deploy backend
+     * never drops a filter from the list. */
+    category?: FilterCategory;
 }
 
 interface VariablesResponse {
@@ -63,9 +68,13 @@ export function useVariables(pageId?: string) {
 }
 
 /**
- * Static default variables (fallback when API unavailable)
+ * Static default variables (fallback when API unavailable).
+ *
+ * Exported so the filter surface can be parity-tested — the curated filter set
+ * here MUST mirror `TEMPLATE_FILTERS` in
+ * fastapi-backend/app/routers/variables.py (the real served list).
  */
-function getDefaultVariables(): VariablesResponse {
+export function getDefaultVariables(): VariablesResponse {
     return {
         variables: [
             // Page
@@ -118,40 +127,64 @@ function getDefaultVariables(): VariablesResponse {
             { path: 'cookies.cookie_name', type: 'string', source: 'cookies', description: 'Browser cookie value' },
         ],
         filters: [
-            // Built-in LiquidJS filters
-            { name: 'upcase', description: 'Convert to uppercase' },
-            { name: 'downcase', description: 'Convert to lowercase' },
-            { name: 'capitalize', description: 'Capitalize first letter' },
-            { name: 'truncate', args: ['length'], description: 'Truncate to length' },
-            { name: 'strip', description: 'Remove whitespace' },
-            { name: 'split', args: ['delimiter'], description: 'Split into array' },
-            { name: 'join', args: ['separator'], description: 'Join array to string' },
-            { name: 'first', description: 'First item of array' },
-            { name: 'last', description: 'Last item of array' },
-            { name: 'size', description: 'Length of array/string' },
-            { name: 'plus', args: ['number'], description: 'Add number' },
-            { name: 'minus', args: ['number'], description: 'Subtract number' },
-            { name: 'times', args: ['number'], description: 'Multiply by number' },
-            { name: 'divided_by', args: ['number'], description: 'Divide by number' },
-            { name: 'round', description: 'Round to nearest integer' },
-            { name: 'floor', description: 'Round down' },
-            { name: 'ceil', description: 'Round up' },
-            { name: 'abs', description: 'Absolute value' },
-            { name: 'default', args: ['value'], description: 'Default if empty' },
-            { name: 'date', args: ['format'], description: 'Format date' },
+            // ── Text ──────────────────────────────────────────────
+            { name: 'upcase', description: 'Convert to UPPERCASE', category: 'Text' },
+            { name: 'downcase', description: 'Convert to lowercase', category: 'Text' },
+            { name: 'capitalize', description: 'Capitalize the first letter', category: 'Text' },
+            { name: 'strip', description: 'Trim whitespace from both ends', category: 'Text' },
+            { name: 'strip_html', description: 'Remove HTML tags', category: 'Text' },
+            { name: 'newline_to_br', description: 'Turn line breaks into <br>', category: 'Text' },
+            { name: 'truncate', args: ['length'], description: 'Cut to a max length (with …)', category: 'Text' },
+            { name: 'truncate_words', args: ['count'], description: 'Cut to N words (with …)', category: 'Text' },
+            { name: 'replace', args: ['search', 'replacement'], description: 'Replace all matches', category: 'Text' },
+            { name: 'remove', args: ['text'], description: 'Remove all matches', category: 'Text' },
+            { name: 'append', args: ['text'], description: 'Add text to the end', category: 'Text' },
+            { name: 'prepend', args: ['text'], description: 'Add text to the start', category: 'Text' },
+            { name: 'slugify', description: 'Make a URL-friendly slug', category: 'Text' },
+            { name: 'escape_html', description: 'Escape HTML special characters', category: 'Text' },
+            { name: 'url_encode', description: 'URL-encode for use in links', category: 'Text' },
 
-            // Custom Frontbase filters
-            { name: 'money', args: ['currency'], description: 'Format as currency ($29.99)' },
-            { name: 'time_ago', description: 'Relative time (2 days ago)' },
-            { name: 'timezone', args: ['tz'], description: 'Convert timezone' },
-            { name: 'date_format', args: ['format'], description: 'Format date (short/long/iso)' },
-            { name: 'json', description: 'JSON stringify' },
-            { name: 'pluralize', args: ['singular', 'plural'], description: 'Pluralize based on count' },
-            { name: 'escape_html', description: 'Escape HTML entities' },
-            { name: 'truncate_words', args: ['count'], description: 'Truncate by word count' },
-            { name: 'slugify', description: 'Convert to URL slug' },
-            { name: 'number', args: ['locale'], description: 'Format number with commas' },
-            { name: 'percent', args: ['decimals'], description: 'Format as percentage' },
+            // ── Numbers ───────────────────────────────────────────
+            { name: 'plus', args: ['number'], description: 'Add', category: 'Numbers' },
+            { name: 'minus', args: ['number'], description: 'Subtract', category: 'Numbers' },
+            { name: 'times', args: ['number'], description: 'Multiply', category: 'Numbers' },
+            { name: 'divided_by', args: ['number'], description: 'Divide', category: 'Numbers' },
+            { name: 'modulo', args: ['number'], description: 'Remainder', category: 'Numbers' },
+            { name: 'round', args: ['decimals'], description: 'Round (default 0 decimals)', category: 'Numbers' },
+            { name: 'ceil', description: 'Round up', category: 'Numbers' },
+            { name: 'floor', description: 'Round down', category: 'Numbers' },
+            { name: 'abs', description: 'Absolute value', category: 'Numbers' },
+            { name: 'at_least', args: ['number'], description: 'Minimum value', category: 'Numbers' },
+            { name: 'at_most', args: ['number'], description: 'Maximum value', category: 'Numbers' },
+            { name: 'size', description: 'Length of text or list', category: 'Numbers' },
+
+            // ── Lists ─────────────────────────────────────────────
+            { name: 'split', args: ['delimiter'], description: 'Split text into a list', category: 'Lists' },
+            { name: 'join', args: ['separator'], description: 'Join a list into text', category: 'Lists' },
+            { name: 'first', description: 'First item of a list', category: 'Lists' },
+            { name: 'last', description: 'Last item of a list', category: 'Lists' },
+            { name: 'map', args: ['field'], description: 'Pick a field from each item (operates on a list)', category: 'Lists' },
+            { name: 'where', args: ['field', 'value'], description: 'Keep items where field = value (operates on a list)', category: 'Lists' },
+            { name: 'sort', args: ['property'], description: 'Sort (by property)', category: 'Lists' },
+            { name: 'sort_natural', args: ['property'], description: 'Case-insensitive sort', category: 'Lists' },
+            { name: 'reverse', description: 'Reverse a list or text', category: 'Lists' },
+            { name: 'uniq', description: 'Remove duplicates (operates on a list)', category: 'Lists' },
+            { name: 'compact', description: 'Remove blank items (operates on a list)', category: 'Lists' },
+            { name: 'slice', args: ['start', 'length'], description: 'Take a slice', category: 'Lists' },
+
+            // ── Dates ─────────────────────────────────────────────
+            { name: 'date', args: ['format'], description: 'Format a date (strftime)', category: 'Dates' },
+            { name: 'date_format', args: ['format'], description: 'Format (short/long/iso/time)', category: 'Dates' },
+            { name: 'time_ago', description: 'Relative time (2 days ago)', category: 'Dates' },
+            { name: 'timezone', args: ['tz'], description: 'Convert timezone', category: 'Dates' },
+
+            // ── Format ────────────────────────────────────────────
+            { name: 'default', args: ['value'], description: 'Fallback if empty', category: 'Format' },
+            { name: 'json', description: 'Output as JSON', category: 'Format' },
+            { name: 'money', args: ['currency'], description: 'Currency ($29.99)', category: 'Format' },
+            { name: 'number', args: ['locale'], description: 'Number with separators (1,234)', category: 'Format' },
+            { name: 'percent', args: ['decimals'], description: 'Percentage', category: 'Format' },
+            { name: 'pluralize', args: ['singular', 'plural'], description: 'Singular/plural by count', category: 'Format' },
         ],
     };
 }

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Trash2 } from 'lucide-react';
 import { VariableInput } from './VariableInput';
 import {
-    LogicSnippet, SnippetValues, ConditionValue, CONDITION_OPERATORS,
+    LogicSnippet, SnippetValues, ConditionValue, BranchValue, CONDITION_OPERATORS,
     isSnippetValid, initialSnippetValues,
 } from '@/lib/liquid/logicSnippets';
 
@@ -50,7 +50,7 @@ export const LogicSnippetWizard: React.FC<LogicSnippetWizardProps> = ({
 
     if (!snippet) return null;
 
-    const setField = (key: string, v: string | string[] | ConditionValue) =>
+    const setField = (key: string, v: SnippetValues[string]) =>
         setValues(prev => ({ ...prev, [key]: v }));
 
     const handleInsert = () => {
@@ -108,6 +108,76 @@ export const LogicSnippetWizard: React.FC<LogicSnippetWizardProps> = ({
                                         <p className="text-[11px] text-muted-foreground">
                                             Leave the value blank to test whether the variable simply has a value.
                                         </p>
+                                    </div>
+                                </div>
+                            );
+                        }
+
+                        if (field.kind === 'branches') {
+                            const branches = (values[field.key] as BranchValue[]) || [];
+                            const ensure = (next: BranchValue[]) => setField(field.key, next.length ? next : [{ cond: { lhs: '', op: '==', rhs: '' }, body: '' }]);
+                            const update = (idx: number, patch: Partial<BranchValue>) =>
+                                ensure(branches.map((b, i) => i === idx ? { ...b, ...patch } : b));
+                            return (
+                                <div key={field.key} className="space-y-1.5">
+                                    <Label className="text-sm">{field.label}</Label>
+                                    <div className="space-y-3">
+                                        {branches.map((b, idx) => (
+                                            <div key={idx} className="space-y-2 rounded-md border bg-muted/20 p-2">
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                                                        {idx === 0 ? 'If' : 'Else if'}
+                                                    </span>
+                                                    {branches.length > 1 && (
+                                                        <Button
+                                                            type="button" variant="ghost" size="icon"
+                                                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                                                            onClick={() => ensure(branches.filter((_, i) => i !== idx))}
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                <VariableInput
+                                                    value={b.cond.lhs}
+                                                    onChange={(lhs) => update(idx, { cond: { ...b.cond, lhs } })}
+                                                    syntaxContext="scalar"
+                                                    placeholder="Pick a variable (type @)"
+                                                    className="h-8 text-xs bg-background"
+                                                />
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <Select value={b.cond.op} onValueChange={(op) => update(idx, { cond: { ...b.cond, op } })}>
+                                                        <SelectTrigger className="h-8 text-xs bg-background"><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {CONDITION_OPERATORS.map(op => (
+                                                                <SelectItem key={op.value} value={op.value} className="text-xs">{op.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <VariableInput
+                                                        value={b.cond.rhs}
+                                                        onChange={(rhs) => update(idx, { cond: { ...b.cond, rhs } })}
+                                                        syntaxContext="scalar"
+                                                        placeholder="Value (or @ variable)"
+                                                        className="h-8 text-xs bg-background"
+                                                    />
+                                                </div>
+                                                <VariableInput
+                                                    value={b.body}
+                                                    onChange={(body) => update(idx, { body })}
+                                                    syntaxContext="output"
+                                                    multiline
+                                                    placeholder="Show this… (type @ for variables)"
+                                                    className="text-xs bg-background"
+                                                />
+                                            </div>
+                                        ))}
+                                        <Button
+                                            type="button" variant="outline" size="sm" className="h-7 text-xs gap-1"
+                                            onClick={() => ensure([...branches, { cond: { lhs: '', op: '==', rhs: '' }, body: '' }])}
+                                        >
+                                            <Plus className="h-3.5 w-3.5" /> Add branch
+                                        </Button>
                                     </div>
                                 </div>
                             );

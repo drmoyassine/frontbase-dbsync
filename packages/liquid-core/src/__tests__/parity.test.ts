@@ -50,3 +50,38 @@ describe('SSR/preview parity (shared core)', () => {
         expect(out).toBe('Hello Ada — Pro ($5.00)');
     });
 });
+
+describe('newly surfaced tags & filters (shared core)', () => {
+    it('renders if / elsif / else branch selection', async () => {
+        const tpl = "{% if record.plan == 'gold' %}Gold{% elsif record.plan == 'pro' %}Pro{% else %}Standard{% endif %}";
+        expect(await render(tpl, { record: { plan: 'gold' } })).toBe('Gold');
+        expect(await render(tpl, { record: { plan: 'pro' } })).toBe('Pro');
+        expect(await render(tpl, { record: { plan: 'free' } })).toBe('Standard');
+    });
+
+    it('capture + re-emit', async () => {
+        const out = await render('{% capture g %}Hi{% endcapture %}{{ g }}-{{ g }}', {});
+        expect(out).toBe('Hi-Hi');
+    });
+
+    it('cycle inside a for loop', async () => {
+        const out = await render(
+            '{% for n in (1..4) %}{{ n }}{% cycle "a", "b" %}{% endfor %}',
+            {},
+        );
+        expect(out).toBe('1a2b3a4b');
+    });
+
+    it('list filters: uniq | join', async () => {
+        const out = await render('{{ record.tags | uniq | join: "," }}', {
+            record: { tags: ['a', 'b', 'a'] },
+        });
+        expect(out).toBe('a,b');
+    });
+
+    it('number filters: ceil and modulo', async () => {
+        expect(await render('{{ record.n | ceil }}', { record: { n: 7 } })).toBe('7');
+        expect(await render('{{ record.n | modulo: 3 }}', { record: { n: 7 } })).toBe('1');
+    });
+});
+

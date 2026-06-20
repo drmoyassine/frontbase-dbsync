@@ -5,6 +5,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Suggestion from '@tiptap/suggestion';
 import { cn } from '@/lib/utils';
 import { VariablePicker } from './VariablePicker';
+import { SyntaxContext } from '@/lib/liquid/syntaxContext';
 
 interface InlineTextEditorProps {
   value: string;
@@ -15,6 +16,12 @@ interface InlineTextEditorProps {
   style?: React.CSSProperties;
   multiline?: boolean;
   placeholder?: string;
+  /**
+   * Syntax context for the `@` picker. Canvas text is an output context, so this
+   * defaults to 'output' — which surfaces the "Logic & Loops" snippet group
+   * (`{% if %}`, `{% for %}`, …) alongside variables and filters.
+   */
+  syntaxContext?: SyntaxContext;
 }
 
 export const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
@@ -25,7 +32,8 @@ export const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
   className = '',
   style = {},
   multiline = false,
-  placeholder = ''
+  placeholder = '',
+  syntaxContext = 'output'
 }) => {
   // Variable picker state
   const [showPicker, setShowPicker] = useState(false);
@@ -179,15 +187,22 @@ export const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
     }
   }, [editor]);
 
-  const handleSelect = useCallback((insertValue: string) => {
+  const handleSelect = useCallback((insertValue: string, caretOffset?: number) => {
     if (editor && insertMentionRangeRef.current) {
       const { from, to } = insertMentionRangeRef.current;
-      editor
+      const chain = editor
         .chain()
         .focus()
-        .insertContentAt({ from, to }, insertValue)
-        .run();
-      
+        .insertContentAt({ from, to }, insertValue);
+
+      // Logic snippets return a caretOffset pointing at the first logical gap
+      // (e.g. the condition in `{% if  %}`). Place the caret there instead of at
+      // the end of the inserted text.
+      if (caretOffset != null) {
+        chain.setTextSelection(from + caretOffset);
+      }
+      chain.run();
+
       onChange(editor.getText());
     }
     isPickerOpenRef.current = false;
@@ -205,6 +220,7 @@ export const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
         <VariablePicker
           searchTerm={searchTerm}
           position={pickerPosition}
+          syntaxContext={syntaxContext}
           onSelect={handleSelect}
           onClose={() => {
             isPickerOpenRef.current = false;

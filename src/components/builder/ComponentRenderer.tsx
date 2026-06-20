@@ -12,6 +12,9 @@ import { renderSync, isSimpleInterpolation } from '@frontbase/liquid-core';
 import { processStylesData, processLegacyStyles } from './styling/styleProcessor';
 import { isHiddenForViewport, getHiddenComponentStyles } from './styling/visibilityHelper';
 import { getRenderer } from './registry/componentRegistry';
+import { deepEqual } from '@/lib/equality';
+import { LayoutShell } from './layout/LayoutShell';
+import { LAYOUT_COMPONENT_TYPES, type LayoutTokens } from './layout/layoutTokens';
 
 // JSON Forms Smart Blocks (not in registry - special handling needed)
 import { Form } from '@/components/jsonforms/Form';
@@ -33,10 +36,42 @@ interface ComponentRendererProps {
   onDoubleClick?: (componentId: string, event: React.MouseEvent) => void;
 }
 
-// React.memo uses the default shallow comparator. A custom `arePropsEqual` is
-// only worth adding if re-render profiling (React DevTools, large page) proves a
-// hot path — not speculatively. (Stage 10 / P2-2: profile-first; none added.)
-export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
+/**
+ * Custom comparator for ComponentRenderer's React.memo.
+ *
+ * Compares only what affects the rendered output:
+ *  - `component` identity and style/prop data (deep — these hold bound data,
+ *    text content, styling-panel values, and viewport overrides)
+ *  - `isSelected`, `children`, and the click/double-click callbacks by
+ *    reference (callers should memoize the callbacks)
+ *
+ * Deep-comparing the component payload means a sibling re-rendered with a new
+ * object reference (but identical content) is skipped — the main cause of
+ * cascading drops when typing in inline editors.
+ */
+function areComponentRendererPropsEqual(
+  prev: ComponentRendererProps,
+  next: ComponentRendererProps
+): boolean {
+  const p = prev.component;
+  const n = next.component;
+
+  return (
+    prev.isSelected === next.isSelected &&
+    prev.children === next.children &&
+    prev.onComponentClick === next.onComponentClick &&
+    prev.onDoubleClick === next.onDoubleClick &&
+    p.id === n.id &&
+    p.type === n.type &&
+    deepEqual(p.props, n.props) &&
+    deepEqual(p.styles, n.styles) &&
+    deepEqual((p as any).stylesData, (n as any).stylesData) &&
+    deepEqual((p as any).layout, (n as any).layout) &&
+    deepEqual(p.responsiveStyles, n.responsiveStyles)
+  );
+}
+
+const ComponentRendererBase: React.FC<ComponentRendererProps> = ({
   component,
   isSelected,
   children,
@@ -206,76 +241,92 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
   // Try to get renderer from registry first
   const Renderer = getRenderer(type);
 
+  // Spatial layout (margin/size/align) is applied by a LayoutShell wrapper,
+  // SEPARATE from the component's aesthetic styles (which stay on the
+  // component element via combinedClassName/inlineStyles). Components that own
+  // their own layout (Container, Row, Column, …) are never wrapped, so an
+  // intermediate box never overrides their flex/grid. With no layout tokens the
+  // shell renders layout-transparent (display: contents) — zero effect.
+  const layoutTokens = (component as any).layout as LayoutTokens | undefined;
+  const shouldWrapLayout = !LAYOUT_COMPONENT_TYPES.has(type);
+
   if (Renderer) {
-    return <Renderer {...rendererProps} />;
+    const rendered = <Renderer {...rendererProps} />;
+    return shouldWrapLayout
+      ? <LayoutShell layout={layoutTokens}>{rendered}</LayoutShell>
+      : rendered;
   }
 
   // Special case: JSON Forms Smart Blocks (not in registry - need special handling)
   if (type === 'Form') {
     return (
-      <Form
-        dataSourceId={effectiveProps.dataSourceId}
-        tableName={effectiveProps.tableName}
-        recordId={effectiveProps.recordId}
-        title={effectiveProps.title}
-        excludeColumns={effectiveProps.excludeColumns}
-        readOnlyColumns={effectiveProps.readOnlyColumns}
-        showCard={effectiveProps.showCard ?? true}
-        className={combinedClassName}
-        style={inlineStyles}
-        fieldOverrides={effectiveProps.fieldOverrides}
-        fieldOrder={effectiveProps.fieldOrder}
-        isBuilderMode={true}
-        onFieldOverrideChange={(fieldName: string, updates: any) => {
-          if (id) {
-            const store = useBuilderStore.getState();
-            const currentOverrides = effectiveProps.fieldOverrides || {};
-            store.updateComponent(id, {
-              fieldOverrides: {
-                ...currentOverrides,
-                [fieldName]: {
-                  ...currentOverrides[fieldName],
-                  ...updates
+      <LayoutShell layout={layoutTokens}>
+        <Form
+          dataSourceId={effectiveProps.dataSourceId}
+          tableName={effectiveProps.tableName}
+          recordId={effectiveProps.recordId}
+          title={effectiveProps.title}
+          excludeColumns={effectiveProps.excludeColumns}
+          readOnlyColumns={effectiveProps.readOnlyColumns}
+          showCard={effectiveProps.showCard ?? true}
+          className={combinedClassName}
+          style={inlineStyles}
+          fieldOverrides={effectiveProps.fieldOverrides}
+          fieldOrder={effectiveProps.fieldOrder}
+          isBuilderMode={true}
+          onFieldOverrideChange={(fieldName: string, updates: any) => {
+            if (id) {
+              const store = useBuilderStore.getState();
+              const currentOverrides = effectiveProps.fieldOverrides || {};
+              store.updateComponent(id, {
+                fieldOverrides: {
+                  ...currentOverrides,
+                  [fieldName]: {
+                    ...currentOverrides[fieldName],
+                    ...updates
+                  }
                 }
-              }
-            });
-          }
-        }}
-      />
+              });
+            }
+          }}
+        />
+      </LayoutShell>
     );
   }
 
   if (type === 'InfoList') {
     return (
-      <InfoList
-        dataSourceId={effectiveProps.dataSourceId}
-        tableName={effectiveProps.tableName}
-        recordId={effectiveProps.recordId}
-        title={effectiveProps.title}
-        excludeColumns={effectiveProps.excludeColumns}
-        showCard={effectiveProps.showCard ?? true}
-        className={combinedClassName}
-        style={inlineStyles}
-        fieldOverrides={effectiveProps.fieldOverrides}
-        layout={effectiveProps.layout || '2'}
-        fieldSpacing={effectiveProps.fieldSpacing || 'normal'}
-        isBuilderMode={true}
-        onFieldOverrideChange={(fieldName: string, updates: any) => {
-          if (id) {
-            const store = useBuilderStore.getState();
-            const currentOverrides = effectiveProps.fieldOverrides || {};
-            store.updateComponent(id, {
-              fieldOverrides: {
-                ...currentOverrides,
-                [fieldName]: {
-                  ...currentOverrides[fieldName],
-                  ...updates
+      <LayoutShell layout={layoutTokens}>
+        <InfoList
+          dataSourceId={effectiveProps.dataSourceId}
+          tableName={effectiveProps.tableName}
+          recordId={effectiveProps.recordId}
+          title={effectiveProps.title}
+          excludeColumns={effectiveProps.excludeColumns}
+          showCard={effectiveProps.showCard ?? true}
+          className={combinedClassName}
+          style={inlineStyles}
+          fieldOverrides={effectiveProps.fieldOverrides}
+          layout={effectiveProps.layout || '2'}
+          fieldSpacing={effectiveProps.fieldSpacing || 'normal'}
+          isBuilderMode={true}
+          onFieldOverrideChange={(fieldName: string, updates: any) => {
+            if (id) {
+              const store = useBuilderStore.getState();
+              const currentOverrides = effectiveProps.fieldOverrides || {};
+              store.updateComponent(id, {
+                fieldOverrides: {
+                  ...currentOverrides,
+                  [fieldName]: {
+                    ...currentOverrides[fieldName],
+                    ...updates
+                  }
                 }
-              }
-            });
-          }
-        }}
-      />
+              });
+            }
+          }}
+        />
+      </LayoutShell>
     );
   }
 
@@ -285,4 +336,6 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
       Unknown component: {type}
     </div>
   );
-});
+};
+
+export const ComponentRenderer = React.memo(ComponentRendererBase, areComponentRendererPropsEqual);

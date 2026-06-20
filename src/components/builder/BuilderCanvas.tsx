@@ -14,9 +14,21 @@ interface BuilderCanvasProps {
   page: Page;
 }
 
+/** Recursively find a component node by id. Pure (no closure state) so it is
+ *  stable across renders and safe to call from a memoized handler. */
+const findComponentById = (components: any[], id: string): any => {
+  for (const comp of components) {
+    if (comp.id === id) return comp;
+    if (comp.children) {
+      const found = findComponentById(comp.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+};
+
 export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   const {
-    moveComponent,
     selectedComponentId,
     setSelectedComponentId,
     isPreviewMode,
@@ -42,34 +54,31 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     disabled: hasComponents
   });
 
-  // Helper to find component by ID recursively
-  const findComponentById = (components: any[], id: string): any => {
-    for (const comp of components) {
-      if (comp.id === id) return comp;
-      if (comp.children) {
-        const found = findComponentById(comp.children, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-
-  const handleComponentClick = (componentId: string, event: React.MouseEvent) => {
+  // Memoized so the reference passed to DraggableComponent.onSelect is stable.
+  // Stability is what lets DraggableComponent's React.memo skip unaffected
+  // siblings during inline editing. Reads fresh state via getState() for the
+  // rare scroll-target branch so the common path has no reactive deps.
+  const handleComponentClick = React.useCallback((componentId: string, event: React.MouseEvent) => {
     event.stopPropagation();
 
+    const state = useBuilderStore.getState();
+
     // Handle scroll target selection mode
-    if (scrollTargetSelectionMode && scrollTargetCallback) {
-      const component = findComponentById(components, componentId);
+    if (state.scrollTargetSelectionMode && state.scrollTargetCallback) {
+      const currentPage = state.pages.find(p => p.id === page.id);
+      const component = currentPage
+        ? findComponentById(currentPage.layoutData?.content || [], componentId)
+        : null;
       const componentType = component?.type || 'Section';
-      scrollTargetCallback(componentId, componentType);
-      exitScrollTargetMode();
+      state.scrollTargetCallback(componentId, componentType);
+      state.exitScrollTargetMode();
       return;
     }
 
-    if (!isPreviewMode) {
-      setSelectedComponentId(selectedComponentId === componentId ? null : componentId);
+    if (!state.isPreviewMode) {
+      state.setSelectedComponentId(state.selectedComponentId === componentId ? null : componentId);
     }
-  };
+  }, [page.id]);
 
   // Viewport dimensions - Industry standard sizes
   const getViewportDimensions = () => {
@@ -323,6 +332,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
               index={index}
               pageId={page.id}
               isSelected={selectedComponentId === component.id}
+              isLastComponent={index === components.length - 1}
               onSelect={handleComponentClick}
             />
           ))}

@@ -1,15 +1,17 @@
 /**
  * Basic Property Components
- * Barrel export for all basic component property panels
+ * Barrel export for all basic component property panels.
+ *
+ * NOTE: Heading, Text, Link, Badge, Alert, and Progress are now schema-driven
+ * (see registry/propertySchemas.ts) and no longer have bespoke panels here.
  */
 
 // Typography
-export { HeadingProperties } from './HeadingProperties';
-export { TextProperties } from './TextProperties';
+// (Heading, Text — schema-driven)
 
 // Actions
 export { ButtonProperties } from './ButtonProperties';
-export { LinkProperties } from './LinkProperties';
+// (Link — schema-driven)
 
 // Media
 export { IconProperties } from './IconProperties';
@@ -23,9 +25,7 @@ export { SelectProperties } from './SelectProperties';
 export { ToggleProperties } from './ToggleProperties';
 
 // Display
-export { BadgeProperties } from './BadgeProperties';
-export { AlertProperties } from './AlertProperties';
-export { ProgressProperties } from './ProgressProperties';
+// (Badge, Alert, Progress — schema-driven)
 export { EmbedProperties } from './EmbedProperties';
 
 // Data
@@ -33,4 +33,3 @@ export { ChartProperties } from './ChartProperties';
 export { GridProperties } from './GridProperties';
 export { KPICardProperties } from './KPICardProperties';
 export { RepeaterProperties } from './RepeaterProperties';
-

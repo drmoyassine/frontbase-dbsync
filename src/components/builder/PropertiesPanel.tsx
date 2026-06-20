@@ -26,20 +26,14 @@ import { ActionConfigurator, ActionBinding } from '@/components/actions';
 
 // Basic Components
 import {
-  HeadingProperties,
-  TextProperties,
   ButtonProperties,
   IconProperties,
-  LinkProperties,
   ImageProperties,
   InputProperties,
   TextareaProperties,
   SelectProperties,
   ToggleProperties,
-  BadgeProperties,
   AvatarProperties,
-  ProgressProperties,
-  AlertProperties,
   ChartProperties,
   GridProperties,
   KPICardProperties,
@@ -53,6 +47,10 @@ import { NavbarProperties, FooterProperties, PricingProperties } from './propert
 import { LogoCloudProperties } from './properties/LogoCloudProperties';
 import { FeatureSectionProperties } from './properties/FeatureSectionProperties';
 import { DisplayProperties } from './properties/DisplayProperties';
+
+// Schema-driven property rendering (simple components)
+import { getPropertySchema, type PropertySchema, type PropertyTab } from './registry/propertySchemas';
+import { SchemaDrivenProperties } from './SchemaDrivenProperties';
 
 // Helper to find component recursively
 const findComponent = (components: any[], id: string): any => {
@@ -131,6 +129,26 @@ export const PropertiesPanel = () => {
   const renderPropertyFields = (tab: string) => {
     const { type, props, styles = {} } = selectedComponent;
 
+    // ── Schema-driven path ────────────────────────────────────────────────
+    // Simple components declare their fields via a PropertySchema (see
+    // registry/propertySchemas.ts). If a schema exists, render its fields for
+    // the requested tab and return. Tabs the schema doesn't define yield null,
+    // so the shared Visibility/Action editors (rendered by the tab wrapper)
+    // still show.
+    const schema = type ? getPropertySchema(type) : undefined;
+    if (schema) {
+      const fields = schema[tab as PropertyTab];
+      if (!fields || fields.length === 0) return null;
+      return (
+        <SchemaDrivenProperties
+          fields={fields}
+          props={props}
+          updateProp={updateComponentProp}
+        />
+      );
+    }
+
+    // ── Legacy path: complex components with bespoke panels ───────────────
     const isMultiTabComponent = ['DataTable', 'Chart', 'Grid', 'KPICard', 'Form', 'InfoList', 'Button'].includes(type);
     if (!isMultiTabComponent && tab !== 'general') {
       return null;
@@ -162,18 +180,13 @@ export const PropertiesPanel = () => {
         return <PricingProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} />;
 
       // === TYPOGRAPHY ===
-      case 'Heading':
-        return <HeadingProperties props={props} updateComponentProp={updateComponentProp} />;
-
-      case 'Text':
-        return <TextProperties props={props} updateComponentProp={updateComponentProp} />;
+      // (Heading, Text — schema-driven; see registry/propertySchemas.ts)
 
       // === ACTIONS ===
       case 'Button':
         return <ButtonProperties activeTab={tab} componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} />;
 
-      case 'Link':
-        return <LinkProperties props={props} updateComponentProp={updateComponentProp} />;
+      // (Link — schema-driven; see registry/propertySchemas.ts)
 
       // === MEDIA ===
       case 'Icon':
@@ -200,14 +213,7 @@ export const PropertiesPanel = () => {
         return <ToggleProperties props={props} updateComponentProp={updateComponentProp} />;
 
       // === DISPLAY ===
-      case 'Badge':
-        return <BadgeProperties props={props} updateComponentProp={updateComponentProp} />;
-
-      case 'Alert':
-        return <AlertProperties props={props} updateComponentProp={updateComponentProp} />;
-
-      case 'Progress':
-        return <ProgressProperties props={props} updateComponentProp={updateComponentProp} />;
+      // (Badge, Alert, Progress — schema-driven; see registry/propertySchemas.ts)
 
       // === DATA ===
       case 'Chart':

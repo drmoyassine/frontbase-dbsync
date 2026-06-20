@@ -7,6 +7,7 @@ import { ComponentErrorBoundary } from './ComponentErrorBoundary';
 import { ComponentContextMenu } from './ComponentContextMenu';
 import { useBuilderStore } from '@/stores/builder';
 import { cn } from '@/lib/utils';
+import { deepEqual } from '@/lib/equality';
 
 interface DraggableComponentProps {
   component: {
@@ -14,6 +15,7 @@ interface DraggableComponentProps {
     type: string;
     props: Record<string, any>;
     styles?: any;
+    stylesData?: any;
     className?: string;
     children?: any[];
   };
@@ -21,27 +23,76 @@ interface DraggableComponentProps {
   pageId: string;
   parentId?: string;
   isSelected: boolean;
+  /** Whether this component is the last among its siblings. Drives the
+   *  trailing drop-zone. Passed in by the parent (which already knows the
+   *  sibling count) so this component does not have to subscribe to the full
+   *  page tree — that subscription was the cause of cascading re-renders
+   *  when typing in inline editors. */
+  isLastComponent: boolean;
   onSelect: (componentId: string, event: React.MouseEvent) => void;
 }
 
-// Default shallow React.memo. Add a custom `arePropsEqual` only if profiling
-// proves a re-render hot path on large pages. (Stage 10 / P2-2: profile-first.)
-export const DraggableComponent: React.FC<DraggableComponentProps> = React.memo(({
+/**
+ * Custom comparator for DraggableComponent's React.memo.
+ *
+ * Compares only the fields that affect the rendered output:
+ *  - `component.id`            (identity)
+ *  - `component.props`         (deep — bound data, text, etc.)
+ *  - `component.styles`        (deep — legacy styles)
+ *  - `component.stylesData`    (deep — styling panel data)
+ *  - `component.children`      (reference — structural sharing produces a new
+ *                               array ref whenever a descendant changes, which
+ *                               is how we know to re-render containers)
+ *  - `isSelected`              (selection ring / handles)
+ *  - `isLastComponent`         (trailing drop-zone)
+ *  - scalar positioning props and callbacks (reference equality)
+ *
+ * Callbacks (`onSelect`) are compared by reference, so callers should memoize
+ * them (e.g. `useCallback`) for the comparator to skip unaffected siblings.
+ */
+function areDraggablePropsEqual(
+  prev: DraggableComponentProps,
+  next: DraggableComponentProps
+): boolean {
+  return (
+    prev.isSelected === next.isSelected &&
+    prev.isLastComponent === next.isLastComponent &&
+    prev.index === next.index &&
+    prev.pageId === next.pageId &&
+    prev.parentId === next.parentId &&
+    prev.onSelect === next.onSelect &&
+    prev.component.id === next.component.id &&
+    prev.component.type === next.component.type &&
+    prev.component.children === next.component.children &&
+    deepEqual(prev.component.props, next.component.props) &&
+    deepEqual(prev.component.styles, next.component.styles) &&
+    deepEqual(prev.component.stylesData, next.component.stylesData)
+  );
+}
+
+const DraggableComponentBase: React.FC<DraggableComponentProps> = ({
   component,
   index,
   pageId,
   parentId,
   isSelected,
+  isLastComponent,
   onSelect
 }) => {
-  const { isPreviewMode, moveComponent, pages } = useBuilderStore();
+  const { isPreviewMode } = useBuilderStore();
 
-  // Get sibling components to determine if this is the last one
-  const currentPage = pages.find(p => p.id === pageId);
-  const siblingComponents = parentId
-    ? currentPage?.layoutData?.content?.find(c => c.id === parentId)?.children || []
-    : currentPage?.layoutData?.content || [];
-  const isLastComponent = index === siblingComponents.length - 1;
+  // Memoized so the reference passed to ComponentRenderer.onDoubleClick is
+  // stable while typing (component.type and isPreviewMode don't change then),
+  // letting ComponentRenderer's React.memo skip unaffected siblings.
+  const handleDoubleClick = React.useCallback((componentId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    // Double-click to edit text for text-based components
+    const textComponents = ['Text', 'Heading', 'Button', 'Badge', 'Link'];
+    if (textComponents.includes(component.type) && !isPreviewMode) {
+      const { setEditingTextNode } = useBuilderStore.getState();
+      setEditingTextNode({ componentId, property: 'text' });
+    }
+  }, [component.type, isPreviewMode]);
 
   // Use sortable for drag and drop
   const {
@@ -163,16 +214,8 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = React.memo(
           <ComponentRenderer
             component={component}
             isSelected={isSelected}
-            onComponentClick={(componentId, event) => onSelect(componentId, event)}
-            onDoubleClick={(componentId, event) => {
-              event.stopPropagation();
-              // Double-click to edit text for text-based components
-              const textComponents = ['Text', 'Heading', 'Button', 'Badge', 'Link'];
-              if (textComponents.includes(component.type) && !isPreviewMode) {
-                const { setEditingTextNode } = useBuilderStore.getState();
-                setEditingTextNode({ componentId, property: 'text' });
-              }
-            }}
+            onComponentClick={onSelect}
+            onDoubleClick={handleDoubleClick}
           />
         </ComponentErrorBoundary>
       )}
@@ -190,7 +233,9 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = React.memo(
     </div>
     </ComponentContextMenu>
   );
-});
+};
+
+export const DraggableComponent = React.memo(DraggableComponentBase, areDraggablePropsEqual);
 
 // Container component with drop zone support
 const ContainerComponent: React.FC<{
@@ -238,6 +283,7 @@ const ContainerComponent: React.FC<{
           pageId={pageId}
           parentId={component.id}
           isSelected={selectedComponentId === child.id}
+          isLastComponent={index === component.children.length - 1}
           onSelect={onSelect}
         />
       ))}

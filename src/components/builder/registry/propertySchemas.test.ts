@@ -16,7 +16,9 @@ describe('propertySchemas registry', () => {
 
         const level = schema!.general!.find((f) => f.name === 'level')!;
         expect(level.type).toBe('select');
-        expect(level.options.map((o) => o.value)).toEqual([
+        // Narrow the union to the select variant so `options` is type-safe.
+        const levelOptions = level.type === 'select' ? level.options : [];
+        expect(levelOptions.map((o) => o.value)).toEqual([
             'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
         ]);
     });
@@ -41,7 +43,8 @@ describe('propertySchemas registry', () => {
         expect(schema!.general!.find((f) => f.name === 'href')!.type).toBe('input');
         const target = schema!.general!.find((f) => f.name === 'target')!;
         expect(target.type).toBe('select');
-        expect(target.options.map((o) => o.value)).toEqual(['_self', '_blank']);
+        const targetOptions = target.type === 'select' ? target.options : [];
+        expect(targetOptions.map((o) => o.value)).toEqual(['_self', '_blank']);
     });
 
     it('registers Progress with a bounded number field', () => {

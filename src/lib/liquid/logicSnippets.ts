@@ -8,7 +8,7 @@
  * and get complete, correct Liquid.
  */
 
-export type SnippetFieldKind = 'condition' | 'variable' | 'text' | 'list';
+export type SnippetFieldKind = 'condition' | 'variable' | 'text' | 'list' | 'content';
 
 export interface SnippetField {
     key: string;
@@ -122,9 +122,14 @@ export const LOGIC_SNIPPETS: LogicSnippet[] = [
         description: 'Conditional',
         fields: [
             { key: 'cond', label: 'Show this when…', kind: 'condition' },
+            { key: 'then', label: 'Then show…', kind: 'content', optional: true, placeholder: 'Content to show (leave blank to fill on canvas)' },
         ],
         build: (v) => {
             const cond = serializeCondition(asCondition(v, 'cond')) || 'condition';
+            const then = asText(v, 'then');
+            if (then) {
+                return { text: `{% if ${cond} %}${then}{% endif %}` };
+            }
             const prefix = `{% if ${cond} %}\n  `;
             return { text: `${prefix}\n{% endif %}`, caretOffset: prefix.length };
         },
@@ -137,14 +142,18 @@ export const LOGIC_SNIPPETS: LogicSnippet[] = [
         description: 'Conditional',
         fields: [
             { key: 'cond', label: 'Show the first block when…', kind: 'condition' },
+            { key: 'then', label: 'Then show…', kind: 'content', optional: true, placeholder: "e.g. In stock" },
+            { key: 'else', label: 'Otherwise show…', kind: 'content', optional: true, placeholder: "e.g. Sold out" },
         ],
         build: (v) => {
             const cond = serializeCondition(asCondition(v, 'cond')) || 'condition';
+            const then = asText(v, 'then');
+            const els = asText(v, 'else');
+            if (then || els) {
+                return { text: `{% if ${cond} %}${then}{% else %}${els}{% endif %}` };
+            }
             const prefix = `{% if ${cond} %}\n  `;
-            return {
-                text: `${prefix}\n{% else %}\n  \n{% endif %}`,
-                caretOffset: prefix.length,
-            };
+            return { text: `${prefix}\n{% else %}\n  \n{% endif %}`, caretOffset: prefix.length };
         },
     },
     {
@@ -155,9 +164,14 @@ export const LOGIC_SNIPPETS: LogicSnippet[] = [
         description: 'Negated conditional',
         fields: [
             { key: 'cond', label: 'Hide this when…', kind: 'condition' },
+            { key: 'then', label: 'Show this otherwise…', kind: 'content', optional: true, placeholder: 'Content to show (leave blank to fill on canvas)' },
         ],
         build: (v) => {
             const cond = serializeCondition(asCondition(v, 'cond')) || 'condition';
+            const then = asText(v, 'then');
+            if (then) {
+                return { text: `{% unless ${cond} %}${then}{% endunless %}` };
+            }
             const prefix = `{% unless ${cond} %}\n  `;
             return { text: `${prefix}\n{% endunless %}`, caretOffset: prefix.length };
         },
@@ -171,10 +185,15 @@ export const LOGIC_SNIPPETS: LogicSnippet[] = [
         fields: [
             { key: 'list', label: 'List to repeat over', kind: 'variable', placeholder: 'e.g. record.orders' },
             { key: 'item', label: 'Name each item', kind: 'text', default: 'item', hint: 'Refer to it inside as {{ item.field }}' },
+            { key: 'body', label: 'For each item, show…', kind: 'content', optional: true, placeholder: 'e.g. {{ item.name }} (leave blank to fill on canvas)' },
         ],
         build: (v) => {
             const list = toBareExpr(asText(v, 'list')) || 'items';
             const item = asText(v, 'item', 'item');
+            const body = asText(v, 'body');
+            if (body) {
+                return { text: `{% for ${item} in ${list} %}${body}{% endfor %}` };
+            }
             const prefix = `{% for ${item} in ${list} %}\n  `;
             return { text: `${prefix}\n{% endfor %}`, caretOffset: prefix.length };
         },

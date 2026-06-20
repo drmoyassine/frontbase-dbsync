@@ -51,10 +51,40 @@ describe('snippet build output', () => {
         expect(byKey.assign.build({ name: 'x', value: 'hello' }).text).toBe("{% assign x = 'hello' %}");
         expect(byKey.assign.build({ name: 'x', value: '{{ record.t }}' }).text).toBe('{% assign x = record.t %}');
     });
-    it('caretOffset lands inside the body', () => {
+    it('caretOffset lands inside the body when content is blank', () => {
         const { text, caretOffset } = byKey.if.build({ cond: { lhs: 'a', op: '==', rhs: '' } });
         // caret should be just after the opening tag + newline + indent
         expect(text.slice(0, caretOffset)).toBe('{% if a %}\n  ');
+    });
+
+    it('inlines filled then/else content (no gaps, no caret)', () => {
+        const r = byKey.if_else.build({
+            cond: { lhs: 'record.qty', op: '>', rhs: '0' },
+            then: 'In stock',
+            else: 'Sold out',
+        });
+        expect(r.text).toBe('{% if record.qty > 0 %}In stock{% else %}Sold out{% endif %}');
+        expect(r.caretOffset).toBeUndefined();
+    });
+
+    it('inlines a single then with empty else', () => {
+        const r = byKey.if_else.build({
+            cond: { lhs: 'record.vip', op: '==', rhs: 'true' },
+            then: 'VIP',
+            else: '',
+        });
+        expect(r.text).toBe('{% if record.vip == true %}VIP{% else %}{% endif %}');
+    });
+
+    it('for inlines body content with item variable', () => {
+        const r = byKey.for.build({ list: '{{ record.tags }}', item: 'tag', body: '{{ tag }}' });
+        expect(r.text).toBe('{% for tag in record.tags %}{{ tag }}{% endfor %}');
+    });
+
+    it('falls back to scaffold + caret when content blank', () => {
+        const r = byKey.if.build({ cond: { lhs: 'a', op: '==', rhs: '' }, then: '' });
+        expect(r.text).toBe('{% if a %}\n  \n{% endif %}');
+        expect(r.caretOffset).toBeGreaterThan(0);
     });
 });
 

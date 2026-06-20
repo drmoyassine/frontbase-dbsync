@@ -266,7 +266,7 @@ export function VariablePicker({
             <div
                 ref={listRef}
                 className="variable-picker fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg max-h-80 min-w-[260px] max-w-[360px] overflow-y-auto"
-                style={{ top: position.top, left: position.left }}
+                style={{ top: position.top, left: position.left, pointerEvents: 'auto' }}
             >
                 <div className="p-3 text-sm text-muted-foreground">
                     No variables found
@@ -282,7 +282,7 @@ export function VariablePicker({
             ref={listRef}
             className="variable-picker fixed z-[9999] bg-popover border border-border rounded-lg shadow-lg max-h-80 min-w-[260px] max-w-[360px] overflow-y-auto"
             onMouseDown={(e) => e.preventDefault()}
-            style={{ top: position.top, left: position.left }}
+            style={{ top: position.top, left: position.left, pointerEvents: 'auto' }}
         >
             {isLoading ? (
                 <div className="p-3 text-sm text-muted-foreground">Loading...</div>

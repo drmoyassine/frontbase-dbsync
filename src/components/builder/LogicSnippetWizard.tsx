@@ -152,6 +152,24 @@ export const LogicSnippetWizard: React.FC<LogicSnippetWizardProps> = ({
                             );
                         }
 
+                        if (field.kind === 'content') {
+                            const val = (values[field.key] as string) ?? '';
+                            return (
+                                <div key={field.key} className="space-y-1.5">
+                                    <Label className="text-sm">{field.label}</Label>
+                                    <VariableInput
+                                        value={val}
+                                        onChange={(v) => setField(field.key, v)}
+                                        syntaxContext="output"
+                                        multiline
+                                        placeholder={field.placeholder || 'Content to show (type @ for variables)'}
+                                        className="text-xs"
+                                    />
+                                    {field.hint && <p className="text-[11px] text-muted-foreground">{field.hint}</p>}
+                                </div>
+                            );
+                        }
+
                         // variable | text
                         const val = (values[field.key] as string) ?? '';
                         return (

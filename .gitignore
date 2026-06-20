@@ -159,3 +159,6 @@ scratch_*
 /fix-*.ps1
 /docs/
 
+
+# TypeScript incremental build cache
+*.tsbuildinfo

@@ -257,5 +257,3 @@ async def deprovision_kv(db: Session, cache_id: str) -> None:
 #    account (re-use engine_provisioner._cf_pre_deploy + secrets_builder, re-targeted to the
 #    operator EdgeProviderAccount). Records an is_managed EdgeEngine. This is the base
 #    managed_edge_db resource and the core of the managed tier.
-#  - provision_domain(): CF Workers Custom Domain (managed_domain add-on).
-#  - queue (managed_queue): Upstash QStash (separate provider + token).

@@ -104,6 +104,12 @@ export interface FormProps {
     fieldWrapper?: (fieldName: string, content: ReactNode) => ReactNode;
     /** IoC Slot: Custom field renderer override (for injecting shadcn inputs, etc.) */
     fieldRenderer?: (props: FieldRenderProps) => ReactNode;
+    /**
+     * IoC Slot: Custom field-label renderer (e.g. inline rich-text editing in the
+     * Builder). Receives the field name, resolved label text, and required flag.
+     * When omitted, the default <label> is rendered.
+     */
+    labelRenderer?: (fieldName: string, labelText: string, isRequired: boolean) => ReactNode;
     /** Callback when form is submitted successfully */
     onSubmit?: (data: Record<string, any>) => void;
     /** Callback when form is cancelled */

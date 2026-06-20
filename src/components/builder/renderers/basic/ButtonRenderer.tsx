@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { RendererProps } from '../types';
 import { ICON_MAP } from '@/components/builder/properties/IconPicker';
+import { useLiquidPreview } from '@/hooks/useLiquidPreview';
 
 // Helper to render a Lucide icon by name
 const renderLucideIcon = (iconName: string, className?: string): React.ReactNode => {
@@ -13,6 +14,8 @@ const renderLucideIcon = (iconName: string, className?: string): React.ReactNode
 };
 
 export const ButtonRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, createEditableText }) => {
+    const rawText = effectiveProps.text || 'Button';
+    const { text: previewText, error } = useLiquidPreview(rawText);
     return (
         <Button
             variant={effectiveProps.variant || 'default'}
@@ -21,7 +24,7 @@ export const ButtonRenderer: React.FC<RendererProps> = ({ effectiveProps, combin
             style={inlineStyles}
         >
             {renderLucideIcon(effectiveProps.leftIcon, "w-4 h-4")}
-            {createEditableText(effectiveProps.text || 'Button', 'text', '')}
+            {createEditableText(rawText, 'text', '', undefined, previewText, error)}
             {renderLucideIcon(effectiveProps.rightIcon, "w-4 h-4")}
         </Button>
     );

@@ -77,6 +77,7 @@ export function Form({
     initialData,
     fieldWrapper,
     fieldRenderer,
+    labelRenderer,
     onSubmit,
     onCancel,
     onConfigureBinding,
@@ -337,13 +338,17 @@ export function Form({
 
                 const fieldContent = (
                     <div className="space-y-1.5">
-                        <label
-                            htmlFor={`field-${column.name}`}
-                            className="text-sm font-medium leading-none"
-                        >
-                            {label}
-                            {isRequired && <span className="text-red-500 ml-0.5">*</span>}
-                        </label>
+                        {labelRenderer
+                            ? labelRenderer(column.name, label, isRequired)
+                            : (
+                                <label
+                                    htmlFor={`field-${column.name}`}
+                                    className="text-sm font-medium leading-none"
+                                >
+                                    {label}
+                                    {isRequired && <span className="text-red-500 ml-0.5">*</span>}
+                                </label>
+                            )}
 
                         {renderField({
                             column,

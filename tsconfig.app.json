@@ -36,7 +36,9 @@
       "@frontbase/kpicard": ["./packages/kpicard/src/index.ts"],
       "@frontbase/kpicard/*": ["./packages/kpicard/src/*"],
       "@frontbase/grid": ["./packages/grid/src/index.ts"],
-      "@frontbase/grid/*": ["./packages/grid/src/*"]
+      "@frontbase/grid/*": ["./packages/grid/src/*"],
+      "@frontbase/liquid-core": ["./packages/liquid-core/src/index.ts"],
+      "@frontbase/liquid-core/*": ["./packages/liquid-core/src/*"]
     }
   },
   "include": ["src"],

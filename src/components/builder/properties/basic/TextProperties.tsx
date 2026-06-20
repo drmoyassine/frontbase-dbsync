@@ -23,6 +23,7 @@ export const TextProperties: React.FC<TextPropertiesProps> = ({
                 <VariableInput
                     value={props.text || ''}
                     onChange={(value) => updateComponentProp('text', value)}
+                    syntaxContext="output"
                     multiline
                     placeholder="Enter text or type @ for variables"
                 />

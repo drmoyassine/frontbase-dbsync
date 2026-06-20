@@ -26,6 +26,7 @@ export const BadgeProperties: React.FC<BadgePropertiesProps> = ({
                 <VariableInput
                     value={props.text || ''}
                     onChange={(value) => updateComponentProp('text', value)}
+                    syntaxContext="output"
                     placeholder="Badge text"
                 />
             </div>

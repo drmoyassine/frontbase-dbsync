@@ -14,6 +14,7 @@ import { InfoList } from '../components/infolist/InfoList';
 import { Chart } from '../components/chart/Chart';
 import { KPICard } from '../components/kpicard/KPICard';
 import { Grid } from '../components/grid/Grid';
+import { Repeater } from '../components/repeater/Repeater';
 import './globals.css';
 
 // Create QueryClient with sensible defaults for SSR hydration
@@ -41,6 +42,8 @@ const components: Record<string, React.ComponentType<any>> = {
     kpicard: KPICard,
     Grid,
     grid: Grid,
+    Repeater,
+    repeater: Repeater,
 };
 
 // Hydrate all React components
@@ -87,6 +90,11 @@ function hydrateReactComponents() {
                     const binding = componentDef?.binding || componentDef?.props?.binding;
                     if (binding) {
                         props.binding = { ...props.binding, ...binding };
+                    }
+                    // Repeater: the designed template subtree lives in the layout tree,
+                    // not in serialized props — pass it so the edge Repeater can repeat it.
+                    if (componentDef?.children) {
+                        props.template = componentDef.children;
                     }
                 }
             }

@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 import { useBuilderStore } from '@/stores/builder';
 import { useSimpleData, ComponentDataBinding } from '@/hooks/useSimpleData';
 import { useComponentTextEditor } from './hooks/useComponentTextEditor';
+import { useRecord } from './context/RecordContext';
+import { renderSync, isSimpleInterpolation } from '@frontbase/liquid-core';
 
 // Import style processing utilities
 import { processStylesData, processLegacyStyles } from './styling/styleProcessor';
@@ -31,6 +33,9 @@ interface ComponentRendererProps {
   onDoubleClick?: (componentId: string, event: React.MouseEvent) => void;
 }
 
+// React.memo uses the default shallow comparator. A custom `arePropsEqual` is
+// only worth adding if re-render profiling (React DevTools, large page) proves a
+// hot path — not speculatively. (Stage 10 / P2-2: profile-first; none added.)
 export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
   component,
   isSelected,
@@ -41,6 +46,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
   const { id, type, props, styles = {}, className = '' } = component;
   const { currentViewport, setFocusedField } = useBuilderStore();
   const { createEditableText } = useComponentTextEditor(id);
+  // The current Repeater row, when this component lives inside a Repeater template.
+  const record = useRecord();
 
   // Check visibility for current viewport using extracted helper
   const visibility = (component as any).visibility;
@@ -102,22 +109,45 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
 
   // Calculate effective props with data binding
   const effectiveProps = React.useMemo(() => {
-    if (!binding?.fieldMapping || !boundData || boundData.length === 0) {
-      return props;
+    let newProps = props;
+
+    // 1) Single-record field mapping (KPICard-style own data binding).
+    if (binding?.fieldMapping && boundData && boundData.length > 0) {
+      const mappedRecord = boundData[0];
+      newProps = { ...props };
+      Object.entries(binding.fieldMapping).forEach(([propName, fieldName]) => {
+        const field = fieldName as string;
+        if (mappedRecord[field] !== undefined) {
+          newProps[propName] = mappedRecord[field];
+        }
+      });
     }
 
-    const record = boundData[0];
-    const newProps = { ...props };
-
-    Object.entries(binding.fieldMapping).forEach(([propName, fieldName]) => {
-      const field = fieldName as string;
-      if (record[field] !== undefined) {
-        newProps[propName] = record[field];
+    // 2) Repeater record-token pass. When this component is inside a Repeater,
+    // resolve simple {{ record.* }} interpolation in string props against the
+    // current row (synchronous fast path). Strings with {% %} logic are left
+    // untouched here — Stage 7 (useLiquidPreview) renders those with the full
+    // shared Liquid core.
+    if (record) {
+      let mutated = false;
+      const resolved: Record<string, any> = {};
+      for (const key of Object.keys(newProps)) {
+        const v = newProps[key];
+        if (
+          typeof v === 'string' &&
+          v.includes('{{') &&
+          v.includes('record') &&
+          isSimpleInterpolation(v)
+        ) {
+          resolved[key] = renderSync(v, { record });
+          mutated = true;
+        }
       }
-    });
+      if (mutated) newProps = { ...newProps, ...resolved };
+    }
 
     return newProps;
-  }, [props, binding, boundData]);
+  }, [props, binding, boundData, record]);
 
   // Generate styles from the merged styles object
   const { classes: generatedClasses, inlineStyles } = generateStyles(
@@ -169,7 +199,8 @@ export const ComponentRenderer: React.FC<ComponentRendererProps> = React.memo(({
     componentId: id,
     onColumnOverrideChange: type === 'DataTable' ? handleColumnOverrideChange : undefined,
     onConfigureBinding: handleConfigureBinding,
-    styles // Passed for ContainerRenderer
+    styles, // Passed for ContainerRenderer
+    rawChildren: component.children, // Passed for RepeaterRenderer
   };
 
   // Try to get renderer from registry first

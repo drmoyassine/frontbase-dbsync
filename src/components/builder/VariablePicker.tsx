@@ -9,16 +9,48 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import { useVariables, Variable, Filter } from '../../hooks/useVariables';
 import { cn } from '@/lib/utils';
-import { ChevronRight, ChevronLeft, FileText, User, Globe, Link, Clock, Database, Box, Cookie, Layers } from 'lucide-react';
+import {
+    SyntaxContext,
+    DEFAULT_SYNTAX_CONTEXT,
+    filtersAllowedForContext,
+    logicAllowedForContext,
+} from '@/lib/liquid/syntaxContext';
+import { ChevronRight, ChevronLeft, FileText, User, Globe, Link, Clock, Database, Box, Cookie, Layers, Code2 } from 'lucide-react';
+
+/** A multi-line Liquid snippet offered in output contexts. caretOffset places
+ * the caret at the first logical gap (NOT a literal placeholder — those are
+ * invalid Liquid). */
+interface LogicSnippet {
+    label: string;
+    insert: string;
+    caretOffset: number;
+    description?: string;
+}
+
+const LOGIC_SNIPPETS: LogicSnippet[] = [
+    { label: 'If', insert: '{% if  %}\n  \n{% endif %}', caretOffset: 6, description: 'Conditional' },
+    { label: 'If / Else', insert: '{% if  %}\n  \n{% else %}\n  \n{% endif %}', caretOffset: 6, description: 'Conditional' },
+    { label: 'Unless', insert: '{% unless  %}\n  \n{% endunless %}', caretOffset: 10, description: 'Negated conditional' },
+    { label: 'For loop', insert: '{% for item in  %}\n  \n{% endfor %}', caretOffset: 15, description: 'Iterate a list' },
+    { label: 'Case / When', insert: '{% case  %}\n{% when  %}\n  \n{% endcase %}', caretOffset: 8, description: 'Switch' },
+    { label: 'Assign', insert: '{% assign  =  %}', caretOffset: 10, description: 'Set a variable' },
+];
 
 interface VariablePickerProps {
-    onSelect: (value: string) => void;
+    onSelect: (value: string, caretOffset?: number) => void;
     onClose: () => void;
     searchTerm: string;
     position: { top: number; left: number };
     showFilters?: boolean;
+    /** Syntax context — gates which categories are offered (filters, logic snippets). */
+    syntaxContext?: SyntaxContext;
     /** Optional list of allowed variable groups (e.g., ['visitor', 'system', 'user', 'record']) */
     allowedGroups?: string[];
+    /**
+     * Real columns to offer as `{{ record.<col> }}` tokens inside a Repeater.
+     * When provided, the Record group lists these instead of a placeholder.
+     */
+    recordColumns?: string[];
 }
 
 // Group icons and labels
@@ -32,6 +64,7 @@ const GROUP_CONFIG: Record<string, { icon: React.ReactNode; label: string; color
     local: { icon: <Box className="h-4 w-4" />, label: 'Local', color: 'text-yellow-600', description: 'Page-level variables' },
     session: { icon: <Layers className="h-4 w-4" />, label: 'Session', color: 'text-indigo-500', description: 'Session storage values' },
     cookies: { icon: <Cookie className="h-4 w-4" />, label: 'Cookies', color: 'text-amber-600', description: 'Browser cookie values' },
+    __logic: { icon: <Code2 className="h-4 w-4" />, label: 'Logic & Loops', color: 'text-rose-500', description: 'Conditionals, loops & variables' },
 };
 
 export function VariablePicker({
@@ -40,9 +73,14 @@ export function VariablePicker({
     searchTerm,
     position,
     showFilters = false,
+    syntaxContext = DEFAULT_SYNTAX_CONTEXT,
     allowedGroups,
+    recordColumns,
 }: VariablePickerProps) {
     const { variables, filters, isLoading } = useVariables();
+    // Filters are offered only when triggered AND the syntax context allows them
+    // (never in an 'expression' field like visibility/RLS).
+    const allowFilters = showFilters && filtersAllowedForContext(syntaxContext);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [activeGroup, setActiveGroup] = useState<string | null>(null);
     const listRef = useRef<HTMLDivElement>(null);
@@ -60,49 +98,90 @@ export function VariablePicker({
         return groups;
     }, [variables]);
 
+    // Real record columns (when authoring inside a Repeater), else the API's
+    // placeholder record variables.
+    const recordVariables = useMemo<Variable[]>(() => {
+        if (recordColumns && recordColumns.length > 0) {
+            return recordColumns.map(col => ({
+                path: `record.${col}`,
+                type: 'any' as const,
+                source: 'record' as const,
+                description: col,
+            }));
+        }
+        return groupedVariables['record'] || [];
+    }, [recordColumns, groupedVariables]);
+
     // Get available groups (filtered by allowedGroups if provided)
     const availableGroups = useMemo(() => {
-        const allGroups = Object.keys(groupedVariables).filter(g => groupedVariables[g].length > 0);
+        let allGroups = Object.keys(groupedVariables).filter(g => groupedVariables[g].length > 0);
+        // Ensure the Record group shows when real columns are available, even if
+        // the variables API didn't enumerate record vars.
+        if (recordColumns && recordColumns.length > 0 && !allGroups.includes('record')) {
+            allGroups.push('record');
+        }
         if (allowedGroups && allowedGroups.length > 0) {
-            return allGroups.filter(g => allowedGroups.includes(g));
+            allGroups = allGroups.filter(g => allowedGroups.includes(g));
+        }
+        // Logic & Loops group — offered only in output contexts.
+        if (logicAllowedForContext(syntaxContext) && !allGroups.includes('__logic')) {
+            allGroups.push('__logic');
         }
         return allGroups;
-    }, [groupedVariables, allowedGroups]);
+    }, [groupedVariables, allowedGroups, recordColumns, syntaxContext]);
 
     // Filter based on search term
     const filteredGroups = useMemo(() => {
         if (!searchTerm) return availableGroups;
         return availableGroups.filter(g => {
+            if (g === '__logic') {
+                const label = GROUP_CONFIG['__logic']?.label.toLowerCase() ?? 'logic';
+                return label.includes(searchTerm.toLowerCase()) ||
+                    LOGIC_SNIPPETS.some(s => s.label.toLowerCase().includes(searchTerm.toLowerCase()));
+            }
             const config = GROUP_CONFIG[g];
             if (config?.label.toLowerCase().includes(searchTerm.toLowerCase())) return true;
             // Also include if any variable in group matches
-            return groupedVariables[g].some(v =>
+            const groupVars = g === 'record' ? recordVariables : groupedVariables[g];
+            return groupVars?.some(v =>
                 v.path.toLowerCase().includes(searchTerm.toLowerCase())
             );
         });
-    }, [availableGroups, groupedVariables, searchTerm]);
+    }, [availableGroups, groupedVariables, searchTerm, recordVariables]);
 
     const filteredVariables = useMemo(() => {
-        if (!activeGroup) return [];
-        const vars = groupedVariables[activeGroup] || [];
+        if (!activeGroup || activeGroup === '__logic') return [];
+        const vars = activeGroup === 'record' ? recordVariables : (groupedVariables[activeGroup] || []);
         if (!searchTerm) return vars;
         return vars.filter(v =>
             v.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
             v.description?.toLowerCase().includes(searchTerm.toLowerCase())
         );
-    }, [activeGroup, groupedVariables, searchTerm]);
+    }, [activeGroup, groupedVariables, searchTerm, recordVariables]);
+
+    // Logic snippets (filtered) — shown when the Logic & Loops group is open.
+    const filteredSnippets = useMemo<LogicSnippet[]>(() => {
+        if (!searchTerm) return LOGIC_SNIPPETS;
+        return LOGIC_SNIPPETS.filter(s =>
+            s.label.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [searchTerm]);
 
     const filteredFilters = useMemo(() => {
-        if (!showFilters) return [];
+        if (!allowFilters) return [];
         if (!searchTerm) return filters;
         return filters.filter(f =>
             f.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
-    }, [showFilters, filters, searchTerm]);
+    }, [allowFilters, filters, searchTerm]);
 
-    // Current items to display
-    const currentItems = activeGroup ? filteredVariables : filteredGroups;
-    const totalItems = currentItems.length + (showFilters && !activeGroup ? filteredFilters.length : 0);
+    // Total selectable items in the current view (groups, variables, snippets, filters).
+    const inLogicGroup = activeGroup === '__logic';
+    const totalItems = inLogicGroup
+        ? filteredSnippets.length
+        : activeGroup
+            ? filteredVariables.length
+            : filteredGroups.length + (allowFilters ? filteredFilters.length : 0);
 
     // Reset selection when view changes
     useEffect(() => {
@@ -154,11 +233,20 @@ export function VariablePicker({
     }, [selectedIndex, totalItems, activeGroup, searchTerm]);
 
     const handleSelect = useCallback((index: number) => {
+        if (inLogicGroup) {
+            // Selecting a logic snippet — insert with caret at first gap.
+            const snippet = filteredSnippets[index];
+            if (snippet) {
+                onSelect(snippet.insert, snippet.caretOffset);
+                onClose();
+            }
+            return;
+        }
         if (!activeGroup) {
             // Selecting a group - drill down
             if (index < filteredGroups.length) {
                 setActiveGroup(filteredGroups[index]);
-            } else if (showFilters) {
+            } else if (allowFilters) {
                 // Filter selected
                 const filterIndex = index - filteredGroups.length;
                 onSelect(` | ${filteredFilters[filterIndex].name}`);
@@ -171,7 +259,7 @@ export function VariablePicker({
                 onClose();
             }
         }
-    }, [activeGroup, filteredGroups, filteredVariables, filteredFilters, showFilters, onSelect, onClose]);
+    }, [inLogicGroup, activeGroup, filteredGroups, filteredVariables, filteredFilters, filteredSnippets, allowFilters, onSelect, onClose]);
 
     // Close on click outside
     useEffect(() => {
@@ -239,7 +327,9 @@ export function VariablePicker({
                             </div>
                             {filteredGroups.map((group, i) => {
                                 const config = GROUP_CONFIG[group] || { icon: <Box className="h-4 w-4" />, label: group, color: 'text-gray-500' };
-                                const count = groupedVariables[group]?.length || 0;
+                                const count = group === '__logic'
+                                    ? LOGIC_SNIPPETS.length
+                                    : (groupedVariables[group]?.length || 0);
                                 return (
                                     <div
                                         key={group}
@@ -289,8 +379,31 @@ export function VariablePicker({
                         </div>
                     )}
 
+                    {/* Logic snippets (when the Logic & Loops group is open) */}
+                    {inLogicGroup && filteredSnippets.length > 0 && (
+                        <div className="py-1">
+                            {filteredSnippets.map((s, i) => (
+                                <div
+                                    key={s.label}
+                                    ref={i === selectedIndex ? selectedRef : null}
+                                    className={cn(
+                                        'px-3 py-2 cursor-pointer flex items-center gap-2 text-sm transition-colors',
+                                        i === selectedIndex && 'bg-accent'
+                                    )}
+                                    onClick={() => handleSelect(i)}
+                                    onMouseEnter={() => setSelectedIndex(i)}
+                                >
+                                    <span className="font-mono text-xs bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-900">{s.label}</span>
+                                    {s.description && (
+                                        <span className="text-xs text-muted-foreground ml-auto whitespace-nowrap overflow-hidden text-ellipsis max-w-[140px]">{s.description}</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Filters (only in root view) */}
-                    {!activeGroup && showFilters && filteredFilters.length > 0 && (
+                    {!activeGroup && allowFilters && filteredFilters.length > 0 && (
                         <div className="py-1">
                             <div className="px-3 py-2 text-[0.7rem] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
                                 <span>🔧</span> Filters

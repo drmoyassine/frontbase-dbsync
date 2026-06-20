@@ -174,6 +174,7 @@ export const DisplayProperties: React.FC<DisplayPropertiesProps> = ({
                     <VariableInput
                         value={props.title || ''}
                         onChange={(value) => updateComponentProp('title', value)}
+                        syntaxContext="output"
                         placeholder="Card title or type @ for variables"
                     />
                 </div>
@@ -182,6 +183,7 @@ export const DisplayProperties: React.FC<DisplayPropertiesProps> = ({
                     <VariableInput
                         value={props.description || ''}
                         onChange={(value) => updateComponentProp('description', value)}
+                        syntaxContext="output"
                         placeholder="Card description or type @ for variables"
                         multiline
                     />

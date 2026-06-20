@@ -170,6 +170,9 @@ export function renderDataComponent(
         case 'Grid':
             return renderDataGrid(id, props, propsJson);
 
+        case 'Repeater':
+            return renderRepeater(id, props, propsJson);
+
         default:
             // Fallback for unknown data components
             return `<div data-fb-id="${id}" data-fb-type="${type}" data-fb-hydrate="data" data-fb-props="${escapeHtml(propsJson)}" class="fb-data-component">
@@ -521,6 +524,44 @@ function renderDataGrid(id: string, props: Record<string, unknown>, propsJson: s
                     <div class="h-3 bg-muted rounded w-1/2 animate-pulse"></div>
                     <div class="h-3 bg-muted rounded w-1/3 animate-pulse"></div>
                 </div>
+            </div>
+        </div>
+    `).join('');
+
+    return `<div ${attrs}>
+        ${skeletonCards}
+    </div>`;
+}
+
+function renderRepeater(id: string, props: Record<string, unknown>, propsJson: string): string {
+    const columns = (props.columns as number) || 3;
+    const layout = (props.layout as string) || 'grid';
+
+    // Skeleton only — Stage 4 (Phase 1). The template is hydrated client-side;
+    // full per-row SSR lives in Stage 9.
+    const layoutClass = layout === 'list'
+        ? 'flex flex-col gap-4'
+        : (columns <= 1 ? 'grid grid-cols-1 gap-4'
+            : columns === 2 ? 'grid grid-cols-1 md:grid-cols-2 gap-4'
+            : columns === 3 ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'
+            : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4');
+
+    const attrs = getCommonAttributes(
+        id,
+        layoutClass,
+        props,
+        '',
+        'repeater',
+        propsJson,
+        `data-react-component="Repeater" data-component-id="${id}"`
+    );
+
+    const skeletonCards = Array(Math.min(columns || 3, 4)).fill(0).map(() => `
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm animate-pulse">
+            <div class="h-32 bg-muted rounded-t-lg"></div>
+            <div class="p-6 space-y-2">
+                <div class="h-4 bg-muted rounded w-3/4"></div>
+                <div class="h-3 bg-muted rounded w-1/2"></div>
             </div>
         </div>
     `).join('');

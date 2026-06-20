@@ -117,6 +117,7 @@ const SortableFeatureItem: React.FC<{
                     <VariableInput
                         value={feature.title}
                         onChange={(value) => updateFeature(index, { title: value })}
+                        syntaxContext="output"
                         placeholder="Feature title or type @ for variables"
                     />
                 </div>
@@ -127,6 +128,7 @@ const SortableFeatureItem: React.FC<{
                     <VariableInput
                         value={feature.description}
                         onChange={(value) => updateFeature(index, { description: value })}
+                        syntaxContext="output"
                         placeholder="Feature description or type @ for variables"
                         multiline
                     />

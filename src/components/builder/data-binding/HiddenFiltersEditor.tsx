@@ -142,6 +142,7 @@ export const HiddenFiltersEditor: React.FC<HiddenFiltersEditorProps> = ({
                                         <VariableInput
                                             value={filter.value || ''}
                                             onChange={(val) => updateFilter(idx, { value: val })}
+                                            syntaxContext="scalar"
                                             placeholder={filter.operator === 'in' ? "val1, val2 (or @ for variables)" : "Value (or @ for variables)"}
                                             className="h-8 text-xs bg-background"
                                             allowedGroups={['page', 'user', 'visitor', 'system', 'url', 'local', 'session', 'cookies']}

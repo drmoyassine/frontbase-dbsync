@@ -2,6 +2,7 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { RendererProps } from '../types';
 import { ICON_MAP } from '@/components/builder/properties/IconPicker';
+import { useLiquidPreview } from '@/hooks/useLiquidPreview';
 
 export const BadgeRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, createEditableText, inlineStyles }) => {
     const iconName = effectiveProps.icon;
@@ -22,6 +23,9 @@ export const BadgeRenderer: React.FC<RendererProps> = ({ effectiveProps, combine
         }
     }
 
+    const rawText = effectiveProps.text || 'Now in Private Alpha';
+    const { text: previewText, error } = useLiquidPreview(rawText);
+
     return (
         <div style={{ display: 'flex', width: '100%', justifyContent }} className={combinedClassName}>
             <Badge
@@ -34,7 +38,7 @@ export const BadgeRenderer: React.FC<RendererProps> = ({ effectiveProps, combine
                         style={effectiveProps.iconColor ? { color: effectiveProps.iconColor } : undefined}
                     />
                 )}
-                {createEditableText(effectiveProps.text || 'Now in Private Alpha', 'text', '')}
+                {createEditableText(rawText, 'text', '', undefined, previewText, error)}
                 {IconComponent && iconPosition === 'right' && (
                     <IconComponent
                         className="w-3 h-3 ml-1.5"

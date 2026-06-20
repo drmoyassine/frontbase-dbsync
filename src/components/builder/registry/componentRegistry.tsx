@@ -65,6 +65,7 @@ export const COMPONENT_REGISTRY: Record<string, React.FC<any>> = {
     KPICard: DataRenderers.KPICardRenderer,
     Chart: DataRenderers.ChartRenderer,
     Grid: DataRenderers.GridRenderer,
+    Repeater: DataRenderers.RepeaterRenderer,
 };
 
 /**

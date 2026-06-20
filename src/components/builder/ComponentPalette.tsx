@@ -33,7 +33,8 @@ import {
   PanelTop,
   ChevronDown,
   Star,
-  Code
+  Code,
+  Repeat
 } from 'lucide-react';
 
 const componentCategories = {
@@ -85,6 +86,7 @@ const componentCategories = {
       // Data/Lists Components
       { name: 'DataTable', icon: Table, description: 'Advanced data table', section: 'data' },
       { name: 'Grid', icon: LayoutGrid, description: 'Card grid from a table', section: 'data' },
+      { name: 'Repeater', icon: Repeat, description: 'Pixel-perfect repeating template', section: 'data' },
       { name: 'KPICard', icon: BarChart, description: 'KPI display card', section: 'data' },
       { name: 'Chart', icon: BarChart, description: 'Data visualization', section: 'data' },
       { name: 'Progress', icon: BarChart, description: 'Progress indicator', section: 'data' },

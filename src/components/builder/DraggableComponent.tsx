@@ -24,6 +24,8 @@ interface DraggableComponentProps {
   onSelect: (componentId: string, event: React.MouseEvent) => void;
 }
 
+// Default shallow React.memo. Add a custom `arePropsEqual` only if profiling
+// proves a re-render hot path on large pages. (Stage 10 / P2-2: profile-first.)
 export const DraggableComponent: React.FC<DraggableComponentProps> = React.memo(({
   component,
   index,
@@ -142,7 +144,7 @@ export const DraggableComponent: React.FC<DraggableComponentProps> = React.memo(
       )}
 
       {/* Component Content */}
-      {['Container', 'Row', 'Column', 'Card'].includes(component.type) ? (
+      {['Container', 'Row', 'Column', 'Card', 'Repeater'].includes(component.type) ? (
         <ComponentErrorBoundary
           componentId={component.id}
           componentType={component.type}

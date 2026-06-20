@@ -164,10 +164,20 @@ export function Grid({
                 }
             case 'image':
                 return (
-                    <img 
-                        src={String(value)} 
-                        alt="" 
+                    <img
+                        src={String(value)}
+                        alt=""
                         className="w-12 h-12 rounded-full object-cover border"
+                    />
+                );
+            case 'cover':
+                // Full-bleed card banner — rendered above the header, not in the
+                // label/value list (excluded from secondary columns below).
+                return (
+                    <img
+                        src={String(value)}
+                        alt=""
+                        className="w-full h-32 object-cover rounded-t-lg"
                     />
                 );
             default:
@@ -177,15 +187,14 @@ export function Grid({
 
     const getVisibleColumns = () => {
         if (!data[0]) return [];
-        const allColumns = Object.keys(data[0]);
-        
-        if (binding?.columnOverrides) {
-            return allColumns.filter(col => 
-                binding.columnOverrides?.[col]?.visible !== false
-            );
-        }
-        
-        return allColumns;
+        // Honor the panel column order; fall back to the row's key order.
+        const allKeys = binding?.columnOrder?.length
+            ? binding.columnOrder
+            : Object.keys(data[0]);
+        return allKeys.filter(col =>
+            binding?.columnOverrides?.[col]?.visible !== false &&
+            Object.prototype.hasOwnProperty.call(data[0], col)
+        );
     };
 
     const getColumnDisplayName = (columnName: string) => {
@@ -194,14 +203,23 @@ export function Grid({
     };
 
     const visibleColumns = getVisibleColumns();
-    const primaryColumn = visibleColumns[0];
-    const secondaryColumns = visibleColumns.slice(1);
+    // A cover column renders as a full-bleed banner above the header and is
+    // excluded from the primary/secondary label-value list.
+    const coverColumn = visibleColumns.find(
+        col => binding?.columnOverrides?.[col]?.displayType === 'cover'
+    );
+    const contentColumns = visibleColumns.filter(col => col !== coverColumn);
+    const primaryColumn = contentColumns[0];
+    const secondaryColumns = contentColumns.slice(1);
 
     return (
         <div className={cn(gridLayoutClass, className)} style={safeStyle}>
             {data.map((item: any, index: number) => {
                 const cardContent = (
                     <div className={cn(cardClass, "hover:shadow-md transition-shadow h-full flex flex-col")}>
+                        {coverColumn && item[coverColumn] != null && (
+                            formatValue(item[coverColumn], coverColumn)
+                        )}
                         <div className={headerClass}>
                             <h3 className={titleClass}>
                                 {formatValue(item[primaryColumn], primaryColumn)}
@@ -209,16 +227,28 @@ export function Grid({
                         </div>
                         <div className={cn(contentClass, "flex-1")}>
                             <div className="space-y-2">
-                                {secondaryColumns.map((column) => (
-                                    <div key={column} className="flex justify-between items-center text-sm">
-                                        <span className="text-muted-foreground">
-                                            {getColumnDisplayName(column)}:
-                                        </span>
-                                        <span className="font-medium">
-                                            {formatValue(item[column], column)}
-                                        </span>
-                                    </div>
-                                ))}
+                                {secondaryColumns.map((column) => {
+                                    const hideLabel = binding?.columnOverrides?.[column]?.showLabel === false;
+                                    if (hideLabel) {
+                                        return (
+                                            <div key={column} className="text-sm">
+                                                <span className="font-medium">
+                                                    {formatValue(item[column], column)}
+                                                </span>
+                                            </div>
+                                        );
+                                    }
+                                    return (
+                                        <div key={column} className="flex justify-between items-center text-sm">
+                                            <span className="text-muted-foreground">
+                                                {getColumnDisplayName(column)}:
+                                            </span>
+                                            <span className="font-medium">
+                                                {formatValue(item[column], column)}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>

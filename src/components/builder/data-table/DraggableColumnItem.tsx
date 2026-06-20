@@ -148,10 +148,23 @@ export const DraggableColumnItem: React.FC<DraggableColumnItemProps> = ({
                                         <SelectItem value="boolean">Boolean (✓/✗)</SelectItem>
                                         <SelectItem value="currency">Currency</SelectItem>
                                         <SelectItem value="percentage">%</SelectItem>
-                                        <SelectItem value="image">Image</SelectItem>
+                                        <SelectItem value="image">Logo</SelectItem>
+                                        <SelectItem value="cover">Image (cover)</SelectItem>
                                         <SelectItem value="link">Link</SelectItem>
                                     </SelectContent>
                                 </Select>
+                            </div>
+                            {/* Show label on card (Grid / Repeater) */}
+                            <div className="grid grid-cols-3 items-center gap-4">
+                                <Label htmlFor={`show-label-${column.name}`}>Card label</Label>
+                                <div className="col-span-2 flex items-center gap-2">
+                                    <Switch
+                                        id={`show-label-${column.name}`}
+                                        checked={override.showLabel !== false}
+                                        onCheckedChange={(showLabel) => updateColumnOverride(column.name, { showLabel })}
+                                    />
+                                    <span className="text-xs text-muted-foreground">Show field label on the card</span>
+                                </div>
                             </div>
                             {/* Date Format - only shown when type is date */}
                             {(override.displayType === 'date') && (

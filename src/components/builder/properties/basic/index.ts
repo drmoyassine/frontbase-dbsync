@@ -32,4 +32,5 @@ export { EmbedProperties } from './EmbedProperties';
 export { ChartProperties } from './ChartProperties';
 export { GridProperties } from './GridProperties';
 export { KPICardProperties } from './KPICardProperties';
+export { RepeaterProperties } from './RepeaterProperties';
 

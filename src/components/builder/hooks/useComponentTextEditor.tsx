@@ -16,9 +16,22 @@ export const useComponentTextEditor = (componentId: string | undefined) => {
         setEditingTextNode(null);
     };
 
-    const createEditableText = (text: string, textProperty: string, className: string, style: React.CSSProperties = {}) => {
+    const createEditableText = (
+        text: string,
+        textProperty: string,
+        className: string,
+        style: React.CSSProperties = {},
+        /**
+         * Optional pre-resolved display text (e.g. Liquid preview). When provided,
+         * the non-editing display shows this; editing still edits the raw `text`
+         * (the template). When omitted, `text` is shown directly.
+         */
+        displayText?: string,
+        /** Optional Liquid render error — surfaces a non-blocking red underline. */
+        error?: string | null,
+    ) => {
         const isEditing = editingTextNode?.componentId === componentId && editingTextNode?.property === textProperty;
-        
+
         if (isEditing) {
             return (
                 // Wrapper with position:relative for the hidden measuring span inside InlineTextEditor
@@ -39,9 +52,11 @@ export const useComponentTextEditor = (componentId: string | undefined) => {
             <span
                 className={cn(
                     className,
-                    !isPreviewMode && 'cursor-text hover:bg-accent/20 rounded-sm transition-colors duration-200'
+                    !isPreviewMode && 'cursor-text hover:bg-accent/20 rounded-sm transition-colors duration-200',
+                    error && 'underline decoration-red-500 decoration-wavy underline-offset-2'
                 )}
                 style={style}
+                title={error || undefined}
                 onClick={(e) => {
                     if (!isPreviewMode && componentId) {
                         e.stopPropagation();
@@ -59,7 +74,7 @@ export const useComponentTextEditor = (componentId: string | undefined) => {
                     }
                 }}
             >
-                {text}
+                {displayText ?? text}
             </span>
         );
     };

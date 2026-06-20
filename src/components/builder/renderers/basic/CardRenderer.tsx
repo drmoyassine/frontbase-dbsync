@@ -8,6 +8,7 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { RendererProps } from '../types';
+import { useLiquidPreview } from '@/hooks/useLiquidPreview';
 import { ICON_MAP } from '../../properties/IconPicker';
 
 // Icon size mappings
@@ -35,6 +36,10 @@ export const CardRenderer: React.FC<RendererProps> = ({ effectiveProps, combined
         iconAlignment = 'center',
         textAlignment = 'center',
     } = effectiveProps;
+
+    // Liquid preview for the feature-card title/description.
+    const titlePreview = useLiquidPreview(title || '');
+    const descriptionPreview = useLiquidPreview(description || '');
 
 
 
@@ -88,14 +93,14 @@ export const CardRenderer: React.FC<RendererProps> = ({ effectiveProps, combined
                         {/* Title */}
                         {(title || title === '') && (
                             <h3 className="text-lg font-semibold w-full">
-                                {createEditableText(title || '', 'title', 'block w-full', { textAlign: textAlignMap[textAlignment as keyof typeof textAlignMap] || 'center' })}
+                                {createEditableText(title || '', 'title', 'block w-full', { textAlign: textAlignMap[textAlignment as keyof typeof textAlignMap] || 'center' }, titlePreview.text, titlePreview.error)}
                             </h3>
                         )}
 
                         {/* Description */}
                         {(description || description === '') && (
                             <div className="text-sm text-muted-foreground leading-relaxed w-full">
-                                {createEditableText(description || '', 'description', 'block w-full', { textAlign: textAlignMap[textAlignment as keyof typeof textAlignMap] || 'center' })}
+                                {createEditableText(description || '', 'description', 'block w-full', { textAlign: textAlignMap[textAlignment as keyof typeof textAlignMap] || 'center' }, descriptionPreview.text, descriptionPreview.error)}
                             </div>
                         )}
                     </div>

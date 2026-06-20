@@ -47,6 +47,9 @@ export interface BuilderSlice {
     moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
     updateComponentText: (componentId: string, textProperty: string, text: string) => void;
     updateComponent: (componentId: string, propsUpdates: Record<string, any>) => void;
+    /** Replace a component node in-place with a new node (same position in the
+     * tree). Used by the Repeater "Convert / Wrap" actions. */
+    replaceComponent: (componentId: string, newComponent: ComponentData) => void;
     removeComponent: (componentId: string) => void;
     deleteSelectedComponent: () => void;
     copyComponent: (componentId: string) => void;
@@ -287,6 +290,37 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
                         }
                         return updated;
                     }
+                );
+            }
+
+            const newPages = [...state.pages];
+            newPages[pageIndex] = page;
+
+            return {
+                ...state,
+                pages: newPages,
+                hasUnsavedChanges: true
+            };
+        });
+    },
+
+    replaceComponent: (componentId: string, newComponent: ComponentData) => {
+        set((state) => {
+            const { pages, currentPageId } = state;
+            if (!currentPageId) return state;
+
+            const pageIndex = pages.findIndex(p => p.id === currentPageId);
+            if (pageIndex === -1) return state;
+
+            const page = { ...pages[pageIndex] };
+
+            if (page.layoutData?.content) {
+                // Swap the matching node in place; newComponent keeps the same
+                // tree position (and its own id/children).
+                page.layoutData.content = updateComponentInTree(
+                    page.layoutData.content,
+                    componentId,
+                    () => newComponent
                 );
             }
 

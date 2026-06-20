@@ -24,6 +24,7 @@ export const HeadingProperties: React.FC<HeadingPropertiesProps> = ({
                 <VariableInput
                     value={props.text || ''}
                     onChange={(value) => updateComponentProp('text', value)}
+                    syntaxContext="output"
                     placeholder="Enter heading text or type @ for variables"
                 />
             </div>

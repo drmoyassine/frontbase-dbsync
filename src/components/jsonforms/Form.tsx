@@ -8,10 +8,56 @@
  * Mirrors the InfoList IoC wrapper pattern.
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Form as PureForm, type FormBinding } from '@frontbase/form';
 import { FieldSettingsPopover } from '@/components/builder/form/FieldSettingsPopover';
+import { InlineTextEditor } from '@/components/builder/InlineTextEditor';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
+
+/**
+ * Inline-editable field label for the Builder. Click to edit the label text
+ * in place (Tiptap); commits to `override.label` via onFieldOverrideChange.
+ * Falls back to the default label when not editing.
+ */
+const InlineLabel: React.FC<{
+    fieldName: string;
+    labelText: string;
+    isRequired: boolean;
+    onCommit: (value: string) => void;
+}> = ({ fieldName, labelText, isRequired, onCommit }) => {
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(labelText);
+
+    useEffect(() => {
+        if (!editing) setDraft(labelText);
+    }, [labelText, editing]);
+
+    if (editing) {
+        return (
+            <span className="inline-block" style={{ position: 'relative' }}>
+                <InlineTextEditor
+                    value={draft}
+                    onChange={setDraft}
+                    onSave={() => { onCommit(draft); setEditing(false); }}
+                    onCancel={() => { setDraft(labelText); setEditing(false); }}
+                    className="text-sm font-medium leading-none"
+                />
+                {isRequired && <span className="text-red-500 ml-0.5">*</span>}
+            </span>
+        );
+    }
+
+    return (
+        <label
+            htmlFor={`field-${fieldName}`}
+            className="text-sm font-medium leading-none cursor-text hover:bg-accent/20 rounded-sm px-0.5"
+            onClick={(e) => { e.preventDefault(); setDraft(labelText); setEditing(true); }}
+        >
+            {labelText}
+            {isRequired && <span className="text-red-500 ml-0.5">*</span>}
+        </label>
+    );
+};
 
 export interface FormProps {
     componentId?: string;
@@ -96,6 +142,21 @@ export const Form: React.FC<FormProps> = ({
                     </FieldSettingsPopover>
                 )
                 : undefined
+            }
+            // Inline-editable labels in the Builder (Tiptap). Falls back to the
+            // default <label> in edge/non-builder mode.
+            labelRenderer={
+                isBuilderMode && onFieldOverrideChange
+                    ? (fieldName, labelText, isRequired) => (
+                        <InlineLabel
+                            key={fieldName}
+                            fieldName={fieldName}
+                            labelText={labelText}
+                            isRequired={isRequired}
+                            onCommit={(value) => onFieldOverrideChange(fieldName, { label: value })}
+                        />
+                    )
+                    : undefined
             }
         />
     );

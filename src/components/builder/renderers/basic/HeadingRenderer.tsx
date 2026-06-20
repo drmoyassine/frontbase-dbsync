@@ -1,6 +1,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { RendererProps } from '../types';
+import { useLiquidPreview } from '@/hooks/useLiquidPreview';
 
 export const HeadingRenderer: React.FC<RendererProps> = ({ effectiveProps, combinedClassName, inlineStyles, createEditableText }) => {
     // Handle both 'h4' format and '4' format - strip 'h' prefix if present
@@ -14,12 +15,15 @@ export const HeadingRenderer: React.FC<RendererProps> = ({ effectiveProps, combi
         '5': 'text-lg font-semibold',
         '6': 'text-base font-semibold'
     };
+    const cls = headingClasses[levelStr as keyof typeof headingClasses] || 'text-2xl font-semibold';
+    const rawText = effectiveProps.text || 'Heading';
+    const { text: previewText, error } = useLiquidPreview(rawText);
     return (
         <HeadingTag
-            className={cn(headingClasses[levelStr as keyof typeof headingClasses] || 'text-2xl font-semibold', combinedClassName)}
+            className={cn(cls, combinedClassName)}
             style={inlineStyles}
         >
-            {createEditableText(effectiveProps.text || 'Heading', 'text', headingClasses[levelStr as keyof typeof headingClasses] || 'text-2xl font-semibold', inlineStyles)}
+            {createEditableText(rawText, 'text', cls, inlineStyles, previewText, error)}
         </HeadingTag>
     );
 };

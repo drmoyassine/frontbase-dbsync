@@ -12,7 +12,14 @@
 export interface ColumnOverride {
     visible?: boolean;
     displayName?: string;
-    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'link';
+    displayType?: 'text' | 'badge' | 'date' | 'currency' | 'percentage' | 'image' | 'cover' | 'link' | 'boolean';
+    /**
+     * Show the field label on the card (default: true). When `false`, the Grid /
+     * Repeater render only the value, dropping the label span. Grid/Repeater only.
+     */
+    showLabel?: boolean;
+    /** date-fns-style format string for `displayType: 'date'`. */
+    dateFormat?: string;
 }
 
 export type HiddenFilterOperator =

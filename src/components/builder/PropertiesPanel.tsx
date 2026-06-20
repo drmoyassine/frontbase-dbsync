@@ -5,6 +5,9 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Trash2 } from 'lucide-react';
+import { Repeat } from 'lucide-react';
+import { canConvertToRepeater, convertToRepeaterMode } from '@/lib/builder/canConvertToRepeater';
+import { applyConvertToRepeater } from '@/lib/builder/convertToRepeater';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,6 +43,7 @@ import {
   ChartProperties,
   GridProperties,
   KPICardProperties,
+  RepeaterProperties,
 } from './properties/basic';
 
 // Landing Components
@@ -236,6 +240,21 @@ export const PropertiesPanel = () => {
           />
         );
 
+      case 'Repeater':
+        return (
+          <RepeaterProperties
+            activeTab={tab}
+            componentId={selectedComponentId!}
+            binding={selectedComponent?.props?.binding}
+            onBindingUpdate={(binding) => {
+              setComponentBinding(selectedComponentId!, binding);
+              updateComponentProp('binding', binding);
+            }}
+            props={props}
+            updateComponentProp={updateComponentProp}
+          />
+        );
+
       case 'KPICard':
         return (
           <KPICardProperties
@@ -306,16 +325,32 @@ export const PropertiesPanel = () => {
 
   return (
     <div className="p-4 h-full flex flex-col">
-      <div className="border-b border-border pb-4 mb-4 flex justify-between items-center">
+      <div className="border-b border-border pb-4 mb-4 flex justify-between items-center gap-2">
         <h2 className="font-semibold text-foreground">Properties <span className="text-muted-foreground font-normal">{selectedComponent.type}</span></h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setShowDeleteDialog(true)}
-          className="text-destructive hover:text-destructive"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {canConvertToRepeater(selectedComponent) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs gap-1.5 h-8"
+              title={convertToRepeaterMode(selectedComponent) === 'wrap-template'
+                ? 'Wrap this as a template and repeat it for each row of a table'
+                : 'Convert this grid into a Repeater with a card template'}
+              onClick={() => applyConvertToRepeater(selectedComponent)}
+            >
+              <Repeat className="h-3.5 w-3.5" />
+              {convertToRepeaterMode(selectedComponent) === 'wrap-template' ? 'Repeat for each row' : 'Convert to Repeater'}
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowDeleteDialog(true)}
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -332,6 +367,7 @@ export const PropertiesPanel = () => {
               <VariableInput
                 value={selectedComponent.props.title || ''}
                 onChange={(value) => updateComponentProp('title', value)}
+                syntaxContext="output"
                 placeholder="Enter component title"
               />
             </div>

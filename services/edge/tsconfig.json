@@ -52,6 +52,12 @@
             ],
             "@frontbase/grid/*": [
                 "../../packages/grid/src/*"
+            ],
+            "@frontbase/liquid-core": [
+                "../../packages/liquid-core/src/index.ts"
+            ],
+            "@frontbase/liquid-core/*": [
+                "../../packages/liquid-core/src/*"
             ]
         }
     },

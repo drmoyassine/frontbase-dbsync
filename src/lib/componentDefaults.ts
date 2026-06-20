@@ -49,6 +49,7 @@ export function getDefaultProps(componentType: string): Record<string, any> {
     KPICard: { binding: null },
     Chart: { binding: null, chartType: 'bar' },
     Grid: { binding: null, columns: 3 },
+    Repeater: { binding: null, layout: 'grid', columns: 3, children: [] },
     Embed: { embedType: 'iframe', width: '100%', height: '400px', title: 'Embedded content', sandbox: 'allow-scripts allow-same-origin allow-forms', loading: 'lazy' },
     Pricing: {
       title: 'Simple, transparent pricing',

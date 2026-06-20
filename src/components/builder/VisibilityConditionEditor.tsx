@@ -217,6 +217,7 @@ export function VisibilityConditionEditor({ value, onChange }: VisibilityConditi
                                 <VariableInput
                                     value={row.lhs}
                                     onChange={(val) => handleRowChange(idx, { lhs: val })}
+                                    syntaxContext="expression"
                                     placeholder="Variable (e.g. local.modalOpen)"
                                     className="h-8 text-xs bg-background"
                                     allowedGroups={['page', 'user', 'visitor', 'system', 'url', 'local', 'session', 'cookies']}
@@ -240,6 +241,7 @@ export function VisibilityConditionEditor({ value, onChange }: VisibilityConditi
                                     <VariableInput
                                         value={row.rhs}
                                         onChange={(val) => handleRowChange(idx, { rhs: val })}
+                                        syntaxContext="expression"
                                         placeholder="Value or @variable"
                                         className="h-8 text-xs bg-background"
                                         allowedGroups={['page', 'user', 'visitor', 'system', 'url', 'local', 'session', 'cookies']}
@@ -287,6 +289,7 @@ export function VisibilityConditionEditor({ value, onChange }: VisibilityConditi
                     <VariableInput
                         value={value}
                         onChange={onChange}
+                        syntaxContext="expression"
                         placeholder="e.g. local.modalOpen == true"
                         className="font-mono text-xs"
                         allowedGroups={['page', 'user', 'visitor', 'system', 'url', 'local', 'session', 'cookies']}

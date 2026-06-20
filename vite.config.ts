@@ -76,6 +76,7 @@ export default defineConfig(({ mode }) => {
         "@frontbase/chart": path.resolve(__dirname, "./packages/chart/src/index.ts"),
         "@frontbase/kpicard": path.resolve(__dirname, "./packages/kpicard/src/index.ts"),
         "@frontbase/grid": path.resolve(__dirname, "./packages/grid/src/index.ts"),
+        "@frontbase/liquid-core": path.resolve(__dirname, "./packages/liquid-core/src/index.ts"),
       },
     },
     // Expose server-side env vars to client

@@ -10,6 +10,12 @@ import { VariablePicker } from './VariablePicker';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import {
+    SyntaxContext,
+    DEFAULT_SYNTAX_CONTEXT,
+    filtersAllowedForContext,
+} from '@/lib/liquid/syntaxContext';
+import { useRepeaterRecordColumns } from './hooks/useRepeaterRecordColumns';
 
 interface VariableInputProps {
     value: string;
@@ -18,8 +24,19 @@ interface VariableInputProps {
     className?: string;
     multiline?: boolean;
     showFiltersOnPipe?: boolean;
+    /**
+     * What kind of Liquid expression this input accepts. Controls which
+     * categories the picker offers (filters, and later logic snippets).
+     * Defaults to 'scalar' (preserves prior behavior).
+     */
+    syntaxContext?: SyntaxContext;
     /** Optional list of allowed variable groups (e.g., ['visitor', 'system', 'user', 'record']) */
     allowedGroups?: string[];
+    /**
+     * Columns to offer as `{{ record.<col> }}` tokens. When omitted, derived
+     * automatically from the nearest ancestor Repeater of the selected component.
+     */
+    recordColumns?: string[];
 }
 
 export function VariableInput({
@@ -29,8 +46,14 @@ export function VariableInput({
     className,
     multiline = false,
     showFiltersOnPipe = true,
+    syntaxContext = DEFAULT_SYNTAX_CONTEXT,
     allowedGroups,
+    recordColumns: recordColumnsProp,
 }: VariableInputProps) {
+    // Derive the ancestor Repeater's columns so the Record group offers real
+    // columns when authoring inside a Repeater template (unless overridden).
+    const derivedRecordColumns = useRepeaterRecordColumns();
+    const recordColumns = recordColumnsProp ?? derivedRecordColumns;
     const [showPicker, setShowPicker] = useState(false);
     const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
     const [searchTerm, setSearchTerm] = useState('');
@@ -64,8 +87,9 @@ export function VariableInput({
             return;
         }
 
-        // Check for | trigger (filter picker) - only if showFiltersOnPipe is enabled
-        if (showFiltersOnPipe) {
+        // Check for | trigger (filter picker) - only when filters are enabled AND
+        // the syntax context allows filters (never in an 'expression' field).
+        if (showFiltersOnPipe && filtersAllowedForContext(syntaxContext)) {
             const pipeIndex = textBeforeCursor.lastIndexOf('|');
             if (pipeIndex !== -1 && pipeIndex > lastBoundary) {
                 // Check if we're inside {{ }} - filters only make sense there
@@ -83,7 +107,7 @@ export function VariableInput({
 
         setShowPicker(false);
         setTriggerChar(null);
-    }, [value, showFiltersOnPipe]);
+    }, [value, showFiltersOnPipe, syntaxContext]);
 
     const getCaretCoordinates = (element: HTMLInputElement | HTMLTextAreaElement, position: number) => {
         // Create a mirror div to measure text
@@ -143,22 +167,24 @@ export function VariableInput({
         });
     };
 
-    const handleSelect = useCallback((insertValue: string) => {
+    const handleSelect = useCallback((insertValue: string, caretOffset?: number) => {
         if (!triggerChar) return;
 
         const textBeforeCursor = value.slice(0, cursorPosition);
         const textAfterCursor = value.slice(cursorPosition);
 
         let newValue: string;
-        let triggerIndex: number;
+        // Absolute index in newValue where the inserted text begins.
+        let insertStart: number;
 
         if (triggerChar === '@') {
-            triggerIndex = textBeforeCursor.lastIndexOf('@');
-            newValue = textBeforeCursor.slice(0, triggerIndex) + insertValue + textAfterCursor;
+            insertStart = textBeforeCursor.lastIndexOf('@');
+            newValue = textBeforeCursor.slice(0, insertStart) + insertValue + textAfterCursor;
         } else {
             // For pipe, just append the filter
-            triggerIndex = textBeforeCursor.lastIndexOf('|');
+            const triggerIndex = textBeforeCursor.lastIndexOf('|');
             const beforePipe = textBeforeCursor.slice(0, triggerIndex + 1);
+            insertStart = triggerIndex + 1;
             newValue = beforePipe + insertValue + textAfterCursor;
         }
 
@@ -166,9 +192,19 @@ export function VariableInput({
         setShowPicker(false);
         setTriggerChar(null);
 
-        // Focus back on input
+        // For logic snippets, caretOffset points at the first logical gap;
+        // otherwise place the caret at the end of the inserted text.
+        const finalCaret = caretOffset != null
+            ? insertStart + caretOffset
+            : newValue.length - textAfterCursor.length;
+
+        // Focus back on input and position the caret
         setTimeout(() => {
             inputRef.current?.focus();
+            if (inputRef.current) {
+                inputRef.current.selectionStart = finalCaret;
+                inputRef.current.selectionEnd = finalCaret;
+            }
         }, 0);
     }, [value, cursorPosition, triggerChar, onChange]);
 
@@ -216,7 +252,9 @@ export function VariableInput({
                     onSelect={handleSelect}
                     onClose={handleClose}
                     showFilters={triggerChar === '|'}
+                    syntaxContext={syntaxContext}
                     allowedGroups={allowedGroups}
+                    recordColumns={recordColumns}
                 />
             )}
         </div>

@@ -72,6 +72,16 @@ async def get_tenant_context(request: Request) -> Optional[TenantContext]:
                 except Exception:
                     pass
 
+            # Tag the current Sentry request scope with the acting identity.
+            # No-op when Sentry is off; guarded so it can never affect auth.
+            from app.services.observability import set_request_user
+            set_request_user(
+                user_id=user_id,
+                email=email,
+                tenant_id=payload.get("tenant_id"),
+                role=payload.get("role", "owner"),
+            )
+
             return TenantContext(
                 user_id=user_id,
                 email=email,
@@ -91,6 +101,15 @@ async def get_tenant_context(request: Request) -> Optional[TenantContext]:
         if is_cloud():
             raise HTTPException(status_code=401, detail="Authentication required")
         return None
+
+    # Tag Sentry scope for the master-admin identity (no-op when Sentry is off).
+    from app.services.observability import set_request_user
+    set_request_user(
+        user_id=user.get("user_id", user.get("id", "")),
+        email=user.get("email", ""),
+        tenant_id=user.get("tenant_id"),
+        role=user.get("role", "master"),
+    )
 
     return TenantContext(
         user_id=user.get("user_id", user.get("id", "")),

@@ -630,6 +630,16 @@ def build_engine_secrets(
     from ..core.security import decrypt_field
     secrets: dict[str, str] = {}
 
+    # ─── SENTRY_DSN (platform-wide; propagates to every edge runtime) ──────
+    # Propagate the backend's own Sentry DSN to every deployed edge so edge
+    # errors land in the same project. Read straight from the platform env; if
+    # unset, edges deploy telemetry-free. Each deploy API pushes this dict
+    # wholesale (CF set_secrets / Vercel set_env_vars / …) — see engine_deploy.py.
+    import os as _os
+    _sentry_dsn = _os.getenv("SENTRY_DSN")
+    if _sentry_dsn:
+        secrets["SENTRY_DSN"] = _sentry_dsn
+
     # ─── FRONTBASE_AUTH ──────────────────────────────────────────────────
     auth = _build_auth_config(db, engine_id)
     if auth.get('provider') != 'none':

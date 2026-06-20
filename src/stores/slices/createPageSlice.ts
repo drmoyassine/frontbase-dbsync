@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Page } from '@/types/builder';
 import { BuilderState } from '../builder';
 import { toast } from '@/hooks/use-toast';
+import { track } from '@/lib/analytics';
 import { getPages, createPage as createPageApi, updatePage as updatePageApi, deletePage as deletePageApi, permanentDeletePage as permanentDeletePageApi } from '../../services/pages-api';
 
 // Module-level in-flight dedup — prevents concurrent callers from
@@ -235,6 +236,8 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
             if (result.success) {
                 setUnsavedChanges(false);
 
+                track('page_published', { page_id: pageId, engine_id: engineId, mode: 'single' });
+
                 return result.previewUrl;
             } else {
                 throw new Error(result.error || 'Failed to publish page to target');
@@ -277,6 +280,11 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 setUnsavedChanges(false);
                 // Reload once to get updated deployments
                 await get().loadPagesFromDatabase(false, true);
+                track('page_published', {
+                    page_id: pageId,
+                    target_count: engineIds.length,
+                    mode: 'batch',
+                });
             }
 
             return result;
@@ -441,6 +449,8 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 title: "Page created",
                 description: "Page has been created successfully"
             });
+
+            track('page_created', { page_id: newPage.id });
 
             return newPage.id;
         } catch (error: any) {

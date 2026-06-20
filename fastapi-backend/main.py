@@ -16,6 +16,24 @@ from app.config.edition import is_cloud, DEPLOYMENT_MODE
 logger = logging.getLogger(__name__)
 
 
+# --- Sentry (Cloud-mode error tracking; initialized early to catch startup errors) ---
+# Cloud-mode only; no-op when SENTRY_DSN is unset so self-host builds stay telemetry-free.
+# SSE-SAFE: sentry_sdk.init() with the default FastAPI/Starlette integration instruments
+# the ASGI app via patching — it does NOT add a BaseHTTPMiddleware to the stack, so the
+# StreamingResponse / SSE invariant documented below (zero BaseHTTPMiddleware) is preserved.
+# Per-request identity is tagged from the tenant-context resolver (app.services.observability).
+if is_cloud() and os.getenv("SENTRY_DSN"):
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=os.getenv("SENTRY_DSN"),
+        environment=DEPLOYMENT_MODE,
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+        send_default_pii=False,  # never auto-send request bodies/PII
+    )
+    logger.info("[Startup] Sentry initialized (cloud mode)")
+
+
+
 def _ensure_local_edge():
     """Seed the Local Edge system records in dev / self-host mode.
 

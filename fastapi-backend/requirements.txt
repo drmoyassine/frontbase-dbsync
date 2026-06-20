@@ -74,3 +74,6 @@ supertokens-python>=0.25.0
 # Test dependencies (pyproject.toml sets asyncio_mode = "auto", which requires pytest-asyncio)
 pytest>=8.0
 pytest-asyncio>=0.24
+
+# Observability — Sentry error tracking for the backend (cloud mode; no-op when SENTRY_DSN unset)
+sentry-sdk[fastapi]>=2.0.0

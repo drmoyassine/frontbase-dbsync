@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasourcesApi } from '../api';
 import { Datasource } from '../types';
+import { track } from '@/lib/analytics';
 import { AccountResourcePicker, DiscoveredResource } from '@/components/dashboard/settings/shared/AccountResourcePicker';
 import { PROVIDER_CONFIGS } from '@/components/dashboard/settings/shared/edgeConstants';
 import { Database, TestTube, CheckCircle, XCircle, Loader2 } from 'lucide-react';
@@ -49,8 +50,11 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                 : datasourcesApi.create(data),
         onSuccess: (result) => {
             queryClient.invalidateQueries({ queryKey: ['datasources'] });
-            if (!isEditing && onCreated && result?.data?.id) {
-                onCreated(result.data.id);
+            if (!isEditing) {
+                track('datasource_connected', { datasource_id: result?.data?.id });
+                if (onCreated && result?.data?.id) {
+                    onCreated(result.data.id);
+                }
             }
             onClose();
         },

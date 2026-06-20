@@ -52,6 +52,7 @@ import { agentRoute } from '../routes/agent.js';
 import { getAgentProfilesConfig } from '../config/env.js';
 import { systemKeyAuth, userApiKeyAuth, aiApiKeyAuth } from '../middleware/auth.js';
 import { tenantMiddleware } from '../middleware/tenant.js';
+import { captureEdgeException } from '../lib/sentry.js';
 
 // =============================================================================
 // Liquid Engine (shared singleton for template rendering)
@@ -137,6 +138,10 @@ export function createLiteApp(mode: EngineMode = 'lite') {
                 details: (err as any).issues || err.message,
             }, 400);
         }
+        // Real (500) errors only — report to Sentry with request + tenant + runtime
+        // context. No-op when SENTRY_DSN is unset; guarded so telemetry can never
+        // break error handling.
+        captureEdgeException(err, c);
         return c.json({
             success: false,
             error: err.message || 'Internal server error',

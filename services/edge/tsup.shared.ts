@@ -22,6 +22,14 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 const shim = (name: string) => resolve(__dirname, `shims/${name}.js`);
 
+// liquidjs ships a Node build (default ESM entry) that imports `realpath`/
+// `realpathSync` from `fs` — unavailable in the edge fs shim — and a clean
+// browser ESM build that touches no Node builtins. The shared @frontbase/liquid-core
+// package imports `liquidjs` by bare name from OUTSIDE services/edge, so we pin
+// every edge bundle to the edge's installed browser build (mirrors the
+// @libsql/client → /web and @upstash/redis → /cloudflare aliasing below).
+const liquidjsBrowser = resolve(__dirname, 'node_modules/liquidjs/dist/liquid.browser.mjs');
+
 // ── Shared esbuild plugins ───────────────────────────────────────────
 
 const localSqlitePlugin = {
@@ -107,6 +115,7 @@ const NODE_ALIASES: Record<string, string> = {
     // NPM packages — force edge-compatible variants
     '@libsql/client': '@libsql/client/web',
     '@upstash/redis': '@upstash/redis/cloudflare',
+    'liquidjs': liquidjsBrowser,
     'ws': shim('ws'),
     // UNSUPPORTED builtins → shim stubs
     'fs': shim('fs'), 'node:fs': shim('fs'), 'node:fs/promises': shim('fs'),
@@ -139,6 +148,7 @@ const NODE_ALIASES: Record<string, string> = {
 
 const DENO_ALIASES: Record<string, string> = {
     '@libsql/client': '@libsql/client/web',
+    'liquidjs': liquidjsBrowser,
     'fs': shim('fs'), 'node:fs': shim('fs'), 'node:fs/promises': shim('fs'),
     'path': shim('path'), 'node:path': shim('path'),
 };

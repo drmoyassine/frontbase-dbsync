@@ -1,6 +1,21 @@
 """
-Test configuration and fixtures for pytest.
+Test configuration and fixtures for pytest (sync service).
+
+CRITICAL — pin the database to an isolated test SQLite BEFORE importing any
+app module. The sync engine resolves its URL at import time from the
+DATABASE_URL/DATABASE env vars; without this override it points at the
+application's real configured database (local dev SQLite or cloud Postgres).
+The autouse `setup_database` fixture below calls Base.metadata.drop_all() on
+teardown of every test, so running these tests against the real DB would
+DROP the datasources table (and all other sync tables) — destroying real
+data. (This mirrors the isolation in tests/conftest.py for the main app.)
 """
+
+import os
+
+# Isolate the test database BEFORE any app/database import builds the engine.
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test_sync_db.sqlite3"
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-pytest")
 
 import pytest
 import asyncio

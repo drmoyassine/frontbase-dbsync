@@ -90,7 +90,7 @@ class GoogleSheetsAdapter(DatabaseAdapter):
     async def connect(self) -> None:
         if not self._web_app_url:
             raise ValueError("Google Sheets datasource missing webAppUrl in extra_config")
-        self._client = httpx.AsyncClient(timeout=30)
+        self._client = httpx.AsyncClient(timeout=30, follow_redirects=True)
 
     async def disconnect(self) -> None:
         if self._client:
@@ -100,7 +100,7 @@ class GoogleSheetsAdapter(DatabaseAdapter):
     def _require_client(self) -> httpx.AsyncClient:
         if self._client is None:
             # Stateless fallback so callers that skip connect() still work.
-            self._client = httpx.AsyncClient(timeout=30)
+            self._client = httpx.AsyncClient(timeout=30, follow_redirects=True)
         return self._client
 
     async def _call(self, action: str, **fields: Any) -> Any:

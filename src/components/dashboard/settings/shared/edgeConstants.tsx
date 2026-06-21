@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive, Bot, Cpu, Mail } from 'lucide-react';
+import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive, Bot, Cpu, Mail, Table } from 'lucide-react';
 import { BRAND_ICONS } from '@/components/icons/providers';
 import { Badge } from '@/components/ui/badge';
 
@@ -42,6 +42,7 @@ const LUCIDE_FALLBACKS: Record<string, React.FC<any>> = {
     postgres: Database,
     mysql: HardDrive,
     neon: Database,
+    google_sheets: Table,
     turso: Cloud,
     openai: Bot,
     anthropic: Cpu,
@@ -278,6 +279,13 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
             { key: 'app_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
         ],
         helpText: <>Generate an Application Password in WordPress → Users → Profile → Application Passwords.</>,
+    },
+    google_sheets: {
+        label: 'Google Sheets',
+        defaultName: 'Google Sheets',
+        capabilities: ['database'],
+        fields: [],  // Configured inline in DatasourceModal, not via Connected Account
+        helpText: <>Connect Google Sheets as a datasource via Apps Script Web App. <a href="https://docs.frontbase.dev/google-sheets-setup" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Setup Guide →</a></>,
     },
     turso: {
         label: 'Turso',

@@ -5,7 +5,7 @@ import { Datasource } from '../types';
 import { track } from '@/lib/analytics';
 import { AccountResourcePicker, DiscoveredResource } from '@/components/dashboard/settings/shared/AccountResourcePicker';
 import { PROVIDER_CONFIGS } from '@/components/dashboard/settings/shared/edgeConstants';
-import { Database, TestTube, CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { Database, TestTube, CheckCircle, XCircle, Loader2, Table, Copy } from 'lucide-react';
 
 /** Providers with 'database' or 'cms' capability — drives the Database Type selector. */
 const DATABASE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
@@ -41,6 +41,18 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
         anon_key: '',
         api_key: '',
         provider_account_id: (datasource as any)?.provider_account_id || '',
+        // Google Sheets specific config in extra_config
+        extra_config: (() => {
+            const cfg = (datasource as any)?.extra_config;
+            if (typeof cfg === 'string') {
+                try {
+                    return JSON.parse(cfg);
+                } catch {
+                    return {};
+                }
+            }
+            return cfg || { spreadsheetId: '', webAppUrl: '', webAppSecret: '' };
+        })(),
     });
 
     const mutation = useMutation({
@@ -124,8 +136,112 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                     </div>
 
                     <div className="space-y-4">
-                        {/* Connected Account Picker — replaces all inline credential fields */}
-                        <AccountResourcePicker
+                        {/* Google Sheets Configuration */}
+                        {formData.type === 'google_sheets' ? (
+                            <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Table className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                    <h3 className="font-semibold text-blue-900 dark:text-blue-100">Google Sheets Configuration</h3>
+                                </div>
+
+                                {/* Spreadsheet ID */}
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
+                                        Spreadsheet ID
+                                        <span className="text-xs text-gray-500 ml-2">
+                                            From URL: docs.google.com/spreadsheets/d/<span className="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">SPREADSHEET_ID</span>/edit
+                                        </span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.extra_config?.spreadsheetId || ''}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            extra_config: { ...formData.extra_config, spreadsheetId: e.target.value }
+                                        })}
+                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        placeholder="1AbCdEfGhIjKlMnOpQrStUvWxYz"
+                                    />
+                                </div>
+
+                                {/* Web App URL */}
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
+                                        Web App URL
+                                        <a
+                                            href="https://docs.frontbase.dev/google-sheets-setup"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-primary ml-2 text-xs"
+                                        >
+                                            Setup Guide →
+                                        </a>
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={formData.extra_config?.webAppUrl || ''}
+                                        onChange={(e) => setFormData({
+                                            ...formData,
+                                            extra_config: { ...formData.extra_config, webAppUrl: e.target.value }
+                                        })}
+                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        placeholder="https://script.google.com/macros/s/.../exec"
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Deploy the Apps Script Web App and paste the exec URL here.
+                                    </p>
+                                </div>
+
+                                {/* Shared Secret */}
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
+                                        Shared Secret
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const secret = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+                                                setFormData({
+                                                    ...formData,
+                                                    extra_config: { ...formData.extra_config, webAppSecret: secret }
+                                                });
+                                            }}
+                                            className="text-primary ml-2 text-xs underline hover:no-underline"
+                                        >
+                                            Generate New
+                                        </button>
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={formData.extra_config?.webAppSecret || ''}
+                                            onChange={(e) => setFormData({
+                                                ...formData,
+                                                extra_config: { ...formData.extra_config, webAppSecret: e.target.value }
+                                            })}
+                                            className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all font-mono text-sm"
+                                            placeholder="Enter or generate a secret"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                if (formData.extra_config?.webAppSecret) {
+                                                    navigator.clipboard.writeText(formData.extra_config.webAppSecret);
+                                                }
+                                            }}
+                                            className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                            title="Copy to clipboard"
+                                        >
+                                            <Copy className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Use this secret in your Apps Script Web App code for authentication.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            /* Connected Account Picker — replaces all inline credential fields */
+                            <AccountResourcePicker
                             compatibleProviders={DATASOURCE_PROVIDER_MAP[formData.type] || [formData.type]}
                             label="Connected Account"
                             autoSelectSingle
@@ -141,6 +257,7 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                 setFormData({ ...formData, provider_account_id: '' });
                             }}
                         />
+                        )}
 
                         {formData.provider_account_id && (
                             <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">

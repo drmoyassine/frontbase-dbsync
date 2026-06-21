@@ -12,7 +12,7 @@ export interface TableSchema {
 export interface Datasource {
     id: string
     name: string
-    type: 'supabase' | 'postgres' | 'wordpress' | 'wordpress_rest' | 'wordpress_graphql' | 'neon' | 'mysql'
+    type: 'supabase' | 'postgres' | 'wordpress' | 'wordpress_rest' | 'wordpress_graphql' | 'neon' | 'mysql' | 'google_sheets'
     host: string
     port: number
     database: string

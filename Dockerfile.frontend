@@ -26,6 +26,17 @@ ENV VITE_API_URL=${VITE_API_URL}
 ARG VITE_DEPLOYMENT_MODE=""
 ENV VITE_DEPLOYMENT_MODE=${VITE_DEPLOYMENT_MODE}
 
+# Observability (optional — empty/absent = telemetry off, self-host stays clean).
+# These are BUILD-time args: Vite inlines them into the bundle, so the frontend
+# image MUST be rebuilt after changing them (a container restart is not enough).
+ARG VITE_SENTRY_DSN=""
+ENV VITE_SENTRY_DSN=${VITE_SENTRY_DSN}
+ARG VITE_POSTHOG_KEY=""
+ENV VITE_POSTHOG_KEY=${VITE_POSTHOG_KEY}
+# PostHog host region: https://us.i.posthog.com (default) or https://eu.i.posthog.com
+ARG VITE_POSTHOG_HOST=""
+ENV VITE_POSTHOG_HOST=${VITE_POSTHOG_HOST}
+
 ENV NODE_ENV=production
 
 # Run build and verify output exists

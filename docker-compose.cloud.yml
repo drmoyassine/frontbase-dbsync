@@ -46,6 +46,8 @@ services:
       # Frontend and Backend URLs for SuperTokens links
       - FRONTEND_URL=${FRONTEND_URL}
       - BACKEND_URL=${BACKEND_URL}
+      # Observability — Sentry error tracking (optional; unset = off)
+      - SENTRY_DSN=${SENTRY_DSN:-}
     volumes:
       - backend_data:/app/data
     restart: unless-stopped
@@ -122,6 +124,8 @@ services:
       - API_KEYS=${API_KEYS:-}
       # Public URL for preview links (set PRIMARY_DOMAIN or leave empty for auto-detect)
       - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
+      # Observability — Sentry error tracking (optional; unset = off)
+      - SENTRY_DSN=${SENTRY_DSN:-}
     volumes:
       - edge_data:/app/data
     depends_on:
@@ -142,6 +146,12 @@ services:
         # Empty = use relative URLs (recommended for production)
         VITE_API_URL: ""
         VITE_DEPLOYMENT_MODE: "cloud"
+        # Observability (optional — sourced from the host .env; empty = off).
+        # NOTE: these are build-time args → rebuilding the frontend image is required.
+        VITE_SENTRY_DSN: "${VITE_SENTRY_DSN:-}"
+        VITE_POSTHOG_KEY: "${VITE_POSTHOG_KEY:-}"
+        # EU projects: set VITE_POSTHOG_HOST=https://eu.i.posthog.com in the host .env
+        VITE_POSTHOG_HOST: "${VITE_POSTHOG_HOST:-}"
     expose:
       - "80"
     environment:

@@ -190,22 +190,25 @@ class SchemaService:
     ) -> List[Dict[str, Any]]:
         """
         Get all FK relationships from cached schemas.
-        
-        Aggregates foreign_keys from all cached table schemas.
+
+        Aggregates foreign_keys from all cached table schemas AND merges in
+        any user-defined relationships stored in the datasource's
+        extra_config (used by non-relational datasources like Google Sheets
+        and REST that have no native FKs).
         """
         import json
-        
+
         result = await db.execute(
             select(TableSchemaCache).where(
                 TableSchemaCache.datasource_id == datasource_id
             )
         )
         cached_list = result.scalars().all()
-        
+
         relationships = []
         for cached in cached_list:
             table_name = cached.table_name
-            
+
             # Defensive: handle foreign_keys as string (legacy) or list
             fk_data = cached.foreign_keys or []
             if isinstance(fk_data, str):
@@ -213,26 +216,39 @@ class SchemaService:
                     fk_data = json.loads(fk_data)
                 except (json.JSONDecodeError, TypeError):
                     fk_data = []
-            
+
             for fk in fk_data:
                 # Skip if fk is not a dict (shouldn't happen, but defensive)
                 if not isinstance(fk, dict):
                     continue
-                    
+
                 # Normalize FK format
                 constrained_cols = fk.get("constrained_columns", [])
                 referred_cols = fk.get("referred_columns", [])
-                
+
                 # Handle single column FKs
                 source_col = constrained_cols[0] if constrained_cols else None
                 target_col = referred_cols[0] if referred_cols else None
-                
+
                 if source_col and fk.get("referred_table"):
                     relationships.append({
                         "source_table": table_name,
                         "source_column": source_col,
                         "target_table": fk.get("referred_table"),
-                        "target_column": target_col or "id"
+                        "target_column": target_col or "id",
+                        "is_user_defined": False,
                     })
-        
+
+        # Merge user-defined relationships from extra_config (Sheets/REST/etc.)
+        try:
+            ds_result = await db.execute(
+                select(Datasource).where(Datasource.id == datasource_id)
+            )
+            datasource = ds_result.scalar_one_or_none()
+            if datasource is not None:
+                from app.services.sync.schemas.relationship import get_user_relationships_normalized
+                relationships.extend(get_user_relationships_normalized(datasource))
+        except Exception as e:
+            logger.warning(f"Could not merge user-defined relationships for {datasource_id}: {e}")
+
         return relationships

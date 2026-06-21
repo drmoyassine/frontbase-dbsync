@@ -61,7 +61,7 @@ async def get_table_schema(
         if cached:
             import json
             logger.debug(f"Schema cache hit for {datasource.id}/{table}")
-            
+
             # Defensive: handle columns/foreign_keys as string (legacy) or list
             columns = cached.columns or []
             if isinstance(columns, str):
@@ -69,14 +69,20 @@ async def get_table_schema(
                     columns = json.loads(columns)
                 except (json.JSONDecodeError, TypeError):
                     columns = []
-            
+
             fk_data = cached.foreign_keys or []
             if isinstance(fk_data, str):
                 try:
                     fk_data = json.loads(fk_data)
                 except (json.JSONDecodeError, TypeError):
                     fk_data = []
-            
+
+            # Merge user-defined FKs (Sheets/REST) for this table
+            from app.services.sync.schemas.relationship import get_user_foreign_keys_for_table
+            user_fks = get_user_foreign_keys_for_table(datasource, table)
+            if user_fks:
+                fk_data = list(fk_data) + user_fks
+
             return TableSchema(columns=columns, foreign_keys=fk_data)  # type: ignore[arg-type]
     
     # No cache or refresh requested - fetch from source
@@ -84,8 +90,13 @@ async def get_table_schema(
         adapter = get_adapter(datasource)
         async with adapter:
             schema = await adapter.get_schema(table)
-        
-        # Store in cache (upsert)
+
+        native_columns = schema.get("columns", [])
+        native_fks = schema.get("foreign_keys", [])
+
+        # Store native schema in cache (upsert). User-defined FKs are NOT
+        # cached — they live in extra_config and are merged at read time so
+        # they always survive schema refreshes.
         if refresh:
             await db.execute(
                 delete(TableSchemaCache).where(
@@ -93,18 +104,23 @@ async def get_table_schema(
                     TableSchemaCache.table_name == table
                 )
             )
-        
+
         new_cache = TableSchemaCache(
             datasource_id=datasource.id,
             table_name=table,
-            columns=schema["columns"],
-            foreign_keys=schema.get("foreign_keys", [])
+            columns=native_columns,
+            foreign_keys=native_fks
         )
         db.add(new_cache)
         await db.commit()
-        
+
+        # Merge user-defined FKs into the response
+        from app.services.sync.schemas.relationship import get_user_foreign_keys_for_table
+        user_fks = get_user_foreign_keys_for_table(datasource, table)
+        response_fks = list(native_fks) + user_fks if user_fks else native_fks
+
         logger.info(f"Schema fetched and cached for {datasource.id}/{table}")
-        return TableSchema(**schema)
+        return TableSchema(columns=native_columns, foreign_keys=response_fks)  # type: ignore[arg-type]
     except Exception as e:
         logger.error(f"Error fetching schema for {datasource.id} table {table}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch schema: {str(e)}")

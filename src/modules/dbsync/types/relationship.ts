@@ -1,0 +1,37 @@
+/**
+ * User-defined FK relationship types.
+ *
+ * Google Sheets and REST datasources have no native foreign keys, so users
+ * define relationships manually. These are stored in the datasource's
+ * extra_config JSON and merged into the schema/relationships APIs so they
+ * behave identically to native SQL FKs.
+ */
+
+export type RelationshipType = 'many_to_one' | 'one_to_one' | 'one_to_many' | 'many_to_many';
+
+/** A user-defined relationship (write payload + stored shape). */
+export interface RelationshipDefinition {
+    from_table: string;
+    from_column: string;
+    to_table: string;
+    to_column: string;
+    relationship_type?: RelationshipType;
+    label?: string;
+    cascade_delete?: boolean;
+}
+
+/** Relationship with its array index (from the user-defined list endpoint). */
+export interface IndexedRelationship extends RelationshipDefinition {
+    index: number;
+}
+
+/** Normalized relationship shape returned by GET /relationships/. */
+export interface NormalizedRelationship {
+    source_table: string;
+    source_column: string;
+    target_table: string;
+    target_column: string;
+    is_user_defined?: boolean;
+    relationship_type?: RelationshipType;
+    label?: string;
+}

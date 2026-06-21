@@ -1,5 +1,6 @@
 import { api } from './client'
 import { Datasource, TableSchema, DatasourceView } from '../types'
+import { RelationshipDefinition, IndexedRelationship } from '../types/relationship'
 
 export interface SearchMatch {
     table: string;
@@ -51,6 +52,15 @@ export const datasourcesApi = {
         api.get<TableSchema>(`/datasources/${id}/tables/${table}/schema/`, { params: { refresh: true } }),
     getRelationships: (id: string | number, refresh?: boolean) =>
         api.get<RelationshipsResponse>(`/datasources/${id}/relationships/`, { params: refresh ? { refresh: true } : undefined }),
+    // User-defined relationships (Google Sheets / REST)
+    listUserRelationships: (id: string | number) =>
+        api.get<{ relationships: IndexedRelationship[]; total: number }>(`/datasources/${id}/relationships/user-defined/`),
+    createUserRelationship: (id: string | number, data: RelationshipDefinition) =>
+        api.post<{ index: number; relationship: RelationshipDefinition }>(`/datasources/${id}/relationships/`, data),
+    updateUserRelationship: (id: string | number, index: number, data: RelationshipDefinition) =>
+        api.put<{ index: number; relationship: RelationshipDefinition }>(`/datasources/${id}/relationships/${index}/`, data),
+    deleteUserRelationship: (id: string | number, index: number) =>
+        api.delete<{ success: boolean }>(`/datasources/${id}/relationships/${index}/`),
     searchDatasource: (id: string | number, q: string, detailed?: boolean, limit?: number) =>
         api.get<SearchMatch[]>(`/datasources/${id}/search`, { params: { q, detailed, limit } }),
     searchAll: (q: string, detailed?: boolean, limit?: number) =>

@@ -48,8 +48,6 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
         queryKey: ['datasources-list'],
         queryFn: () => datasourcesApi.list().then(r => r.data),
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     // Fetch storage providers for multi-select
@@ -60,8 +58,6 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
             return res.data;
         },
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     // Fetch project settings (for auth detection)
@@ -72,8 +68,6 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
             return res.data;
         },
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     const hasAuth = !!(project?.supabaseUrl || project?.supabase_url);

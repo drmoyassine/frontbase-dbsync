@@ -162,11 +162,20 @@ export const dataChangeTriggerSchema: NodeSchema = {
             ],
         } as SelectFieldDefinition,
         {
+            name: 'timestampColumn',
+            type: 'select',
+            label: 'Watermark Column (optional)',
+            description:
+                'A timestamp column (e.g. updated_at / last_updated) for efficient change detection. ' +
+                'Leave empty to detect inserts/deletes only — updates require a watermark column.',
+            options: 'columns',
+        } as SelectFieldDefinition,
+        {
             name: 'pollingInterval',
             type: 'number',
             label: 'Polling Interval (s)',
             default: 30,
-            description: 'How often to check for changes (seconds)',
+            description: 'How often to check for changes (seconds). Min 60s on the cloud scheduler.',
         },
     ],
     outputs: [

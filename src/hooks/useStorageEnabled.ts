@@ -8,6 +8,7 @@
 import { useCallback, useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api-service';
+import { STALE } from '@/lib/queryCache';
 
 interface StorageProvider {
     id: string;
@@ -52,9 +53,7 @@ export function useStorageEnabled(): UseStorageEnabledResult {
             const res = await api.get('/api/storage/providers/');
             return res.data;
         },
-        staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
+        staleTime: STALE.STANDARD,
     });
 
     const defaultProvider = useMemo(

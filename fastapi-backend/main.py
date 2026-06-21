@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent, users
 from app.middleware.test_mode import TestModeMiddleware
 from app.config.edition import is_cloud, DEPLOYMENT_MODE
 
@@ -1035,6 +1035,10 @@ if is_cloud():
         app.include_router(tenants_router.router, prefix="/api/tenants", tags=["Tenants"])
     except ImportError:
         pass  # Tenants router not yet available
+    try:
+        app.include_router(users.router, prefix="/api/users", tags=["App Users"])
+    except ImportError:
+        pass  # App-user management router not available
     try:
         from app.routers import tenant_admin
         app.include_router(tenant_admin.router, prefix="/api/admin/tenants", tags=["Tenant Admin"])

@@ -26,6 +26,7 @@ import type { IStateProvider } from './IStateProvider';
 import { TursoHttpProvider } from './TursoHttpProvider';
 import { LocalSqliteProvider } from './LocalSqliteProvider';
 import { getStateDbConfig } from '../config/env.js';
+import { recordStateDbOp, registerDowngraders } from '../resilience.js';
 
 // =============================================================================
 // Mutable Singleton (supports hot-swap after startup sync)
@@ -114,6 +115,16 @@ export function getStateProvider(): IStateProvider {
     return _provider;
 }
 
+/**
+ * Replace the state provider (Sprint 2D graceful downgrade). On quota exhaustion
+ * or failure, the resilience module swaps to a LocalSqliteProvider on Docker so
+ * the edge keeps serving; on cloud there's no filesystem, so no swap there.
+ */
+export function setStateProvider(provider: IStateProvider): void {
+    _provider = provider;
+    console.log('🔄 State provider swapped (resilience downgrade)');
+}
+
 // =============================================================================
 // Init Gate — ensures migrations complete before any DB operation
 // =============================================================================
@@ -154,6 +165,7 @@ export const stateProvider: IStateProvider = new Proxy({} as IStateProvider, {
         }
         return async (...args: any[]) => {
             await ensureInitialized();
+            recordStateDbOp(); // Sprint 2B: heuristic quota counter (no-op without FRONTBASE_DB_LIMITS)
             const provider = getStateProvider();
             const value = (provider as any)[prop];
             if (typeof value === 'function') {
@@ -162,6 +174,22 @@ export const stateProvider: IStateProvider = new Proxy({} as IStateProvider, {
             return value;
         };
     }
+});
+
+// Sprint 2D: register the state-DB downgrade action. On Docker (not cloud) a
+// quota/ failure swaps the provider to local SQLite so the edge keeps serving.
+registerDowngraders({
+    stateDb: () => {
+        if (!isCloudRuntime()) {
+            try {
+                setStateProvider(new LocalSqliteProvider());
+            } catch (err) {
+                console.warn('[Resilience] state-DB downgrade failed:', err);
+            }
+        } else {
+            console.warn('[Resilience] state-DB degraded on cloud — no local fallback (read-only)');
+        }
+    },
 });
 
 export type { IStateProvider, ProjectSettingsData, PublishedPageSummary, WorkflowData, ExecutionData, NewExecutionData, ExecutionStats } from './IStateProvider';

@@ -116,8 +116,6 @@ export const LogsPanel: React.FC<LogsPanelProps> = ({ engineId, engineName, sett
             return resp.json();
         },
         staleTime: 60_000,
-        retry: 1,
-        refetchOnWindowFocus: false,
         enabled: !!engineId,
     });
 
@@ -130,8 +128,6 @@ export const LogsPanel: React.FC<LogsPanelProps> = ({ engineId, engineName, sett
             return resp.json();
         },
         staleTime: 300_000, // 5 min
-        retry: 1,
-        refetchOnWindowFocus: false,
         enabled: !!engineId,
     });
 

@@ -51,6 +51,26 @@ export async function executeNode(
             };
         }
 
+        case 'data_change_trigger': {
+            // The poller fires execution with { changes, operation, count }.
+            // Surface them as the node's outputs for downstream nodes.
+            const payload = inputs?.changes !== undefined ? inputs : { changes: [], operation: 'any', count: 0 };
+            const changes = Array.isArray(payload.changes) ? payload.changes : [];
+            return {
+                changes,
+                operation: payload.operation ?? 'any',
+                count: typeof payload.count === 'number' ? payload.count : changes.length,
+            };
+        }
+
+        case 'schedule_trigger': {
+            // Fires on a cron tick; pass through the trigger payload.
+            return {
+                timestamp: inputs?.timestamp ?? new Date().toISOString(),
+                scheduledTime: inputs?.scheduledTime ?? inputs?.timestamp ?? null,
+            };
+        }
+
         case 'data_request':
             return await executeDataRequest(node, inputs);
 

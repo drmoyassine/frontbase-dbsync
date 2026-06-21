@@ -86,11 +86,106 @@ export interface WireFilter {
     value?: any;
 }
 
+// ============ Structured Query Contract (Phase 0) ============
+//
+// One query shape emitted by every data component (Chart, DataTable, KPI),
+// fulfilled differently per datasource. The front-end and publish layers only
+// ever produce RowsQuery / AggregateQuery; the edge dispatches on `mode`.
+
+/** A single JOIN clause in a RowsQuery. */
+export interface Join {
+    /** Table to join. */
+    table: string;
+    /** Column on the source table (left side). */
+    fromColumn?: string;
+    /** Column on the joined table (right side). */
+    toColumn?: string;
+    /** Raw ON expression for non-FK joins (takes precedence when set). */
+    on?: string;
+    /** Optional alias for the joined table. */
+    alias?: string;
+    /** Join type (default 'left'). */
+    type?: 'left' | 'inner' | 'right' | 'full';
+    [key: string]: unknown;
+}
+
+/** Row-fetch query — the common case for tables, lists, charts of raw rows. */
+export interface RowsQuery {
+    kind: 'rows';
+    table: string;
+    /** Select list (already computed at publish time), e.g. '"users"."id","users"."name"'. */
+    columns?: string;
+    joins?: Join[];
+    /** User filters + resolved hidden filters, merged. */
+    filters: WireFilter[];
+    search?: string;
+    searchColumns?: string[];
+    sort?: { column: string; direction: 'asc' | 'desc' } | null;
+    /** 0-based page index. */
+    page: number;
+    pageSize: number;
+}
+
+/** Aggregation query — GROUP BY category for charts/KPIs. */
+export interface AggregateQuery {
+    kind: 'aggregate';
+    table: string;
+    category: string;
+    aggregation: 'count' | 'sum' | 'average' | 'min' | 'max';
+    value?: string;
+    filters: WireFilter[];
+    sort: 'none' | 'asc' | 'desc';
+    limit: number;
+}
+
+/** Union of the two query shapes. */
+export type StructuredQuery = RowsQuery | AggregateQuery;
+
+/** Result of a RowsQuery. */
+export interface RowsResult {
+    rows: any[];
+    total: number;
+}
+
+/** Result of an AggregateQuery. */
+export interface AggregateResultItem {
+    category: string;
+    value: number;
+}
+
+export type QueryResult = RowsResult | AggregateResultItem[];
+
+/**
+ * How a datasource fulfills the contract. The edge dispatches on this.
+ *  - direct-rpc : Supabase — SQL built in DB (frontbase_* RPCs), browser → PostgREST
+ *  - proxy-rpc  : Neon/Postgres — frontbase_* installed there, edge → /sql
+ *  - proxy-sql  : MySQL/Turso — SQL built in edge (queryBuilder), edge → dialect HTTP
+ *  - proxy-http : Google Sheets / REST — query fulfilled by a remote Web App / API
+ */
+export type QueryMode = 'direct-rpc' | 'proxy-rpc' | 'proxy-sql' | 'proxy-http';
+
+/** The publish-time/baked instruction that selects a fulfillment mode. */
+export interface QueryDispatch {
+    mode: QueryMode;
+    /** For proxy modes: which datasource to resolve credentials for. */
+    datasourceId?: string;
+    /** Dialect hint for proxy-sql (e.g. 'mysql' | 'sqlite'). */
+    dialect?: string;
+    /** The structured query itself. */
+    spec: StructuredQuery;
+}
+
 /** Hidden-filter operators that are UI sugar for date/time ranges. */
 export const DATE_OPERATORS = [
     'is_before', 'is_after', 'is_on_or_before', 'is_on_or_after',
     'is_within_last_days', 'is_today',
 ] as const;
+
+export { executeQuery } from './executeQuery';
+export type {
+    ExecuteQueryBinding,
+    ExecuteQueryOptions,
+} from './executeQuery';
 
 /**
  * Desugar a date/time hidden-filter operator into standard wire operators

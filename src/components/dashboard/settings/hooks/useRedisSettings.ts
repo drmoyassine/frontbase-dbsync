@@ -69,8 +69,6 @@ export function useRedisSettings(): UseRedisSettingsReturn {
         queryKey: ['redisSettings'],
         queryFn: () => settingsApi.getRedis().then(r => r.data),
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     // Sync state from server

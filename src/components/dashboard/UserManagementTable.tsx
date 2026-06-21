@@ -6,15 +6,19 @@ import {
 } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Settings2 } from 'lucide-react';
+import { Settings2, UserPlus, Users } from 'lucide-react';
 import { CompactColumnConfigurator } from '@/components/builder/data-table/CompactColumnConfigurator';
 import { FilterConfigurator } from '@/components/builder/data-table/FilterConfigurator';
 import { useFilterOptions } from '@/hooks/dashboard/useFilterOptions';
 import { useUserTableBinding } from '@/hooks/dashboard/useUserTableBinding';
+import { InviteUserDialog } from '@/components/dashboard/users/InviteUserDialog';
+import { ManageUsersDialog } from '@/components/dashboard/users/ManageUsersDialog';
 
 export const UserManagementTable = () => {
   const { config, isConfigured, saveConfig } = useUserContactConfig();
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [manageOpen, setManageOpen] = useState(false);
 
   // Use custom hooks for logic
   const filterOptions = useFilterOptions(config, isConfigured);
@@ -52,14 +56,25 @@ export const UserManagementTable = () => {
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-semibold">Users Table</h2>
 
-        {/* Configuration Dialog */}
-        <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <Settings2 className="w-4 h-4" />
-              Configure Table
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          {/* App-user (GoTrue) management actions */}
+          <Button variant="default" size="sm" className="gap-2" onClick={() => setInviteOpen(true)}>
+            <UserPlus className="w-4 h-4" />
+            Invite User
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => setManageOpen(true)}>
+            <Users className="w-4 h-4" />
+            Manage Users
+          </Button>
+
+          {/* Configuration Dialog */}
+          <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Settings2 className="w-4 h-4" />
+                Configure Table
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>Configure User Table</DialogTitle>
@@ -94,6 +109,10 @@ export const UserManagementTable = () => {
             </Tabs>
           </DialogContent>
         </Dialog>
+        </div>
+
+        <InviteUserDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+        <ManageUsersDialog open={manageOpen} onOpenChange={setManageOpen} />
       </div>
 
       <div className="border rounded-md">

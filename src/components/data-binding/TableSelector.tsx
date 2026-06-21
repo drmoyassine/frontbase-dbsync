@@ -53,8 +53,6 @@ export function TableSelector({
     },
     enabled: !!activeId,
     staleTime: 30000, // Cache for 30 seconds
-    retry: 1,
-    refetchOnWindowFocus: false,
   });
 
   const hasSource = !!activeId;

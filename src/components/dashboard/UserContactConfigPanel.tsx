@@ -339,8 +339,6 @@ export function UserContactConfigPanel() {
       return res.data;
     },
     enabled: !!contactsDbId && !!selectedTable,
-    retry: 1,
-    refetchOnWindowFocus: false,
   });
 
   const tableSchema = contactsDbId

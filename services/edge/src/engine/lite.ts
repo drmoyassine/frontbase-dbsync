@@ -463,6 +463,14 @@ export function createLiteApp(mode: EngineMode = 'lite') {
 // Pre-built instance for direct use by lite adapters
 const liteApp = createLiteApp();
 
+// ── Register tick handlers for scheduled/data_change triggers (Phase 3) ──────
+// This runs on edge boot and registers handlers for all active workflows.
+// When QStash/BullMQ pings /api/queue/process?jobName=dc:<id> or sched:<id>,
+// the handlers execute the workflow.
+import { registerTickHandlers } from './tickHandlers.js';
+// Fire-and-forget registration — we don't want to block edge boot
+void registerTickHandlers();
+
 // Root info route — only on standalone lite (full engine has its own homepage route)
 liteApp.get('/', (c) => c.json({
     service: 'Frontbase Edge Engine',

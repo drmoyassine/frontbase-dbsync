@@ -27,8 +27,6 @@ export function WorkspaceAgentSetup({ onSetupComplete }: WorkspaceAgentSetupProp
             return res.json();
         },
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     const gpuProviders = providers.filter((p: any) => GPU_CAPABLE_PROVIDERS.has(p.provider));

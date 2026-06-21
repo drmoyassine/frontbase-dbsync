@@ -16,6 +16,18 @@ import { stateProvider } from '../storage/index.js';
 import { SuccessResponseSchema, ErrorResponseSchema } from '../schemas';
 import { WorkflowNodeSchema, WorkflowEdgeSchema, WorkflowValidationResultSchema } from '../schemas/workflow.js';
 import { validateWorkflow } from '../validation/connectionValidator.js';
+import { readScheduleMeta, unscheduleWorkflowTriggers, needsSchedule, scheduleWorkflowTriggers, withScheduleMeta } from '../engine/scheduler.js';
+
+/** Best-effort teardown of any schedules attached to a workflow. */
+async function teardownSchedules(workflowId: string, tenantSlug: string | undefined) {
+    try {
+        const wf = await stateProvider.getWorkflowById(workflowId, tenantSlug);
+        const handles = readScheduleMeta(wf?.settings ?? null);
+        if (handles.length) await unscheduleWorkflowTriggers(handles);
+    } catch {
+        // best-effort — do not block delete/toggle on scheduler errors
+    }
+}
 
 const workflowsRoute = new OpenAPIHono();
 
@@ -136,6 +148,7 @@ const deleteRoute = createRoute({
 workflowsRoute.openapi(deleteRoute, async (c) => {
     const { id } = c.req.valid('param');
     const tenantSlug = (c.get as any)('tenantSlug') || c.req.query('tenant_slug') || undefined;
+    await teardownSchedules(id, tenantSlug);
     await stateProvider.deleteWorkflow(id, tenantSlug);
     return c.json({ success: true as const, message: `Workflow ${id} deleted` }, 200);
 });
@@ -218,6 +231,26 @@ workflowsRoute.openapi(toggleRoute, async (c) => {
     const { id } = c.req.valid('param');
     const { isActive } = c.req.valid('json');
     const tenantSlug = (c.get as any)('tenantSlug') || c.req.query('tenant_slug') || undefined;
+
+    if (isActive) {
+        // Activating: reschedule if the workflow uses data_change/scheduled triggers
+        const workflow = await stateProvider.getWorkflowById(id, tenantSlug);
+        if (workflow && (needsSchedule(workflow.triggerType).dataChange || needsSchedule(workflow.triggerType).scheduled)) {
+            try {
+                const handles = await scheduleWorkflowTriggers(workflow);
+                const settingsWithSchedules = withScheduleMeta(workflow.settings, handles);
+                // Update settings before toggling — toggleWorkflow will set isActive
+                await stateProvider.upsertWorkflow({ ...workflow, settings: settingsWithSchedules } as any);
+            } catch (e: any) {
+                console.warn(`[Workflows] Failed to reschedule workflow ${id}:`, e.message);
+                // Don't block the toggle if scheduling fails
+            }
+        }
+    } else {
+        // Deactivating: tear down schedules
+        await teardownSchedules(id, tenantSlug);
+    }
+
     await stateProvider.toggleWorkflow(id, isActive, tenantSlug);
     return c.json({
         success: true as const,

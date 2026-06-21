@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 
 const API_BASE = '';
 
@@ -321,9 +322,7 @@ export function useEdgeProviders() {
     return useQuery({
         queryKey: ['edge-providers'],
         queryFn: edgeInfrastructureApi.getProviders,
-        staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
+        staleTime: STALE.STANDARD,
     });
 }
 
@@ -331,9 +330,7 @@ export function useEdgeEngines() {
     return useQuery({
         queryKey: ['edge-engines'],
         queryFn: edgeInfrastructureApi.getEngines,
-        staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
+        staleTime: STALE.STANDARD,
     });
 }
 
@@ -341,9 +338,7 @@ export function useEdgeDatabases() {
     return useQuery({
         queryKey: ['edge-databases'],
         queryFn: edgeInfrastructureApi.getEdgeDatabases,
-        staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
+        staleTime: STALE.STANDARD,
     });
 }
 
@@ -351,9 +346,7 @@ export function useEdgeCaches() {
     return useQuery({
         queryKey: ['edge-caches'],
         queryFn: edgeInfrastructureApi.getEdgeCaches,
-        staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
+        staleTime: STALE.STANDARD,
     });
 }
 
@@ -361,9 +354,7 @@ export function useEdgeQueues() {
     return useQuery({
         queryKey: ['edge-queues'],
         queryFn: edgeInfrastructureApi.getEdgeQueues,
-        staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
+        staleTime: STALE.STANDARD,
     });
 }
 
@@ -397,9 +388,7 @@ export function useEdgeAPIKeys(engineId?: string) {
             const data = await res.json();
             return data.keys;
         },
-        staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
+        staleTime: STALE.STANDARD,
     });
 }
 
@@ -424,6 +413,10 @@ export interface HealthCheckResponse {
         stateDb: BindingStatus;
         cache: BindingStatus;
         queue: BindingStatus;
+    };
+    resilience?: {
+        stateDb?: { level: string; reason?: string; since?: string; ops?: number };
+        cache?: { level: string; reason?: string; since?: string; ops?: number };
     };
 }
 

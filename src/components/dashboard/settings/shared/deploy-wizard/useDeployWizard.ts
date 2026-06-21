@@ -93,8 +93,6 @@ export function useDeployWizard() {
         queryKey: ['gpu-catalog', selectedProviderId],
         queryFn: () => fetchGPUCatalog(selectedProviderId),
         enabled: computeType === 'gpu' && !!selectedProviderId && step === 'ai-model',
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     // Filter catalog

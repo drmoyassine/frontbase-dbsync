@@ -213,27 +213,27 @@ queueRoute.openapi(processRoute, async (c) => {
 
     const queueService = await queueServiceReady;
 
+    // QStash requires signature verification
     if (queueService instanceof QStashProvider) {
         const signature = c.req.header('upstash-signature');
         if (!signature) {
             return c.json({ error: 'MissingSignature', message: 'Missing upstash-signature header' }, 401);
         }
-        
-        const handler = queueService.getHandler(jobName);
-        if (!handler) {
-            return c.json({ error: 'NoHandler', message: `No handler configured for job ${jobName}` }, 404);
-        }
-
-        try {
-            const data = await c.req.json();
-            await handler(data);
-            return c.json({ success: true as const, message: 'Processed successfully' }, 200);
-        } catch (e: any) {
-            return c.json({ error: 'HandlerError', message: e.message }, 500);
-        }
     }
 
-    return c.json({ error: 'InvalidProvider', message: 'Not using QStashProvider' }, 400);
+    // Look up the handler (all providers with schedule support must implement getHandler)
+    const handler = (queueService as any).getHandler?.(jobName);
+    if (!handler) {
+        return c.json({ error: 'NoHandler', message: `No handler configured for job ${jobName}` }, 404);
+    }
+
+    try {
+        const data = await c.req.json();
+        await handler(data);
+        return c.json({ success: true as const, message: 'Processed successfully' }, 200);
+    } catch (e: any) {
+        return c.json({ error: 'HandlerError', message: e.message }, 500);
+    }
 });
 
 export { queueRoute };

@@ -312,8 +312,6 @@ export function useExecutionDetail(executionId: string | null, engineUrl?: strin
         queryFn: () => fetchExecutionDetail(executionId!, engineUrl),
         enabled: !!executionId,
         staleTime: Infinity, // Execution details are immutable once completed
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 }
 

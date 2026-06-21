@@ -6,6 +6,7 @@
  */
 
 import type { DatasourceConfig, DatasourceType } from '../schemas/publish';
+import { readWithFallback, stableHash } from './fallback.js';
 
 // =============================================================================
 // Types
@@ -311,7 +312,7 @@ export async function handleDataQuery(
     table: string,
     options: Partial<QueryOptions> = {},
     datasourceConfig?: DatasourceConfig
-): Promise<QueryResult> {
+): Promise<QueryResult & { _stale?: boolean }> {
     const adapter = datasourceConfig
         ? createDatasourceAdapter(datasourceConfig)
         : getDefaultDatasource();
@@ -320,8 +321,18 @@ export async function handleDataQuery(
         return { data: [], error: 'No datasource configured' };
     }
 
-    return adapter.query({
-        table,
-        ...options,
-    });
+    // Read-through stale fallback (Sprint 2A): on a failed read, serve the
+    // last-good cached rows and mark the result `_stale` so the route handler
+    // can set X-Fb-Cache: stale. Read-only path only; never used for writes.
+    const key = `ds:lastgood:${table}:${stableHash(options)}`;
+    try {
+        const { value, stale } = await readWithFallback(
+            key,
+            () => adapter.query({ table, ...options }),
+            (r) => !!r.error,
+        );
+        return stale ? { ...value, _stale: true } : value;
+    } catch (err: any) {
+        return { data: [], error: err?.message || 'Query failed' };
+    }
 }

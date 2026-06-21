@@ -12,6 +12,7 @@
 
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { getPlatform } from '../adapters/shared.js';
+import { getResilienceState } from '../resilience.js';
 
 const startedAt = Date.now();
 const healthRoute = new OpenAPIHono();
@@ -124,6 +125,10 @@ const route = createRoute({
                             cache: bindingSchema,
                             queue: bindingSchema,
                         }),
+                        resilience: z.object({
+                            stateDb: z.any().optional(),
+                            cache: z.any().optional(),
+                        }).optional(),
                     }),
                 },
             },
@@ -172,6 +177,7 @@ healthRoute.openapi(route, async (c) => {
         ...(isServerless ? {} : { uptime_seconds: Math.floor((Date.now() - startedAt) / 1000) }),
         timestamp: new Date().toISOString(),
         bindings: { stateDb, cache, queue },
+        resilience: getResilienceState(),
     });
 });
 

@@ -29,8 +29,6 @@ export function DatabaseProviderSelector({
     const { data: datasources = [], isLoading, error } = useQuery<Datasource[]>({
         queryKey: ['datasources'],
         queryFn: () => datasourcesApi.list().then(r => r.data),
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     // Auto-suggest: when auth provider type matches a datasource type, pre-select it

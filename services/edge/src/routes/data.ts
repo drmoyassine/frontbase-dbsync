@@ -14,6 +14,7 @@
 
 import { Hono } from 'hono';
 import { handleDataQuery, createDatasourceAdapter } from '../db/datasource-adapter';
+import { readWithFallback, stableHash } from '../db/fallback';
 import { stateProvider } from '../storage/index.js';
 import { isMultiTenantSlug } from '../storage/IStateProvider.js';
 import { getRedis, cached } from '../cache/redis.js';
@@ -21,6 +22,7 @@ import type { DatasourceConfig, DataRequest } from '../schemas/publish';
 import { ipRateLimiter } from '../middleware/rateLimit.js';
 import { getBotProtection } from '../config/securityConfig.js';
 import { verifyCaptchaToken } from '../middleware/captchaVerify.js';
+import { isNewMode, dispatchByMode } from '../engine/queryDispatch.js';
 
 export const dataRoute = new Hono();
 dataRoute.use('*', ipRateLimiter);
@@ -427,6 +429,11 @@ dataRoute.get('/:table', async (c) => {
             }, 500);
         }
 
+        // Sprint 2A: served from the stale fallback cache (datasource was unreachable)
+        if ((result as any)._stale) {
+            c.header('X-Fb-Cache', 'stale');
+        }
+
         // Set cache headers
         c.header('Cache-Control', 'public, max-age=60, s-maxage=300');
 
@@ -461,6 +468,10 @@ dataRoute.get('/:table/:id', async (c) => {
             filters: { id },
             limit: 1,
         }, datasource || undefined);
+
+        if ((result as any)._stale) {
+            c.header('X-Fb-Cache', 'stale');
+        }
 
         return c.json({
             success: true,
@@ -536,7 +547,30 @@ dataRoute.post('/execute', async (c) => {
             : dataRequest.url?.substring(0, 80);
         console.log(`[Data Execute] Processing: ${label}...`);
 
-        const { data, total } = await executeDataRequest(dataRequest);
+        // Phase 0: route explicit contract modes (proxy-rpc/proxy-sql/proxy-http)
+        // to the structured-query dispatch. Legacy direct/proxy stays unchanged.
+        let data: unknown[];
+        let total: number | null;
+        if (isNewMode(dataRequest)) {
+            const result = await dispatchByMode(dataRequest, tenantSlug);
+            data = result.data;
+            total = result.total;
+        } else if ((dataRequest.method || 'GET').toUpperCase() === 'GET') {
+            // Sprint 2A: read-through stale fallback for reads only (never writes)
+            const key = `exec:lastgood:${stableHash(dataRequest)}`;
+            const { value, stale } = await readWithFallback(
+                key,
+                () => executeDataRequest(dataRequest),
+                () => false, // executeDataRequest signals failure by throwing, not a field
+            );
+            data = value.data;
+            total = value.total;
+            if (stale) c.header('X-Fb-Cache', 'stale');
+        } else {
+            const result = await executeDataRequest(dataRequest);
+            data = result.data;
+            total = result.total;
+        }
 
         return c.json({
             success: true,

@@ -24,6 +24,8 @@ class DatasourceType(str, enum.Enum):
     WORDPRESS_GRAPHQL = "wordpress_graphql"
     NEON = "neon"
     MYSQL = "mysql"
+    GOOGLE_SHEETS = "google_sheets"
+    REST = "rest"
 
 
 class Datasource(Base):

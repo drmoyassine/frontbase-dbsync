@@ -44,6 +44,8 @@ const STATUS_STYLES: Record<string, string> = {
     ok: 'bg-green-500/10 text-green-400 border-green-500/20',
     error: 'bg-red-500/10 text-red-400 border-red-500/20',
     not_configured: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+    degraded: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    down: 'bg-red-500/10 text-red-400 border-red-500/20',
 };
 
 const BINDING_ICONS: Record<string, React.ElementType> = {
@@ -250,6 +252,30 @@ export const HealthCheckPopover: React.FC<HealthCheckPopoverProps> = ({
                                 {Object.entries(data.bindings).map(([name, binding]) => (
                                     <BindingRow key={name} name={name} binding={binding} />
                                 ))}
+                            </div>
+                        )}
+
+                        {/* Resilience (Sprint 2D) — shows only when a binding is degraded/down */}
+                        {data.resilience && (data.resilience.stateDb?.level !== 'ok' || data.resilience.cache?.level !== 'ok') && (
+                            <div className="px-4 py-3 border-t border-border">
+                                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                                    Resilience
+                                </div>
+                                {(['stateDb', 'cache'] as const).map((comp) => {
+                                    const r = data.resilience?.[comp];
+                                    if (!r || r.level === 'ok') return null;
+                                    return (
+                                        <div key={comp} className="flex items-center gap-2 py-1">
+                                            <span className="text-xs text-foreground w-14 capitalize">{comp === 'stateDb' ? 'State DB' : 'Cache'}</span>
+                                            <Badge variant="outline" className={`text-[10px] ${STATUS_STYLES[r.level] || ''}`}>
+                                                {r.level}
+                                            </Badge>
+                                            {r.reason && (
+                                                <span className="text-[10px] text-muted-foreground ml-auto truncate" title={r.reason}>{r.reason}</span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
 

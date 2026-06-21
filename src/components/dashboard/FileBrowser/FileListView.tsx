@@ -134,8 +134,6 @@ export function FileListView({
         queryKey: ['storage-buckets', storageProviderId],
         queryFn: () => fetchBuckets(storageProviderId),
         staleTime: 30_000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
     const buckets = bucketsResult?.buckets;
 
@@ -154,8 +152,6 @@ export function FileListView({
             sortConfig.direction
         ),
         enabled: !!currentBucket,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     // ── Cached folder sizes ──
@@ -167,8 +163,6 @@ export function FileListView({
                 queryKey: ['storage-size', storageProviderId, currentBucket, folderPath],
                 queryFn: () => computeSize(storageProviderId, currentBucket, folderPath),
                 staleTime: 5 * 60 * 1000,
-                retry: 1,
-                refetchOnWindowFocus: false,
                 enabled: !!currentBucket,
             };
         }),

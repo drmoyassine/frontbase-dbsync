@@ -99,7 +99,6 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         enabled: open && (hasDeployHistory || hasProvider),
         staleTime: 5 * 60 * 1000,
         retry: 0,
-        refetchOnWindowFocus: false,
     });
 
     // ─── Settings + Secrets (multi-provider via engine inspector) ─────
@@ -112,8 +111,6 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         queryFn: () => engineInspectFetch<InspectSettingsResponse>(engine.id, 'settings'),
         enabled: open && hasProvider,
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     const {
@@ -124,8 +121,6 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         queryFn: () => engineInspectFetch<InspectSecretsResponse>(engine.id, 'secrets'),
         enabled: open && hasProvider,
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     // Fetch live OpenAPI spec from the engine itself (provider-agnostic)
@@ -139,8 +134,6 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         },
         enabled: open && !!workerBaseUrl,
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     // ── Domains (multi-provider via domain_manager) ───────────────────
@@ -153,8 +146,6 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         queryFn: () => engineInspectFetch<InspectDomainsResponse>(engine.id, 'domains'),
         enabled: open && hasProvider,
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     const error = sourceError ? (sourceError as Error).message : null;

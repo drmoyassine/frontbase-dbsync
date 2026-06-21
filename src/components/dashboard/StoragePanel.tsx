@@ -74,8 +74,6 @@ function useStorageProviders() {
     queryKey: ['storage-providers'],
     queryFn: storageProvidersApi.list,
     staleTime: 5 * 60 * 1000,
-    retry: 1,
-    refetchOnWindowFocus: false,
   });
 }
 
@@ -110,8 +108,6 @@ function AddStorageDialog({
     },
     enabled: isNetlify && !!selectedAccountId,
     staleTime: 5 * 60 * 1000,
-    retry: 1,
-    refetchOnWindowFocus: false,
   });
 
   // Reset site selection when account changes
@@ -439,8 +435,6 @@ export const StoragePanel: React.FC = () => {
       queryKey: ['storage-buckets', sp.id],
       queryFn: () => fetchBuckets(sp.id),
       staleTime: 30_000,
-      retry: 1,
-      refetchOnWindowFocus: false,
     })),
   });
 

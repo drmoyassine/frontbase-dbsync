@@ -6,6 +6,8 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { stateProvider } from '../storage/index.js';
 import type { WorkflowData } from '../storage/IStateProvider.js';
 import { DeployWorkflowSchema, SuccessResponseSchema, ErrorResponseSchema } from '../schemas';
+import { isSchedulerConfigured } from '../engine/executionGuards.js';
+import { needsSchedule, scheduleWorkflowTriggers, unscheduleWorkflowTriggers, withScheduleMeta, readScheduleMeta } from '../engine/scheduler.js';
 
 const deployRoute = new OpenAPIHono();
 
@@ -50,6 +52,42 @@ const route = createRoute({
 deployRoute.openapi(route, async (c) => {
     try {
         const body = c.req.valid('json');
+        const tenantSlug = body.tenantSlug || '_default';
+
+        // Phase 3: scheduled/data_change workflows require a scheduler backend.
+        if (needsSchedule(body.triggerType).dataChange || needsSchedule(body.triggerType).scheduled) {
+            if (!isSchedulerConfigured()) {
+                return c.json({
+                    error: 'SchedulerNotConfigured',
+                    message: 'This workflow uses a scheduled/data_change trigger, but no scheduler is configured (set QSTASH_TOKEN or BULLMQ_REDIS_URL).',
+                }, 400);
+            }
+        }
+
+        // Idempotent re-publish: tear down any prior schedules for this workflow.
+        const existing = await stateProvider.getWorkflowById(body.id, tenantSlug);
+        if (existing) {
+            const oldHandles = readScheduleMeta(existing.settings);
+            if (oldHandles.length) await unscheduleWorkflowTriggers(oldHandles);
+        }
+
+        // Register new schedules (before upsert so we can store handles in settings).
+        let settingsRaw: string | null = (body as any).settings ? JSON.stringify((body as any).settings) : null;
+        if (needsSchedule(body.triggerType).dataChange || needsSchedule(body.triggerType).scheduled) {
+            const preWorkflow: WorkflowData = {
+                id: body.id, name: body.name, triggerType: body.triggerType,
+                triggerConfig: JSON.stringify(body.triggerConfig || {}),
+            } as WorkflowData;
+            try {
+                const handles = await scheduleWorkflowTriggers(preWorkflow);
+                settingsRaw = withScheduleMeta(settingsRaw, handles);
+            } catch (err: any) {
+                return c.json({
+                    error: 'ScheduleRegistrationFailed',
+                    message: err.message || 'Failed to register trigger schedule.',
+                }, 400);
+            }
+        }
 
         const workflow: WorkflowData = {
             id: body.id,
@@ -59,9 +97,9 @@ deployRoute.openapi(route, async (c) => {
             triggerConfig: JSON.stringify(body.triggerConfig || {}),
             nodes: JSON.stringify(body.nodes),
             edges: JSON.stringify(body.edges),
-            settings: (body as any).settings ? JSON.stringify((body as any).settings) : null,
+            settings: settingsRaw,
             publishedBy: body.publishedBy || null,
-            tenantSlug: body.tenantSlug || '_default',
+            tenantSlug,
             version: 1,
             isActive: body.isActive ?? true,
             createdAt: new Date().toISOString(),

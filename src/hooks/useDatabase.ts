@@ -1,6 +1,7 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { databaseApi } from '@/services/database-api';
 import { SupabaseTable } from '@/services/database-api';
+import { STALE } from '@/lib/queryCache';
 
 // Types
 export interface GlobalSchema {
@@ -36,7 +37,7 @@ export function useGlobalSchema() {
                 definitions: schemaData.definitions || {}
             } as GlobalSchema;
         },
-        staleTime: 1000 * 60 * 60, // 1 hour (schema rarely changes)
+        staleTime: STALE.SCHEMA, // 1 hour (schema rarely changes)
         retry: 2,
     });
 }
@@ -49,7 +50,7 @@ export function useTables() {
             // fetchTables returns { tables: ... } (unwrapped/validated)
             return result.tables || [];
         },
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE.STANDARD, // 5 minutes
     });
 }
 
@@ -61,7 +62,7 @@ export function useTableSchema(tableName: string | null) {
             return await databaseApi.fetchTableSchema(tableName);
         },
         enabled: !!tableName,
-        staleTime: 1000 * 60 * 60, // 1 hour for schema (rarely changes)
+        staleTime: STALE.SCHEMA, // 1 hour for schema (rarely changes)
     });
 }
 
@@ -125,7 +126,7 @@ export function useTableData(tableName: string | null, params: TableDataParams =
         },
         enabled: !!tableName && !!globalSchema,
         placeholderData: keepPreviousData,
-        staleTime: 5000,
+        staleTime: STALE.REALTIME,
     });
 }
 
@@ -150,6 +151,6 @@ export function useRpcData(rpcName: string | undefined, params: any = {}) {
         },
         enabled: !!rpcName,
         placeholderData: keepPreviousData,
-        staleTime: 5000,
+        staleTime: STALE.REALTIME,
     });
 }

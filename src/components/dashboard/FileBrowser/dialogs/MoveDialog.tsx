@@ -43,8 +43,6 @@ export function MoveDialog({
             return files.filter((f) => f.isFolder);
         },
         enabled: open && !!destBucket,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     return (

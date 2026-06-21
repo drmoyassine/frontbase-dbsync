@@ -114,8 +114,6 @@ export function BucketListView({
             queryKey: ['storage-size', b.providerId || storageProviderId, b.name, '__root__'],
             queryFn: () => computeSize(b.providerId || storageProviderId || '', b.name, ''),
             staleTime: 5 * 60 * 1000,
-            retry: 1,
-            refetchOnWindowFocus: false,
             enabled: !!(b.providerId || storageProviderId),
         })),
     });

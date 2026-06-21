@@ -6,6 +6,8 @@ from app.services.sync.adapters.postgres_adapter import PostgresAdapter
 from app.services.sync.adapters.mysql_adapter import MySQLAdapter
 from app.services.sync.adapters.wordpress_api_adapter import WordPressRestAdapter, WordPressGraphQLAdapter
 from app.services.sync.adapters.neon_adapter import NeonAdapter
+from app.services.sync.adapters.google_sheets_adapter import GoogleSheetsAdapter
+from app.services.sync.adapters.rest_adapter import RESTAdapter
 from app.services.sync.models.datasource import Datasource, DatasourceType
 
 
@@ -18,12 +20,14 @@ def get_adapter(datasource: Datasource) -> DatabaseAdapter:
         DatasourceType.WORDPRESS_GRAPHQL: WordPressGraphQLAdapter,
         DatasourceType.NEON: NeonAdapter,
         DatasourceType.MYSQL: MySQLAdapter,
+        DatasourceType.GOOGLE_SHEETS: GoogleSheetsAdapter,
+        DatasourceType.REST: RESTAdapter,
     }
-    
+
     adapter_class = adapter_map.get(datasource.type)
     if not adapter_class:
         raise ValueError(f"Unsupported datasource type: {datasource.type}")
-    
+
     return adapter_class(datasource)
 
 
@@ -35,6 +39,8 @@ __all__ = [
     "WordPressRestAdapter",
     "WordPressGraphQLAdapter",
     "NeonAdapter",
+    "GoogleSheetsAdapter",
+    "RESTAdapter",
     "get_adapter",
 ]
 

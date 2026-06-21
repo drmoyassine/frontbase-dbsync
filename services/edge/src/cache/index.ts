@@ -17,6 +17,7 @@
 import type { ICacheProvider } from './ICacheProvider.js';
 import { NullCacheProvider } from './NullCacheProvider.js';
 import { getCacheConfig } from '../config/env.js';
+import { recordCacheOp, registerDowngraders } from '../resilience.js';
 
 // Re-export for convenience
 export type { ICacheProvider } from './ICacheProvider.js';
@@ -122,6 +123,7 @@ export function setCacheProvider(provider: ICacheProvider): void {
  */
 export const cacheProvider: ICacheProvider = new Proxy({} as ICacheProvider, {
     get(_target, prop: string) {
+        recordCacheOp(); // Sprint 2C: heuristic quota counter (no-op without FRONTBASE_CACHE_LIMITS)
         const provider = getCacheProvider();
         const value = (provider as any)[prop];
         if (typeof value === 'function') {
@@ -129,6 +131,18 @@ export const cacheProvider: ICacheProvider = new Proxy({} as ICacheProvider, {
         }
         return value;
     }
+});
+
+// Sprint 2D: register the cache downgrade — on quota exhaustion, drop L2 entirely
+// (NullCacheProvider is inert; reads just miss, no external commands billed).
+registerDowngraders({
+    cache: () => {
+        try {
+            setCacheProvider(new NullCacheProvider());
+        } catch (err) {
+            console.warn('[Resilience] cache downgrade failed:', err);
+        }
+    },
 });
 
 // Re-export high-level helpers from redis.ts for backward compatibility

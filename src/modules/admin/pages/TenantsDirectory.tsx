@@ -98,8 +98,6 @@ export function TenantsDirectory() {
         queryKey: ['admin-tenants'],
         queryFn: () => tenantAdminApi.listTenants(),
         staleTime: 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     const tenantsList = data?.tenants || [];
@@ -109,8 +107,6 @@ export function TenantsDirectory() {
         queryKey: ['admin-plans'],
         queryFn: () => adminPlansApi.listPlans(),
         staleTime: 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
     const planOptions = plansData?.plans ?? [];
 

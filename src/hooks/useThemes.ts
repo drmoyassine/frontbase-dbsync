@@ -28,8 +28,6 @@ export function useThemes(componentType?: string) {
       return response.data as ComponentTheme[];
     },
     staleTime: 10 * 60 * 1000,
-    retry: 1,
-    refetchOnWindowFocus: false,
   });
 
   const createThemeMutation = useMutation({

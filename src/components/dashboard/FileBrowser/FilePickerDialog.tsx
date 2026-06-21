@@ -56,8 +56,6 @@ export function FilePickerDialog({
         },
         enabled: open && !storageProviderId,
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
     });
 
     const resolvedProviderId = storageProviderId || (providers.length > 0 ? providers[0].id : null);

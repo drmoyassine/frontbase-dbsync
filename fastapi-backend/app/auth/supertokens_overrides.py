@@ -85,6 +85,16 @@ def provision_tenant(
     project_id = str(uuid.uuid4())
     member_id = str(uuid.uuid4())
 
+    # Idempotency check: if tenant already exists (race condition or retry), return early
+    existing_tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if existing_tenant:
+        logger.info(f"[Signup] Tenant '{slug}' (id={tenant_id}) already exists, skipping provision")
+        return {
+            "tenant_id": tenant_id,
+            "slug": slug,
+            "role": "owner",
+        }
+
     # 0. Sync User to public.users to satisfy Foreign Keys
     user = User(
         id=st_user_id,

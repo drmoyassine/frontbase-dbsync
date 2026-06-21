@@ -2,6 +2,7 @@
 Connection testing endpoints for datasources.
 """
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -111,7 +112,7 @@ async def test_new_datasource(data: DatasourceTestRequest):
             api_url=api_url,
             api_key_encrypted=api_key,
             table_prefix=data.table_prefix,
-            extra_config=str(data.extra_config) if data.extra_config else None,
+            extra_config=json.dumps(data.extra_config) if data.extra_config else None,
         )
 
         # If direct DB URI provided, set it

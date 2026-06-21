@@ -14,6 +14,7 @@ export const TriggerTypeSchema = z.enum([
     'http_webhook',
     'scheduled',
     'data_change',
+    'ui_event',
 ]).openapi('TriggerType');
 
 export const ExecutionStatusSchema = z.enum([
@@ -159,6 +160,38 @@ export const ErrorResponseSchema = z.object({
     message: z.string(),
     details: z.any().optional(),
 }).openapi('ErrorResponse');
+
+// ============ Connection Validation (Sprint 1) ============
+
+export const ConnectionValidationResultSchema = z.object({
+    isValid: z.boolean(),
+    edgeId: z.string().optional(),
+    error: z.string().optional(),
+    sourceNodeId: z.string(),
+    targetNodeId: z.string(),
+    sourceOutput: z.string().optional(),
+    targetInput: z.string().optional(),
+    sourceType: z.string(),
+    targetType: z.string(),
+}).openapi('ConnectionValidationResult');
+
+export const WorkflowValidationErrorSchema = z.object({
+    type: z.enum(['invalid_connection', 'missing_trigger', 'orphan_node', 'circular_dependency']),
+    message: z.string(),
+    edgeId: z.string().optional(),
+    nodeId: z.string().optional(),
+}).openapi('WorkflowValidationError');
+
+export const WorkflowValidationWarningSchema = z.object({
+    type: z.enum(['type_coercion', 'unused_output', 'missing_input']),
+    message: z.string(),
+}).openapi('WorkflowValidationWarning');
+
+export const WorkflowValidationResultSchema = z.object({
+    isValid: z.boolean(),
+    errors: z.array(WorkflowValidationErrorSchema),
+    warnings: z.array(WorkflowValidationWarningSchema),
+}).openapi('WorkflowValidationResult');
 
 export const SuccessResponseSchema = z.object({
     success: z.boolean(),

@@ -11,6 +11,7 @@ import ReactFlow, {
     MiniMap,
     ReactFlowProvider,
     ReactFlowInstance,
+    Connection,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -24,6 +25,8 @@ import {
     getDefaultInputsFromSchema,
     getDefaultOutputsFromSchema
 } from '@/lib/workflow/nodeSchemas';
+import { validateConnection } from '@/lib/workflow/typeCompatibility';
+import { InvalidConnectionTooltip } from './InvalidConnectionTooltip';
 
 // Register custom node types
 const nodeTypes = {
@@ -32,6 +35,7 @@ const nodeTypes = {
     webhook_trigger: TriggerNode,
     schedule_trigger: TriggerNode,
     data_change_trigger: TriggerNode,
+    ui_event_trigger: TriggerNode,
     // Core actions
     action: ActionNode,
     condition: ConditionNode,
@@ -74,6 +78,8 @@ export function WorkflowCanvas({ className, nodeExecutions }: WorkflowCanvasProp
         onConnect,
         selectNode,
         addNode,
+        setLastValidationError,
+        addRejectedConnection,
     } = useActionsStore();
 
     // Merge execution status into nodes
@@ -170,6 +176,22 @@ export function WorkflowCanvas({ className, nodeExecutions }: WorkflowCanvasProp
         selectNode(null);
     }, [selectNode]);
 
+    // Validate connections before allowing them (Sprint 1)
+    const handleConnect = useCallback((connection: Connection) => {
+        const result = validateConnection(connection, nodes);
+        if (!result.isValid) {
+            setLastValidationError(result.error || 'Invalid connection');
+            addRejectedConnection({
+                source: connection.source || '',
+                target: connection.target || '',
+                error: result.error || 'Invalid connection',
+            });
+            return;
+        }
+        setLastValidationError(null);
+        onConnect(connection);
+    }, [nodes, onConnect, setLastValidationError, addRejectedConnection]);
+
     // Handle drag and drop from palette
     const onDragOver = useCallback((event: React.DragEvent) => {
         event.preventDefault();
@@ -228,7 +250,7 @@ export function WorkflowCanvas({ className, nodeExecutions }: WorkflowCanvasProp
                 edges={edgesWithStatus}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
+                onConnect={handleConnect}
                 onNodeClick={onNodeClick}
                 onPaneClick={onPaneClick}
                 onInit={setReactFlowInstance}
@@ -249,6 +271,7 @@ export function WorkflowCanvas({ className, nodeExecutions }: WorkflowCanvasProp
                     className="bg-background border rounded-md"
                 />
             </ReactFlow>
+            <InvalidConnectionTooltip />
         </div>
     );
 }

@@ -34,6 +34,23 @@ export async function executeNode(
             // Trigger nodes just pass through inputs
             return { ...inputs };
 
+        case 'ui_event_trigger': {
+            // UI event data is passed in via the trigger payload (inputs).
+            // Surface a normalized event object for downstream nodes.
+            const event = inputs?.event ?? inputs;
+            return {
+                timestamp: event?.timestamp ?? new Date().toISOString(),
+                eventType: event?.eventType ?? event?.type ?? null,
+                element: event?.element ?? null,
+                value: event?.value ?? null,
+                checked: event?.checked ?? null,
+                coordinates: event?.coordinates ?? null,
+                modifiers: event?.modifiers ?? null,
+                key: event?.key ?? null,
+                target: event?.target ?? null,
+            };
+        }
+
         case 'data_request':
             return await executeDataRequest(node, inputs);
 

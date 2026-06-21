@@ -14,6 +14,8 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { stateProvider } from '../storage/index.js';
 import { SuccessResponseSchema, ErrorResponseSchema } from '../schemas';
+import { WorkflowNodeSchema, WorkflowEdgeSchema, WorkflowValidationResultSchema } from '../schemas/workflow.js';
+import { validateWorkflow } from '../validation/connectionValidator.js';
 
 const workflowsRoute = new OpenAPIHono();
 
@@ -136,6 +138,44 @@ workflowsRoute.openapi(deleteRoute, async (c) => {
     const tenantSlug = (c.get as any)('tenantSlug') || c.req.query('tenant_slug') || undefined;
     await stateProvider.deleteWorkflow(id, tenantSlug);
     return c.json({ success: true as const, message: `Workflow ${id} deleted` }, 200);
+});
+
+// ── POST /validate — Validate workflow structure (Sprint 1) ─────────────────
+
+const validateRoute = createRoute({
+    method: 'post',
+    path: '/validate',
+    tags: ['Workflows'],
+    summary: 'Validate workflow structure',
+    description: 'Validates workflow nodes and edges for type compatibility and structural issues',
+    request: {
+        body: {
+            content: {
+                'application/json': {
+                    schema: z.object({
+                        nodes: z.array(WorkflowNodeSchema),
+                        edges: z.array(WorkflowEdgeSchema),
+                    }),
+                },
+            },
+        },
+    },
+    responses: {
+        200: {
+            description: 'Validation result (always 200; check `isValid` field)',
+            content: {
+                'application/json': {
+                    schema: WorkflowValidationResultSchema,
+                },
+            },
+        },
+    },
+});
+
+workflowsRoute.openapi(validateRoute, async (c) => {
+    const { nodes, edges } = c.req.valid('json');
+    const result = validateWorkflow(nodes, edges);
+    return c.json(result, 200);
 });
 
 // ── PATCH /:id/toggle — Toggle active/inactive ─────────────────────────────

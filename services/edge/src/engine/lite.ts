@@ -43,6 +43,8 @@ import { updateRoute } from '../routes/update.js';
 import { cacheRoute } from '../routes/cache.js';
 import { edgeLogsRoute } from '../routes/edge-logs.js';
 import { workflowsRoute } from '../routes/workflows.js';
+import { uiEventsRoute } from '../routes/ui-events.js';
+import { publicExecuteRoute } from '../routes/public-execute.js';
 import { queueRoute } from '../routes/queue.js';
 import { configRoute } from '../routes/config.js';
 import { openaiRoute } from '../routes/openai.js';
@@ -233,6 +235,9 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     app.route('/api/cache', cacheRoute);
     app.route('/api/edge-logs', edgeLogsRoute);
     app.route('/api/workflows', workflowsRoute);
+    // Public (no systemKeyAuth) — consumed by the hydrated page client
+    app.route('/api/public', uiEventsRoute);
+    app.route('/api/public/execute', publicExecuteRoute);
     app.route('/api/queue', queueRoute);
     app.route('/api/config', configRoute);
     app.route('/api/agent-tools', agentToolsRoute);

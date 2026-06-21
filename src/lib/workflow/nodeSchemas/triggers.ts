@@ -175,3 +175,104 @@ export const dataChangeTriggerSchema: NodeSchema = {
         { name: 'count', type: 'number', description: 'Number of changed records' },
     ],
 };
+
+/**
+ * UI Event Trigger Schema — Sprint 4
+ *
+ * Triggers a workflow on UI element interactions. Events are captured
+ * client-side and POSTed to /api/execute/:id with the event payload.
+ */
+export const uiEventTriggerSchema: NodeSchema = {
+    type: 'ui_event_trigger',
+    label: 'UI Event',
+    description: 'Trigger on UI element interactions',
+    category: 'triggers',
+    inputs: [
+        {
+            name: 'eventType',
+            type: 'select',
+            label: 'Event Type',
+            required: true,
+            default: 'click',
+            description: 'The DOM event to listen for',
+            options: [
+                { value: 'click', label: 'Click' },
+                { value: 'dblclick', label: 'Double Click' },
+                { value: 'hover', label: 'Hover (Mouse Enter)' },
+                { value: 'hoverEnd', label: 'Hover End (Mouse Leave)' },
+                { value: 'submit', label: 'Form Submit' },
+                { value: 'change', label: 'Value Change' },
+                { value: 'input', label: 'Input Event' },
+                { value: 'focus', label: 'Focus' },
+                { value: 'blur', label: 'Blur' },
+                { value: 'keydown', label: 'Key Down' },
+                { value: 'keyup', label: 'Key Up' },
+            ],
+        } as SelectFieldDefinition,
+        {
+            name: 'elementSelector',
+            type: 'string',
+            label: 'Element Selector',
+            required: true,
+            default: '',
+            placeholder: '#myButton, .my-class, [data-id="xyz"]',
+            description: 'CSS selector for target element(s)',
+        },
+        {
+            name: 'debounceMs',
+            type: 'number',
+            label: 'Debounce (ms)',
+            default: 0,
+            description: 'Minimum time between triggers (0 = no debounce)',
+        },
+        {
+            name: 'captureEventData',
+            type: 'boolean',
+            label: 'Capture Event Data',
+            default: true,
+            description: 'Include event details (coordinates, keys, etc.) in payload',
+        },
+        {
+            name: 'preventDefault',
+            type: 'boolean',
+            label: 'Prevent Default Behavior',
+            default: false,
+            description: 'Call preventDefault() on the event (e.g., stop form submission)',
+        },
+        {
+            name: 'stopPropagation',
+            type: 'boolean',
+            label: 'Stop Propagation',
+            default: false,
+            description: 'Stop event from bubbling to parent elements',
+        },
+        {
+            name: 'throttleMs',
+            type: 'number',
+            label: 'Throttle (ms)',
+            default: 0,
+            showWhen: { eventType: ['scroll', 'resize', 'mousemove'] },
+            description: 'Maximum frequency of events (0 = no throttle)',
+        },
+        {
+            name: 'keyFilter',
+            type: 'string',
+            label: 'Key Filter',
+            default: '',
+            showWhen: { eventType: ['keydown', 'keyup'] },
+            placeholder: 'Enter, Escape, a-z',
+            description: 'Only trigger for specific keys (comma-separated)',
+        },
+    ],
+    outputs: [
+        { name: 'timestamp', type: 'string', description: 'ISO timestamp of event' },
+        { name: 'eventType', type: 'string', description: 'The event type that was triggered' },
+        { name: 'element', type: 'object', description: 'Element details (tag, id, classes, attributes)' },
+        { name: 'value', type: 'any', description: 'Element value (for inputs, textareas, selects)' },
+        { name: 'checked', type: 'boolean', description: 'Checkbox/radio state' },
+        { name: 'coordinates', type: 'object', description: 'Client/page coordinates (x, y)' },
+        { name: 'modifiers', type: 'object', description: 'Key modifiers (ctrl, shift, alt, meta)' },
+        { name: 'key', type: 'string', description: 'Key pressed (for keyboard events)' },
+        { name: 'target', type: 'object', description: 'Event target reference' },
+    ],
+};

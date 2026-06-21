@@ -19,6 +19,7 @@ export type {
 export {
     manualTriggerSchema, webhookTriggerSchema,
     scheduleTriggerSchema, dataChangeTriggerSchema,
+    uiEventTriggerSchema,
 } from './triggers';
 
 export {
@@ -32,7 +33,7 @@ export { httpResponseSchema } from './output';
 
 // ============ Schema Registry ============
 
-import { manualTriggerSchema, webhookTriggerSchema, scheduleTriggerSchema, dataChangeTriggerSchema } from './triggers';
+import { manualTriggerSchema, webhookTriggerSchema, scheduleTriggerSchema, dataChangeTriggerSchema, uiEventTriggerSchema } from './triggers';
 import { httpRequestSchema, transformSchema, logSchema } from './actions';
 import { conditionSchema } from './logic';
 import { dataRequestSchema } from './integrations';
@@ -46,6 +47,7 @@ export const nodeSchemas: Record<string, NodeSchema> = {
     webhook_trigger: webhookTriggerSchema,
     schedule_trigger: scheduleTriggerSchema,
     data_change_trigger: dataChangeTriggerSchema,
+    ui_event_trigger: uiEventTriggerSchema,
     // Actions
     http_request: httpRequestSchema,
     transform: transformSchema,

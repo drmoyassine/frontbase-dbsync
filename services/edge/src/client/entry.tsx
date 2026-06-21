@@ -291,6 +291,9 @@ if (typeof window !== 'undefined') {
         
         // Delegate button clicks and success handlers
         initActionDelegation(store);
+
+        // Sprint 4 (Model C): wire global ui_event_trigger listeners
+        initUIEventTriggers(store);
     };
 
     if (document.readyState === 'loading') {
@@ -702,4 +705,224 @@ function initActionDelegation(store: VariableStore) {
             }
         }
     });
+}
+
+// =============================================================================
+// Sprint 4 (Model C): UI Event Triggers
+//
+// Global ui_event_trigger workflows are fetched from the public
+// /api/public/ui-events endpoint and wired to the DOM. Configuration is
+// cache-first via localStorage (stale-while-revalidate) so published pages
+// keep working offline / on slow connections. Firing a trigger POSTs to
+// /api/execute/:workflowId with the captured event payload.
+// =============================================================================
+
+interface UIEventTriggerConfig {
+    workflowId: string;
+    workflowName: string;
+    eventType: string;
+    elementSelector: string;
+    debounceMs: number;
+    throttleMs: number;
+    captureEventData: boolean;
+    preventDefault: boolean;
+    stopPropagation: boolean;
+    keyFilter: string;
+}
+
+const UI_EVENTS_CACHE_KEY = 'fb:ui-events';
+const UI_EVENTS_ENDPOINT = '/api/public/ui-events';
+
+/** Map the schema event type to a DOM event name. */
+function resolveDomEvent(eventType: string): string | null {
+    switch (eventType) {
+        case 'click':
+        case 'dblclick':
+        case 'submit':
+        case 'change':
+        case 'input':
+        case 'focus':
+        case 'blur':
+        case 'keydown':
+        case 'keyup':
+            return eventType;
+        case 'hover':
+            return 'mouseenter';
+        case 'hoverEnd':
+            return 'mouseleave';
+        default:
+            return null;
+    }
+}
+
+/** Normalize a key name for keyFilter matching (Enter↵, Escape↎, letters lowercased). */
+function normalizeKey(key: string): string {
+    const k = key.toLowerCase();
+    if (k === 'enter' || k === 'return') return 'enter';
+    if (k === 'esc' || k === 'escape') return 'escape';
+    return k;
+}
+
+function keyMatchesFilter(event: Event, keyFilter: string): boolean {
+    if (!keyFilter.trim()) return true;
+    const allowed = new Set(keyFilter.split(',').map(k => normalizeKey(k.trim())));
+    return allowed.has(normalizeKey((event as KeyboardEvent).key || ''));
+}
+
+/** Build the event payload sent to the workflow. */
+function buildEventPayload(e: Event, el: Element): Record<string, any> {
+    const htmlEl = el as HTMLElement;
+    const ke = e as KeyboardEvent;
+    const me = e as MouseEvent;
+    return {
+        timestamp: new Date().toISOString(),
+        eventType: e.type,
+        element: {
+            tag: htmlEl.tagName?.toLowerCase(),
+            id: htmlEl.id || null,
+            classes: htmlEl.className ? String(htmlEl.className).split(/\s+/) : [],
+        },
+        value: (htmlEl as HTMLInputElement).value ?? null,
+        checked: (htmlEl as HTMLInputElement).checked ?? null,
+        coordinates: ('clientX' in e) ? { x: me.clientX, y: me.clientY } : null,
+        modifiers: ('ctrlKey' in e)
+            ? { ctrl: ke.ctrlKey, shift: ke.shiftKey, alt: ke.altKey, meta: ke.metaKey }
+            : null,
+        key: ('key' in e) ? ke.key : null,
+    };
+}
+
+function fireTrigger(config: UIEventTriggerConfig, store: VariableStore, payload: Record<string, any>) {
+    const body = {
+        parameters: {
+            event: payload,
+            local: store.local,
+            session: store.session,
+            cookies: store.cookies,
+            url: store.url,
+            app: store.app,
+        },
+    };
+
+    fetch(`/api/public/execute/${config.workflowId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    }).catch((err) => {
+        console.error(`[UI Event] Failed to trigger workflow ${config.workflowId}:`, err);
+    });
+}
+
+/** Wire a single trigger config to all matching elements (idempotent via WeakSet). */
+function wireTrigger(
+    config: UIEventTriggerConfig,
+    store: VariableStore,
+    root: ParentNode,
+    wired: WeakSet<Element>
+) {
+    const domEvent = resolveDomEvent(config.eventType);
+    if (!domEvent) return;
+
+    let elements: Element[];
+    try {
+        elements = Array.from(root.querySelectorAll(config.elementSelector));
+    } catch {
+        // Invalid selector — skip silently
+        return;
+    }
+
+    for (const el of elements) {
+        if (wired.has(el)) continue;
+        wired.add(el);
+
+        // Per-element debounce/throttle state
+        let lastFire = 0;
+        let pending: ReturnType<typeof setTimeout> | null = null;
+
+        const handler = (e: Event) => {
+            if (config.preventDefault) e.preventDefault();
+            if (config.stopPropagation) e.stopPropagation();
+            if (!keyMatchesFilter(e, config.keyFilter)) return;
+
+            const fire = () => {
+                const payload = config.captureEventData ? buildEventPayload(e, el) : { eventType: e.type };
+                fireTrigger(config, store, payload);
+                lastFire = Date.now();
+            };
+
+            if (config.debounceMs > 0) {
+                if (pending) clearTimeout(pending);
+                pending = setTimeout(fire, config.debounceMs);
+            } else if (config.throttleMs > 0) {
+                const elapsed = Date.now() - lastFire;
+                if (elapsed >= config.throttleMs) {
+                    fire();
+                }
+            } else {
+                fire();
+            }
+        };
+
+        el.addEventListener(domEvent, handler);
+    }
+}
+
+function applyTriggers(configs: UIEventTriggerConfig[], store: VariableStore) {
+    if (!configs.length) return;
+    const wired = new WeakSet<Element>();
+
+    for (const config of configs) {
+        wireTrigger(config, store, document, wired);
+    }
+
+    // Watch for dynamically-added elements (data binding, conditionals) and wire them too
+    const observer = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+            m.addedNodes.forEach((node) => {
+                if (node.nodeType !== 1) return;
+                const el = node as Element;
+                for (const config of configs) {
+                    // The added node itself, or its descendants, may match
+                    if (el.matches?.(config.elementSelector)) {
+                        wireTrigger(config, store, document, wired);
+                    }
+                    if (el.querySelector?.(config.elementSelector)) {
+                        wireTrigger(config, store, el as ParentNode, wired);
+                    }
+                }
+            });
+        }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+}
+
+function initUIEventTriggers(store: VariableStore) {
+    // 1. Cache-first: render immediately from localStorage (offline-capable)
+    try {
+        const cached = localStorage.getItem(UI_EVENTS_CACHE_KEY);
+        if (cached) {
+            const parsed = JSON.parse(cached) as UIEventTriggerConfig[];
+            if (Array.isArray(parsed)) applyTriggers(parsed, store);
+        }
+    } catch {
+        // Ignore corrupt cache
+    }
+
+    // 2. Background revalidation (SWR)
+    fetch(UI_EVENTS_ENDPOINT)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+            if (!data || !Array.isArray(data.triggers)) return;
+            try {
+                localStorage.setItem(UI_EVENTS_CACHE_KEY, JSON.stringify(data.triggers));
+            } catch {
+                // Storage full / unavailable — non-fatal
+            }
+            applyTriggers(data.triggers as UIEventTriggerConfig[], store);
+        })
+        .catch((err) => {
+            // Offline or endpoint unavailable — cached config (if any) still works
+            console.warn('[UI Event] Could not refresh triggers:', err);
+        });
 }

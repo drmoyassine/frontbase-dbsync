@@ -5,6 +5,7 @@ import { twMerge } from 'tailwind-merge';
 
 import type { FormProps, ColumnSchema, FormFieldOverride, FieldRenderProps } from './types';
 import { useFormQuery, useFormSubmit } from './hooks/useFormQuery';
+import { validateFormData } from './validation/validationManager';
 
 // Local cn utility to avoid bringing in the whole lib
 function cn(...inputs: ClassValue[]) {
@@ -122,6 +123,7 @@ export function Form({
     // Form state
     const [formData, setFormData] = useState<Record<string, any>>({});
     const [success, setSuccess] = useState(false);
+    const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
     // Populate form data from fetched record (edit mode)
     const record = queryResult?.record;
@@ -164,6 +166,14 @@ export function Form({
     // Handle form submission
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Sprint 2: validate required fields before submitting
+        const { valid, errors } = validateFormData(formData, visibleColumns, fieldOverrides);
+        if (!valid) {
+            setValidationErrors(errors);
+            return;
+        }
+        setValidationErrors({});
 
         try {
             await submitMutation.mutateAsync({ data: formData, recordId: isEditMode ? recordId : undefined });
@@ -355,11 +365,27 @@ export function Form({
                             fieldType,
                             label,
                             value: formData[column.name],
-                            onChange: (val) => setFormData(prev => ({ ...prev, [column.name]: val })),
+                            onChange: (val) => {
+                                setFormData(prev => ({ ...prev, [column.name]: val }));
+                                // Clear field error as the user edits
+                                if (validationErrors[column.name]) {
+                                    setValidationErrors(prev => {
+                                        const next = { ...prev };
+                                        delete next[column.name];
+                                        return next;
+                                    });
+                                }
+                            },
                             required: isRequired,
                             override,
                             disabled: isReadOnly,
                         })}
+
+                        {validationErrors[column.name] && (
+                            <p className="text-xs text-red-600" role="alert">
+                                {validationErrors[column.name]}
+                            </p>
+                        )}
                     </div>
                 );
 

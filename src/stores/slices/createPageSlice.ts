@@ -5,6 +5,7 @@ import { BuilderState } from '../builder';
 import { toast } from '@/hooks/use-toast';
 import { track } from '@/lib/analytics';
 import { getPages, createPage as createPageApi, updatePage as updatePageApi, deletePage as deletePageApi, permanentDeletePage as permanentDeletePageApi } from '../../services/pages-api';
+import { validatePageForSave, validatePageForPublish, type ValidationError } from '@/lib/validation/pageValidation';
 
 // Module-level in-flight dedup — prevents concurrent callers from
 // triggering redundant page loads (App.tsx + BuilderPage.tsx + PagesPanel.tsx)
@@ -33,6 +34,10 @@ export interface PageSlice {
     togglePageVisibility: (pageId: string) => Promise<void>;
     loadPagesFromDatabase: (includeDeleted?: boolean, force?: boolean) => Promise<void>;
     createPageInDatabase: (pageData: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;
+
+    // Sprint 2: required-field / form-binding validation
+    validatePageForSave: (pageId: string) => { valid: boolean; errors: ValidationError[] };
+    validatePageForPublish: (pageId: string) => { valid: boolean; errors: ValidationError[] };
 }
 
 export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (set, get) => ({
@@ -147,6 +152,12 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         const page = pages.find(p => p.id === pageId);
         if (!page) return;
 
+        // Sprint 2: pre-save validation (warnings only — never blocks saving)
+        const validation = validatePageForSave(page);
+        if (!validation.valid) {
+            console.warn('⚠️ [Store] Page has form validation issues:', validation.errors);
+        }
+
         setSaving(true);
         try {
             // Serialize containerStyles into layoutData.root for database storage
@@ -217,6 +228,17 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         const page = pages.find(p => p.id === pageId);
         if (!page) return;
 
+        // Sprint 2: pre-publish validation (blocks publication of misconfigured pages)
+        const validation = validatePageForPublish(page);
+        if (!validation.valid) {
+            toast({
+                title: "Cannot publish page",
+                description: validation.errors.map(e => e.message).join('; '),
+                variant: "destructive",
+            });
+            return;
+        }
+
         setSaving(true);
         try {
             // First save any unsaved changes
@@ -258,6 +280,17 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         const { pages, setSaving, setUnsavedChanges, savePageToDatabase } = get();
         const page = pages.find(p => p.id === pageId);
         if (!page || engineIds.length === 0) return;
+
+        // Sprint 2: pre-publish validation (blocks publication of misconfigured pages)
+        const validation = validatePageForPublish(page);
+        if (!validation.valid) {
+            toast({
+                title: "Cannot publish page",
+                description: validation.errors.map(e => e.message).join('; '),
+                variant: "destructive",
+            });
+            return;
+        }
 
         setSaving(true);
         try {
@@ -463,5 +496,18 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         } finally {
             setSaving(false);
         }
+    },
+
+    // Sprint 2: validation methods
+    validatePageForSave: (pageId: string) => {
+        const page = get().pages.find(p => p.id === pageId);
+        if (!page) return { valid: false, errors: [{ field: 'page', message: 'Page not found' }] };
+        return validatePageForSave(page);
+    },
+
+    validatePageForPublish: (pageId: string) => {
+        const page = get().pages.find(p => p.id === pageId);
+        if (!page) return { valid: false, errors: [{ field: 'page', message: 'Page not found' }] };
+        return validatePageForPublish(page);
     },
 });

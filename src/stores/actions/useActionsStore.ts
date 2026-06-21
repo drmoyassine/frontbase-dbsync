@@ -33,6 +33,10 @@ export interface ActionsState {
     isSaving: boolean;
     isPublishing: boolean;
 
+    // Validation state (Sprint 1: Node Connection Validation)
+    lastValidationError: string | null;
+    rejectedConnections: Array<{ source: string; target: string; error: string; timestamp: number }>;
+
     // Actions
     setCurrentDraft: (id: string | null, name?: string) => void;
     setTriggerType: (type: ActionsState['triggerType']) => void;
@@ -51,6 +55,11 @@ export interface ActionsState {
 
     // Selection
     selectNode: (id: string | null) => void;
+
+    // Validation actions (Sprint 1)
+    setLastValidationError: (error: string | null) => void;
+    addRejectedConnection: (connection: { source: string; target: string; error: string }) => void;
+    clearRejectedConnections: () => void;
 
     // Editor controls
     openEditor: (draftId?: string) => void;
@@ -73,6 +82,8 @@ const initialState = {
     isDirty: false,
     isSaving: false,
     isPublishing: false,
+    lastValidationError: null,
+    rejectedConnections: [],
 };
 
 export const useActionsStore = create<ActionsState>((set, get) => ({
@@ -165,6 +176,18 @@ export const useActionsStore = create<ActionsState>((set, get) => ({
 
     // Selection
     selectNode: (id) => set({ selectedNodeId: id }),
+
+    // Validation actions (Sprint 1)
+    setLastValidationError: (error) => set({ lastValidationError: error }),
+
+    addRejectedConnection: (connection) => set((state) => ({
+        rejectedConnections: [
+            ...state.rejectedConnections,
+            { ...connection, timestamp: Date.now() },
+        ].slice(-10), // keep only the most recent 10
+    })),
+
+    clearRejectedConnections: () => set({ rejectedConnections: [], lastValidationError: null }),
 
     // Editor controls
     openEditor: (draftId) => set({

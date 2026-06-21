@@ -16,6 +16,7 @@ import { saveCheckpoint, loadCheckpoint, clearCheckpoint } from './checkpoint.js
 import { createWorkflowLogger, type LogLevel, type WorkflowLogger } from './logger.js';
 import { cacheProvider } from '../cache/index.js';
 import { executeNode, updateNodeStatus, updateExecutionStatus } from './node-executors.js';
+import { validateWorkflowExecution } from './validation.js';
 
 /** Parsed workflow settings passed from route handlers */
 export interface WorkflowSettings {
@@ -111,6 +112,19 @@ export async function executeWorkflow(
     // Core execution logic wrapped for timeout race
     async function coreExecute(): Promise<ExecutionResult> {
         try {
+            // ── Sprint 3: pre-execution required-field validation ──
+            const validation = validateWorkflowExecution(nodes);
+            if (!validation.valid) {
+                const messages = validation.errors.map(e => e.message);
+                log.error(`Validation failed, aborting execution: ${messages.join('; ')}`);
+                await updateExecutionStatus(executionId, 'error', context.nodeExecutions, stateProvider);
+                return {
+                    status: 'error',
+                    result: {},
+                    error: `Workflow validation failed: ${messages.join('; ')}`,
+                };
+            }
+
             // ── Checkpoint resume: restore state from a previous attempt ──
             const checkpoint = await loadCheckpoint(executionId);
             const executed = new Set<string>();

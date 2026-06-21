@@ -285,7 +285,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         defaultName: 'Google Sheets',
         capabilities: ['database'],
         fields: [],  // Configured inline in DatasourceModal, not via Connected Account
-        helpText: <>Connect Google Sheets as a datasource via Apps Script Web App. <a href="https://docs.frontbase.dev/google-sheets-setup" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Setup Guide →</a></>,
+        helpText: <>Connect Google Sheets as a datasource via Apps Script Web App. See <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">docs/google-sheets-setup.md</code> in the repo for setup instructions.</>,
     },
     turso: {
         label: 'Turso',

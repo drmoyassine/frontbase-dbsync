@@ -168,15 +168,10 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                 <div>
                                     <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
                                         Web App URL
-                                        <a
-                                            href="https://docs.frontbase.dev/google-sheets-setup"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-primary ml-2 text-xs"
-                                        >
-                                            Setup Guide →
-                                        </a>
                                     </label>
+                                    <p className="text-xs text-gray-500 mb-2">
+                                        Deploy the Apps Script Web App and paste the exec URL. See <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">docs/google-sheets-setup.md</code> in the repo.
+                                    </p>
                                     <input
                                         type="url"
                                         value={formData.extra_config?.webAppUrl || ''}

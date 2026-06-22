@@ -13,6 +13,7 @@ No DB columns/migration required.
 """
 
 import json
+import logging
 from typing import Any, Dict, List, Optional, Union
 
 import httpx

@@ -77,6 +77,11 @@ class GoogleSheetsAdapter(DatabaseAdapter):
                 secret = ""
         self._secret = secret or ""
 
+        # Debug logging
+        import logging
+        logger = logging.getLogger("adapters.googlesheets")
+        logger.info(f"[GoogleSheets] Initialized with webAppUrl={bool(self._web_app_url)}, spreadsheetId={bool(self._spreadsheet_id)}, secret={bool(self._secret)}")
+
     def _read_config(self) -> Dict[str, Any]:
         raw = getattr(self.datasource, "extra_config", None)
         if not raw:
@@ -106,9 +111,13 @@ class GoogleSheetsAdapter(DatabaseAdapter):
     async def _call(self, action: str, **fields: Any) -> Any:
         client = self._require_client()
         payload = {"secret": self._secret, "action": action, **fields}
+        logger = logging.getLogger("adapters.googlesheets")
+        logger.info(f"[GoogleSheets] Calling {self._web_app_url} with action={action}, payload_keys={list(payload.keys())}")
         resp = await client.post(self._web_app_url, json=payload)
         resp.raise_for_status()
-        return resp.json()
+        result = resp.json()
+        logger.info(f"[GoogleSheets] Response for {action}: {list(result.keys()) if isinstance(result, dict) else type(result)}")
+        return result
 
     # ---- schema ----
     async def get_tables(self) -> List[str]:

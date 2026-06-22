@@ -1040,6 +1040,11 @@ if is_cloud():
     except ImportError:
         pass  # App-user management router not available
     try:
+        from app.routers import vector as vector_router
+        app.include_router(vector_router.router)  # prefix defined on router (/api/vector)
+    except ImportError:
+        pass  # Vector search router not available
+    try:
         from app.routers import tenant_admin
         app.include_router(tenant_admin.router, prefix="/api/admin/tenants", tags=["Tenant Admin"])
     except ImportError:

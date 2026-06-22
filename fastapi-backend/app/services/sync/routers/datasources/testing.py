@@ -184,7 +184,9 @@ async def test_datasource_update(
         await adapter.connect()
         tables = await adapter.get_tables()
         await adapter.disconnect()
-        
+
+        logger.info(f"[test-update] Got {len(tables)} tables for datasource {datasource.id}: {tables}")
+
         return DatasourceTestResult(
             success=True,
             message="Connection successful (updates validated)",

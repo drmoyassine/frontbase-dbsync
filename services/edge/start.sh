@@ -5,7 +5,13 @@
 set -e
 
 echo "🔴 Starting embedded Redis..."
-redis-server --daemonize yes --save "" --appendonly no --maxmemory 128mb --maxmemory-policy allkeys-lru
+# Disable overcommit warning by setting config at runtime
+redis-server --daemonize yes \
+    --save "" \
+    --appendonly no \
+    --maxmemory 128mb \
+    --maxmemory-policy allkeys-lru \
+    --ignore-warnings "no-config"
 
 # Wait for Redis to be ready
 for i in $(seq 1 10); do

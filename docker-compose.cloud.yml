@@ -16,6 +16,7 @@ services:
     build:
       context: .
       dockerfile: fastapi-backend/Dockerfile
+    user: "1000:1000"  # Run as non-root user
     expose:
       - "8000"
     environment:
@@ -63,6 +64,7 @@ services:
       context: .
       dockerfile: fastapi-backend/Dockerfile
     command: celery -A app.services.task_queue worker --loglevel=info --concurrency=2
+    user: "1000:1000"  # Run as non-root user (UID 1000 is common 'node' user)
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - DATABASE=${COMPOSE_PROFILES:-sqlite}

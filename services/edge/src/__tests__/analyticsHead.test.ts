@@ -11,7 +11,9 @@ describe('builder analytics injection (Sprint 4A)', () => {
 
         it('emits GTM (and skips direct GA4) when both are set', () => {
             const head = buildAnalyticsHead({ ga4MeasurementId: 'G-ABCDEF1234', gtmContainerId: 'GTM-XYZ123' });
-            expect(head).toContain('gtm.js?id=GTM-XYZ123');
+            // GTM builds its src at runtime; the container ID is passed into the loader.
+            expect(head).toContain("gtm.js?id='+i+dl");
+            expect(head).toContain("'dataLayer','GTM-XYZ123'");
             expect(head).not.toContain('gtag/js'); // GTM loads GA4 itself
         });
 

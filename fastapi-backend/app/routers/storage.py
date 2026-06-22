@@ -746,3 +746,39 @@ async def move_file(request: dict, ctx: TenantContext | None = Depends(get_tenan
         raise
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+@router.post("/move-cross")
+async def move_file_cross(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
+    """Move a file across buckets / providers (Sprint 4B).
+
+    Body:
+      source_provider_id, source_bucket, source_key
+      dest_provider_id,   dest_bucket,   dest_key
+
+    Resolves both adapters (tenant-scoped) and streams the object through this
+    process: download from source → upload to dest → delete source. Same-provider
+    adapters with native server-side copy override `move_cross` for efficiency.
+    """
+    src_pid = request.get("source_provider_id")
+    dst_pid = request.get("dest_provider_id")
+    if not src_pid or not dst_pid:
+        raise HTTPException(400, "source_provider_id and dest_provider_id are required")
+    src_bucket = request.get("source_bucket", "")
+    src_key = request.get("source_key", "")
+    dst_bucket = request.get("dest_bucket", "")
+    dst_key = request.get("dest_key", "")
+    if not (src_bucket and src_key and dst_bucket and dst_key):
+        raise HTTPException(400, "source_bucket, source_key, dest_bucket, dest_key are required")
+
+    try:
+        src_adapter = _resolve_adapter(src_pid, ctx)
+        dst_adapter = _resolve_adapter(dst_pid, ctx)
+        result = await src_adapter.move_cross(
+            src_bucket, src_key, dst_adapter, dst_bucket, dst_key,
+        )
+        return {"success": True, **result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))

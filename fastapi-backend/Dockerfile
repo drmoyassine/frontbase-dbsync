@@ -51,6 +51,10 @@ RUN dos2unix /usr/local/bin/docker_entrypoint.sh && chmod +x /usr/local/bin/dock
 # Create data directory
 RUN mkdir -p /app/data
 
+# Create non-root user for production (security best practice)
+RUN groupadd -r appuser && useradd -r -g appuser -u 1000 appuser \
+    && chown -R appuser:appuser /app
+
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 # Note: DATABASE_URL is NOT set here — it's resolved by config.py

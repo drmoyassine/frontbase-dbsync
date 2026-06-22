@@ -205,3 +205,28 @@ export async function moveFile(
     const data = res.data;
     if (!data.success) throw new Error(data.error || 'Failed to move/rename');
 }
+
+/**
+ * Move a file across buckets / providers (Sprint 4B). Streams through the backend
+ * (download source → upload dest → delete source). Returns bytes moved.
+ */
+export async function moveFileCross(params: {
+    sourceProviderId: string;
+    sourceBucket: string;
+    sourceKey: string;
+    destProviderId: string;
+    destBucket: string;
+    destKey: string;
+}): Promise<{ bytes: number }> {
+    const res = await api.post('/api/storage/move-cross', {
+        source_provider_id: params.sourceProviderId,
+        source_bucket: params.sourceBucket,
+        source_key: params.sourceKey,
+        dest_provider_id: params.destProviderId,
+        dest_bucket: params.destBucket,
+        dest_key: params.destKey,
+    });
+    const data = res.data;
+    if (!data.success) throw new Error(data.error || 'Failed to move file across providers');
+    return { bytes: data.bytes ?? 0 };
+}

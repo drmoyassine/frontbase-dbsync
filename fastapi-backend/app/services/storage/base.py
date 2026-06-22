@@ -10,7 +10,9 @@ Also includes shared concrete methods like compute_folder_size().
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
+
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +80,50 @@ class StorageAdapter(ABC):
     @abstractmethod
     async def create_folder(self, bucket: str, folder_path: str) -> None:
         ...
+
+    # ── Sprint 4B: cross-bucket / cross-provider file move ───────────────────
+    # These are CONCRETE defaults built on the abstract methods above, so every
+    # adapter gets cross-provider move for free. Adapters with a native
+    # server-side copy (Cloudflare R2, S3) may override `move_cross` for efficiency.
+
+    async def download_file(self, bucket: str, path: str) -> Tuple[bytes, str]:
+        """Download a file's bytes + content-type.
+
+        Default implementation fetches via a short-lived signed URL. Adapters with
+        a direct object-get API may override to avoid the redirect. Loads the whole
+        object into memory — fine up to ~100MB; stream larger files via an override.
+        """
+        url = await self.get_signed_url(bucket, path, expires_in=300)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0)) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+        content_type = resp.headers.get("content-type", "application/octet-stream")
+        return resp.content, content_type
+
+    async def move_cross(
+        self,
+        source_bucket: str,
+        source_key: str,
+        dest_adapter: "StorageAdapter",
+        dest_bucket: str,
+        dest_key: str,
+    ) -> Dict[str, Any]:
+        """Move a file to another bucket/provider (download → upload → delete).
+
+        Works across providers (e.g. R2 → Supabase) because it streams through
+        this process. Same-provider adapters with native copy should override for
+        a server-side (no egress) move. On success the source is deleted; on an
+        upload failure the source is left intact (no data loss).
+        """
+        content, content_type = await self.download_file(source_bucket, source_key)
+        await dest_adapter.upload_file(dest_bucket, dest_key, content, content_type)
+        # Only delete the source once the destination write succeeded.
+        await self.delete_files(source_bucket, [source_key])
+        return {
+            "source": f"{source_bucket}/{source_key}",
+            "destination": f"{dest_bucket}/{dest_key}",
+            "bytes": len(content),
+        }
 
     async def compute_folder_size(self, bucket: str, path: str = "") -> int:
         """Recursively compute the total size of all files under a path.

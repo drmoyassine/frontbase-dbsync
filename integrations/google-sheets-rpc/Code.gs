@@ -97,6 +97,45 @@ function headerOf_(sheet) {
   return sheet.getRange(1, 1, 1, lastCol).getValues()[0];
 }
 
+/** Ensure the sheet has an 'id' column as the first column. Creates it if missing.
+ *  Returns true if the column was created, false if it already existed.
+ */
+function ensureIdColumn_(sheet) {
+  var header = headerOf_(sheet);
+  if (header.length > 0 && header[0] === 'id') return false; // Already exists
+
+  // Insert a new first column
+  sheet.insertColumnsBefore(1, 1);
+  sheet.getRange(1, 1).setValue('id');
+
+  // Fill existing rows with sequential IDs if there's data
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    var ids = [];
+    for (var i = 2; i <= lastRow; i++) {
+      ids.push([i - 1]);
+    }
+    if (ids.length > 0) {
+      sheet.getRange(2, 1, lastRow - 1, 1).setValues(ids);
+    }
+  }
+  return true;
+}
+
+/** Get the next available ID for a sheet (max id + 1, or 1 if empty). */
+function nextId_(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 1;
+
+  var idCol = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  var max = 0;
+  for (var i = 0; i < idCol.length; i++) {
+    var val = Number(idCol[i][0]);
+    if (!isNaN(val) && val > max) max = val;
+  }
+  return max + 1;
+}
+
 /** Infer a coarse column type from its values (best-effort). */
 function inferType_(values) {
   for (var i = 0; i < values.length; i++) {
@@ -116,6 +155,7 @@ function schema() {
   var ss = targetSpreadsheet();
   var sheets = ss.getSheets();
   var tables = sheets.map(function (sh) {
+    ensureIdColumn_(sh);
     var header = headerOf_(sh);
     var data = sh.getLastRow() > 1
       ? sh.getRange(2, 1, Math.min(sh.getLastRow() - 1, 50), header.length).getValues()
@@ -256,10 +296,15 @@ function aggregate(q) {
 
 function insert(table, records) {
   var sheet = getSheet_(table);
+  ensureIdColumn_(sheet);
   var header = headerOf_(sheet);
+  var nextId = nextId_(sheet);
   var n = 0;
   records.forEach(function (rec) {
-    var row = header.map(function (c) { return rec[c] !== undefined ? rec[c] : ''; });
+    var row = header.map(function (c) {
+      if (c === 'id') return nextId++;
+      return rec[c] !== undefined ? rec[c] : '';
+    });
     sheet.appendRow(row);
     n++;
   });

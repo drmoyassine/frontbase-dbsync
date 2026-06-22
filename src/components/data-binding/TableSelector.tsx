@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Check, ChevronsUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { STALE } from '@/lib/queryCache';
 
 interface TableSelectorProps {
   value?: string;
@@ -52,7 +53,7 @@ export function TableSelector({
       return response.json();
     },
     enabled: !!activeId,
-    staleTime: 30000, // Cache for 30 seconds
+    staleTime: STALE.DEFAULT, // Cache for 30 seconds
   });
 
   const hasSource = !!activeId;

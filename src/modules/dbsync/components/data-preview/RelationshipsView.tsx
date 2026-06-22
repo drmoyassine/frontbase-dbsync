@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import { datasourcesApi, Relationship } from '../../api';
 import { RelationshipModal } from '../RelationshipModal';
 import { supportsManualRelationships } from '../../types/relationship';
@@ -45,14 +46,14 @@ export const RelationshipsView: React.FC<RelationshipsViewProps> = ({ datasource
     const { data, isLoading, error } = useQuery({
         queryKey: ['relationships', datasourceId],
         queryFn: () => datasourcesApi.getRelationships(datasourceId).then(r => r.data),
-        staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+        staleTime: STALE.STANDARD, // Cache for 5 minutes
     });
 
     // Fetch the datasource to populate the relationship modal header.
     const { data: datasource } = useQuery({
         queryKey: ['datasource', datasourceId],
         queryFn: () => datasourcesApi.get(datasourceId).then(r => r.data),
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     // Manual relationship creation is only meaningful for datasources that

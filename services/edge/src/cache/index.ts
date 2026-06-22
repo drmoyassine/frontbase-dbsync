@@ -17,7 +17,7 @@
 import type { ICacheProvider } from './ICacheProvider.js';
 import { NullCacheProvider } from './NullCacheProvider.js';
 import { getCacheConfig } from '../config/env.js';
-import { recordCacheOp, registerDowngraders, getTtlMultiplier } from '../resilience.js';
+import { recordCacheOp, registerDowngraders, getTtlMultiplier, recordCacheHit, recordCacheMiss } from '../resilience.js';
 
 // Re-export for convenience
 export type { ICacheProvider } from './ICacheProvider.js';
@@ -127,6 +127,22 @@ export const cacheProvider: ICacheProvider = new Proxy({} as ICacheProvider, {
         const provider = getCacheProvider();
         const value = (provider as any)[prop];
         if (typeof value === 'function') {
+            // Sprint 3C: count cache effectiveness on `get` (hit = value, miss = null/undefined).
+            if (prop === 'get') {
+                return (...args: unknown[]) => {
+                    const result = value.apply(provider, args);
+                    if (result && typeof (result as Promise<unknown>).then === 'function') {
+                        return (result as Promise<unknown>).then((v: unknown) => {
+                            if (v === null || v === undefined) recordCacheMiss();
+                            else recordCacheHit();
+                            return v;
+                        });
+                    }
+                    if (result === null || result === undefined) recordCacheMiss();
+                    else recordCacheHit();
+                    return result;
+                };
+            }
             // Sweep Gap 3: clamp TTL on setex(key, seconds, value) and
             // expire(key, seconds) when cache quota is in the degraded band.
             // `set(key, value)` has no TTL and is left untouched.

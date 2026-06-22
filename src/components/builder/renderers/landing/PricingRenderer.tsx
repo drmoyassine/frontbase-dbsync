@@ -2,6 +2,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import { RendererProps } from '../types';
 import { useQuery } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import { tenantPlanApi, PublicPricingPlan } from '@/services/tenantPlanApi';
 
 export const PricingRenderer: React.FC<RendererProps> = ({
@@ -27,7 +28,7 @@ export const PricingRenderer: React.FC<RendererProps> = ({
         queryKey: ['publicPlans'],
         queryFn: () => tenantPlanApi.listPublicPlans(),
         enabled: isFrontbasePlans,
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     const activePlans = isFrontbasePlans 

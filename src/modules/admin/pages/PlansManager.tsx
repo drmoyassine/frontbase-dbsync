@@ -7,6 +7,7 @@ import {
 import {
     adminPlansApi, Plan, LimitDef, PlanWritePayload, PlanChangeRequestAdmin,
 } from '@/services/adminPlansApi';
+import { STALE } from '@/lib/queryCache';
 import { toast } from 'sonner';
 
 const UNLIMITED = -1;
@@ -33,18 +34,18 @@ export function PlansManager() {
     const { data: plansData, isLoading } = useQuery({
         queryKey: ['admin-plans'],
         queryFn: () => adminPlansApi.listPlans(),
-        staleTime: 30_000,
+        staleTime: STALE.DEFAULT,
     });
     const { data: registryData } = useQuery({
         queryKey: ['admin-plan-limit-registry'],
         queryFn: () => adminPlansApi.getLimitRegistry(),
-        staleTime: Infinity,
+        staleTime: STALE.IMMUTABLE,
     });
     const { data: requestsData, isLoading: requestsLoading } = useQuery({
         queryKey: ['admin-plan-requests'],
         queryFn: () => adminPlansApi.listRequests('pending'),
         enabled: tab === 'requests',
-        staleTime: 15_000,
+        staleTime: 15_000, // custom TTL (not a STALE tier)
     });
 
     const plans = plansData?.plans ?? [];

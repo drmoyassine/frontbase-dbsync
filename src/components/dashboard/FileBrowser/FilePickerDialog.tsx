@@ -16,6 +16,7 @@ import {
 import { FileBrowser } from './index';
 import { StorageFile } from './types';
 import { useQuery } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import api from '@/services/api-service';
 
 export interface FilePickerDialogProps {
@@ -55,7 +56,7 @@ export function FilePickerDialog({
             return res.data;
         },
         enabled: open && !storageProviderId,
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     const resolvedProviderId = storageProviderId || (providers.length > 0 ? providers[0].id : null);

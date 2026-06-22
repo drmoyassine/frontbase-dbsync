@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { ColumnInfo } from '@/hooks/data/useBindingColumns';
 import { ColumnSelect } from './ColumnSelect';
+import { STALE } from '@/lib/queryCache';
 import { VariableInput } from '@/components/builder/VariableInput';
 import { HiddenFilter, HiddenFilterOperator } from '@/hooks/data/useSimpleData';
 
@@ -52,7 +53,7 @@ export const HiddenFiltersEditor: React.FC<HiddenFiltersEditorProps> = ({
             if (!response.ok) return [];
             return response.json();
         },
-        staleTime: 30000,
+        staleTime: STALE.DEFAULT,
     });
 
     const isSupabase = datasources.find(ds => ds.id === dataSourceId)?.type === 'supabase';

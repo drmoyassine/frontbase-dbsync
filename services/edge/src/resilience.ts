@@ -30,6 +30,10 @@ export interface ComponentStatus {
 export interface ResilienceState {
     stateDb: ComponentStatus;
     cache: ComponentStatus;
+    /** Cache TTL multiplier (1.0 = full, 0.5 = degraded/clamped at soft quota). */
+    ttlMultiplier?: number;
+    /** Cache effectiveness counters (Sprint 3C) — hits/misses on `get`. */
+    cacheStats?: { hits: number; misses: number };
 }
 
 let _state: ResilienceState = {
@@ -38,7 +42,12 @@ let _state: ResilienceState = {
 };
 
 export function getResilienceState(): Readonly<ResilienceState> {
-    return _state;
+    // ttlMultiplier + cacheStats are read live so health always reflects the current values.
+    return {
+        ..._state,
+        ttlMultiplier: _ttlMultiplier,
+        cacheStats: { hits: _cacheHits, misses: _cacheMisses },
+    };
 }
 
 export function markComponent(component: 'stateDb' | 'cache', level: Level, reason?: string): void {
@@ -82,6 +91,21 @@ let _cacheTtlClamped = false;
 /** Current cache TTL multiplier (1.0 = full TTL, 0.5 = degraded/clamped). */
 export function getTtlMultiplier(): number {
     return _ttlMultiplier;
+}
+
+// ── Cache effectiveness counters (Sprint 3C) ──────────────────────────────
+// Incremented by the cache Proxy when a `get` resolves to a value (hit) or
+// null/undefined (miss). Surfaced via /api/health → resilience.cacheStats so
+// operators can verify the ~99% hit-rate goal for published pages under load.
+let _cacheHits = 0;
+let _cacheMisses = 0;
+
+export function recordCacheHit(): void {
+    _cacheHits++;
+}
+
+export function recordCacheMiss(): void {
+    _cacheMisses++;
 }
 
 /**
@@ -138,6 +162,8 @@ export function _resetResilienceForTests(): void {
     _cacheDowngraded = false;
     _ttlMultiplier = 1.0;
     _cacheTtlClamped = false;
+    _cacheHits = 0;
+    _cacheMisses = 0;
     _state = { stateDb: { level: 'ok' }, cache: { level: 'ok' } };
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useTableData, useTableSchema, useGlobalSchema, useRpcData } from '@/hooks/useDatabase';
 import { debug } from '@/lib/debug';
@@ -180,7 +181,7 @@ export function useSimpleData({
             return response.json();
         },
         enabled: useDatasourceData && !!binding?.tableName,
-        staleTime: 1000 * 60 * 60, // 1 hour for schema
+        staleTime: STALE.SCHEMA, // 1 hour for schema
     });
 
     // Use datasource-specific schema if available, otherwise fallback to legacy
@@ -295,7 +296,7 @@ export function useSimpleData({
             return result;
         },
         enabled: useDatasourceData && !!binding?.tableName,
-        staleTime: 5000,
+        staleTime: STALE.REALTIME,
     });
 
     // Call both hooks but only enable the relevant one

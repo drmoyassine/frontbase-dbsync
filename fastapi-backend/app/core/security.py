@@ -14,6 +14,7 @@ import json
 import os
 import warnings
 from functools import lru_cache
+from typing import Optional
 
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.orm import Session
@@ -284,5 +285,37 @@ def get_provider_creds(provider_id: str, db: Session) -> dict:
             creds.update(metadata)
         except (json.JSONDecodeError, TypeError):
             pass
-    
+
     return creds
+
+
+# ── IP anonymization (GDPR / Sprint 3D) ────────────────────────────────────
+
+import ipaddress
+
+
+def anonymize_ip(ip: Optional[str]) -> str:
+    """Mask an IP address for privacy before storing it in a *non-security* context.
+
+    - IPv4: last octet zeroed → ``192.0.2.10`` becomes ``192.0.2.0``
+    - IPv6: truncated to /48 → ``2001:db8:abcd:ef01::1`` becomes ``2001:db8:abcd:0000::``
+    - Non-parseable / missing / "unknown": returned unchanged (defensive).
+
+    ⚠️ Security audit logs (`log_security_event`) intentionally keep the FULL IP —
+    new-IP login detection + alert emails need it, and that's a GDPR legitimate
+    interest. Use this helper only for PRODUCT-facing IP storage (e.g. a future
+    "last seen" profile field) or when an operator enables strict-privacy mode.
+    Product analytics IP masking is handled client-side via PostHog `mask_ip`.
+    """
+    if not ip or ip == "unknown":
+        return ip or "unknown"
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip  # not an IP literal (e.g. a hostname) — leave as-is
+    if addr.version == 4:
+        return str(ipaddress.IPv4Network(f"{addr}/24", strict=False).network_address)
+    # IPv6 → /48 (zero the host portion)
+    net = ipaddress.IPv6Network(f"{addr}/48", strict=False)
+    return str(net.network_address)
+

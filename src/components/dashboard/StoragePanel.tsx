@@ -8,6 +8,7 @@ import { HardDrive, Plus, Trash2, AlertTriangle, Zap, Loader2 } from 'lucide-rea
 import { FileBrowser } from './FileBrowser';
 import { toast } from 'sonner';
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,7 +74,7 @@ function useStorageProviders() {
   return useQuery({
     queryKey: ['storage-providers'],
     queryFn: storageProvidersApi.list,
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE.STANDARD,
   });
 }
 
@@ -107,7 +108,7 @@ function AddStorageDialog({
       return res.data;
     },
     enabled: isNetlify && !!selectedAccountId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE.STANDARD,
   });
 
   // Reset site selection when account changes
@@ -434,7 +435,7 @@ export const StoragePanel: React.FC = () => {
     queries: storageProviders.map(sp => ({
       queryKey: ['storage-buckets', sp.id],
       queryFn: () => fetchBuckets(sp.id),
-      staleTime: 30_000,
+      staleTime: STALE.DEFAULT,
     })),
   });
 

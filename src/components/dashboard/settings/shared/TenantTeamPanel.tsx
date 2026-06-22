@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Mail, X, UserPlus, Check, Database } from 'lucide-react';
 import { tenantTeamApi } from '@/services/tenantTeamApi';
+import { STALE } from '@/lib/queryCache';
 import { tenantPlanApi } from '@/services/tenantPlanApi';
 import { projectsApi } from '@/services/projectsApi';
 import { useActiveProject } from '@/stores/useActiveProject';
@@ -34,12 +35,12 @@ export const TenantTeamPanel: React.FC = () => {
     const { data: invitesData, isLoading } = useQuery({
         queryKey: ['tenant-invites'],
         queryFn: () => tenantTeamApi.listInvites(),
-        staleTime: 30_000,
+        staleTime: STALE.DEFAULT,
     });
     const { data: planData } = useQuery({
         queryKey: ['my-plan'],
         queryFn: () => tenantPlanApi.getMyPlan(),
-        staleTime: 30_000,
+        staleTime: STALE.DEFAULT,
     });
 
     const invites = invitesData?.invites ?? [];
@@ -198,7 +199,7 @@ const ProjectMembersCard: React.FC<{ projectId: string; canManage: boolean }> = 
     const { data, isLoading } = useQuery({
         queryKey: ['project-members', projectId],
         queryFn: () => projectsApi.listMembers(projectId),
-        staleTime: 30_000,
+        staleTime: STALE.DEFAULT,
     });
     const [addUserId, setAddUserId] = useState('');
     const [addRole, setAddRole] = useState<'editor' | 'viewer'>('viewer');
@@ -272,7 +273,7 @@ const SharedDataSourcesCard: React.FC<{ projectId: string; canManage: boolean }>
     const { data, isLoading } = useQuery({
         queryKey: ['project-datasources', projectId],
         queryFn: () => projectsApi.listProjectDatasources(projectId),
-        staleTime: 30_000,
+        staleTime: STALE.DEFAULT,
     });
 
     const refresh = () => queryClient.invalidateQueries({ queryKey: ['project-datasources', projectId] });

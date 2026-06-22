@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import { datasourcesApi } from '../api';
 import { TableSchema } from '../types';
 import { RelationshipDefinition, RelationshipType, IndexedRelationship } from '../types/relationship';
-import { Link2, Plus, Trash2, XCircle, Loader2, CheckCircle, ArrowRight, Pencil } from 'lucide-react';
+import { Link2, Plus, Trash2, XCircle, Loader2, CheckCircle, ArrowRight, Pencil, Sparkles } from 'lucide-react';
+import { detectFkSuggestions, novelSuggestions } from '@/lib/fkDetection';
 
 interface RelationshipModalProps {
     datasourceId: string;
@@ -53,6 +55,16 @@ export function RelationshipModal({ datasourceId, datasourceName, onClose }: Rel
 
     const fromColumns = useMemo(() => (fromSchema?.columns || []).map(c => c.name), [fromSchema]);
     const toColumns = useMemo(() => (toSchema?.columns || []).map(c => c.name), [toSchema]);
+
+    // Sprint 3G: heuristic FK suggestions for the selected daughter table. Only
+    // novel ones (not already defined) are shown; one click adds them directly.
+    const suggestions = useMemo(() => {
+        if (!newRel.from_table || isEditing) return [];
+        return novelSuggestions(
+            detectFkSuggestions(newRel.from_table, fromColumns, tables),
+            userRels,
+        );
+    }, [newRel.from_table, fromColumns, tables, userRels, isEditing]);
 
     const invalidateAll = () => {
         queryClient.invalidateQueries({ queryKey: ['datasource-user-relationships', datasourceId] });
@@ -194,6 +206,49 @@ export function RelationshipModal({ datasourceId, datasourceName, onClose }: Rel
                             </div>
                         )}
                     </div>
+
+                    {/* Sprint 3G: heuristic FK suggestions for the selected daughter table */}
+                    {suggestions.length > 0 && (
+                        <div className="p-4 bg-amber-50 dark:bg-amber-900/10 rounded-xl border border-amber-100 dark:border-amber-800/30 space-y-3">
+                            <h3 className="text-sm font-bold text-amber-900 dark:text-amber-100 flex items-center gap-2">
+                                <Sparkles className="w-4 h-4" />
+                                Suggested Relationships ({suggestions.length})
+                            </h3>
+                            <p className="text-[11px] text-amber-700/80 dark:text-amber-200/70 -mt-2">
+                                Detected from column names. Click to add — you can edit the display column after.
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                                {suggestions.map((s) => (
+                                    <button
+                                        key={`${s.from_table}.${s.from_column}`}
+                                        onClick={() => createMutation.mutate({
+                                            from_table: s.from_table,
+                                            from_column: s.from_column,
+                                            to_table: s.to_table,
+                                            to_column: s.to_column,
+                                            relationship_type: s.relationship_type || 'many_to_one',
+                                            display_column: '',
+                                        })}
+                                        disabled={isSaving}
+                                        title={s.reason}
+                                        className={`flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                                            s.confidence === 'high'
+                                                ? 'bg-white dark:bg-gray-800 border-amber-200 dark:border-amber-700 text-gray-700 dark:text-gray-200 hover:border-amber-400'
+                                                : 'bg-white/60 dark:bg-gray-800/60 border-amber-200/60 dark:border-amber-700/40 text-gray-500 dark:text-gray-400 hover:border-amber-300'
+                                        }`}
+                                    >
+                                        <Plus className="w-3 h-3" />
+                                        <span className="font-medium">{s.from_column}</span>
+                                        <ArrowRight className="w-3 h-3 text-gray-400" />
+                                        <span className="font-medium">{s.to_table}</span>
+                                        {s.confidence === 'medium' && (
+                                            <span className="text-[9px] uppercase opacity-60">?</span>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Add / edit relationship */}
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30 space-y-4">
@@ -374,6 +429,6 @@ function useTableSchema(datasourceId: string, table: string) {
         queryKey: ['datasource-table-schema', datasourceId, table],
         queryFn: () => datasourcesApi.getTableSchema(datasourceId, table).then(r => r.data),
         enabled: !!table,
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 }

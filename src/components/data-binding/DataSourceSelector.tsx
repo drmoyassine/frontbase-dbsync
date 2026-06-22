@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
+import { STALE } from '@/lib/queryCache';
 
 interface Datasource {
   id: string;
@@ -34,7 +35,7 @@ export function DataSourceSelector({
       if (!response.ok) throw new Error('Failed to fetch datasources');
       return response.json();
     },
-    staleTime: 30000, // Cache for 30 seconds
+    staleTime: STALE.DEFAULT, // Cache for 30 seconds
   });
 
   // Auto-select first datasource if none selected

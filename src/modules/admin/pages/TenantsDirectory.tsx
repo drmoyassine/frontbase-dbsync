@@ -32,6 +32,7 @@ import {
 import { tenantAdminApi, TenantAdminResponse } from '@/services/tenantAdminApi';
 import { adminPlansApi } from '@/services/adminPlansApi';
 import { useAuthStore } from '@/stores/auth';
+import { STALE } from '@/lib/queryCache';
 import { toast } from 'sonner';
 
 // Format relative time helper
@@ -97,7 +98,7 @@ export function TenantsDirectory() {
     const { data, isLoading, isRefetching, refetch, error } = useQuery({
         queryKey: ['admin-tenants'],
         queryFn: () => tenantAdminApi.listTenants(),
-        staleTime: 60 * 1000,
+        staleTime: 60 * 1000, // custom TTL (not a STALE tier)
     });
 
     const tenantsList = data?.tenants || [];
@@ -106,7 +107,7 @@ export function TenantsDirectory() {
     const { data: plansData } = useQuery({
         queryKey: ['admin-plans'],
         queryFn: () => adminPlansApi.listPlans(),
-        staleTime: 60 * 1000,
+        staleTime: 60 * 1000, // custom TTL (not a STALE tier)
     });
     const planOptions = plansData?.plans ?? [];
 
@@ -866,7 +867,7 @@ function TenantAddonsManager({ tenantId }: { tenantId: string }) {
         queryKey: ['admin-tenant-addons', tenantId],
         queryFn: () => adminPlansApi.listTenantAddons(tenantId),
         enabled: !!tenantId,
-        staleTime: 30_000,
+        staleTime: STALE.DEFAULT,
     });
     const grantMutation = useMutation({
         mutationFn: () => adminPlansApi.grantTenantAddon(tenantId, addonType, 1),

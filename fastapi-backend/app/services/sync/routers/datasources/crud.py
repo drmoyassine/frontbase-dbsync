@@ -73,23 +73,35 @@ async def create_datasource(
         )
 
     from app.core.security import encrypt_field
-    datasource = Datasource(
-        name=data.name,
-        type=data.type,
-        host=data.host,
-        port=data.port,
-        database=data.database,
-        username=data.username,
-        password_encrypted=encrypt_field(data.password),
-        api_url=data.api_url,
-        api_key_encrypted=encrypt_field(data.api_key),
-        anon_key_encrypted=encrypt_field(data.anon_key),
-        table_prefix=data.table_prefix,
-        extra_config=json.dumps(data.extra_config) if data.extra_config else None,
-        provider_account_id=data.provider_account_id,
-        project_id=project_id,
-    )
-    
+    from sqlalchemy import inspect
+
+    # Get actual database columns to avoid setting fields that don't exist in the DB
+    # This handles cases where the model has a field but the migration hasn't been applied yet
+    db_columns = {col['name'] for col in inspect(Datasource).columns}
+
+    # Build datasource kwargs, only including fields that exist in the database
+    datasource_kwargs = {
+        "name": data.name,
+        "type": data.type,
+        "host": data.host,
+        "port": data.port,
+        "database": data.database,
+        "username": data.username,
+        "password_encrypted": encrypt_field(data.password),
+        "api_url": data.api_url,
+        "api_key_encrypted": encrypt_field(data.api_key),
+        "anon_key_encrypted": encrypt_field(data.anon_key),
+        "table_prefix": data.table_prefix,
+        "extra_config": json.dumps(data.extra_config) if data.extra_config else None,
+        "project_id": project_id,
+    }
+
+    # Only add provider_account_id if the column exists in the database
+    if "provider_account_id" in db_columns and data.provider_account_id:
+        datasource_kwargs["provider_account_id"] = data.provider_account_id
+
+    datasource = Datasource(**datasource_kwargs)
+
     db.add(datasource)
     await db.commit()
     
@@ -246,14 +258,20 @@ async def update_datasource(
     update_data = data.model_dump(exclude_unset=True)
     sensitive_fields = ["host", "port", "database", "username", "password", "connection_uri", "api_url", "api_key"]
     should_reset_test = any(field in update_data for field in sensitive_fields)
-    
+
     from app.core.security import encrypt_field
+    from sqlalchemy import inspect
+
+    # Get actual database columns to avoid setting fields that don't exist in the DB
+    # This handles cases where the model has a field but the migration hasn't been applied yet
+    db_columns = {col['name'] for col in inspect(Datasource).columns}
+
     for field, value in update_data.items():
         if field == "password" and value:
             setattr(datasource, "password_encrypted", encrypt_field(value))
         elif field == "api_key" and value:
             setattr(datasource, "api_key_encrypted", encrypt_field(value))
-        elif hasattr(datasource, field):
+        elif hasattr(datasource, field) and field in db_columns:
             setattr(datasource, field, value)
             
     if should_reset_test:

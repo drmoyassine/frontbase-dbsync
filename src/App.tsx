@@ -13,6 +13,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { GlobalAgentChat } from "@/components/agent/GlobalAgentChat";
 import { MasterAdminImpersonator } from "@/components/dashboard/admin/MasterAdminImpersonator";
+import { ConsentBanner } from "@/components/dashboard/ConsentBanner";
 import { BASE_PATH, isCloud } from "@/lib/edition";
 
 // Unified Shell & DB-Sync Pages
@@ -43,6 +44,7 @@ import BuilderPage from "./pages/BuilderPage";
 import ActionsPage from "./pages/ActionsPage";
 import VariablesPage from "./pages/VariablesPage";
 import EmbedAuthPage from "./pages/EmbedAuthPage";
+import PrivacyPage from "./pages/PrivacyPage";
 import NotFound from "./pages/NotFound";
 import { AdminRoute } from "./routes/adminRoutes";
 import { TenantsDirectory } from "./modules/admin/pages/TenantsDirectory";
@@ -128,6 +130,8 @@ const App = () => {
           <Toaster />
           <Sonner />
           <BrowserRouter basename={BASE_PATH}>
+            {/* GDPR consent banner — EU users only, dismissible (Sprint 3D) */}
+            <ConsentBanner />
             {/* Global Chat Overlay (Protected via state) */}
             {isAuthenticated && (
               <>
@@ -138,6 +142,7 @@ const App = () => {
             <Routes>
               {/* Admin root redirects to dashboard */}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />

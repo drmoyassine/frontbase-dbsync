@@ -27,7 +27,7 @@ export function useThemes(componentType?: string) {
       }
       return response.data as ComponentTheme[];
     },
-    staleTime: 10 * 60 * 1000,
+    staleTime: 10 * 60 * 1000, // custom TTL (not a STALE tier)
   });
 
   const createThemeMutation = useMutation({

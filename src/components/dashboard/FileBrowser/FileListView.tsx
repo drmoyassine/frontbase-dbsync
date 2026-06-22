@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useQuery, useQueries } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import { useToast } from '@/components/ui/use-toast';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -133,7 +134,7 @@ export function FileListView({
     const { data: bucketsResult } = useQuery({
         queryKey: ['storage-buckets', storageProviderId],
         queryFn: () => fetchBuckets(storageProviderId),
-        staleTime: 30_000,
+        staleTime: STALE.DEFAULT,
     });
     const buckets = bucketsResult?.buckets;
 
@@ -162,7 +163,7 @@ export function FileListView({
             return {
                 queryKey: ['storage-size', storageProviderId, currentBucket, folderPath],
                 queryFn: () => computeSize(storageProviderId, currentBucket, folderPath),
-                staleTime: 5 * 60 * 1000,
+                staleTime: STALE.STANDARD,
                 enabled: !!currentBucket,
             };
         }),

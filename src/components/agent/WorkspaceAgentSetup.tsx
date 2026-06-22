@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import { Bot, Plus, ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -26,7 +27,7 @@ export function WorkspaceAgentSetup({ onSetupComplete }: WorkspaceAgentSetupProp
             if (!res.ok) throw new Error('Network error');
             return res.json();
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     const gpuProviders = providers.filter((p: any) => GPU_CAPABLE_PROVIDERS.has(p.provider));

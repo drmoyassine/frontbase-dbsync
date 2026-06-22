@@ -11,7 +11,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:load:signup": "k6 run tests/load/k6/signup.js",
+    "test:load:page": "k6 run tests/load/k6/published-page.js",
+    "test:load:dashboard": "k6 run tests/load/k6/dashboard.js",
+    "test:load": "npm run test:load:dashboard"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.161",

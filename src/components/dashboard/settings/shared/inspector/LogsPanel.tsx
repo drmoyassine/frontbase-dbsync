@@ -14,6 +14,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -115,7 +116,7 @@ export const LogsPanel: React.FC<LogsPanelProps> = ({ engineId, engineName, sett
             if (!resp.ok) throw new Error('Failed to fetch logs');
             return resp.json();
         },
-        staleTime: 60_000,
+        staleTime: 60_000, // custom TTL (not a STALE tier)
         enabled: !!engineId,
     });
 
@@ -127,7 +128,7 @@ export const LogsPanel: React.FC<LogsPanelProps> = ({ engineId, engineName, sett
             if (!resp.ok) throw new Error('Failed to fetch retention config');
             return resp.json();
         },
-        staleTime: 300_000, // 5 min
+        staleTime: STALE.STANDARD, // 5 min
         enabled: !!engineId,
     });
 

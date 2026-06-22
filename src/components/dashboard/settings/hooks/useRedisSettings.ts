@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsApi, RedisSettings } from '@/modules/dbsync/api';
+import { STALE } from '@/lib/queryCache';
 
 export interface UseRedisSettingsReturn {
     // State
@@ -68,7 +69,7 @@ export function useRedisSettings(): UseRedisSettingsReturn {
     const { data: settings, isLoading } = useQuery({
         queryKey: ['redisSettings'],
         queryFn: () => settingsApi.getRedis().then(r => r.data),
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     // Sync state from server

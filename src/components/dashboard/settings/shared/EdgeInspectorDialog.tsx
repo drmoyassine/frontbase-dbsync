@@ -9,6 +9,7 @@
 
 import React, { useState, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -97,7 +98,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
             throw new Error('No source available');
         },
         enabled: open && (hasDeployHistory || hasProvider),
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
         retry: 0,
     });
 
@@ -110,7 +111,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         queryKey: ['edge-inspector', 'settings', engine.id],
         queryFn: () => engineInspectFetch<InspectSettingsResponse>(engine.id, 'settings'),
         enabled: open && hasProvider,
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     const {
@@ -120,7 +121,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         queryKey: ['edge-inspector', 'secrets', engine.id],
         queryFn: () => engineInspectFetch<InspectSecretsResponse>(engine.id, 'secrets'),
         enabled: open && hasProvider,
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     // Fetch live OpenAPI spec from the engine itself (provider-agnostic)
@@ -133,7 +134,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
             return resp.json();
         },
         enabled: open && !!workerBaseUrl,
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     // ── Domains (multi-provider via domain_manager) ───────────────────
@@ -145,7 +146,7 @@ export const EdgeInspectorDialog: React.FC<EdgeInspectorDialogProps> = ({ engine
         queryKey: ['edge-inspector', 'domains', engine.id],
         queryFn: () => engineInspectFetch<InspectDomainsResponse>(engine.id, 'domains'),
         enabled: open && hasProvider,
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     const error = sourceError ? (sourceError as Error).message : null;

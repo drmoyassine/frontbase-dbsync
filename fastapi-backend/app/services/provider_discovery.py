@@ -25,16 +25,28 @@ logger = logging.getLogger(__name__)
 
 async def discover_resources(provider: str, creds: dict) -> dict:
     """Discover resources (projects, databases, sites) for a given provider."""
+    # Sprint 3I: L1/L2 cache so repeated discovery within a session doesn't
+    # re-hit provider APIs (they rate-limit and are slow). Failures are NOT cached.
+    from .discovery_cache import get_cached_discovery, set_cached_discovery
+    cached = await get_cached_discovery(provider, creds)
+    if cached is not None:
+        return cached
+
     discoverer = _DISCOVERERS.get(provider)
     if not discoverer:
         return {"success": False, "detail": f"Discovery not supported for provider: {provider}"}
 
     try:
-        return await discoverer(creds)  # type: ignore[operator]
+        result = await discoverer(creds)  # type: ignore[operator]
     except PermissionError as e:
         return {"success": False, "detail": str(e)}
     except Exception as e:
         return {"success": False, "detail": f"Discovery failed: {str(e)}"}
+
+    # Only cache successful discoveries — never cache error payloads.
+    if isinstance(result, dict) and result.get("success"):
+        await set_cached_discovery(provider, creds, result)
+    return result
 
 
 async def create_resource(provider: str, resource_type: str, creds: dict, **kwargs) -> dict:
@@ -45,9 +57,16 @@ async def create_resource(provider: str, resource_type: str, creds: dict, **kwar
         return {"success": False, "detail": f"Resource creation not supported for {provider}/{resource_type}"}
 
     try:
-        return await creator(creds, **kwargs)  # type: ignore[operator]
+        result = await creator(creds, **kwargs)  # type: ignore[operator]
     except Exception as e:
         return {"success": False, "detail": f"Create failed: {str(e)}"}
+
+    # Sprint 3I: a successful create must invalidate cached discovery so the new
+    # resource shows up on the next list (otherwise it'd be hidden for up to 1h).
+    if isinstance(result, dict) and result.get("success"):
+        from .discovery_cache import invalidate_discovery_cache
+        await invalidate_discovery_cache(provider, creds)
+    return result
 
 
 # NOTE: PG schema helpers (discover_pg_schemas, create_pg_schema) and

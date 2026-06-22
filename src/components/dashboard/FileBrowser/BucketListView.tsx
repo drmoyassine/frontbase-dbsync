@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { useQueries } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -113,7 +114,7 @@ export function BucketListView({
         queries: (buckets ?? []).map((b) => ({
             queryKey: ['storage-size', b.providerId || storageProviderId, b.name, '__root__'],
             queryFn: () => computeSize(b.providerId || storageProviderId || '', b.name, ''),
-            staleTime: 5 * 60 * 1000,
+            staleTime: STALE.STANDARD,
             enabled: !!(b.providerId || storageProviderId),
         })),
     });

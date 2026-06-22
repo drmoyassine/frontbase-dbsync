@@ -7,6 +7,7 @@
 
 import type { DatasourceConfig, DatasourceType } from '../schemas/publish';
 import { readWithFallback, stableHash } from './fallback.js';
+import { sanitizeColumns, sanitizeIdentifier } from './identifiers.js';
 
 // =============================================================================
 // Types
@@ -48,15 +49,18 @@ class SupabaseAdapter implements DatasourceAdapter {
     }
 
     async query(options: QueryOptions): Promise<QueryResult> {
-        const { table, columns = ['*'], filters = {}, limit = 100, offset = 0 } = options;
+        const { table, filters = {}, limit = 100, offset = 0 } = options;
+        // Sprint 3E: project only requested columns (default '*') and validate
+        // identifiers so caller-controlled names can't break out of the projection.
+        const selectCols = sanitizeColumns(options.columns).join(',');
+        const tableName = sanitizeIdentifier(table, 'table');
 
         // Build PostgREST URL
-        const selectCols = columns.join(',');
-        let url = `${this.url}/rest/v1/${table}?select=${selectCols}`;
+        let url = `${this.url}/rest/v1/${tableName}?select=${encodeURIComponent(selectCols)}`;
 
-        // Add filters
+        // Add filters (keys are column identifiers; values URL-encoded for PostgREST)
         Object.entries(filters).forEach(([key, value]) => {
-            url += `&${key}=eq.${value}`;
+            url += `&${encodeURIComponent(sanitizeIdentifier(key, 'filter column'))}=eq.${encodeURIComponent(String(value))}`;
         });
 
         // Add pagination
@@ -121,14 +125,18 @@ class NeonAdapter implements DatasourceAdapter {
     }
 
     async query(options: QueryOptions): Promise<QueryResult> {
-        const { table, columns = ['*'], filters = {}, limit = 100, offset = 0 } = options;
+        const { table, filters = {}, limit = 100, offset = 0 } = options;
+        // Sprint 3E: project only requested columns + validate identifiers.
+        const selectCols = sanitizeColumns(options.columns).join(', ');
+        const tableName = sanitizeIdentifier(table, 'table');
 
         // Build SQL query
-        const selectCols = columns.join(', ');
-        let sql = `SELECT ${selectCols} FROM ${table}`;
+        let sql = `SELECT ${selectCols} FROM ${tableName}`;
 
+        // TODO(3E-followup): parameterize filter values via execute(sql, params)
+        // instead of string-interpolating. Until then, escape single quotes.
         const whereConditions = Object.entries(filters).map(([key, value]) =>
-            `${key} = '${value}'`
+            `${sanitizeIdentifier(key, 'filter column')} = '${String(value).replace(/'/g, "''")}'`
         );
 
         if (whereConditions.length > 0) {
@@ -173,13 +181,15 @@ class PlanetScaleAdapter implements DatasourceAdapter {
     }
 
     async query(options: QueryOptions): Promise<QueryResult> {
-        const { table, columns = ['*'], filters = {}, limit = 100, offset = 0 } = options;
+        const { table, filters = {}, limit = 100, offset = 0 } = options;
+        // Sprint 3E: project only requested columns + validate identifiers.
+        const selectCols = sanitizeColumns(options.columns).join(', ');
+        const tableName = sanitizeIdentifier(table, 'table');
 
-        const selectCols = columns.join(', ');
-        let sql = `SELECT ${selectCols} FROM \`${table}\``;
+        let sql = `SELECT ${selectCols} FROM \`${tableName}\``;
 
         const whereConditions = Object.entries(filters).map(([key, value]) =>
-            `\`${key}\` = '${value}'`
+            `\`${sanitizeIdentifier(key, 'filter column')}\` = '${String(value).replace(/'/g, "''")}'`
         );
 
         if (whereConditions.length > 0) {
@@ -224,13 +234,15 @@ class TursoAdapter implements DatasourceAdapter {
     }
 
     async query(options: QueryOptions): Promise<QueryResult> {
-        const { table, columns = ['*'], filters = {}, limit = 100, offset = 0 } = options;
+        const { table, filters = {}, limit = 100, offset = 0 } = options;
+        // Sprint 3E: project only requested columns + validate identifiers.
+        const selectCols = sanitizeColumns(options.columns).join(', ');
+        const tableName = sanitizeIdentifier(table, 'table');
 
-        const selectCols = columns.join(', ');
-        let sql = `SELECT ${selectCols} FROM "${table}"`;
+        let sql = `SELECT ${selectCols} FROM "${tableName}"`;
 
         const whereConditions = Object.entries(filters).map(([key, value]) =>
-            `"${key}" = '${value}'`
+            `"${sanitizeIdentifier(key, 'filter column')}" = '${String(value).replace(/'/g, "''")}'`
         );
 
         if (whereConditions.length > 0) {

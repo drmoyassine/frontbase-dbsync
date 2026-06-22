@@ -55,7 +55,7 @@ export function useVariables(pageId?: string) {
                 return getDefaultVariables();
             }
         },
-        staleTime: 60_000, // Cache for 1 minute
+        staleTime: 60_000, // custom TTL (not a STALE tier) — Cache for 1 minute
         retry: false, // Don't retry if API fails
     });
 

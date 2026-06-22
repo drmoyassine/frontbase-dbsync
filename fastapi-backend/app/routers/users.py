@@ -200,7 +200,13 @@ async def set_user_state(
     body: UserStateRequest,
     ctx: TenantContext = Depends(require_tenant_context),
 ):
-    """Enable (unban) or disable (ban) an app user via GoTrue."""
+    """Enable (unban) or disable (ban) an app user via GoTrue.
+
+    Design note: a single ``/{id}/state`` endpoint with a ``disabled`` boolean is
+    preferred over separate ``/disable`` and ``/enable`` routes — one handler, one
+    validation path, and the client flips a flag instead of choosing a verb. This is
+    the recommended pattern for future boolean-state CRUD endpoints.
+    """
     db = SessionLocal()
     try:
         gotrue = _gotrue_context(db)

@@ -11,6 +11,7 @@ pushed to the affected CF Workers so changes take effect immediately.
 
 import hashlib
 import json
+import os
 import secrets
 import uuid
 from datetime import datetime
@@ -24,7 +25,13 @@ from ..database.config import get_db
 from ..database.utils import encrypt_data, decrypt_data, get_project
 from ..models.models import EdgeAPIKey, EdgeEngine, EdgeProviderAccount
 from ..services.secrets_builder import build_engine_secrets, _build_api_keys_config
-from ..services.engine_reconfigure import _resolve_cf_credentials, _patch_cf_settings
+from ..services.engine_reconfigure import (
+    _resolve_cf_credentials,
+    _patch_cf_settings,
+    _push_env_vars,
+    _resolve_provider_type,
+    NEEDS_REDEPLOY_FOR_ENV,
+)
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 
 
@@ -125,16 +132,25 @@ def _serialize(key: EdgeAPIKey, engine: Optional[EdgeEngine] = None) -> dict:
 
 
 async def _sync_keys_to_engines(engine_id: Optional[str]) -> None:
-    """Push updated FRONTBASE_API_KEY_HASHES to affected engines.
-    
-    - CF Workers: patched via CF API (fast, no downtime)
-    - Other providers: full redeploy so env vars are baked into deployment
-    
+    """Push updated FRONTBASE_API_KEYS to affected engines.
+
+    Provider routing (Sprint 3J — direct env patching to reduce deploy churn):
+      - CF Workers:        PATCH Worker secrets directly (instant, no downtime)
+      - Supabase / Deno:   patch via provider env API (instant; read at runtime,
+                           so NO redeploy needed)
+      - Vercel / Netlify:  patch via provider env API; then redeploy to ACTIVATE,
+                           unless FRONTBASE_KEY_SYNC_NO_REDEPLOY=1 (rely on runtime
+                           propagation — slightly delayed activation, zero churn)
+      - Docker / unknown:  full redeploy (env baked via secrets_builder at runtime)
+
     If engine_id is set, only that engine is updated.
     If engine_id is None (key scoped to "all engines"), update every engine.
     Runs as a background task — failures are silent (logged, not raised).
     """
     from ..database.config import SessionLocal
+    from ..services.engine_deploy import redeploy
+
+    no_redeploy = os.getenv("FRONTBASE_KEY_SYNC_NO_REDEPLOY", "0") == "1"
 
     db = SessionLocal()
     try:
@@ -148,11 +164,7 @@ async def _sync_keys_to_engines(engine_id: Optional[str]) -> None:
 
         for engine in engines:
             try:
-                # Determine provider type
-                provider = db.query(EdgeProviderAccount).filter(
-                    EdgeProviderAccount.id == engine.edge_provider_id
-                ).first()
-                provider_type = str(provider.provider) if provider else ""
+                provider_type = _resolve_provider_type(engine, db) or ""
 
                 if provider_type == "cloudflare":
                     # CF Workers: patch secrets directly (no redeploy needed)
@@ -167,12 +179,37 @@ async def _sync_keys_to_engines(engine_id: Optional[str]) -> None:
                             print(f"[KeySync] Pushed key hashes to CF engine '{engine.name}'")
                         else:
                             print(f"[KeySync] Failed to push keys to CF engine '{engine.name}'")
+
+                elif provider_type in ("supabase", "deno", "vercel", "netlify"):
+                    # Sprint 3J: patch FRONTBASE_API_KEYS via the provider env API
+                    # (sets it directly in the provider's env config — no rebuild).
+                    key_secrets = _build_key_secrets(engine, db)
+                    if not key_secrets:
+                        continue
+
+                    patched = await _push_env_vars(provider_type, engine, db, key_secrets)
+                    if patched:
+                        print(f"[KeySync] Patched {list(key_secrets)} via {provider_type} env API on '{engine.name}'")
+                    else:
+                        # env API failed → fall back to full redeploy (sets all secrets)
+                        print(f"[KeySync] {provider_type} env API failed for '{engine.name}'; falling back to redeploy")
+                        await redeploy(engine, db)
+                        continue
+
+                    # Vercel/Netlify bake env at build time → redeploy to activate
+                    # (unless the operator opted into runtime-propagation mode).
+                    if provider_type in NEEDS_REDEPLOY_FOR_ENV and not no_redeploy:
+                        try:
+                            await redeploy(engine, db)
+                            print(f"[KeySync] Activation redeploy for {provider_type} '{engine.name}'")
+                        except Exception as e:
+                            print(f"[KeySync] Activation redeploy failed for {provider_type} '{engine.name}': {e}")
+
                 else:
-                    # All other providers: trigger full redeploy
+                    # Docker / self-hosted / unknown: full redeploy
                     # (secrets are baked into deployment via secrets_builder)
-                    from ..services.engine_deploy import redeploy
                     await redeploy(engine, db)
-                    print(f"[KeySync] Redeployed engine '{engine.name}' ({provider_type}) with updated key hashes")
+                    print(f"[KeySync] Redeployed engine '{engine.name}' ({provider_type or 'unknown'}) with updated key hashes")
             except Exception as e:
                 print(f"[KeySync] Error syncing keys to engine '{engine.name}': {e}")
     finally:

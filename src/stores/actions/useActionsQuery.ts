@@ -5,6 +5,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 
 // Types matching the Pydantic schemas
 export interface WorkflowNode {
@@ -193,7 +194,7 @@ export function useWorkflowDrafts() {
     return useQuery({
         queryKey: ['workflow-drafts'],
         queryFn: fetchDrafts,
-        staleTime: 30000,
+        staleTime: STALE.DEFAULT,
     });
 }
 
@@ -202,7 +203,7 @@ export function useWorkflowDraft(id: string | null) {
         queryKey: ['workflow-draft', id],
         queryFn: () => fetchDraft(id!),
         enabled: !!id,
-        staleTime: 10000,
+        staleTime: 10000, // custom TTL (not a STALE tier)
     });
 }
 
@@ -279,7 +280,7 @@ export function useAllExecutions(params?: {
     return useQuery({
         queryKey: ['all-executions', params],
         queryFn: () => fetchAllExecutions(params),
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: STALE.STANDARD, // 5 minutes
     });
 }
 
@@ -311,7 +312,7 @@ export function useExecutionDetail(executionId: string | null, engineUrl?: strin
         queryKey: ['execution-detail', executionId],
         queryFn: () => fetchExecutionDetail(executionId!, engineUrl),
         enabled: !!executionId,
-        staleTime: Infinity, // Execution details are immutable once completed
+        staleTime: STALE.IMMUTABLE, // Execution details are immutable once completed
     });
 }
 

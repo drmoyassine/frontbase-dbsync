@@ -141,12 +141,16 @@ async def test_new_datasource(data: DatasourceTestRequest):
 
 @router.post("/{datasource_id}/test-update/", response_model=DatasourceTestResult)
 async def test_datasource_update(
-    data: DatasourceUpdate,
+    data: DatasourceUpdate = None,  # Make body optional to handle regression cases
     datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
     """Test a datasource connection with proposed updates merged into existing config."""
     logger.info(f"Testing connection update for datasource: {datasource.id}")
+
+    # Handle missing body (regression fix: treat as no-op test of existing config)
+    if data is None:
+        data = DatasourceUpdate()
 
     # Merge extra_config: use new data if provided, otherwise preserve existing
     existing_extra = datasource.extra_config

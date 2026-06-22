@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsApi, PrivacySettings, AdvancedVariables, CookieVariables } from '@/modules/dbsync/api';
+import { STALE } from '@/lib/queryCache';
 
 // Default values for advanced variables
 const DEFAULT_ADVANCED_VARIABLES: AdvancedVariables = {
@@ -75,7 +76,7 @@ export function usePrivacySettings(): UsePrivacySettingsReturn {
     const { data: settings, isLoading } = useQuery({
         queryKey: ['privacySettings'],
         queryFn: () => settingsApi.getPrivacy().then(r => r.data),
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     // Sync state from server

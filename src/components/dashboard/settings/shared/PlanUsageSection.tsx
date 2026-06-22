@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, ArrowUpCircle, ArrowDownCircle, Check, Clock, X } from 'lucide-react';
 import { tenantPlanApi } from '@/services/tenantPlanApi';
+import { STALE } from '@/lib/queryCache';
 import type { Plan } from '@/services/adminPlansApi';
 import { toast } from 'sonner';
 
@@ -30,18 +31,18 @@ export const PlanUsageSection: React.FC = () => {
     const { data, isLoading } = useQuery({
         queryKey: ['my-plan'],
         queryFn: () => tenantPlanApi.getMyPlan(),
-        staleTime: 30_000,
+        staleTime: STALE.DEFAULT,
     });
     const { data: addonsData } = useQuery({
         queryKey: ['my-addons'],
         queryFn: () => tenantPlanApi.getMyAddons(),
-        staleTime: 60_000,
+        staleTime: 60_000, // custom TTL (not a STALE tier)
     });
     const { data: publicData } = useQuery({
         queryKey: ['public-plans'],
         queryFn: () => tenantPlanApi.listPublicPlans(),
         enabled: pickerOpen,
-        staleTime: 60_000,
+        staleTime: 60_000, // custom TTL (not a STALE tier)
     });
 
     const requestMutation = useMutation({

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import { datasourcesApi } from '../../api';
 
 interface UseDataPreviewDataProps {
@@ -26,14 +27,14 @@ export const useDataPreviewData = ({
         queryKey: ['datasourceTables', datasourceId],
         queryFn: () => datasourcesApi.getTables(datasourceId!).then(r => r.data),
         enabled: isOpen && !!datasourceId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE.STANDARD, // 5 minutes
     });
 
     const { data: schemaData } = useQuery({
         queryKey: ['tableSchema', datasourceId, selectedTable],
         queryFn: () => datasourcesApi.getTableSchema(datasourceId!, selectedTable!).then(r => r.data),
         enabled: isOpen && !!datasourceId && !!selectedTable,
-        staleTime: 1000 * 60 * 60, // 1 hour for schema
+        staleTime: STALE.SCHEMA, // 1 hour for schema
     });
 
     // Infinite query for paginated table data
@@ -61,7 +62,7 @@ export const useDataPreviewData = ({
         },
         initialPageParam: 0,
         enabled: isOpen && !!datasourceId && !!selectedTable,
-        staleTime: 1000 * 60 * 10, // 10 minutes cache for data by default
+        staleTime: 1000 * 60 * 10, // custom TTL (not a STALE tier) — 10 minutes cache for data by default
     });
 
     // Flatten paginated data for use in the component
@@ -81,7 +82,7 @@ export const useDataPreviewData = ({
         queryKey: ['datasourceSearch', datasourceId, dataSearchQuery],
         queryFn: () => datasourcesApi.searchDatasource(datasourceId!, dataSearchQuery).then(r => r.data),
         enabled: isOpen && !!datasourceId && showDataSearchResults && !!dataSearchQuery.trim(),
-        staleTime: 1000 * 60 * 5, // Cache search results for 5 minutes
+        staleTime: STALE.STANDARD, // Cache search results for 5 minutes
     });
 
     const refreshSchemaMutation = useMutation({

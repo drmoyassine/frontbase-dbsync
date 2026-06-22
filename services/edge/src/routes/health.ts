@@ -128,6 +128,11 @@ const route = createRoute({
                         resilience: z.object({
                             stateDb: z.any().optional(),
                             cache: z.any().optional(),
+                            ttlMultiplier: z.number().optional(),
+                            cacheStats: z.object({
+                                hits: z.number(),
+                                misses: z.number(),
+                            }).optional(),
                         }).optional(),
                     }),
                 },

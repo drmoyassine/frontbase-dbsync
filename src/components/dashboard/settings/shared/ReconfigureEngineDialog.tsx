@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { API_BASE, fetchGPUCatalog, type CatalogModel } from './edgeConstants';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { STALE } from '@/lib/queryCache';
 import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
     DialogHeader, DialogTitle, DialogTrigger,
@@ -47,7 +48,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
     const { data: datasources = [] } = useQuery({
         queryKey: ['datasources-list'],
         queryFn: () => datasourcesApi.list().then(r => r.data),
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     // Fetch storage providers for multi-select
@@ -57,7 +58,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
             const res = await api.get('/api/storage/providers/');
             return res.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     // Fetch project settings (for auth detection)
@@ -67,7 +68,7 @@ export const ReconfigureEngineDialog: React.FC<ReconfigureEngineDialogProps> = (
             const res = await api.get('/api/project/');
             return res.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE.STANDARD,
     });
 
     const hasAuth = !!(project?.supabaseUrl || project?.supabase_url);

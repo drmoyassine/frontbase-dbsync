@@ -98,6 +98,7 @@ class DatasourceUpdate(BaseModel):
     table_prefix: Optional[str] = None
     extra_config: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
+    provider_account_id: Optional[str] = None  # Connected account for managed providers
 
     @model_validator(mode="before")
     @classmethod

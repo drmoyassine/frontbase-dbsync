@@ -26,9 +26,14 @@ logger = logging.getLogger(__name__)
 async def discover_resources(provider: str, creds: dict) -> dict:
     """Discover resources (projects, databases, sites) for a given provider."""
     # Sprint 3I: L1/L2 cache so repeated discovery within a session doesn't
-    # re-hit provider APIs (they rate-limit and are slow). Failures are NOT cached.
+    # re-hit provider APIs (they rate-limit and are slow). Failures are NOT cached,
+    # and the cache itself must NEVER break discovery — a cache error (e.g. Redis
+    # mocked/unavailable) falls through to the real discoverer.
     from .discovery_cache import get_cached_discovery, set_cached_discovery
-    cached = await get_cached_discovery(provider, creds)
+    try:
+        cached = await get_cached_discovery(provider, creds)
+    except Exception:
+        cached = None
     if cached is not None:
         return cached
 
@@ -45,7 +50,10 @@ async def discover_resources(provider: str, creds: dict) -> dict:
 
     # Only cache successful discoveries — never cache error payloads.
     if isinstance(result, dict) and result.get("success"):
-        await set_cached_discovery(provider, creds, result)
+        try:
+            await set_cached_discovery(provider, creds, result)
+        except Exception:
+            pass  # best-effort; caching is an optimization, not a requirement
     return result
 
 
@@ -65,7 +73,10 @@ async def create_resource(provider: str, resource_type: str, creds: dict, **kwar
     # resource shows up on the next list (otherwise it'd be hidden for up to 1h).
     if isinstance(result, dict) and result.get("success"):
         from .discovery_cache import invalidate_discovery_cache
-        await invalidate_discovery_cache(provider, creds)
+        try:
+            await invalidate_discovery_cache(provider, creds)
+        except Exception:
+            pass  # invalidation is best-effort
     return result
 
 

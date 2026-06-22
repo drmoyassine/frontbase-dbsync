@@ -77,7 +77,7 @@ async def create_datasource(
 
     # Get actual database columns to avoid setting fields that don't exist in the DB
     # This handles cases where the model has a field but the migration hasn't been applied yet
-    db_columns = {col['name'] for col in inspect(Datasource).columns}
+    db_columns = {col.name for col in inspect(Datasource).columns}
 
     # Build datasource kwargs, only including fields that exist in the database
     datasource_kwargs = {
@@ -264,7 +264,7 @@ async def update_datasource(
 
     # Get actual database columns to avoid setting fields that don't exist in the DB
     # This handles cases where the model has a field but the migration hasn't been applied yet
-    db_columns = {col['name'] for col in inspect(Datasource).columns}
+    db_columns = {col.name for col in inspect(Datasource).columns}
 
     for field, value in update_data.items():
         if field == "password" and value:

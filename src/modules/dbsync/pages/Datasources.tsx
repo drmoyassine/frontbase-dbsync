@@ -4,6 +4,7 @@ import { datasourcesApi, Datasource, viewsApi } from '../api'
 import DataPreviewModal from '../components/DataPreviewModal'
 import { DatasourceModal } from '../components/DatasourceModal'
 import { RelationshipModal } from '../components/RelationshipModal'
+import { supportsManualRelationships } from '../types/relationship'
 import { Plus, Database, Trash2, TestTube, CheckCircle, XCircle, Loader2, Edit2, Filter, Link2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { PROVIDER_CONFIGS } from '@/components/dashboard/settings/shared/edgeConstants'
@@ -299,13 +300,15 @@ function DatasourceCard({
                     <Edit2 className="w-4 h-4" />
                     {datasource.last_test_success === false ? 'Fix' : 'Edit'}
                 </button>
-                <button
-                    onClick={onRelationships}
-                    className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors border border-gray-200 dark:border-gray-600"
-                    title="Define Relationships (foreign keys)"
-                >
-                    <Link2 className="w-4 h-4" />
-                </button>
+                {supportsManualRelationships(datasource.type) && (
+                    <button
+                        onClick={onRelationships}
+                        className="p-2 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors border border-gray-200 dark:border-gray-600"
+                        title="Define Relationships (foreign keys)"
+                    >
+                        <Link2 className="w-4 h-4" />
+                    </button>
+                )}
                 <button
                     onClick={onDelete}
                     className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors border border-gray-200 dark:border-gray-600"

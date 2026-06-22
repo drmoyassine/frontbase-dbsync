@@ -35,3 +35,21 @@ export interface NormalizedRelationship {
     relationship_type?: RelationshipType;
     label?: string;
 }
+
+/**
+ * Datasource types that have NO native foreign-key reflection (accessed via
+ * HTTP/API rather than direct SQL) and therefore rely on user-defined
+ * relationships stored in extra_config. Relational DBs (supabase/postgres/
+ * neon/mysql) reflect their own FKs from the catalog, so manual definition is
+ * hidden for them.
+ */
+export const MANUAL_RELATIONSHIP_TYPES: ReadonlySet<string> = new Set([
+    'google_sheets',
+    'rest',
+    'wordpress',
+    'wordpress_rest',
+    'wordpress_graphql',
+]);
+
+export const supportsManualRelationships = (type?: string | null): boolean =>
+    !!type && MANUAL_RELATIONSHIP_TYPES.has(type);

@@ -57,6 +57,8 @@ export function RelationshipModal({ datasourceId, datasourceName, onClose }: Rel
     const invalidateAll = () => {
         queryClient.invalidateQueries({ queryKey: ['datasource-user-relationships', datasourceId] });
         queryClient.invalidateQueries({ queryKey: ['datasource-relationships', datasourceId] });
+        // RelationshipsView panel reads this key — refresh it so adds show up live.
+        queryClient.invalidateQueries({ queryKey: ['relationships', datasourceId] });
         queryClient.invalidateQueries({ queryKey: ['datasources'] });
     };
 

@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasourcesApi, Relationship } from '../../api';
-import { Loader2, GitBranch, ArrowRight, Table, AlertCircle, Database, Link2, RefreshCw } from 'lucide-react';
+import { RelationshipModal } from '../RelationshipModal';
+import { supportsManualRelationships } from '../../types/relationship';
+import { Loader2, GitBranch, ArrowRight, Table, AlertCircle, Database, Link2, RefreshCw, Plus } from 'lucide-react';
 
 interface RelationshipsViewProps {
     datasourceId: string | number;
@@ -38,12 +40,24 @@ function groupBySourceTable(relationships: Relationship[]) {
 
 export const RelationshipsView: React.FC<RelationshipsViewProps> = ({ datasourceId }) => {
     const queryClient = useQueryClient();
+    const [showAddModal, setShowAddModal] = useState(false);
 
     const { data, isLoading, error } = useQuery({
         queryKey: ['relationships', datasourceId],
         queryFn: () => datasourcesApi.getRelationships(datasourceId).then(r => r.data),
         staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     });
+
+    // Fetch the datasource to populate the relationship modal header.
+    const { data: datasource } = useQuery({
+        queryKey: ['datasource', datasourceId],
+        queryFn: () => datasourcesApi.get(datasourceId).then(r => r.data),
+        staleTime: 5 * 60 * 1000,
+    });
+
+    // Manual relationship creation is only meaningful for datasources that
+    // have no native FK reflection (Google Sheets / REST / WordPress).
+    const canAdd = supportsManualRelationships(datasource?.type);
 
     // Mutation to refresh schema
     const refreshMutation = useMutation({
@@ -98,6 +112,16 @@ export const RelationshipsView: React.FC<RelationshipsViewProps> = ({ datasource
                     </div>
                 </div>
                 <div className="flex items-center gap-4">
+                    {canAdd && (
+                        <button
+                            onClick={() => setShowAddModal(true)}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-primary-600 text-white rounded-lg border border-primary-600 hover:bg-primary-700 transition-colors shadow-sm"
+                            title="Define a foreign key relationship between two tables (this datasource has no native FKs)"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span className="text-xs font-semibold">Add Relationship</span>
+                        </button>
+                    )}
                     <button
                         onClick={() => refreshMutation.mutate()}
                         disabled={refreshMutation.isPending}
@@ -128,7 +152,23 @@ export const RelationshipsView: React.FC<RelationshipsViewProps> = ({ datasource
                 <div className="flex flex-col items-center justify-center py-16 text-gray-400">
                     <Database className="w-12 h-12 mb-4 opacity-50" />
                     <p className="text-sm font-medium">No foreign key relationships found</p>
-                    <p className="text-xs mt-1">This database doesn't have any FK constraints defined</p>
+                    {canAdd ? (
+                        <>
+                            <p className="text-xs mt-1 mb-4 max-w-sm text-center">
+                                This datasource has no native foreign keys. Define them manually so tables
+                                can be joined across the app.
+                            </p>
+                            <button
+                                onClick={() => setShowAddModal(true)}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-semibold"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add Relationship
+                            </button>
+                        </>
+                    ) : (
+                        <p className="text-xs mt-1">This database doesn't have any FK constraints defined</p>
+                    )}
                 </div>
             ) : (
                 <>
@@ -200,6 +240,14 @@ export const RelationshipsView: React.FC<RelationshipsViewProps> = ({ datasource
                         </div>
                     )}
                 </>
+            )}
+
+            {showAddModal && (
+                <RelationshipModal
+                    datasourceId={datasourceId}
+                    datasourceName={datasource?.name || ''}
+                    onClose={() => setShowAddModal(false)}
+                />
             )}
         </div>
     );

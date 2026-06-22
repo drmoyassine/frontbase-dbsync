@@ -51,6 +51,11 @@ export function generateHtmlDocument(
     const description = page.description || '';
     const keywords = page.keywords || '';
 
+    // Sprint 4A: builder-injected analytics (GA4 / GTM) + custom <head> HTML.
+    const analyticsHead = buildAnalyticsHead(trackingConfig);
+    const gtmNoscript = buildGtmNoscript(trackingConfig.gtmContainerId);
+    const customHead = sanitizeCustomHead(trackingConfig.customHeadHtml);
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -60,7 +65,7 @@ export function generateHtmlDocument(
     ${description ? `<meta name="description" content="${escapeHtml(description)}">` : ''}
     ${keywords ? `<meta name="keywords" content="${escapeHtml(keywords)}">` : ''}
     <meta name="generator" content="Frontbase">
-    
+    ${analyticsHead}
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="${faviconUrl}">
     <link rel="apple-touch-icon" href="${faviconUrl}">
@@ -109,8 +114,10 @@ export function generateHtmlDocument(
     <style>
         ${page.cssBundle || FALLBACK_CSS}
     </style>
+    ${customHead}
 </head>
 <body>
+    ${gtmNoscript}
     <div id="root">${bodyHtml}</div>
     <!-- Initial state for hydration -->
     <script>
@@ -298,4 +305,64 @@ export function escapeHtml(str: string): string {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+}
+
+// ── Sprint 4A: builder analytics injection ────────────────────────────────
+
+const GA4_RE = /^G-[A-Z0-9]{6,}$/;
+const GTM_RE = /^GTM-[A-Z0-9]+$/;
+
+/**
+ * Build the GA4 + GTM `<head>` scripts for a published page. IDs are validated
+ * against their canonical formats so a malformed value never ships broken HTML.
+ * GTM takes precedence when both are set (GTM can load GA4 itself).
+ */
+export function buildAnalyticsHead(cfg: { ga4MeasurementId?: string; gtmContainerId?: string }): string {
+    const parts: string[] = [];
+    const gtm = cfg.gtmContainerId && GTM_RE.test(cfg.gtmContainerId) ? cfg.gtmContainerId : '';
+    const ga4 = cfg.ga4MeasurementId && GA4_RE.test(cfg.ga4MeasurementId) ? cfg.ga4MeasurementId : '';
+
+    if (gtm) {
+        parts.push(`<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${gtm}');</script>
+<!-- End Google Tag Manager -->`);
+    } else if (ga4) {
+        // Only emit GA4 directly when GTM isn't configured (GTM loads GA4 itself).
+        parts.push(`<!-- Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=${ga4}"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${ga4}');
+</script>`);
+    }
+    return parts.join('\n    ');
+}
+
+/** GTM <noscript> iframe — must live immediately after <body>, not in <head>. */
+export function buildGtmNoscript(gtmContainerId?: string): string {
+    if (!gtmContainerId || !GTM_RE.test(gtmContainerId)) return '';
+    return `<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=${gtmContainerId}"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>`;
+}
+
+/**
+ * Sanitize builder-supplied custom <head> HTML. This is raw HTML the builder
+ * intentionally injects (their own pixels/verification tags), so it is NOT
+ * HTML-escaped — but we strip document-structure breakouts (`</head>`, `</body>`,
+ * `<html`) so a stray tag can't terminate the document early. XSS is an accepted
+ * builder risk (they control their own published pages); documented in sprint4.md.
+ */
+export function sanitizeCustomHead(html?: string): string {
+    if (!html || !html.trim()) return '';
+    return html
+        .replace(/<\/\s*(head|body|html)\s*>/gi, '')
+        .replace(/<\s*html\b/gi, '&lt;html')
+        .replace(/<\/\s*script\s*>/gi, '<\\/script>'); // safe inside the template literal
 }

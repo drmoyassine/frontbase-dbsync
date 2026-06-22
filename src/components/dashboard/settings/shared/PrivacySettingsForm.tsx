@@ -55,9 +55,15 @@ export function PrivacySettingsForm({ withCard = false }: PrivacySettingsFormPro
         requireCookieConsent,
         advancedVariables,
         cookieVariables,
+        ga4MeasurementId,
+        gtmContainerId,
+        customHeadHtml,
         setEnableVisitorTracking,
         setCookieExpiryDays,
         setRequireCookieConsent,
+        setGa4MeasurementId,
+        setGtmContainerId,
+        setCustomHeadHtml,
         isLoading,
         hasChanges,
         handleChange,
@@ -247,6 +253,66 @@ export function PrivacySettingsForm({ withCard = false }: PrivacySettingsFormPro
                                 </div>
                             </>
                         )}
+                    </div>
+
+                    <Separator />
+
+                    {/* Section 4: Builder Analytics (GA4 / GTM / custom head) — Sprint 4A */}
+                    <div className="space-y-4">
+                        <div>
+                            <Label className="text-base font-semibold flex items-center gap-2">
+                                📊 Builder Analytics
+                            </Label>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Inject Google Analytics / Tag Manager into your published pages.
+                                GTM takes precedence when both are set.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <Label htmlFor="ga4-id">GA4 Measurement ID</Label>
+                                <Input
+                                    id="ga4-id"
+                                    value={ga4MeasurementId}
+                                    onChange={(e) => { setGa4MeasurementId(e.target.value); handleChange(); }}
+                                    placeholder="G-XXXXXXXXXX"
+                                    className="max-w-[260px]"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Direct GA4 (ignored if GTM is set).
+                                </p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label htmlFor="gtm-id">GTM Container ID</Label>
+                                <Input
+                                    id="gtm-id"
+                                    value={gtmContainerId}
+                                    onChange={(e) => { setGtmContainerId(e.target.value); handleChange(); }}
+                                    placeholder="GTM-XXXXXXX"
+                                    className="max-w-[260px]"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Loads GA4 (and other tags) via Tag Manager.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="custom-head">Custom &lt;head&gt; HTML</Label>
+                            <textarea
+                                id="custom-head"
+                                value={customHeadHtml}
+                                onChange={(e) => { setCustomHeadHtml(e.target.value); handleChange(); }}
+                                placeholder={'<meta name="facebook-domain-verification" content="...">\n<script>/* pixel */</script>'}
+                                rows={4}
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-ring outline-none"
+                            />
+                            <p className="text-xs text-amber-600 dark:text-amber-400">
+                                ⚠️ Raw HTML — you control your own pages. Avoid pasting untrusted code (XSS).
+                            </p>
+                        </div>
                     </div>
 
                     <Separator />

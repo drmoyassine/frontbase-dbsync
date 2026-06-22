@@ -167,6 +167,10 @@ export interface PrivacySettings {
     cookieVariables: CookieVariables
     // Advanced variable toggles
     advancedVariables: AdvancedVariables
+    // Builder-injected analytics on published pages (Sprint 4A)
+    ga4MeasurementId?: string
+    gtmContainerId?: string
+    customHeadHtml?: string
 }
 
 export interface EmailProviderSettings {

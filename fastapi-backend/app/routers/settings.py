@@ -166,6 +166,10 @@ class PrivacySettings(BaseModel):
     requireCookieConsent: bool = True
     advancedVariables: AdvancedVariables = AdvancedVariables()
     cookieVariables: CookieVariables = CookieVariables()
+    # Sprint 4A: builder-injected analytics on published pages.
+    ga4MeasurementId: Optional[str] = None   # G-XXXXXXXXXX
+    gtmContainerId: Optional[str] = None      # GTM-XXXXXXX
+    customHeadHtml: Optional[str] = None       # arbitrary <head> HTML (pixels/verification)
 
 
 # File-based settings storage
@@ -280,6 +284,10 @@ async def get_privacy_settings(ctx: TenantContext | None = Depends(get_tenant_co
         requireCookieConsent=privacy.get("requireCookieConsent", True),
         advancedVariables=advanced,
         cookieVariables=cookies,
+        # Sprint 4A: builder analytics (forwarded to edge TrackingConfig → published <head>).
+        ga4MeasurementId=privacy.get("ga4MeasurementId"),
+        gtmContainerId=privacy.get("gtmContainerId"),
+        customHeadHtml=privacy.get("customHeadHtml"),
     )
 
 

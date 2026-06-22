@@ -173,12 +173,30 @@ async def init_db():
                 row = default_proj.fetchone()
                 if row:
                     default_id = row[0]
-                    # Update datasources that have null project_id
+                    # Update datasources that have null project_id, skipping duplicates
+                    # Use ON CONFLICT to handle unique constraint violations gracefully
                     await conn.execute(
-                        text("UPDATE datasources SET project_id = :default_id WHERE project_id IS NULL"),
+                        text("""
+                            UPDATE datasources
+                            SET project_id = :default_id
+                            WHERE id IN (
+                                SELECT ds.id FROM datasources ds
+                                WHERE ds.project_id IS NULL
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM datasources existing
+                                    WHERE existing.project_id = :default_id
+                                    AND existing.name = ds.name
+                                )
+                            )
+                        """),
                         {"default_id": default_id}
                     )
-                    _logger.info(f"[AUTO-MIGRATE] Backfilled unassigned datasources to default project '{default_id}'")
+                    updated = await conn.execute(
+                        text("SELECT COUNT(*) FROM datasources WHERE project_id = :default_id"),
+                        {"default_id": default_id}
+                    )
+                    count = updated.scalar() or 0
+                    _logger.info(f"[AUTO-MIGRATE] Backfilled unassigned datasources to default project '{default_id}' ({count} total)")
             except Exception as e:
                 _logger.warning(f"[AUTO-MIGRATE] Backfill failed: {e}")
 

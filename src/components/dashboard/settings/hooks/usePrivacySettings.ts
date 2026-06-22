@@ -38,11 +38,17 @@ export interface UsePrivacySettingsReturn {
     requireCookieConsent: boolean;
     advancedVariables: AdvancedVariables;
     cookieVariables: CookieVariables;
+    ga4MeasurementId: string;
+    gtmContainerId: string;
+    customHeadHtml: string;
 
     // Setters
     setEnableVisitorTracking: (enabled: boolean) => void;
     setCookieExpiryDays: (days: number) => void;
     setRequireCookieConsent: (required: boolean) => void;
+    setGa4MeasurementId: (id: string) => void;
+    setGtmContainerId: (id: string) => void;
+    setCustomHeadHtml: (html: string) => void;
     setAdvancedVariables: React.Dispatch<React.SetStateAction<AdvancedVariables>>;
     setCookieVariables: React.Dispatch<React.SetStateAction<CookieVariables>>;
 
@@ -70,6 +76,10 @@ export function usePrivacySettings(): UsePrivacySettingsReturn {
     const [requireCookieConsent, setRequireCookieConsent] = useState(true);
     const [advancedVariables, setAdvancedVariables] = useState<AdvancedVariables>(DEFAULT_ADVANCED_VARIABLES);
     const [cookieVariables, setCookieVariables] = useState<CookieVariables>(DEFAULT_COOKIE_VARIABLES);
+    // Sprint 4A: builder analytics
+    const [ga4MeasurementId, setGa4MeasurementId] = useState('');
+    const [gtmContainerId, setGtmContainerId] = useState('');
+    const [customHeadHtml, setCustomHeadHtml] = useState('');
     const [hasChanges, setHasChanges] = useState(false);
 
     // Query
@@ -85,6 +95,10 @@ export function usePrivacySettings(): UsePrivacySettingsReturn {
             setEnableVisitorTracking(settings.enableVisitorTracking);
             setCookieExpiryDays(settings.cookieExpiryDays);
             setRequireCookieConsent(settings.requireCookieConsent);
+            // Sprint 4A: builder analytics
+            setGa4MeasurementId(settings.ga4MeasurementId || '');
+            setGtmContainerId(settings.gtmContainerId || '');
+            setCustomHeadHtml(settings.customHeadHtml || '');
 
             // Handle migration from old settings structure - merge with defaults
             if (settings.advancedVariables) {
@@ -157,6 +171,9 @@ export function usePrivacySettings(): UsePrivacySettingsReturn {
             requireCookieConsent,
             cookieVariables,
             advancedVariables,
+            ga4MeasurementId,
+            gtmContainerId,
+            customHeadHtml,
         });
     };
 
@@ -167,6 +184,9 @@ export function usePrivacySettings(): UsePrivacySettingsReturn {
         requireCookieConsent,
         advancedVariables,
         cookieVariables,
+        ga4MeasurementId,
+        gtmContainerId,
+        customHeadHtml,
 
         // Setters
         setEnableVisitorTracking,
@@ -174,6 +194,9 @@ export function usePrivacySettings(): UsePrivacySettingsReturn {
         setRequireCookieConsent,
         setAdvancedVariables,
         setCookieVariables,
+        setGa4MeasurementId,
+        setGtmContainerId,
+        setCustomHeadHtml,
 
         // Status
         isLoading,

@@ -32,6 +32,12 @@ export interface TrackingConfig {
     cookieExpiryDays: number;
     requireCookieConsent: boolean;
     advancedVariables?: AdvancedVariables;
+    /** Google Analytics 4 measurement ID (G-XXXXXXXXXX). Sprint 4A. */
+    ga4MeasurementId?: string;
+    /** Google Tag Manager container ID (GTM-XXXXXXX). Sprint 4A. */
+    gtmContainerId?: string;
+    /** Arbitrary <head> HTML (other pixels / verification meta). Sprint 4A. */
+    customHeadHtml?: string;
 }
 
 export interface TrackingVariables {

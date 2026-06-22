@@ -361,20 +361,18 @@ export const DataPreviewTable = ({
                                     if (val === undefined && key.includes('.')) {
                                         const [table, col] = key.split('.');
                                         val = record[table]?.[col];
-
-                                        // Debug log for missing data
-                                        if (key.includes('degree_name') || key.includes('type')) {
-                                            console.log(`[DataPreviewTable] Nested lookup for ${key}:`, {
-                                                direct: record[key],
-                                                nested: val,
-                                                recordKeys: Object.keys(record)
-                                            });
-                                        }
                                     }
                                     return val;
                                 })();
 
-                                const strVal = typeof displayValue === 'object' && displayValue !== null ? JSON.stringify(displayValue) : String(displayValue ?? '');
+                                // Resolve FK display value when this column has a user-defined
+                                // display_column (e.g. show "Lincoln High" instead of school id).
+                                const fk = data?.fk_columns?.[key];
+                                const resolved = fk && displayValue != null ? fk.lookup?.[String(displayValue)] : undefined;
+                                const strVal = resolved != null
+                                    ? (typeof resolved === 'object' && resolved !== null ? JSON.stringify(resolved) : String(resolved))
+                                    : (typeof displayValue === 'object' && displayValue !== null ? JSON.stringify(displayValue) : String(displayValue ?? ''));
+                                const isFk = !!fk;
                                 const cellMatches = globalSearch && strVal.toLowerCase().includes(globalSearch.toLowerCase());
                                 const isPinned = pinnedColumns.includes(key);
                                 const leftOffset = isPinned ? (j * 150) : undefined;
@@ -382,7 +380,8 @@ export const DataPreviewTable = ({
                                 return (
                                     <td
                                         key={j}
-                                        className={`px-4 py-3 text-xs border-b border-gray-50 truncate transition-all ${cellMatches ? 'bg-yellow-50/50 dark:bg-yellow-900/10 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'} ${isPinned ? 'sticky z-10 bg-white dark:bg-gray-800 border-r border-gray-100/50 group-hover:bg-primary-50/50 dark:group-hover:bg-primary-900/10' : 'max-w-xs'} `}
+                                        title={isFk ? `${key} → ${fk.parent_table}.${fk.display_column}` : undefined}
+                                        className={`px-4 py-3 text-xs border-b border-gray-50 truncate transition-all ${cellMatches ? 'bg-yellow-50/50 dark:bg-yellow-900/10 text-gray-900 dark:text-white' : isFk ? 'text-primary-700 dark:text-primary-300 font-medium' : 'text-gray-600 dark:text-gray-300'} ${isPinned ? 'sticky z-10 bg-white dark:bg-gray-800 border-r border-gray-100/50 group-hover:bg-primary-50/50 dark:group-hover:bg-primary-900/10' : 'max-w-xs'} `}
                                         style={isPinned ? { left: leftOffset, minWidth: '150px', maxWidth: '150px' } : {}}
                                     >
                                         <HighlightMatches text={strVal} query={globalSearch} />

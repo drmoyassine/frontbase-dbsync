@@ -17,6 +17,8 @@ export interface RelationshipDefinition {
     to_column: string;
     relationship_type?: RelationshipType;
     label?: string;
+    /** Column in the parent (to_table) to display for this FK (e.g. school name). */
+    display_column?: string;
     cascade_delete?: boolean;
 }
 
@@ -34,6 +36,7 @@ export interface NormalizedRelationship {
     is_user_defined?: boolean;
     relationship_type?: RelationshipType;
     label?: string;
+    display_column?: string;
 }
 
 /**

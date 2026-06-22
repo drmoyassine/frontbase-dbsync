@@ -45,6 +45,12 @@ class RelationshipDefinition(BaseModel):
         description="many_to_one | one_to_one | one_to_many | many_to_many",
     )
     label: Optional[str] = Field(None, description="Human-readable label for the UI")
+    display_column: Optional[str] = Field(
+        default=None,
+        description="Column in the parent (to_table) whose value to display for this FK "
+                    "(e.g. show a school's name instead of its id). When set, the table "
+                    "data endpoint returns a lookup map for this FK column.",
+    )
     cascade_delete: bool = Field(default=False, description="Delete related rows when source is deleted (future)")
 
 
@@ -99,6 +105,7 @@ def _normalize_user_fk(rel: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "is_user_defined": True,
         "relationship_type": rel.get("relationship_type", "many_to_one"),
         "label": rel.get("label"),
+        "display_column": rel.get("display_column"),
     }
 
 
@@ -127,6 +134,7 @@ def get_user_foreign_keys_for_table(datasource: Any, table: str) -> List[Dict[st
             "is_user_defined": True,
             "relationship_type": rel.get("relationship_type", "many_to_one"),
             "label": rel.get("label"),
+            "display_column": rel.get("display_column"),
         })
     return out
 

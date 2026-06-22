@@ -42,6 +42,61 @@ def _extract_row_id(record: Dict[str, Any]) -> Any:
     return list(record.values())[0] if record else None
 
 
+# Upper bound on parent rows fetched to build an FK display lookup. Keeps the
+# inspector snappy on large parent tables; ids beyond the cap fall back to raw.
+_FK_LOOKUP_CAP = 2000
+
+
+async def _build_fk_display_lookups(adapter: Any, datasource: Datasource, table: str, records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Build a display-value lookup for FK columns that have a user-defined
+    ``display_column`` (e.g. show a school's name instead of its id).
+
+    Returns ``{ fk_column: { parent_table, display_column, lookup: {id: label} } }``.
+    Empty when the datasource has no such relationships, so callers without
+    user-defined relationships pay nothing (no extra round-trip).
+    """
+    from app.services.sync.schemas.relationship import get_user_relationships
+
+    rels = get_user_relationships(datasource)
+    relevant = [
+        r for r in rels
+        if (r.get("from_table") == table) and r.get("display_column")
+    ]
+    if not relevant or not records:
+        return {}
+
+    lookups: Dict[str, Any] = {}
+    for rel in relevant:
+        fk_col = rel.get("from_column")
+        parent = rel.get("to_table")
+        ref_col = rel.get("to_column") or "id"
+        disp_col = rel.get("display_column")
+        if not (fk_col and parent and disp_col):
+            continue
+        try:
+            parent_rows = await adapter.read_records(
+                parent, columns=[ref_col, disp_col], limit=_FK_LOOKUP_CAP
+            )
+        except Exception as e:
+            logger.warning(f"[FK display] lookup fetch failed for {parent}.{disp_col}: {e}")
+            continue
+        lookup: Dict[str, Any] = {}
+        for prow in parent_rows or []:
+            k = prow.get(ref_col)
+            if k is not None:
+                lookup[str(k)] = prow.get(disp_col)
+        lookups[fk_col] = {
+            "parent_table": parent,
+            "display_column": disp_col,
+            "lookup": lookup,
+        }
+        logger.info(
+            f"[FK display] built lookup for {table}.{fk_col} -> {parent}.{disp_col} "
+            f"({len(lookup)} entries)"
+        )
+    return lookups
+
+
 @router.get("/{datasource_id}/tables/{table}/data/")
 async def get_datasource_table_data(
     table: str,
@@ -232,6 +287,9 @@ async def get_datasource_table_data(
                     # Adapter doesn't support related_specs argument
                     total = await adapter.count_records(table, where=where)
             
+            # Resolve user-defined FK display columns (e.g. show school name for school_id).
+            fk_columns = await _build_fk_display_lookups(adapter, datasource, table, records)
+
             total = max(total, len(records) + offset)
             has_more = (offset + len(records)) < total
             return {
@@ -240,6 +298,7 @@ async def get_datasource_table_data(
                 "offset": offset,
                 "limit": limit,
                 "has_more": has_more,
+                "fk_columns": fk_columns,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             }
     except Exception as e:

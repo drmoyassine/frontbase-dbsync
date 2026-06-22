@@ -18,6 +18,9 @@ export interface TableDataResponse {
     limit: number;
     has_more: boolean;
     timestamp_utc?: string;
+    /** FK display lookups for columns with a user-defined display_column
+     * (keyed by FK column name → { parent_table, display_column, lookup: id→label }). */
+    fk_columns?: Record<string, { parent_table: string; display_column: string; lookup: Record<string, any> }>;
 }
 
 export interface Relationship {

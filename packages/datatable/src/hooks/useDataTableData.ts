@@ -313,8 +313,6 @@ export function useDataTableData({
             : undefined,
         enabled: enabled && !!binding?.tableName,
         staleTime: 60_000, // 1 minute
-        refetchOnWindowFocus: false,
-        retry: 1,
         refetchInterval: binding?.refreshInterval && binding.refreshInterval > 0
             ? binding.refreshInterval * 1000
             : false,

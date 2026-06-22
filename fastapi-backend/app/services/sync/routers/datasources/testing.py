@@ -147,7 +147,19 @@ async def test_datasource_update(
 ):
     """Test a datasource connection with proposed updates merged into existing config."""
     logger.info(f"Testing connection update for datasource: {datasource.id}")
-    
+
+    # Merge extra_config: use new data if provided, otherwise preserve existing
+    existing_extra = datasource.extra_config
+    if data.extra_config is not None:
+        # New extra_config provided (dict from Pydantic) — serialize to JSON
+        merged_extra = json.dumps(data.extra_config) if data.extra_config else None
+    else:
+        # No new extra_config — preserve existing
+        merged_extra = existing_extra
+
+    # Merge provider_account_id similarly
+    merged_provider_account_id = data.provider_account_id if data.provider_account_id is not None else datasource.provider_account_id
+
     test_ds = Datasource(
         name=data.name or datasource.name,
         type=datasource.type,
@@ -159,6 +171,8 @@ async def test_datasource_update(
         api_url=data.api_url or datasource.api_url,
         api_key_encrypted=data.api_key or datasource.api_key_encrypted,
         table_prefix=data.table_prefix or datasource.table_prefix,
+        extra_config=merged_extra,
+        provider_account_id=merged_provider_account_id,
     )
     
     try:

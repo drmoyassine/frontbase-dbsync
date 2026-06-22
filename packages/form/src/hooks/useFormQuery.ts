@@ -142,8 +142,6 @@ export function useFormQuery({
         },
         initialData: initialData !== undefined ? { record: initialData, columns: binding.columns || [] } : undefined,
         staleTime: 5 * 60 * 1000,
-        retry: 1,
-        refetchOnWindowFocus: false,
         enabled: enabled && !!tableName,
     });
 }

@@ -17,7 +17,7 @@
 import type { ICacheProvider } from './ICacheProvider.js';
 import { NullCacheProvider } from './NullCacheProvider.js';
 import { getCacheConfig } from '../config/env.js';
-import { recordCacheOp, registerDowngraders } from '../resilience.js';
+import { recordCacheOp, registerDowngraders, getTtlMultiplier } from '../resilience.js';
 
 // Re-export for convenience
 export type { ICacheProvider } from './ICacheProvider.js';
@@ -127,6 +127,19 @@ export const cacheProvider: ICacheProvider = new Proxy({} as ICacheProvider, {
         const provider = getCacheProvider();
         const value = (provider as any)[prop];
         if (typeof value === 'function') {
+            // Sweep Gap 3: clamp TTL on setex(key, seconds, value) and
+            // expire(key, seconds) when cache quota is in the degraded band.
+            // `set(key, value)` has no TTL and is left untouched.
+            if ((prop === 'setex' || prop === 'expire') && getTtlMultiplier() < 1) {
+                const multiplier = getTtlMultiplier();
+                return (...args: unknown[]) => {
+                    // seconds is arg index 1 for both setex and expire
+                    if (typeof args[1] === 'number' && args[1] > 0) {
+                        args[1] = Math.max(1, Math.floor(args[1] * multiplier));
+                    }
+                    return value.apply(provider, args);
+                };
+            }
             return value.bind(provider);
         }
         return value;

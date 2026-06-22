@@ -70,6 +70,20 @@ let _cacheOps = 0;
 let _dbDowngraded = false;
 let _cacheDowngraded = false;
 
+// ── TTL clamping (Sprint 2C / Sweep Gap 3) ───────────────────────────────
+// At the soft quota threshold, cache TTLs are clamped to 50% so a binding
+// approaching its command budget refreshes entries more often (cheaper reads
+// of shorter-lived data vs. long-lived eviction). 1.0 = unchanged; 0.5 = degraded.
+// For v1 this is one-way: once clamped it stays at 50% until the hard limit
+// (NullCacheProvider swap) or a manual reset — see risks in sweep_sprints1_2.md.
+let _ttlMultiplier = 1.0;
+let _cacheTtlClamped = false;
+
+/** Current cache TTL multiplier (1.0 = full TTL, 0.5 = degraded/clamped). */
+export function getTtlMultiplier(): number {
+    return _ttlMultiplier;
+}
+
 /**
  * Downgrade actions are injected by storage/index.ts + cache/index.ts to avoid a
  * circular import (this module must not import the provider factories).
@@ -106,6 +120,12 @@ export function recordCacheOp(): void {
         markComponent('cache', 'down', `quota exhausted (~${_cacheOps} ops)`);
         _downgradeCache?.();
     } else if (_cacheOps >= CACHE_LIMITS.soft) {
+        // Sweep Gap 3: clamp TTLs to 50% once the soft threshold is crossed.
+        if (!_cacheTtlClamped) {
+            _cacheTtlClamped = true;
+            _ttlMultiplier = 0.5;
+            console.warn('[Resilience] cache TTL clamped to 50% (soft quota threshold)');
+        }
         markComponent('cache', 'degraded', `approaching quota (~${_cacheOps} ops)`);
     }
 }
@@ -116,6 +136,8 @@ export function _resetResilienceForTests(): void {
     _cacheOps = 0;
     _dbDowngraded = false;
     _cacheDowngraded = false;
+    _ttlMultiplier = 1.0;
+    _cacheTtlClamped = false;
     _state = { stateDb: { level: 'ok' }, cache: { level: 'ok' } };
 }
 

@@ -311,7 +311,8 @@ export function getDefaultDatasource(): DatasourceAdapter | null {
 export async function handleDataQuery(
     table: string,
     options: Partial<QueryOptions> = {},
-    datasourceConfig?: DatasourceConfig
+    datasourceConfig?: DatasourceConfig,
+    tenantSlug?: string,
 ): Promise<QueryResult & { _stale?: boolean }> {
     const adapter = datasourceConfig
         ? createDatasourceAdapter(datasourceConfig)
@@ -324,7 +325,8 @@ export async function handleDataQuery(
     // Read-through stale fallback (Sprint 2A): on a failed read, serve the
     // last-good cached rows and mark the result `_stale` so the route handler
     // can set X-Fb-Cache: stale. Read-only path only; never used for writes.
-    const key = `ds:lastgood:${table}:${stableHash(options)}`;
+    // Tenant-isolated: prefix key with tenantSlug to prevent cross-tenant leakage.
+    const key = `ds:lastgood:${tenantSlug || 'default'}:${table}:${stableHash(options)}`;
     try {
         const { value, stale } = await readWithFallback(
             key,

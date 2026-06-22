@@ -122,6 +122,25 @@ export interface DeadLetterData {
 }
 
 // =============================================================================
+// Workflow Versions Types (Automations A6)
+// =============================================================================
+
+export interface WorkflowVersionData {
+    id: string;
+    workflowId: string;
+    version: number;
+    name: string;
+    description: string | null;
+    triggerType: string;
+    nodes: string;
+    edges: string;
+    settings: string | null;
+    createdAt: string;
+    createdBy: string | null;
+    tenantSlug?: string;
+}
+
+// =============================================================================
 // Agent Tool Types
 // =============================================================================
 
@@ -242,6 +261,14 @@ export interface IStateProvider {
     // --- Dead Letter Queue ---
     /** Write a failed execution to the dead letters table (optional) */
     createDeadLetter?(deadLetter: DeadLetterData): Promise<void>;
+
+    // --- Workflow Versions (Automations A6; optional — providers without a
+    //     persisted versions table simply omit these and the route 503s) ---
+    createWorkflowVersion?(version: WorkflowVersionData): Promise<void>;
+    listWorkflowVersions?(workflowId: string, limit?: number, tenantSlug?: string): Promise<WorkflowVersionData[]>;
+    getWorkflowVersion?(id: string, tenantSlug?: string): Promise<WorkflowVersionData | null>;
+    rollbackToVersion?(workflowId: string, versionId: string, tenantSlug?: string): Promise<void>;
+    deleteWorkflowVersion?(id: string, tenantSlug?: string): Promise<boolean>;
 
     // --- Agent Tools ---
     /** List agent tools for a profile (active only by default) */

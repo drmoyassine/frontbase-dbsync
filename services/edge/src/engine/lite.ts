@@ -38,11 +38,14 @@ import { manifestRoute } from '../routes/manifest.js';
 import { deployRoute } from '../routes/deploy.js';
 import { executeRoute } from '../routes/execute.js';
 import { webhookRoute } from '../routes/webhook.js';
+import { emailWebhooksRoute } from '../routes/emailWebhooks.js';
+import { realtimeRoute } from '../routes/realtime.js';
 import { executionsRoute } from '../routes/executions.js';
 import { updateRoute } from '../routes/update.js';
 import { cacheRoute } from '../routes/cache.js';
 import { edgeLogsRoute } from '../routes/edge-logs.js';
 import { workflowsRoute } from '../routes/workflows.js';
+import { versionsRoute } from '../routes/versions.js';
 import { uiEventsRoute } from '../routes/ui-events.js';
 import { publicExecuteRoute } from '../routes/public-execute.js';
 import { queueRoute } from '../routes/queue.js';
@@ -218,6 +221,7 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     app.use('/api/manifest/*', systemKeyAuth);
     app.use('/api/executions/*', systemKeyAuth);
     app.use('/api/workflows/*', systemKeyAuth);
+    app.use('/api/versions/*', systemKeyAuth);
     app.use('/api/queue/*', systemKeyAuth);
     app.use('/api/config/*', systemKeyAuth);
     app.use('/api/agent-tools/*', systemKeyAuth);
@@ -230,11 +234,17 @@ export function createLiteApp(mode: EngineMode = 'lite') {
     app.route('/api/deploy', deployRoute);
     app.route('/api/execute', executeRoute);
     app.route('/api/webhook', webhookRoute);
+    // Public (inbound email providers) — verified via shared secret inside the route
+    app.route('/api/email-webhook', emailWebhooksRoute);
+    // Public (real-time execution streaming) — tenant-scoped by tenantMiddleware
+    // executionId is unguessable (UUID4) but access is scoped to the resolved tenant
+    app.route('/api/realtime', realtimeRoute);
     app.route('/api/executions', executionsRoute);
     app.route('/api/update', updateRoute);
     app.route('/api/cache', cacheRoute);
     app.route('/api/edge-logs', edgeLogsRoute);
     app.route('/api/workflows', workflowsRoute);
+    app.route('/api/versions', versionsRoute);
     // Public (no systemKeyAuth) — consumed by the hydrated page client
     app.route('/api/public', uiEventsRoute);
     app.route('/api/public/execute', publicExecuteRoute);
@@ -470,6 +480,12 @@ const liteApp = createLiteApp();
 import { registerTickHandlers } from './tickHandlers.js';
 // Fire-and-forget registration — we don't want to block edge boot
 void registerTickHandlers();
+
+// ── Register queue-trigger consumers (Automations A10) ──────────────────────
+// Same boot pattern as tick handlers, for queue_trigger workflows + delay-node
+// resume jobs (wf:resume:<executionId>).
+import { registerQueueConsumers } from '../execution/queueConsumer.js';
+void registerQueueConsumers();
 
 // Root info route — only on standalone lite (full engine has its own homepage route)
 liteApp.get('/', (c) => c.json({

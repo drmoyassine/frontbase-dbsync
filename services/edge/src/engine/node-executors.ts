@@ -8,6 +8,18 @@
 
 import type { WorkflowNode, NodeExecutionStatus } from '../schemas';
 import type { NodeExecution } from './runtime.js';
+import { executeEmailNode, validateEmailNode } from '../nodes/EmailNode.js';
+import { executeDelayNode } from '../nodes/DelayNode.js';
+import { executeLoopNode } from '../nodes/LoopNode.js';
+import { executeCheckpointNode } from '../nodes/CheckpointNode.js';
+import { executeQueueTrigger } from '../nodes/QueueTrigger.js';
+import { executeEmailTrigger } from '../nodes/EmailTrigger.js';
+import {
+    getNodeOutput,
+    setNodeOutput,
+    isCacheableNodeType,
+    getDefaultTTL,
+} from '../execution/nodeCache.js';
 
 /** Execution context subset needed by node-level helpers */
 interface ExecutionContext {
@@ -27,6 +39,17 @@ export async function executeNode(
     inputs: Record<string, any>,
     context: ExecutionContext
 ): Promise<Record<string, any>> {
+    // Automations A8: node-level output cache for read-only node types.
+    // Serves the last cached output keyed by a stable input hash.
+    if (isCacheableNodeType(node.type)) {
+        const ttlInput = (node.inputs || []).find((i: any) => i.name === 'cache_ttl')?.value;
+        const ttl = typeof ttlInput === 'number' ? ttlInput : getDefaultTTL(node.type);
+        const cached = await getNodeOutput(node.id, inputs, ttl, context.workflowId);
+        if (cached.cached && cached.outputs !== undefined) {
+            return cached.outputs;
+        }
+    }
+
     // Node type handlers
     switch (node.type) {
         case 'trigger':
@@ -71,15 +94,24 @@ export async function executeNode(
             };
         }
 
-        case 'data_request':
-            return await executeDataRequest(node, inputs);
+        case 'data_request': {
+            const dataResult = await executeDataRequest(node, inputs);
+            await cacheStore(node, inputs, context, dataResult);
+            return dataResult;
+        }
 
-        case 'http_request':
-            return await executeHttpRequest(node, inputs);
+        case 'http_request': {
+            const httpResult = await executeHttpRequest(node, inputs);
+            await cacheStore(node, inputs, context, httpResult);
+            return httpResult;
+        }
 
         case 'transform':
-        case 'json_transform':
-            return executeTransform(node, inputs);
+        case 'json_transform': {
+            const transformResult = executeTransform(node, inputs);
+            await cacheStore(node, inputs, context, transformResult);
+            return transformResult;
+        }
 
         case 'condition':
         case 'if':
@@ -139,10 +171,76 @@ export async function executeNode(
             };
         }
 
+        // ── Automations A3: Email node ──
+        case 'email':
+        case 'send_email': {
+            const validation = validateEmailNode(inputs);
+            if (!validation.valid) {
+                throw new Error(`Email node validation failed: ${validation.errors.join(', ')}`);
+            }
+            return await executeEmailNode(inputs);
+        }
+
+        // ── Automations A4: Delay / wait node ──
+        case 'delay':
+        case 'wait': {
+            return await executeDelayNode({
+                ...inputs,
+                _executionId: context.executionId,
+                _workflowId: context.workflowId,
+                _nodeId: node.id,
+            });
+        }
+
+        // ── Automations A5: Loop / iterator node ──
+        case 'loop':
+        case 'iterator': {
+            return await executeLoopNode(inputs);
+        }
+
+        // ── Automations A9: Manual checkpoint node ──
+        case 'checkpoint': {
+            return await executeCheckpointNode(node, inputs, {
+                executionId: context.executionId,
+                workflowId: context.workflowId,
+                nodeOutputs: context.nodeOutputs,
+                nodeExecutions: context.nodeExecutions,
+            });
+        }
+
+        // ── Automations A10: Queue trigger node ──
+        case 'queue_trigger': {
+            return executeQueueTrigger(inputs);
+        }
+
+        // ── Automations A11: Email received trigger node ──
+        case 'email_trigger': {
+            return executeEmailTrigger(inputs);
+        }
+
         default:
             // Generic pass-through for unknown types
             console.warn(`Unknown node type: ${node.type}`);
             return { ...inputs };
+    }
+}
+
+/**
+ * Automations A8: store a node's output in the node cache (cacheable types only).
+ */
+async function cacheStore(
+    node: WorkflowNode,
+    inputs: Record<string, any>,
+    context: ExecutionContext,
+    outputs: Record<string, any>,
+): Promise<void> {
+    if (!isCacheableNodeType(node.type)) return;
+    try {
+        const ttlInput = (node.inputs || []).find((i: any) => i.name === 'cache_ttl')?.value;
+        const ttl = typeof ttlInput === 'number' ? ttlInput : getDefaultTTL(node.type);
+        await setNodeOutput(node.id, inputs, outputs, ttl, context.workflowId);
+    } catch (error) {
+        console.error('[NodeCache] Store in executeNode failed:', error);
     }
 }
 
@@ -285,96 +383,11 @@ async function executeHttpRequest(
     };
 }
 
-function normalizeExpression(expr: string): string {
-    return expr
-        .replace(/\[['"]([^'"]+)['"]\]/g, '.$1')
-        .replace(/\[(\d+)\]/g, '.$1');
-}
-
-function getPath(obj: any, path: string): any {
-    const parts = path.trim().split('.');
-    let current = obj;
-    for (const part of parts) {
-        if (current === null || current === undefined) return undefined;
-        current = current[part];
-    }
-    return current;
-}
-
-export function safeEval(expression: string, data: Record<string, any>): any {
-    expression = normalizeExpression(expression.trim());
-
-    if (expression === 'true') return true;
-    if (expression === 'false') return false;
-    if (expression === 'null') return null;
-    if (expression === 'undefined') return undefined;
-
-    if (/^\d+(\.\d+)?$/.test(expression)) {
-        return Number(expression);
-    }
-
-    const stringMatch = expression.match(/^['"](.*)['"]$/);
-    if (stringMatch) {
-        return stringMatch[1];
-    }
-
-    if (expression.startsWith('!')) {
-        return !safeEval(expression.substring(1), data);
-    }
-
-    if (expression.includes('||')) {
-        const parts = expression.split('||');
-        for (const part of parts) {
-            const val = safeEval(part, data);
-            if (val) return val;
-        }
-        return safeEval(parts[parts.length - 1], data);
-    }
-
-    if (expression.includes('&&')) {
-        const parts = expression.split('&&');
-        let val: any = true;
-        for (const part of parts) {
-            val = safeEval(part, data);
-            if (!val) return val;
-        }
-        return val;
-    }
-
-    const operators = ['===', '!==', '==', '!=', '>=', '<=', '>', '<'];
-    for (const op of operators) {
-        if (expression.includes(op)) {
-            const parts = expression.split(op).map(p => p.trim());
-            if (parts.length === 2) {
-                const left = safeEval(parts[0], data);
-                const right = safeEval(parts[1], data);
-                switch (op) {
-                    case '===':
-                    case '==':
-                        return left === right;
-                    case '!==':
-                    case '!=':
-                        return left !== right;
-                    case '>=':
-                        return left >= right;
-                    case '<=':
-                        return left <= right;
-                    case '>':
-                        return left > right;
-                    case '<':
-                        return left < right;
-                }
-            }
-        }
-    }
-
-    if (expression === 'data') return data;
-    if (expression.startsWith('data.')) {
-        return getPath({ data }, expression);
-    }
-
-    return getPath(data, expression);
-}
+// The expression engine (safeEval + helpers) lives in engine/expr.ts so that
+// nodes/LoopNode.ts can import it without forming a circular dependency with
+// this module. Imported for local use and re-exported for backward compat.
+import { safeEval } from './expr.js';
+export { safeEval };
 
 /**
  * Transform Node

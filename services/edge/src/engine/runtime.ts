@@ -17,6 +17,16 @@ import { createWorkflowLogger, type LogLevel, type WorkflowLogger } from './logg
 import { cacheProvider } from '../cache/index.js';
 import { executeNode, updateNodeStatus, updateExecutionStatus } from './node-executors.js';
 import { validateWorkflowExecution } from './validation.js';
+import { broadcastExecutionEvent, createExecutionEvent } from '../websocket/executionServer.js';
+
+/** Automations A12: broadcast a real-time event (never throws into execution). */
+function broadcast(type: Parameters<typeof createExecutionEvent>[0], executionId: string, workflowId: string, data?: any): void {
+    try {
+        broadcastExecutionEvent(createExecutionEvent(type, executionId, workflowId, data));
+    } catch {
+        // Real-time broadcasting must never break execution.
+    }
+}
 
 /** Parsed workflow settings passed from route handlers */
 export interface WorkflowSettings {
@@ -140,6 +150,7 @@ export async function executeWorkflow(
 
             // Update status to executing
             await updateExecutionStatus(executionId, 'executing', context.nodeExecutions, stateProvider);
+            broadcast('executing', executionId, workflow.id, { nodes: nodes.length });
 
             // Find start nodes (nodes with no incoming edges)
             const targetNodeIds = new Set(edges.map(e => e.target));
@@ -198,6 +209,7 @@ export async function executeWorkflow(
                     updateNodeStatus(context, nodeId, 'completed', outputs);
                     executed.add(nodeId);
                     log.info(`Node ${node.type || nodeId} completed`);
+                    broadcast('node_completed', executionId, workflow.id, { nodeId, nodeType: node.type });
 
                     // ── Checkpoint: save progress after each node ──
                     await saveCheckpoint({
@@ -218,6 +230,7 @@ export async function executeWorkflow(
                 } catch (error: any) {
                     updateNodeStatus(context, nodeId, 'error', undefined, error.message);
                     log.error(`Node ${node?.type || nodeId} failed: ${error.message}`);
+                    broadcast('node_error', executionId, workflow.id, { nodeId, nodeType: node?.type, error: error.message });
                     // Leave checkpoint in Redis for retry (TTL 1h)
                     throw error;
                 }
@@ -264,6 +277,7 @@ export async function executeWorkflow(
             }
 
             log.info(`Execution completed (${executed.size} nodes)`);
+            broadcast('completed', executionId, workflow.id, { nodes: executed.size });
             return { status: 'completed', result, httpResponse, variableMutations: context.variableMutations };
 
         } catch (error: any) {
@@ -291,6 +305,7 @@ export async function executeWorkflow(
             });
 
             log.error(`Execution failed: ${error.message}`);
+            broadcast('error', executionId, workflow.id, { error: error.message });
             return { status: 'error', result: {}, error: error.message, variableMutations: context.variableMutations };
         }
     } // end coreExecute

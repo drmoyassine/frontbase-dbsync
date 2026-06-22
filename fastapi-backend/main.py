@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent, users
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent, users, workflows
 from app.middleware.test_mode import TestModeMiddleware
 from app.config.edition import is_cloud, DEPLOYMENT_MODE
 
@@ -1060,6 +1060,7 @@ if is_cloud():
     except ImportError:
         pass  # Projects router not yet available
 app.include_router(auth.router)  # Auth (login, logout, /me) — works for both modes
+app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"])  # Email send endpoint (A3) — works for both modes
 app.include_router(pages.router)
 app.include_router(project.router)
 app.include_router(variables.router)

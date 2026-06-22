@@ -223,7 +223,28 @@ queueRoute.openapi(processRoute, async (c) => {
 
     // Look up the handler (all providers with schedule support must implement getHandler)
     const handler = (queueService as any).getHandler?.(jobName);
+
+    // Automations A4/A10: dynamic resume jobs (wf:resume:<executionId>) are not
+    // pre-registered — dispatch them directly via the queue consumer.
     if (!handler) {
+        try {
+            const { isResumeJob, handleResume, handleQueueMessage, QUEUE_JOB } = await import('../execution/queueConsumer.js');
+            const data = await c.req.json();
+            if (isResumeJob(jobName)) {
+                await handleResume(jobName, data || {});
+                return c.json({ success: true as const, message: 'Resumed successfully' }, 200);
+            }
+            // Queue-trigger jobs may not be pre-registered in some runtimes;
+            // fall back to the workflow-id encoded in the jobName. Tenant is
+            // resolved from the workflow itself (handleQueueMessage looks it up).
+            if (jobName.startsWith('queue:')) {
+                const workflowId = jobName.slice('queue:'.length);
+                await handleQueueMessage(workflowId, data || {});
+                return c.json({ success: true as const, message: 'Processed successfully' }, 200);
+            }
+        } catch (e: any) {
+            return c.json({ error: 'HandlerError', message: e.message }, 500);
+        }
         return c.json({ error: 'NoHandler', message: `No handler configured for job ${jobName}` }, 404);
     }
 

@@ -21,13 +21,31 @@ import type { PublishPage, PageLayout, SeoData, DatasourceConfig } from '../sche
 import type {
     IStateProvider, ProjectSettingsData, PublishedPageSummary,
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
-    AgentToolData,
+    AgentToolData, WorkflowVersionData,
 } from './IStateProvider';
 import { isMultiTenantSlug } from './IStateProvider';
 import { publishedPages, projectSettings, workflowsTable, executionsTable, agentToolsTable, type NewPublishedPage } from './schema';
 
 /** Default favicon path (Frontbase logo) */
 const DEFAULT_FAVICON = '/static/icon.png';
+
+/** Map a raw workflow_draft_versions row to WorkflowVersionData. */
+function rowToVersion(row: any): WorkflowVersionData {
+    return {
+        id: row.id,
+        workflowId: row.workflow_id,
+        version: row.version,
+        name: row.name,
+        description: row.description,
+        triggerType: row.trigger_type,
+        nodes: row.nodes,
+        edges: row.edges,
+        settings: row.settings,
+        createdAt: row.created_at,
+        createdBy: row.created_by,
+        tenantSlug: row.tenant_slug,
+    };
+}
 
 // =============================================================================
 // Abstract Base (subclasses provide getDb())
@@ -231,6 +249,37 @@ export abstract class DrizzleStateProvider implements IStateProvider {
 
         if (existing) {
             const newVersion = (existing.version || 1) + 1;
+
+            // Automations A6: snapshot the previous version before overwriting.
+            try {
+                await this.createWorkflowVersion({
+                    id: `${existing.id}:v${existing.version}:${now}`,
+                    workflowId: existing.id,
+                    version: existing.version,
+                    name: existing.name,
+                    description: existing.description,
+                    triggerType: existing.triggerType,
+                    nodes: existing.nodes,
+                    edges: existing.edges,
+                    settings: existing.settings,
+                    createdAt: now,
+                    createdBy: existing.publishedBy,
+                    tenantSlug: existing.tenantSlug || '_default',
+                });
+
+                // Prune old versions beyond the retention limit.
+                const maxVersions = parseInt(process.env.WORKFLOW_VERSION_LIMIT || '50', 10);
+                if (Number.isFinite(maxVersions) && maxVersions > 0) {
+                    const all = await this.listWorkflowVersions(existing.id, maxVersions + 5, existing.tenantSlug || '_default');
+                    for (const old of all.slice(maxVersions)) {
+                        await this.deleteWorkflowVersion(old.id, existing.tenantSlug || '_default').catch(() => {});
+                    }
+                }
+            } catch (snapError) {
+                // Snapshot is best-effort — never block a deploy on it.
+                console.warn('[DrizzleStateProvider] version snapshot failed:', snapError);
+            }
+
             await database.update(workflowsTable)
                 .set({
                     name: workflow.name, description: workflow.description,
@@ -464,6 +513,82 @@ export abstract class DrizzleStateProvider implements IStateProvider {
             VALUES (${deadLetter.id}, ${deadLetter.workflowId}, ${deadLetter.executionId},
                     ${deadLetter.error}, ${deadLetter.payload}, ${deadLetter.retryCount || 0})
         `);
+    }
+
+    // =========================================================================
+    // Workflow Versions (Automations A6)
+    // =========================================================================
+
+    async createWorkflowVersion(version: WorkflowVersionData): Promise<void> {
+        await this.getDb().run(sql`
+            INSERT INTO workflow_draft_versions
+                (id, workflow_id, version, name, description, trigger_type, nodes, edges, settings, created_at, created_by, tenant_slug)
+            VALUES (${version.id}, ${version.workflowId}, ${version.version}, ${version.name},
+                    ${version.description}, ${version.triggerType}, ${version.nodes}, ${version.edges},
+                    ${version.settings}, ${version.createdAt}, ${version.createdBy},
+                    ${version.tenantSlug || '_default'})
+        `);
+    }
+
+    async listWorkflowVersions(workflowId: string, limit: number = 50, tenantSlug?: string): Promise<WorkflowVersionData[]> {
+        const rows = tenantSlug
+            ? await this.getDb().all(sql`
+                SELECT * FROM workflow_draft_versions
+                WHERE workflow_id = ${workflowId} AND tenant_slug = ${tenantSlug}
+                ORDER BY created_at DESC LIMIT ${limit}
+              `)
+            : await this.getDb().all(sql`
+                SELECT * FROM workflow_draft_versions
+                WHERE workflow_id = ${workflowId}
+                ORDER BY created_at DESC LIMIT ${limit}
+              `);
+        return (rows || []).map(rowToVersion);
+    }
+
+    async getWorkflowVersion(id: string, tenantSlug?: string): Promise<WorkflowVersionData | null> {
+        const row = tenantSlug
+            ? await this.getDb().get(sql`
+                SELECT * FROM workflow_draft_versions
+                WHERE id = ${id} AND tenant_slug = ${tenantSlug}
+              `)
+            : await this.getDb().get(sql`
+                SELECT * FROM workflow_draft_versions WHERE id = ${id}
+              `);
+        return row ? rowToVersion(row) : null;
+    }
+
+    async rollbackToVersion(workflowId: string, versionId: string, tenantSlug?: string): Promise<void> {
+        const version = await this.getWorkflowVersion(versionId, tenantSlug);
+        if (!version) throw new Error(`Version ${versionId} not found`);
+
+        const conditions = [sql`id = ${workflowId}`];
+        if (tenantSlug) conditions.push(sql`tenant_slug = ${tenantSlug}`);
+
+        // Bump version + restore content.
+        await this.getDb().run(sql`
+            UPDATE workflows SET
+                name = ${version.name},
+                description = ${version.description},
+                trigger_type = ${version.triggerType},
+                nodes = ${version.nodes},
+                edges = ${version.edges},
+                settings = ${version.settings},
+                version = version + 1,
+                updated_at = ${new Date().toISOString()}
+            WHERE ${sql.join(conditions, sql` AND `)}
+        `);
+    }
+
+    async deleteWorkflowVersion(id: string, tenantSlug?: string): Promise<boolean> {
+        const result = tenantSlug
+            ? await this.getDb().run(sql`
+                DELETE FROM workflow_draft_versions WHERE id = ${id} AND tenant_slug = ${tenantSlug}
+              `)
+            : await this.getDb().run(sql`
+                DELETE FROM workflow_draft_versions WHERE id = ${id}
+              `);
+        // better-sqlite3 returns { changes: n }; treat >0 as deleted.
+        return !result || (result as any).changes === undefined ? true : (result as any).changes > 0;
     }
 
     // =========================================================================

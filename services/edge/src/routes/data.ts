@@ -419,7 +419,7 @@ dataRoute.get('/:table', async (c) => {
             limit,
             offset,
             orderBy,
-        }, datasource || undefined);
+        }, datasource || undefined, tenantSlug);
 
         if (result.error) {
             console.error(`[Data API] Error:`, result.error);
@@ -467,7 +467,7 @@ dataRoute.get('/:table/:id', async (c) => {
         const result = await handleDataQuery(table, {
             filters: { id },
             limit: 1,
-        }, datasource || undefined);
+        }, datasource || undefined, tenantSlug);
 
         if ((result as any)._stale) {
             c.header('X-Fb-Cache', 'stale');
@@ -557,7 +557,8 @@ dataRoute.post('/execute', async (c) => {
             total = result.total;
         } else if ((dataRequest.method || 'GET').toUpperCase() === 'GET') {
             // Sprint 2A: read-through stale fallback for reads only (never writes)
-            const key = `exec:lastgood:${stableHash(dataRequest)}`;
+            // Tenant-isolated: prefix key with tenantSlug to prevent cross-tenant leakage.
+            const key = `exec:lastgood:${tenantSlug || 'default'}:${stableHash(dataRequest)}`;
             const { value, stale } = await readWithFallback(
                 key,
                 () => executeDataRequest(dataRequest),

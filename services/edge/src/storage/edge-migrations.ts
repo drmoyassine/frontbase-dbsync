@@ -210,6 +210,28 @@ export const MIGRATIONS: Migration[] = [
             `CREATE INDEX IF NOT EXISTS idx_workflows_tenant_slug ON workflows(tenant_slug)`,
         ],
     },
+    {
+        version: 12,
+        description: 'Add workflow_draft_versions table for version history & rollback (Automations A6)',
+        sql: [
+            `CREATE TABLE IF NOT EXISTS workflow_draft_versions (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                trigger_type TEXT,
+                nodes TEXT NOT NULL,
+                edges TEXT NOT NULL,
+                settings TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_by TEXT,
+                tenant_slug TEXT NOT NULL DEFAULT '_default'
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_workflow_versions_workflow_id ON workflow_draft_versions(workflow_id)`,
+            `CREATE INDEX IF NOT EXISTS idx_workflow_versions_tenant_slug ON workflow_draft_versions(tenant_slug)`,
+        ],
+    },
 ];
 
 // =============================================================================

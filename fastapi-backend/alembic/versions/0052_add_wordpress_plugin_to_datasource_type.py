@@ -30,7 +30,7 @@ from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision: str = '0052_add_wordpress_plugin_to_datasource_type'
-down_revision: Union[str, Sequence[str], None] = '0051_post_sprint_file_move_jobs'
+down_revision: Union[str, Sequence[str], None] = '0050_post_sprint_ip_anonymization'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

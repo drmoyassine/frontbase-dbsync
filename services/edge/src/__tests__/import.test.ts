@@ -14,6 +14,7 @@ const mockGetPageBySlug = vi.fn();
 const mockDeletePage = vi.fn();
 const mockUpdateProjectSettings = vi.fn();
 const mockGetProjectSettings = vi.fn();
+const mockListTenantSecrets = vi.fn();
 
 vi.mock('../storage', () => ({
     stateProvider: {
@@ -22,6 +23,7 @@ vi.mock('../storage', () => ({
         deletePage: (...args: any[]) => mockDeletePage(...args),
         updateProjectSettings: (...args: any[]) => mockUpdateProjectSettings(...args),
         getProjectSettings: (...args: any[]) => mockGetProjectSettings(...args),
+        listTenantSecrets: (...args: any[]) => mockListTenantSecrets(...args),
     },
 }));
 
@@ -198,6 +200,28 @@ describe('Import Route', () => {
             expect(res.status).toBe(200);
             expect(body.status).toBe('ok');
             expect(body.ready).toBe(true);
+        });
+    });
+
+    describe('GET /secrets — List all tenant secrets (V2 rotation read-back)', () => {
+        beforeEach(() => {
+            mockListTenantSecrets.mockReset();
+        });
+
+        it('returns all tenant_secrets rows (ciphertext)', async () => {
+            mockListTenantSecrets.mockResolvedValue([
+                { tenantSlug: 'acme', kind: 'datasources', payload: 'ct-acme==' },
+                { tenantSlug: 'globex', kind: 'datasources', payload: 'ct-globex==' },
+            ]);
+
+            const res = await importRoute.request('/secrets', { method: 'GET' });
+            const body = await res.json();
+
+            expect(res.status).toBe(200);
+            expect(body.success).toBe(true);
+            expect(body.secrets).toHaveLength(2);
+            expect(body.secrets[0]).toEqual({ tenantSlug: 'acme', kind: 'datasources', payload: 'ct-acme==' });
+            expect(mockListTenantSecrets).toHaveBeenCalledTimes(1);
         });
     });
 });

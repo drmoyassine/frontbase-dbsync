@@ -418,24 +418,6 @@ async def sync_shared_engine_tenant_secrets(engine: EdgeEngine, db: Session) -> 
 # the new key happens only after the new key is generated; the redeploy is the
 # single deploy that propagates it. A failed redeploy leaves the old key active.
 
-def _build_rotation_items(engine: EdgeEngine, db: Session) -> list[dict]:
-    """Rebuild the plaintext tenant-secret items that will be re-encrypted.
-
-    Authoritative source = control-plane DB (same path as
-    sync_shared_engine_tenant_secrets). We rebuild from DB rather than
-    round-tripping edge ciphertext so rotation reflects the latest secret state.
-    """
-    from .secrets_builder import build_tenant_secret_blobs
-
-    items: list[dict] = []
-    tenants = _tenants_bound_to_engine(engine, db)
-    for tenant_id, tenant_slug in tenants:
-        blobs = build_tenant_secret_blobs(db, str(engine.id), tenant_id, kinds={'datasources'})
-        for kind, plaintext in blobs.items():
-            items.append({"tenantSlug": tenant_slug, "kind": kind, "payload": plaintext})
-    return items
-
-
 async def fetch_all_tenant_secrets(engine: EdgeEngine) -> list[dict]:
     """Read back ALL tenant_secrets rows (ciphertext) from a worker's state-DB.
 
@@ -480,13 +462,11 @@ async def rotate_secrets_key(
 
     cfg = _engine_config(engine)
 
-    # 1. Resolve the current (soon-to-be-old) key.
-    old_key = resolve_secrets_key(engine, db)
-
-    # 2. Count affected tenants (authoritative: control-plane DB).
+    # 1. Count affected tenants (authoritative: control-plane DB).
     tenants_count = len(_tenants_bound_to_engine(engine, db))
 
-    # 3. Generate the new key.
+    # 2. Generate the new key (pure — no mutation: derive is deterministic,
+    #    random generation does not touch engine_config).
     if strategy == 'hkdf':
         encrypted_sys = cfg.get('system_key')
         if not encrypted_sys:
@@ -502,11 +482,13 @@ async def rotate_secrets_key(
     new_version = int(cfg.get('key_version', 1)) + 1
     old_version = new_version - 1
 
-    # Sanity: rotating must actually change the key (hkdf from an unchanged
-    # system_key is deterministic — flag it so callers know nothing changed).
-    key_changed = new_key != old_key
-
     if dry_run:
+        # Side-effect-free: do NOT resolve the old key (get_or_create would
+        # persist a random key if the engine had none yet).
+        if strategy == 'hkdf':
+            key_changed = not cfg.get('use_hkdf')  # switching to HKDF, or already on it
+        else:
+            key_changed = True  # a fresh random key always differs
         return {
             "status": "dry_run",
             "rotation_id": rotation_id,
@@ -518,7 +500,19 @@ async def rotate_secrets_key(
             "key_changed": key_changed,
         }
 
-    # 4. Persist: new key active, old key retained for the transition window.
+    # 3. Resolve the current (soon-to-be-old) key. May persist a random key if
+    #    the engine had none yet — intended idempotent behavior. Re-read config
+    #    afterward so we don't clobber anything resolve wrote.
+    old_key = resolve_secrets_key(engine, db)
+    cfg = _engine_config(engine)
+
+    # Sanity: rotating must actually change the key (hkdf from an unchanged
+    # system_key is deterministic — flag it so callers know nothing changed).
+    key_changed = new_key != old_key
+
+    # 4. Persist: new key active. The old key is retained for a transition
+    #    window only when window_seconds > 0; window_seconds == 0 means an
+    #    immediate cut-over (no rollback window, no KEY_OLD emitted).
     if strategy == 'hkdf':
         # HKDF derives from system_key — no random key to store. Drop any legacy
         # random key and switch the resolver to HKDF mode.
@@ -529,21 +523,27 @@ async def rotate_secrets_key(
         if encrypted_new:
             cfg['secrets_key'] = encrypted_new
 
-    encrypted_old = encrypt_field(old_key)
-    if encrypted_old:
-        cfg['secrets_key_old'] = encrypted_old
-
     cfg['key_version'] = new_version
-    started_at = datetime.now(UTC)
-    cfg['rotation'] = {
-        "id": rotation_id,
-        "started_at": started_at.isoformat() + "Z",
-        "strategy": strategy,
-        "window_seconds": window_seconds,
-        "status": "transitioning",
-        "new_key_version": new_version,
-        "old_key_version": old_version,
-    }
+
+    if window_seconds > 0:
+        encrypted_old = encrypt_field(old_key)
+        if encrypted_old:
+            cfg['secrets_key_old'] = encrypted_old
+        started_at = datetime.now(UTC)
+        cfg['rotation'] = {
+            "id": rotation_id,
+            "started_at": started_at.isoformat() + "Z",
+            "strategy": strategy,
+            "window_seconds": window_seconds,
+            "status": "transitioning",
+            "new_key_version": new_version,
+            "old_key_version": old_version,
+        }
+    else:
+        # Immediate cut-over: drop any stale transition metadata.
+        cfg.pop('secrets_key_old', None)
+        cfg.pop('rotation', None)
+
     _save_engine_config(engine, cfg, db)
 
     # 5. Redeploy: propagates new+old keys as env and re-pushes ciphertext

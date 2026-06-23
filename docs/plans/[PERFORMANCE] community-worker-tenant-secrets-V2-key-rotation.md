@@ -1,9 +1,20 @@
 # Plan: V2 — Key Rotation & HKDF for Tenant Secrets
 
 **Parent Plan:** `[PERFORMANCE] community-worker-tenant-secrets-in-statedb.md`
-**Status:** 📋 Planning
-**Last updated:** 2026-06-23
+**Status:** ✅ Implemented (2026-06-24)
+**Last updated:** 2026-06-24
 **Version:** 1.0
+
+> **⚠️ Superseded — read the delivery report instead.** This plan was
+> implemented as V2, but the **shipped code differs from the spec below in 8
+> places** (all deliberate; e.g. fixed HKDF salt instead of `engine_id`,
+> UTF-8 IKM instead of base64-decode, native WebCrypto HKDF, re-encrypt from
+> the control-plane DB, side-effect-free `dry_run`, `window_seconds=0` =
+> immediate cut-over). The authoritative record — including the rationale for
+> every deviation — is
+> `[PERFORMANCE] community-worker-tenant-secrets-V2-DELIVERY-REPORT.md`, §5
+> "Deviations From the V2 Plan". Treat that report, not this doc, as source of
+> truth for how it actually works.
 
 ---
 

@@ -34,7 +34,11 @@ def _parse_uri_metadata(data: Any) -> Any:
         try:
             url = make_url(data["connection_uri"])
             # Only parse if it's a database type
-            if data.get("type") not in [DatasourceType.WORDPRESS_REST, DatasourceType.WORDPRESS_GRAPHQL]:
+            if data.get("type") not in [
+                DatasourceType.WORDPRESS_REST,
+                DatasourceType.WORDPRESS_GRAPHQL,
+                DatasourceType.WORDPRESS_PLUGIN,
+            ]:
                 data["host"] = url.host or data.get("host")
                 data["port"] = url.port or data.get("port") or 5432
                 data["database"] = url.database or data.get("database")

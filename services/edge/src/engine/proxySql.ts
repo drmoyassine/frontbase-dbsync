@@ -10,6 +10,7 @@
 import type { StructuredQuery } from '@frontbase/types';
 import { buildRowsQuery, buildAggregateQuery, type Dialect, type BuiltQuery } from '../db/queryBuilder.js';
 import { cached } from '../cache/redis.js';
+import { isMultiTenantSlug } from '../storage/IStateProvider.js';
 
 interface SqlCredentials {
     type?: string;
@@ -23,12 +24,26 @@ interface DispatchableRequest {
     datasourceId?: string | null;
     queryConfig?: Record<string, unknown> | null;
     body?: Record<string, unknown> | null;
+    tenantSlug?: string | null;
     [key: string]: unknown;
 }
 
 let _datasourcesCache: Record<string, SqlCredentials> | null = null;
 
-function getDatasourceCredentials(datasourceId: string): SqlCredentials | null {
+async function getDatasourceCredentials(
+    datasourceId: string,
+    tenantSlug?: string | null,
+): Promise<SqlCredentials | null> {
+    const normalized = tenantSlug ?? undefined;
+    if (isMultiTenantSlug(normalized)) {
+        const { getTenantSecret } = await import('../config/tenantSecrets.js');
+        const blob = await getTenantSecret('datasources', normalized);
+        if (blob && typeof blob === 'object') {
+            return (blob as Record<string, SqlCredentials>)[datasourceId] || null;
+        }
+        return null;
+    }
+
     if (!_datasourcesCache) {
         const raw = process.env.FRONTBASE_DATASOURCES || '';
         if (!raw) return null;
@@ -65,7 +80,7 @@ export async function executeProxySql(
     const datasourceId = req.datasourceId;
     if (!datasourceId) throw new Error('proxy-sql: missing datasourceId');
 
-    const creds = getDatasourceCredentials(datasourceId);
+    const creds = await getDatasourceCredentials(datasourceId, req.tenantSlug);
     if (!creds) throw new Error(`proxy-sql: no credentials for datasource ${datasourceId}`);
 
     const httpUrl = creds.httpUrl || creds.apiUrl;

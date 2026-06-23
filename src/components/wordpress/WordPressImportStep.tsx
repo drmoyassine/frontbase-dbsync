@@ -48,9 +48,10 @@ export const WordPressImportStep: React.FC<WordPressImportStepProps> = ({
     try {
       abortControllerRef.current = new AbortController();
 
-      // Start the import
-      const response = await fetch('/api/wordpress/import', {
+      // Start the import (sync sub-app is mounted at /api/sync)
+      const response = await fetch('/api/sync/wordpress/import/', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           datasource_id: datasourceId,
@@ -82,7 +83,9 @@ export const WordPressImportStep: React.FC<WordPressImportStepProps> = ({
    * Connect to SSE progress stream
    */
   const connectToProgressStream = useCallback((importId: string) => {
-    const eventSource = new EventSource(`/api/wordpress/import/${importId}/progress`);
+    const eventSource = new EventSource(`/api/sync/wordpress/import/${importId}/progress/`, {
+      withCredentials: true,
+    });
     eventSourceRef.current = eventSource;
 
     eventSource.addEventListener('progress', (e) => {

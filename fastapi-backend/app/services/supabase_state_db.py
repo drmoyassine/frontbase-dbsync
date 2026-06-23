@@ -277,6 +277,17 @@ async def init_supabase_state_db(
             retry_count INTEGER DEFAULT 0,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )''',
+
+        # Tenant secrets — encrypted per-tenant blobs on community/shared workers.
+        # `payload` is opaque AES-256-GCM ciphertext; only the edge role touches it.
+        f'''CREATE TABLE IF NOT EXISTS "{s}".tenant_secrets (
+            tenant_slug TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (tenant_slug, kind)
+        )''',
+        f'CREATE INDEX IF NOT EXISTS idx_tenant_secrets_tenant ON "{s}".tenant_secrets(tenant_slug)',
     ]
 
     # PostgREST grants: expose schema + create edge role for scoped JWT access.
@@ -305,7 +316,7 @@ async def init_supabase_state_db(
     migrations.append(f'ALTER DEFAULT PRIVILEGES IN SCHEMA "{s}" GRANT SELECT ON TABLES TO anon')
 
     # Enable RLS on all tables + create policies (idempotent)
-    for table in ['published_pages', 'project_settings', 'workflows', 'executions', 'edge_logs', 'dead_letters']:
+    for table in ['published_pages', 'project_settings', 'workflows', 'executions', 'edge_logs', 'dead_letters', 'tenant_secrets']:
         migrations.append(f'ALTER TABLE IF EXISTS "{s}".{table} ENABLE ROW LEVEL SECURITY')
         migrations.append(
             f"DO $$ BEGIN\n"

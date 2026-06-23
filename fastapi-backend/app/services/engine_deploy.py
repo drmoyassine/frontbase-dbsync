@@ -106,6 +106,19 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
         #    via Management API since the pooler URL has [YOUR-PASSWORD] placeholder.
         await _init_supabase_state_db_if_needed(engine, db)
 
+        # 4. Shared/community engines: push per-tenant secrets (datasources in
+        #    v1) to the worker's state-DB now that the worker is live and the
+        #    state-DB tables exist. The env blob is trimmed for shared engines
+        #    (see secrets_builder.build_engine_secrets), so this populates the
+        #    edge-side `tenant_secrets` rows it will decrypt at request time.
+        #    Best-effort + non-fatal — a failure is retried on next reconfigure.
+        if bool(engine.is_shared):
+            try:
+                from .edge_secrets_push import sync_shared_engine_tenant_secrets
+                await sync_shared_engine_tenant_secrets(engine, db)
+            except Exception as sync_err:
+                print(f"[Redeploy] Tenant-secrets sync failed (non-fatal): {sync_err}")
+
         # Update local record
         deployed_at = datetime.now(UTC).isoformat() + "Z"
         engine.bundle_checksum = source_hash  # type: ignore[assignment]

@@ -5,6 +5,7 @@ from app.services.sync.adapters.supabase_adapter import SupabaseAdapter
 from app.services.sync.adapters.postgres_adapter import PostgresAdapter
 from app.services.sync.adapters.mysql_adapter import MySQLAdapter
 from app.services.sync.adapters.wordpress_api_adapter import WordPressRestAdapter, WordPressGraphQLAdapter
+from app.services.sync.adapters.wordpress_plugin_adapter import WordPressPluginAdapter
 from app.services.sync.adapters.neon_adapter import NeonAdapter
 from app.services.sync.adapters.google_sheets_adapter import GoogleSheetsAdapter
 from app.services.sync.adapters.rest_adapter import RESTAdapter
@@ -18,6 +19,7 @@ def get_adapter(datasource: Datasource) -> DatabaseAdapter:
         DatasourceType.POSTGRES: PostgresAdapter,
         DatasourceType.WORDPRESS_REST: WordPressRestAdapter,
         DatasourceType.WORDPRESS_GRAPHQL: WordPressGraphQLAdapter,
+        DatasourceType.WORDPRESS_PLUGIN: WordPressPluginAdapter,
         DatasourceType.NEON: NeonAdapter,
         DatasourceType.MYSQL: MySQLAdapter,
         DatasourceType.GOOGLE_SHEETS: GoogleSheetsAdapter,
@@ -38,6 +40,7 @@ __all__ = [
     "MySQLAdapter",
     "WordPressRestAdapter",
     "WordPressGraphQLAdapter",
+    "WordPressPluginAdapter",
     "NeonAdapter",
     "GoogleSheetsAdapter",
     "RESTAdapter",

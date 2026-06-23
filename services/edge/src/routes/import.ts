@@ -288,3 +288,94 @@ importRoute.get('/status', async (c) => {
         ready: true,
     });
 });
+
+// =============================================================================
+// POST /api/import/secrets - Upsert an encrypted per-tenant secret blob
+// POST /api/import/secrets/batch - Upsert many (bulk reconfigure)
+// DELETE /api/import/secrets?tenantSlug=&kind= - Remove a blob (offboard)
+//
+// Auth: systemKeyAuth middleware (applied to /api/import/* in full.ts) — the
+// control plane calls these with the engine's x-system-key header.
+// `payload` is opaque AES-256-GCM ciphertext; the edge never inspects it.
+// Each write invalidates the in-memory decrypted cache for that (tenant, kind).
+// =============================================================================
+
+importRoute.post('/secrets', async (c) => {
+    try {
+        const body = await c.req.json();
+        const { tenantSlug, kind, payload } = body ?? {};
+
+        if (!tenantSlug || typeof tenantSlug !== 'string' ||
+            !kind || typeof kind !== 'string' ||
+            !payload || typeof payload !== 'string') {
+            return c.json({ success: false, error: 'Missing required fields (tenantSlug, kind, payload)' }, 400);
+        }
+
+        await stateProvider.upsertTenantSecret(tenantSlug, kind, payload);
+        const { invalidateTenantSecret } = await import('../config/tenantSecrets.js');
+        invalidateTenantSecret(kind, tenantSlug);
+
+        console.log(`[Import/Secrets] Upserted ${kind} for tenant ${tenantSlug}`);
+        return c.json({ success: true });
+    } catch (error) {
+        console.error('[Import/Secrets] Upsert failed:', error);
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Failed to upsert secret' }, 500);
+    }
+});
+
+importRoute.post('/secrets/batch', async (c) => {
+    try {
+        const body = await c.req.json();
+        const secrets = Array.isArray(body?.secrets) ? body.secrets : null;
+
+        if (!secrets) {
+            return c.json({ success: false, error: 'Invalid secrets array' }, 400);
+        }
+
+        const { invalidateTenantSecret } = await import('../config/tenantSecrets.js');
+        const results: Array<{ tenantSlug: string; kind: string; success: boolean; error?: string }> = [];
+
+        for (const item of secrets) {
+            const { tenantSlug, kind, payload } = item ?? {};
+            if (!tenantSlug || !kind || typeof payload !== 'string') {
+                results.push({ tenantSlug: tenantSlug || '', kind: kind || '', success: false, error: 'invalid entry' });
+                continue;
+            }
+            try {
+                await stateProvider.upsertTenantSecret(tenantSlug, kind, payload);
+                invalidateTenantSecret(kind, tenantSlug);
+                results.push({ tenantSlug, kind, success: true });
+            } catch (err) {
+                results.push({ tenantSlug, kind, success: false, error: err instanceof Error ? err.message : 'upsert failed' });
+            }
+        }
+
+        const ok = results.filter((r) => r.success).length;
+        console.log(`[Import/Secrets] Batch upserted ${ok}/${results.length} secret(s)`);
+        return c.json({ success: true, results });
+    } catch (error) {
+        console.error('[Import/Secrets] Batch upsert failed:', error);
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Failed to batch upsert secrets' }, 500);
+    }
+});
+
+importRoute.delete('/secrets', async (c) => {
+    try {
+        const tenantSlug = c.req.query('tenantSlug');
+        const kind = c.req.query('kind');
+
+        if (!tenantSlug || !kind) {
+            return c.json({ success: false, error: 'Missing tenantSlug or kind query parameter' }, 400);
+        }
+
+        await stateProvider.deleteTenantSecret(tenantSlug, kind);
+        const { invalidateTenantSecret } = await import('../config/tenantSecrets.js');
+        invalidateTenantSecret(kind, tenantSlug);
+
+        console.log(`[Import/Secrets] Deleted ${kind} for tenant ${tenantSlug}`);
+        return c.json({ success: true });
+    } catch (error) {
+        console.error('[Import/Secrets] Delete failed:', error);
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Failed to delete secret' }, 500);
+    }
+});

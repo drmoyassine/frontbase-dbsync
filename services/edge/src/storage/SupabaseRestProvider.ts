@@ -720,4 +720,46 @@ export class SupabaseRestProvider implements IStateProvider {
         throwIfError(result, `deleteAgentTool(${id})`);
         return true;
     }
+
+    // =========================================================================
+    // Tenant Secrets (community/shared workers)
+    // =========================================================================
+
+    async getTenantSecret(tenantSlug: string, kind: string): Promise<string | null> {
+        const client = getClient();
+        const { data, error } = await client
+            .from('tenant_secrets')
+            .select('payload')
+            .eq('tenant_slug', tenantSlug)
+            .eq('kind', kind)
+            .maybeSingle();
+        if (error) throw new Error(`[SupabaseRest] getTenantSecret: ${error.message}`);
+        return data ? (data.payload as string) : null;
+    }
+
+    async upsertTenantSecret(tenantSlug: string, kind: string, payload: string): Promise<void> {
+        const client = getClient();
+        const result = await client
+            .from('tenant_secrets')
+            .upsert(
+                {
+                    tenant_slug: tenantSlug,
+                    kind,
+                    payload,
+                    updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'tenant_slug,kind' },
+            );
+        throwIfError(result, `upsertTenantSecret(${tenantSlug}/${kind})`);
+    }
+
+    async deleteTenantSecret(tenantSlug: string, kind: string): Promise<void> {
+        const client = getClient();
+        const result = await client
+            .from('tenant_secrets')
+            .delete()
+            .eq('tenant_slug', tenantSlug)
+            .eq('kind', kind);
+        throwIfError(result, `deleteTenantSecret(${tenantSlug}/${kind})`);
+    }
 }

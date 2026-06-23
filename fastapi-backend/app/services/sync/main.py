@@ -14,7 +14,8 @@ from app.services.sync.routers import (
     sync as sync_router,
     webhooks as webhooks_router,
     views as views_router,
-    settings as settings_api_router
+    settings as settings_api_router,
+    wordpress as wordpress_router,
 )
 from app.services.sync.middleware.error_handler import (
     global_exception_handler,
@@ -147,6 +148,7 @@ sync_app.include_router(views_router.router, prefix="/views", tags=["Views"]) # 
 
 sync_app.include_router(webhooks_router.router, prefix="/webhooks", tags=["Webhooks"]) # Keep /webhooks
 sync_app.include_router(settings_api_router.router, prefix="/settings", tags=["Settings"]) # Was /api/settings
+sync_app.include_router(wordpress_router.router, prefix="/wordpress", tags=["WordPress Import"])
 logger.info("Routers included successfully")
 
 

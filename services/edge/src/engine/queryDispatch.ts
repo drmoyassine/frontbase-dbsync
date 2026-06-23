@@ -69,18 +69,22 @@ export function isNewMode(req: DispatchableRequest): boolean {
  */
 export async function dispatchByMode(
     req: DispatchableRequest,
-    _tenantSlug?: string
+    tenantSlug?: string
 ): Promise<{ data: unknown[]; total: number | null }> {
     const mode = resolveQueryMode(req);
 
+    // Attach the tenant slug so each executor can resolve per-tenant
+    // datasource credentials from the state-DB on shared workers.
+    const reqWithTenant = tenantSlug ? { ...req, tenantSlug } : req;
+
     if (mode === 'proxy-http') {
-        return executeProxyHttp(req);
+        return executeProxyHttp(reqWithTenant);
     }
     if (mode === 'proxy-sql') {
-        return executeProxySql(req);
+        return executeProxySql(reqWithTenant);
     }
     if (mode === 'proxy-rpc') {
-        return executeProxyRpc(req);
+        return executeProxyRpc(reqWithTenant);
     }
 
     throw new Error(

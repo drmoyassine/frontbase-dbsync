@@ -35,15 +35,36 @@ let cachedDatasource: DatasourceConfig | null = null;
 // =============================================================================
 
 /**
- * Datasource credentials cache (parsed from FRONTBASE_DATASOURCES env var)
+ * Datasource credentials cache (parsed from FRONTBASE_DATASOURCES env var).
+ * Single-tenant only — shared workers resolve per-tenant from state-DB.
  */
 let _datasourcesCache: Record<string, any> | null = null;
 
 /**
- * Get datasource credentials from FRONTBASE_DATASOURCES env var.
- * Returns null if datasource not found.
+ * Get datasource credentials for a proxy-strategy request.
+ *
+ * Resolution order:
+ *   1. Shared worker (real tenant slug): decrypt the tenant's `datasources`
+ *      secret blob from the state-DB (AES-256-GCM). O(1) env size.
+ *   2. Single-tenant (self-host / dedicated): read the FRONTBASE_DATASOURCES
+ *      env blob — unchanged behavior.
+ *
+ * Returns null if credentials can't be resolved.
  */
-function getDatasourceCredentials(datasourceId: string): Record<string, any> | null {
+async function getDatasourceCredentials(
+    datasourceId: string,
+    tenantSlug?: string,
+): Promise<Record<string, any> | null> {
+    if (isMultiTenantSlug(tenantSlug)) {
+        const { getTenantSecret } = await import('../config/tenantSecrets.js');
+        const datasourcesSecret = await getTenantSecret('datasources', tenantSlug);
+        if (datasourcesSecret && typeof datasourcesSecret === 'object') {
+            return datasourcesSecret[datasourceId] || null;
+        }
+        return null;
+    }
+
+    // Single-tenant: env-var path
     if (!_datasourcesCache) {
         const raw = process.env.FRONTBASE_DATASOURCES || '';
         if (!raw) return null;
@@ -61,12 +82,13 @@ function getDatasourceCredentials(datasourceId: string): Record<string, any> | n
  * Build the real HTTP request from datasource credentials + query config.
  * This runs server-side — credentials never reach the client.
  */
-function buildProxyRequest(
+async function buildProxyRequest(
     datasourceId: string,
     queryConfig: Record<string, any>,
     body: Record<string, any> | undefined,
-): { url: string; headers: Record<string, string>; body: any } | null {
-    const creds = getDatasourceCredentials(datasourceId);
+    tenantSlug?: string,
+): Promise<{ url: string; headers: Record<string, string>; body: any } | null> {
+    const creds = await getDatasourceCredentials(datasourceId, tenantSlug);
     if (!creds) {
         console.error(`[Data Execute] No credentials found for datasource: ${datasourceId}`);
         return null;
@@ -236,7 +258,7 @@ function flattenRelations(data: any[]): any[] {
  * For proxy strategy: resolves credentials server-side from FRONTBASE_DATASOURCES.
  * For direct strategy: uses the URL/headers as-is (Supabase anonKey is public).
  */
-export async function executeDataRequest(dataRequest: DataRequest): Promise<{ data: any[]; total: number | null }> {
+export async function executeDataRequest(dataRequest: DataRequest, tenantSlug?: string): Promise<{ data: any[]; total: number | null }> {
     let url: string;
     let headers: Record<string, string> = {};
     let body = dataRequest.body;
@@ -245,10 +267,11 @@ export async function executeDataRequest(dataRequest: DataRequest): Promise<{ da
 
     if (isProxy) {
         // Proxy: resolve credentials server-side
-        const proxyReq = buildProxyRequest(
+        const proxyReq = await buildProxyRequest(
             dataRequest.datasourceId!,
             (dataRequest.queryConfig || {}) as Record<string, any>,
             dataRequest.body as Record<string, any> | undefined,
+            tenantSlug,
         );
         if (!proxyReq) {
             throw new Error(`Cannot resolve credentials for datasource: ${dataRequest.datasourceId}`);
@@ -561,14 +584,14 @@ dataRoute.post('/execute', async (c) => {
             const key = `exec:lastgood:${tenantSlug || 'default'}:${stableHash(dataRequest)}`;
             const { value, stale } = await readWithFallback(
                 key,
-                () => executeDataRequest(dataRequest),
+                () => executeDataRequest(dataRequest, tenantSlug),
                 () => false, // executeDataRequest signals failure by throwing, not a field
             );
             data = value.data;
             total = value.total;
             if (stale) c.header('X-Fb-Cache', 'stale');
         } else {
-            const result = await executeDataRequest(dataRequest);
+            const result = await executeDataRequest(dataRequest, tenantSlug);
             data = result.data;
             total = result.total;
         }
@@ -596,6 +619,8 @@ dataRoute.post('/execute', async (c) => {
 dataRoute.post('/clear-cache', async (c) => {
     cachedDatasource = null;
     _datasourcesCache = null;  // Also invalidate FRONTBASE_DATASOURCES cache
+    const { clearAllTenantSecretsCache } = await import('../config/tenantSecrets.js');
+    clearAllTenantSecretsCache();  // Invalidate decrypted per-tenant secrets
     return c.json({ success: true, message: 'Cache cleared' });
 });
 

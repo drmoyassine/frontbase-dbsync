@@ -11,6 +11,7 @@
  */
 
 import { cached } from '../cache/redis.js';
+import { isMultiTenantSlug } from '../storage/IStateProvider.js';
 
 interface SheetsCredentials {
     type?: string;
@@ -25,12 +26,26 @@ interface DispatchableRequest {
     queryConfig?: Record<string, unknown> | null;
     datasourceId?: string | null;
     body?: Record<string, unknown> | null;
+    tenantSlug?: string | null;
     [key: string]: unknown;
 }
 
 let _datasourcesCache: Record<string, SheetsCredentials> | null = null;
 
-function getDatasourceCredentials(datasourceId: string): SheetsCredentials | null {
+async function getDatasourceCredentials(
+    datasourceId: string,
+    tenantSlug?: string | null,
+): Promise<SheetsCredentials | null> {
+    const normalized = tenantSlug ?? undefined;
+    if (isMultiTenantSlug(normalized)) {
+        const { getTenantSecret } = await import('../config/tenantSecrets.js');
+        const blob = await getTenantSecret('datasources', normalized);
+        if (blob && typeof blob === 'object') {
+            return (blob as Record<string, SheetsCredentials>)[datasourceId] || null;
+        }
+        return null;
+    }
+
     if (!_datasourcesCache) {
         const raw = process.env.FRONTBASE_DATASOURCES || '';
         if (!raw) return null;
@@ -75,7 +90,7 @@ export async function executeProxyHttp(
     const datasourceId = req.datasourceId;
     if (!datasourceId) throw new Error('proxy-http: missing datasourceId');
 
-    const creds = getDatasourceCredentials(datasourceId);
+    const creds = await getDatasourceCredentials(datasourceId, req.tenantSlug);
     if (!creds) throw new Error(`proxy-http: no credentials for datasource ${datasourceId}`);
 
     const url = creds.webAppUrl || creds.apiUrl;

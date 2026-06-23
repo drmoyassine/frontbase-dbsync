@@ -30,6 +30,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_AGENT_PROFILES',
     'FRONTBASE_SECURITY',
     'FRONTBASE_STORAGE',
+    'FRONTBASE_SECRETS_KEY',  # per-worker AES-256-GCM key for state-DB secrets (shared engines)
 ])
 
 
@@ -466,6 +467,119 @@ def _build_datasources_config(db: Session, engine_id: str | None) -> dict:
     return datasources
 
 
+def _build_tenant_datasources_blob(
+    db: Session,
+    engine_id: str,
+    tenant_project_ids: list[str],
+) -> str:
+    """Build the FRONTBASE_DATASOURCES JSON blob scoped to ONE tenant.
+
+    Mirrors `_build_datasources_config`, but only includes datasources that are
+    (a) bound to this engine and (b) owned by one of the tenant's projects.
+    This is the per-tenant plaintext pushed to the worker's state-DB on shared
+    engines (see edge_secrets_push.sync_shared_engine_tenant_secrets).
+    """
+    from app.models.edge import engine_datasources
+    from app.services.sync.models.datasource import Datasource
+    import sqlalchemy as sa
+
+    datasources: dict[str, dict] = {}
+    if not tenant_project_ids:
+        return json.dumps(datasources)
+
+    try:
+        bound_ids = db.execute(
+            sa.select(engine_datasources.c.datasource_id).where(
+                engine_datasources.c.engine_id == engine_id
+            )
+        ).scalars().all()
+        if not bound_ids:
+            return json.dumps(datasources)
+
+        datasources_list = db.query(Datasource).filter(
+            Datasource.id.in_(bound_ids),
+            Datasource.is_active == True,
+            Datasource.project_id.in_(tenant_project_ids),
+        ).all()
+
+        for ds in datasources_list:
+            ds_type = str(ds.type.value) if ds.type else ''
+
+            # Supabase uses direct strategy (browser → PostgREST), skip
+            if ds_type == 'supabase':
+                continue
+
+            entry: dict[str, str] = {'type': ds_type}
+
+            if ds_type in ('neon', 'postgres', 'mysql'):
+                user = str(ds.username or '')
+                password = decrypt_field(str(ds.password_encrypted)) if ds.password_encrypted else ''
+                host = str(ds.host or '')
+                port = str(ds.port or '5432')
+                database = str(ds.database or '')
+
+                if ds_type == 'mysql':
+                    entry['connectionString'] = f"mysql://{user}:{password}@{host}:{port}/{database}"
+                else:
+                    sslmode = 'require' if ds_type == 'neon' else 'prefer'
+                    entry['connectionString'] = f"postgresql://{user}:{password}@{host}:{port}/{database}?sslmode={sslmode}"
+
+                if ds_type == 'neon' and host:
+                    entry['httpUrl'] = f"https://{host}"
+
+            if ds.api_key_encrypted:
+                api_key = decrypt_field(str(ds.api_key_encrypted))
+                if api_key:
+                    entry['apiKey'] = api_key
+
+            if ds.api_url:
+                entry['apiUrl'] = str(ds.api_url)
+
+            if ds.extra_config:
+                try:
+                    extra = json.loads(str(ds.extra_config))
+                    if isinstance(extra, dict):
+                        entry.update(extra)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            datasources[str(ds.id)] = entry
+    except Exception as e:
+        print(f"[SecretsBuilder] Could not build tenant datasources blob: {e}")
+
+    return json.dumps(datasources)
+
+
+def build_tenant_secret_blobs(
+    db: Session,
+    engine_id: str,
+    tenant_id: str,
+    kinds: set | None = None,
+) -> dict:
+    """Build per-tenant secret blobs for state-DB routing (shared engines).
+
+    Returns {kind: plaintext_json_string} for the given tenant. Only
+    `datasources` is routed in v1 (other kinds land in follow-up sprints).
+
+    Each blob is the same JSON that would have gone into the env var, but
+    scoped to ONE tenant only. The push layer AES-256-GCM-encrypts it before
+    sending it to the worker's state-DB.
+    """
+    from app.models.auth import Project
+
+    kinds = kinds or {'datasources'}
+    result: dict[str, str] = {}
+
+    tenant_project_ids = [
+        pid for (pid,) in db.query(Project.id).filter(Project.tenant_id == tenant_id).all()
+    ]
+
+    if 'datasources' in kinds:
+        result['datasources'] = _build_tenant_datasources_blob(db, engine_id, tenant_project_ids)
+
+    return result
+
+
 def _build_storage_config(db: Session, engine_id: str | None) -> dict:
     """Build FRONTBASE_STORAGE JSON blob.
 
@@ -640,9 +754,33 @@ def build_engine_secrets(
     if _sentry_dsn:
         secrets["SENTRY_DSN"] = _sentry_dsn
 
+    # ─── Shared-engine detection (community workers) ─────────────────────
+    # On shared engines, per-tenant secrets (datasources in v1) live in the
+    # worker's state-DB as AES-256-GCM rows instead of env blobs — keeping
+    # env size O(1) as tenant count grows. See edge_secrets_push +
+    # services/edge/src/config/tenantSecrets.ts.
+    is_shared = False
+    engine = None
+    if engine_id:
+        from ..models.models import EdgeEngine as _EdgeEngine
+        engine = db.query(_EdgeEngine).filter(_EdgeEngine.id == engine_id).first()
+        is_shared = bool(engine and getattr(engine, 'is_shared', False))
+
+    if is_shared and engine is not None:
+        from .edge_secrets_push import get_or_create_secrets_key
+        secrets['FRONTBASE_SECRETS_KEY'] = get_or_create_secrets_key(engine, db)
+
     # ─── FRONTBASE_AUTH ──────────────────────────────────────────────────
     auth = _build_auth_config(db, engine_id)
-    if auth.get('provider') != 'none':
+    if is_shared:
+        # Keep only the platform-wide (_default / master-admin) auth entry.
+        # Per-tenant auth is empty for free shared tenants today; follow-up
+        # sprint V1.1 routes tenant auth via state-DB. This closes the latent
+        # over-share where every tenant's auth shipped to every shared engine.
+        default_auth = auth.get('_default') if isinstance(auth, dict) else None
+        if isinstance(default_auth, dict) and default_auth.get('provider') != 'none':
+            secrets['FRONTBASE_AUTH'] = json.dumps({'_default': default_auth})
+    elif auth.get('provider') != 'none':
         secrets['FRONTBASE_AUTH'] = json.dumps(auth)
 
     # ─── FRONTBASE_API_KEYS ──────────────────────────────────────────────
@@ -782,9 +920,15 @@ def build_engine_secrets(
             secrets['FRONTBASE_QUEUE'] = json.dumps(queue)
 
     # ─── FRONTBASE_DATASOURCES ──────────────────────────────────────────
-    datasources = _build_datasources_config(db, engine_id)
-    if datasources:
-        secrets['FRONTBASE_DATASOURCES'] = json.dumps(datasources)
+    if not is_shared:
+        # Dedicated / self-host: bake the full datasources blob into env (one
+        # tenant — no size explosion).
+        datasources = _build_datasources_config(db, engine_id)
+        if datasources:
+            secrets['FRONTBASE_DATASOURCES'] = json.dumps(datasources)
+    # Shared engines: datasources are pushed to the worker's state-DB per
+    # tenant at deploy time (edge_secrets_push.sync_shared_engine_tenant_secrets),
+    # NOT baked into env. The edge resolves them via getTenantSecret().
 
     # ─── FRONTBASE_STORAGE ───────────────────────────────────────────────
     storage = _build_storage_config(db, engine_id)

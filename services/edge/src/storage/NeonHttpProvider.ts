@@ -683,4 +683,33 @@ export class NeonHttpProvider implements IStateProvider {
         }
         return true;
     }
+
+    // =========================================================================
+    // Tenant Secrets (community/shared workers)
+    // =========================================================================
+
+    async getTenantSecret(tenantSlug: string, kind: string): Promise<string | null> {
+        const row = await this.get<{ payload: string }>(
+            `SELECT payload FROM ${SCHEMA}.tenant_secrets WHERE tenant_slug = $1 AND kind = $2`,
+            [tenantSlug, kind]
+        );
+        return row ? (row.payload as string) : null;
+    }
+
+    async upsertTenantSecret(tenantSlug: string, kind: string, payload: string): Promise<void> {
+        await this.query(
+            `INSERT INTO ${SCHEMA}.tenant_secrets (tenant_slug, kind, payload, updated_at)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT(tenant_slug, kind) DO UPDATE SET
+               payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at`,
+            [tenantSlug, kind, payload, new Date().toISOString()]
+        );
+    }
+
+    async deleteTenantSecret(tenantSlug: string, kind: string): Promise<void> {
+        await this.query(
+            `DELETE FROM ${SCHEMA}.tenant_secrets WHERE tenant_slug = $1 AND kind = $2`,
+            [tenantSlug, kind]
+        );
+    }
 }

@@ -14,6 +14,7 @@ from app.services.sync.routers.datasources.views import router as views_router
 from app.services.sync.routers.datasources.migration import router as migration_router
 from app.services.sync.routers.datasources.relationships import router as relationships_router
 from app.services.sync.routers.datasources.sheets_connect import router as sheets_connect_router
+from app.services.sync.routers.datasources.wordpress import router as wordpress_router
 
 # Create the main router that combines all sub-routers
 router = APIRouter()
@@ -27,5 +28,6 @@ router.include_router(schema_router)
 router.include_router(relationships_router)
 router.include_router(data_router)
 router.include_router(sheets_connect_router)
+router.include_router(wordpress_router)
 
 __all__ = ["router"]

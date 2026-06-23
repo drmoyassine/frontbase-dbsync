@@ -12,6 +12,7 @@
 
 import type { StructuredQuery, RowsQuery, AggregateQuery } from '@frontbase/types';
 import { cached } from '../cache/redis.js';
+import { isMultiTenantSlug } from '../storage/IStateProvider.js';
 
 interface RpcCredentials {
     type?: string;
@@ -23,12 +24,26 @@ interface RpcCredentials {
 interface DispatchableRequest {
     datasourceId?: string | null;
     body?: Record<string, unknown> | null;
+    tenantSlug?: string | null;
     [key: string]: unknown;
 }
 
 let _datasourcesCache: Record<string, RpcCredentials> | null = null;
 
-function getDatasourceCredentials(datasourceId: string): RpcCredentials | null {
+async function getDatasourceCredentials(
+    datasourceId: string,
+    tenantSlug?: string | null,
+): Promise<RpcCredentials | null> {
+    const normalized = tenantSlug ?? undefined;
+    if (isMultiTenantSlug(normalized)) {
+        const { getTenantSecret } = await import('../config/tenantSecrets.js');
+        const blob = await getTenantSecret('datasources', normalized);
+        if (blob && typeof blob === 'object') {
+            return (blob as Record<string, RpcCredentials>)[datasourceId] || null;
+        }
+        return null;
+    }
+
     if (!_datasourcesCache) {
         const raw = process.env.FRONTBASE_DATASOURCES || '';
         if (!raw) return null;
@@ -87,7 +102,7 @@ export async function executeProxyRpc(
     const datasourceId = req.datasourceId;
     if (!datasourceId) throw new Error('proxy-rpc: missing datasourceId');
 
-    const creds = getDatasourceCredentials(datasourceId);
+    const creds = await getDatasourceCredentials(datasourceId, req.tenantSlug);
     if (!creds) throw new Error(`proxy-rpc: no credentials for datasource ${datasourceId}`);
 
     const httpUrl = creds.httpUrl || creds.apiUrl;

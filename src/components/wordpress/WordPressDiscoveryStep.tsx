@@ -38,7 +38,9 @@ export const WordPressDiscoveryStep: React.FC<WordPressDiscoveryStepProps> = ({
     setError(null);
 
     try {
-      const response = await fetch(`/api/datasources/${datasourceId}/wordpress/discover`);
+      const response = await fetch(`/api/sync/datasources/${datasourceId}/wordpress/discover/`, {
+        credentials: 'include',
+      });
 
       if (!response.ok) {
         throw new Error('Failed to fetch discovery data');

@@ -86,9 +86,10 @@ export const WordPressConnectionStep: React.FC<WordPressConnectionStepProps> = (
         });
 
         if (discoverResponse.ok) {
-          // Create datasource
-          const datasourceResponse = await fetch('/api/datasources', {
+          // Create datasource (sync sub-app is mounted at /api/sync)
+          const datasourceResponse = await fetch('/api/sync/datasources/', {
             method: 'POST',
+            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               name: `${normalizedUrl.replace(/^https?:\/\//, '')}`,

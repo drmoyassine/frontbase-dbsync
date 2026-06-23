@@ -74,9 +74,14 @@ class DatasourceCreate(DatasourceBase):
             # Map base_url → api_url
             if data.get("base_url") and not data.get("api_url"):
                 data["api_url"] = data.pop("base_url")
-            # Map app_password → password
-            if data.get("app_password") and not data.get("password"):
-                data["password"] = data.pop("app_password")
+            # Map app_password → password for REST/GraphQL, → api_key for Plugin
+            # Plugin uses api_key_encrypted, REST uses password_encrypted
+            if data.get("app_password"):
+                if data.get("type") == DatasourceType.WORDPRESS_PLUGIN:
+                    data["api_key"] = data.pop("app_password")
+                else:
+                    if not data.get("password"):
+                        data["password"] = data.pop("app_password")
         return data
 
 
@@ -113,9 +118,14 @@ class DatasourceTestRequest(BaseModel):
             # Map base_url → api_url
             if data.get("base_url") and not data.get("api_url"):
                 data["api_url"] = data.pop("base_url")
-            # Map app_password → password
-            if data.get("app_password") and not data.get("password"):
-                data["password"] = data.pop("app_password")
+            # Map app_password → password for REST/GraphQL, → api_key for Plugin
+            # Plugin uses api_key_encrypted, REST uses password_encrypted
+            if data.get("app_password"):
+                if data.get("type") == DatasourceType.WORDPRESS_PLUGIN:
+                    data["api_key"] = data.pop("app_password")
+                else:
+                    if not data.get("password"):
+                        data["password"] = data.pop("app_password")
         return data
 
 
@@ -135,12 +145,32 @@ class DatasourceUpdate(BaseModel):
     extra_config: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
     provider_account_id: Optional[str] = None  # Connected account for managed providers
+    # WordPress Plugin specific fields for updates
+    base_url: Optional[str] = None
+    app_password: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
     def parse_connection_uri(cls, data: Any) -> Any:
         """Parse connection URI if provided."""
-        return _parse_uri_metadata(data)
+        data = _parse_uri_metadata(data)
+        # Map WordPress Plugin fields to standard fields for updates
+        if isinstance(data, dict) and data.get("type") in [
+            DatasourceType.WORDPRESS_REST,
+            DatasourceType.WORDPRESS_GRAPHQL,
+            DatasourceType.WORDPRESS_PLUGIN,
+        ]:
+            # Map base_url → api_url
+            if data.get("base_url") and not data.get("api_url"):
+                data["api_url"] = data.pop("base_url")
+            # Map app_password → password for REST/GraphQL, → api_key for Plugin
+            if data.get("app_password"):
+                if data.get("type") == DatasourceType.WORDPRESS_PLUGIN:
+                    data["api_key"] = data.pop("app_password")
+                else:
+                    if not data.get("password"):
+                        data["password"] = data.pop("app_password")
+        return data
 
 
 class DatasourceViewBase(BaseModel):

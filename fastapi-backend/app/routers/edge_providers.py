@@ -104,7 +104,7 @@ def get_workspace_agent_token(db: Session = Depends(get_db), ctx: TenantContext 
         "credentials": creds,
         "tenantSlug": ctx.tenant_slug if ctx else None,
         "isMaster": ctx.is_master if ctx else True,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)
+        "exp": datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=1)
     }
     
     token = jwt.encode(payload, secret, algorithm="HS256")
@@ -214,7 +214,7 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
             databases.append(new_db_entry)
             existing_creds["databases"] = databases
             existing_turso.provider_credentials = encrypt_credentials(existing_creds)  # type: ignore[assignment]
-            existing_turso.updated_at = datetime.datetime.utcnow().isoformat()  # type: ignore[assignment]
+            existing_turso.updated_at = datetime.datetime.now(datetime.UTC).isoformat()  # type: ignore[assignment]
             db.commit()
             return _provider_response(existing_turso)
 
@@ -270,7 +270,7 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
             ).count()
             check_quota(db, ctx, "connected_accounts", account_count)
 
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.UTC).isoformat()
     
     credentials_str = None
     metadata_str = None
@@ -404,7 +404,7 @@ async def update_provider(provider_id: str, payload: EdgeProviderAccountUpdate, 
         if metadata:
             provider.provider_metadata = json.dumps(metadata)  # type: ignore[assignment]
         
-    provider.updated_at = datetime.datetime.utcnow().isoformat()  # type: ignore[assignment]
+    provider.updated_at = datetime.datetime.now(datetime.UTC).isoformat()  # type: ignore[assignment]
     db.commit()
     db.refresh(provider)
     
@@ -630,7 +630,7 @@ async def add_turso_database(
 
     # Re-encrypt and save
     provider.provider_credentials = encrypt_credentials(creds)  # type: ignore[assignment]
-    provider.updated_at = datetime.datetime.utcnow().isoformat()  # type: ignore[assignment]
+    provider.updated_at = datetime.datetime.now(datetime.UTC).isoformat()  # type: ignore[assignment]
     db.commit()
 
     return {"success": True, "database": {k: v for k, v in new_entry.items() if k != "token"}}
@@ -664,7 +664,7 @@ async def remove_turso_database(
 
     creds["databases"] = databases
     provider.provider_credentials = encrypt_credentials(creds)  # type: ignore[assignment]
-    provider.updated_at = datetime.datetime.utcnow().isoformat()  # type: ignore[assignment]
+    provider.updated_at = datetime.datetime.now(datetime.UTC).isoformat()  # type: ignore[assignment]
     db.commit()
 
     return {"success": True, "detail": "Database removed"}
@@ -703,7 +703,7 @@ async def test_turso_database(
 
     db_url = target.get("url", "")
     db_token = target.get("token", "")
-    now = datetime.datetime.utcnow().isoformat() + "Z"
+    now = datetime.datetime.now(datetime.UTC).isoformat() + "Z"
 
     # Test via HTTP endpoint (libsql URLs support HTTP)
     try:

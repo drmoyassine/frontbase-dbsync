@@ -5,6 +5,7 @@ import {
     RedisTestResult,
 
     PrivacySettings,
+    SecuritySettings,
     EmailProviderSettings,
     AdminInviteRequest,
     AdminInviteResponse
@@ -28,6 +29,10 @@ export const settingsApi = {
     // Privacy & Tracking
     getPrivacy: () => mainApi.get<PrivacySettings>('/settings/privacy/'),
     updatePrivacy: (data: PrivacySettings) => mainApi.put<PrivacySettings>('/settings/privacy/', data),
+
+    // Security — audit-log full-IP retention (Post-sprint 2.1)
+    getSecurity: () => mainApi.get<SecuritySettings>('/settings/security/'),
+    updateSecurity: (data: SecuritySettings) => mainApi.put<SecuritySettings>('/settings/security/', data),
 
     // Email Provider
     getEmail: () => mainApi.get<EmailProviderSettings>('/settings/email'),

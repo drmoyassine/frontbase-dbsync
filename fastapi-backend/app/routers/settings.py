@@ -172,6 +172,30 @@ class PrivacySettings(BaseModel):
     customHeadHtml: Optional[str] = None       # arbitrary <head> HTML (pixels/verification)
 
 
+class SecuritySettings(BaseModel):
+    """Security-log IP retention (Post-sprint 2.1 — configurable GDPR strict mode).
+
+    Controls how long security audit logs (`audit_logs`) keep the FULL client IP
+    before it is purged to NULL (the anonymized /24 or /48 value is retained
+    long-term). Full IPs are needed short-term for new-IP login alerts.
+
+    full_ip_retention_days:
+      >0  = retain the full IP for this many days, then purge (default 30)
+       0  = anonymize immediately (strictest privacy; disables new-IP alerts)
+      -1  = retain indefinitely (legitimate-interest mode; never auto-purge)
+    """
+    full_ip_retention_days: int = 30
+
+
+def get_security_ip_retention_days(tenant_slug: Optional[str] = None) -> int:
+    """Read the full-IP retention window from tenant settings (defensive)."""
+    try:
+        raw = load_settings(tenant_slug).get("security", {}).get("full_ip_retention_days", 30)
+        return int(raw)
+    except (TypeError, ValueError):
+        return 30
+
+
 # File-based settings storage
 # IMPORTANT: Use Docker-persisted volume path (/app/data) NOT ephemeral container path
 # This ensures settings persist across container rebuilds/deployments
@@ -305,7 +329,34 @@ async def update_privacy_settings(settings_update: PrivacySettings, ctx: TenantC
     settings = load_settings(tenant_slug)
     settings["privacy"] = settings_update.dict()
     save_settings(settings, tenant_slug)
-    
+
+    return settings_update
+
+
+# =============================================================================
+# Security Settings (Post-sprint 2.1 — audit-log IP retention)
+# =============================================================================
+
+@router.get("/security/", response_model=SecuritySettings)
+async def get_security_settings(ctx: TenantContext | None = Depends(get_tenant_context)):
+    """Get security-log IP retention settings."""
+    tenant_slug = ctx.tenant_slug if ctx else None
+    sec = load_settings(tenant_slug).get("security", {})
+    return SecuritySettings(full_ip_retention_days=int(sec.get("full_ip_retention_days", 30)))
+
+
+@router.put("/security/", response_model=SecuritySettings)
+async def update_security_settings(settings_update: SecuritySettings, ctx: TenantContext | None = Depends(get_tenant_context)):
+    """Update security-log IP retention.
+
+    - full_ip_retention_days > 0 : retain full IP N days, then purge
+    - 0  : anonymize immediately (strict privacy)
+    - -1 : retain indefinitely (legitimate interest)
+    """
+    tenant_slug = ctx.tenant_slug if ctx else None
+    settings = load_settings(tenant_slug)
+    settings["security"] = settings_update.dict()
+    save_settings(settings, tenant_slug)
     return settings_update
 
 
@@ -430,7 +481,7 @@ async def send_admin_invite(request: AdminInviteRequest):
     
     from .auth import ADMIN_USERS, hash_password
     import secrets
-    from datetime import datetime
+    from datetime import datetime, UTC
     
     # Check if already exists
     if request.email in ADMIN_USERS:
@@ -440,7 +491,7 @@ async def send_admin_invite(request: AdminInviteRequest):
     # (Since there is no /register or set-password flow yet)
     user_id = f"admin-{secrets.token_hex(4)}"
     random_pass = secrets.token_urlsafe(12)
-    now = datetime.utcnow().isoformat() + "Z"
+    now = datetime.now(UTC).isoformat() + "Z"
     
     ADMIN_USERS[request.email] = {
         "id": user_id,

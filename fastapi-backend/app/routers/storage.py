@@ -5,7 +5,7 @@ All bucket/file operations are scoped by storage_provider_id.
 Provider CRUD endpoints manage the StorageProvider records.
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query, Depends
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query, Depends, BackgroundTasks
 from typing import Optional, List
 from datetime import datetime, timezone
 import uuid
@@ -749,16 +749,22 @@ async def move_file(request: dict, ctx: TenantContext | None = Depends(get_tenan
 
 
 @router.post("/move-cross")
-async def move_file_cross(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
-    """Move a file across buckets / providers (Sprint 4B).
+async def move_file_cross(
+    request: dict,
+    background_tasks: BackgroundTasks,
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Move a file across buckets / providers (Sprint 4B + Post-sprint 2.2).
 
     Body:
       source_provider_id, source_bucket, source_key
       dest_provider_id,   dest_bucket,   dest_key
 
-    Resolves both adapters (tenant-scoped) and streams the object through this
-    process: download from source → upload to dest → delete source. Same-provider
-    adapters with native server-side copy override `move_cross` for efficiency.
+    Small files (< 50 MB, or unknown size) are moved synchronously: download from
+    source → upload to dest → delete source. Large files (≥ 50 MB) are moved by a
+    background job — this returns ``{async: true, job_id}``` and the client polls
+    ``/api/storage/move-status/{job_id}``. Same-provider adapters with native
+    server-side copy override ``move_cross`` for efficiency.
     """
     src_pid = request.get("source_provider_id")
     dst_pid = request.get("dest_provider_id")
@@ -774,6 +780,46 @@ async def move_file_cross(request: dict, ctx: TenantContext | None = Depends(get
     try:
         src_adapter = _resolve_adapter(src_pid, ctx)
         dst_adapter = _resolve_adapter(dst_pid, ctx)
+        size = await src_adapter.get_file_size(src_bucket, src_key)
+
+        from app.services.storage.move_worker import LARGE_FILE_THRESHOLD, execute_file_move
+
+        if size and size >= LARGE_FILE_THRESHOLD:
+            # Large file → background job with progress polling.
+            from app.models.file_move_job import FileMoveJob
+            project_id = None
+            db = SessionLocal()
+            try:
+                if ctx and ctx.tenant_id:
+                    project = get_project(db, ctx)
+                    if project:
+                        project_id = project.id
+                job = FileMoveJob(
+                    id=str(uuid.uuid4()),
+                    source_provider_id=src_pid, source_bucket=src_bucket, source_key=src_key,
+                    dest_provider_id=dst_pid, dest_bucket=dst_bucket, dest_key=dst_key,
+                    tenant_id=ctx.tenant_id if ctx else None,
+                    project_id=project_id,
+                    status="pending",
+                    bytes_total=size,
+                )
+                db.add(job)
+                db.commit()
+                db.refresh(job)
+                job_id = job.id
+            finally:
+                db.close()
+
+            background_tasks.add_task(execute_file_move, job_id)
+            return {
+                "success": True,
+                "async": True,
+                "job_id": job_id,
+                "status": "pending",
+                "bytes_total": size,
+            }
+
+        # Small / unknown-size → synchronous move (proven Sprint 4B path).
         result = await src_adapter.move_cross(
             src_bucket, src_key, dst_adapter, dst_bucket, dst_key,
         )
@@ -782,3 +828,39 @@ async def move_file_cross(request: dict, ctx: TenantContext | None = Depends(get
         raise
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+@router.get("/move-status/{job_id}")
+async def get_move_status(job_id: str, ctx: TenantContext | None = Depends(get_tenant_context)):
+    """Poll the status of a background cross-bucket move (Post-sprint 2.2)."""
+    from app.models.file_move_job import FileMoveJob
+    db = SessionLocal()
+    try:
+        job = db.query(FileMoveJob).filter(FileMoveJob.id == job_id).first()
+        if not job:
+            raise HTTPException(404, "Move job not found")
+        # Tenant scoping — only the owning tenant (or master) may poll.
+        # - Jobs with tenant_id=NULL are self-host/global: accessible by master or when ctx.tenant_id is NULL.
+        # - Jobs with a tenant_id are only accessible by that tenant or by master (is_master=True).
+        # - Deny if job.tenant_id is set, ctx exists, tenant_ids don't match, and not master.
+        # - Deny if job.tenant_id is set but ctx.tenant_id is NULL (unauthed trying to access tenant job).
+        if job.tenant_id is not None:
+            if not ctx or ctx.tenant_id is None:
+                # Tenant-owned job, but request has no tenant context (not even master with is_master=True)
+                raise HTTPException(404, "Move job not found")
+            if ctx.tenant_id != job.tenant_id and not ctx.is_master:
+                raise HTTPException(404, "Move job not found")
+        progress = (job.bytes_transferred / job.bytes_total) if job.bytes_total else 0.0
+        return {
+            "success": True,
+            "job_id": job.id,
+            "status": job.status,
+            "phase": job.phase,
+            "bytes_total": job.bytes_total,
+            "bytes_transferred": job.bytes_transferred,
+            "progress": round(progress, 4),
+            "error": job.error_message,
+            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+        }
+    finally:
+        db.close()

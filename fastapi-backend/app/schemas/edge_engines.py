@@ -87,8 +87,9 @@ class EdgeEngineResponse(BaseModel):
     created_at: str
     updated_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 class TestConnectionResult(BaseModel):
@@ -184,6 +185,7 @@ class EdgeAgentProfileResponse(BaseModel):
     created_at: str
     updated_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 

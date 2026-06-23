@@ -14,7 +14,7 @@ import json
 import os
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
@@ -293,7 +293,7 @@ def create_api_key(
                 raise HTTPException(404, "Edge engine not found")
 
     full_key, prefix, key_hash = _generate_key()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # Validate scope
     valid_scopes = ('user', 'management', 'all')
@@ -376,7 +376,7 @@ def update_api_key(
     if payload.expires_at is not None:
         api_key.expires_at = payload.expires_at  # type: ignore[assignment]
 
-    api_key.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    api_key.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
     db.commit()
     db.refresh(api_key)
 

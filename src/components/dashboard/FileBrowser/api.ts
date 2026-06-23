@@ -207,8 +207,12 @@ export async function moveFile(
 }
 
 /**
- * Move a file across buckets / providers (Sprint 4B). Streams through the backend
- * (download source → upload dest → delete source). Returns bytes moved.
+ * Move a file across buckets / providers (Sprint 4B + Post-sprint 2.2).
+ *
+ * Small files (< 50 MB) are moved synchronously and return `{ bytes }`.
+ * Large files are moved by a background job — the response then carries
+ * `{ async: true, jobId, bytesTotal }` and the caller polls `getMoveStatus`
+ * until `status` is `completed` or `failed`.
  */
 export async function moveFileCross(params: {
     sourceProviderId: string;
@@ -217,7 +221,7 @@ export async function moveFileCross(params: {
     destProviderId: string;
     destBucket: string;
     destKey: string;
-}): Promise<{ bytes: number }> {
+}): Promise<{ bytes: number; async?: boolean; jobId?: string; bytesTotal?: number }> {
     const res = await api.post('/api/storage/move-cross', {
         source_provider_id: params.sourceProviderId,
         source_bucket: params.sourceBucket,
@@ -228,5 +232,37 @@ export async function moveFileCross(params: {
     });
     const data = res.data;
     if (!data.success) throw new Error(data.error || 'Failed to move file across providers');
-    return { bytes: data.bytes ?? 0 };
+    return {
+        bytes: data.bytes ?? 0,
+        async: data.async === true ? true : undefined,
+        jobId: data.job_id,
+        bytesTotal: data.bytes_total,
+    };
 }
+
+export interface MoveJobStatus {
+    status: 'pending' | 'in_progress' | 'completed' | 'failed';
+    phase?: string | null;
+    bytesTotal: number;
+    bytesTransferred: number;
+    progress: number; // 0..1
+    error?: string | null;
+}
+
+/**
+ * Poll the status of a background cross-bucket move (Post-sprint 2.2).
+ */
+export async function getMoveStatus(jobId: string): Promise<MoveJobStatus> {
+    const res = await api.get(`/api/storage/move-status/${jobId}`);
+    const data = res.data;
+    if (!data.success) throw new Error(data.error || 'Failed to fetch move status');
+    return {
+        status: data.status,
+        phase: data.phase,
+        bytesTotal: data.bytes_total ?? 0,
+        bytesTransferred: data.bytes_transferred ?? 0,
+        progress: typeof data.progress === 'number' ? data.progress : 0,
+        error: data.error,
+    };
+}
+

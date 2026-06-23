@@ -9,7 +9,7 @@ Uses python-jose (already in requirements.txt) rather than PyJWT.
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional
 
 from jose import jwt, JWTError  # python-jose
@@ -40,7 +40,7 @@ def create_token(
     Returns:
         Encoded JWT string.
     """
-    now = datetime.utcnow()
+    now = datetime.now(UTC)
     payload = {
         "sub": user_id,
         "email": email,

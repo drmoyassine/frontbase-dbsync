@@ -34,8 +34,9 @@ class RedisSettingsResponse(BaseModel):
     cache_ttl_data: int = 60
     cache_ttl_count: int = 300
     
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 class RedisTestResult(BaseModel):

@@ -4,7 +4,7 @@ Connection testing endpoints for datasources.
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -53,7 +53,7 @@ async def test_datasource(
         tables = await adapter.get_tables()
         await adapter.disconnect()
         
-        datasource.last_tested_at = datetime.utcnow()  # Naive for PostgreSQL TIMESTAMP WITHOUT TIME ZONE
+        datasource.last_tested_at = datetime.now(UTC)  # aware datetime; Postgres TIMESTAMP WITHOUT TIME ZONE strips tz on store (display-only, never compared)
         datasource.last_test_success = True
         await db.commit()
         
@@ -64,7 +64,7 @@ async def test_datasource(
         )
     except Exception as e:
         logger.error(f"Error testing datasource {datasource.id}: {str(e)}", exc_info=True)
-        datasource.last_tested_at = datetime.utcnow()  # Naive for PostgreSQL TIMESTAMP WITHOUT TIME ZONE
+        datasource.last_tested_at = datetime.now(UTC)  # aware datetime; Postgres TIMESTAMP WITHOUT TIME ZONE strips tz on store (display-only, never compared)
         datasource.last_test_success = False
         await db.commit()
         

@@ -161,6 +161,24 @@ async def _http_redis_set(url: str, token: str, key: str, value: str, ttl: int) 
     return False
 
 
+async def _http_redis_getdel(url: str, token: str, key: str) -> Optional[str]:
+    """GETDEL a key from HTTP Redis (Upstash-compatible) — atomic get-and-delete."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                f"{url.rstrip('/')}/",
+                headers={"Authorization": f"Bearer {token}"},
+                json=["GETDEL", key]
+            )
+            if response.status_code == 200:
+                data = response.json()
+                result = data.get("result") if isinstance(data, dict) else (data[0].get("result") if isinstance(data, list) else None)
+                return result
+    except Exception as e:
+        logger.warning(f"HTTP Redis GETDEL failed for {key}: {e}")
+    return None
+
+
 # =============================================================================
 # Unified Cache Interface
 # =============================================================================
@@ -220,6 +238,47 @@ async def cache_set(redis_url: Optional[str], key: str, value: Any, ttl: int = 3
     except Exception as e:
         logger.warning(f"Redis SET failed for {key}: {e}")
         return False
+
+
+async def cache_getdel(redis_url: Optional[str], key: str) -> Optional[Any]:
+    """Atomically GET + DELETE a key. Used for single-use tokens.
+
+    Returns the parsed JSON value, or None if missing/expired/already-consumed.
+    Supports both TCP and HTTP (Upstash) Redis.
+    """
+    settings = await get_configured_redis_settings()
+
+    # Check if HTTP Redis
+    if redis_url and _is_http_redis(redis_url):
+        token = settings.get("token") if settings else None
+        if not token:
+            logger.warning("HTTP Redis configured but no token available")
+            return None
+        raw_value = await _http_redis_getdel(redis_url, token, key)
+        if raw_value:
+            try:
+                return json.loads(raw_value)
+            except json.JSONDecodeError:
+                return raw_value
+        return None
+
+    # TCP Redis
+    client = await get_redis_client(redis_url)
+    if not client:
+        return None
+
+    try:
+        # GETDEL (Redis 6.2+) — atomic get-and-delete. Falls back to get+delete.
+        try:
+            data = await client.getdel(key)
+        except Exception:
+            data = await client.get(key)
+            if data is not None:
+                await client.delete(key)
+        return json.loads(data) if data else None
+    except Exception as e:
+        logger.warning(f"Redis GETDEL failed for {key}: {e}")
+        return None
 
 
 async def cache_delete_pattern(redis_url: Optional[str], pattern: str) -> int:

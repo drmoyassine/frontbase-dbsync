@@ -74,6 +74,18 @@ export const datasourcesApi = {
         api.get<any>(`/datasources/${id}/tables/${table}/session/`),
     clearSession: (id: string | number, table: string) =>
         api.delete(`/datasources/${id}/tables/${table}/session/`),
+
+    // Google Sheets add-on connect flow
+    issueSheetsConnect: (datasourceId?: string) =>
+        api.post<{ token: string; addonInstallUrl: string; expiresAt: string }>(
+            '/datasources/sheets/connect/issue/',
+            datasourceId ? { datasource_id: datasourceId } : {}
+        ),
+    sheetsConnectStatus: (token: string) =>
+        api.get<{ connected: boolean; datasourceId?: string; spreadsheetName?: string }>(
+            '/datasources/sheets/connect/status/',
+            { params: { token } }
+        ),
 }
 
 export const viewsApi = {

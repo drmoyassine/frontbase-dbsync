@@ -8,7 +8,7 @@ Each EdgeDatabase can be attached to one or more DeploymentTargets.
 """
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, UTC
 import uuid
 import httpx
 
@@ -146,7 +146,7 @@ async def create_edge_database(payload: EdgeDatabaseCreate, ctx: TenantContext |
         # Validate provider account ownership
         _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
         
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(UTC).isoformat() + "Z"
         
         # If this is set as default, unset all others
         if payload.is_default:
@@ -260,7 +260,7 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate, ctx: Ten
                 )
             edge_db.is_default = payload.is_default  # type: ignore[assignment]
         
-        edge_db.updated_at = datetime.utcnow().isoformat() + "Z"  # type: ignore[assignment]
+        edge_db.updated_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
         db.commit()
         db.refresh(edge_db)
         

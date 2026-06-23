@@ -108,6 +108,13 @@ class AuditLog(Base):
     user_id = Column(String, nullable=False)
     action = Column(String(100), nullable=False)
     ip_address = Column(String(50), nullable=True)
+    # Post-sprint 2.1: dual-field IP storage for configurable GDPR retention.
+    # `ip_address` holds the FULL IP (needed for new-IP login alerts — legitimate
+    # interest) only until `ip_full_until`; after that it is purged to NULL by
+    # purge_expired_security_ips(). `ip_address_anonymized` (IPv4 /24, IPv6 /48)
+    # is retained long-term for analytics/forensics without identifying the user.
+    ip_address_anonymized = Column(String(50), nullable=True)
+    ip_full_until = Column(String, nullable=True)  # isoformat UTC string, matches created_at style
     user_agent = Column(String(255), nullable=True)
     details = Column(Text, nullable=True)
     created_at = Column(String, nullable=False)

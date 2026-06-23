@@ -3,7 +3,7 @@ Sync Executor - orchestrates the sync process between master and slave databases
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, Dict, List, Optional
 import asyncio
 
@@ -61,7 +61,7 @@ async def execute_sync(job_id: str, config_id: str) -> None:
         
         # Update job status to running
         job.status = JobStatus.RUNNING
-        job.started_at = datetime.utcnow()
+        job.started_at = datetime.now(UTC)
         await db.commit()
         
         try:
@@ -155,13 +155,13 @@ async def execute_sync(job_id: str, config_id: str) -> None:
             
             # Mark job complete
             job.status = JobStatus.COMPLETED
-            job.completed_at = datetime.utcnow()
-            config.last_sync_at = datetime.utcnow()
+            job.completed_at = datetime.now(UTC)
+            config.last_sync_at = datetime.now(UTC)
             
         except Exception as e:
             job.status = JobStatus.FAILED
             job.error_message = str(e)
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(UTC)
             logger.exception("Sync execution failed")
         
         await db.commit()

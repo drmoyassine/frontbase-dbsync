@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
-import { fetchBuckets, moveFileCross } from './api';
+import { fetchBuckets, moveFileCross, getMoveStatus } from './api';
 import { toast } from 'sonner';
 
 export interface StorageProviderOption {
@@ -38,6 +38,8 @@ export function MoveCrossDialog({
     const [destBucket, setDestBucket] = useState('');
     const [destKey, setDestKey] = useState(basename(source.key));
     const [moving, setMoving] = useState(false);
+    // Background-move progress (only set for large files that return a job_id).
+    const [progress, setProgress] = useState<{ phase?: string; pct: number } | null>(null);
 
     // Other providers (exclude the source so cross-bucket stays meaningful,
     // though same-provider cross-bucket is allowed by the backend).
@@ -54,8 +56,9 @@ export function MoveCrossDialog({
 
     const handleMove = async () => {
         setMoving(true);
+        setProgress(null);
         try {
-            const { bytes } = await moveFileCross({
+            const res = await moveFileCross({
                 sourceProviderId: source.providerId,
                 sourceBucket: source.bucket,
                 sourceKey: source.key,
@@ -63,6 +66,29 @@ export function MoveCrossDialog({
                 destBucket,
                 destKey,
             });
+
+            // Large files (≥ 50 MB) return a background job — poll it to completion.
+            let bytes = res.bytes;
+            if (res.async && res.jobId) {
+                const startedAt = Date.now();
+                // 10-min safety ceiling so a stalled job never hangs the dialog.
+                while (true) {
+                    const s = await getMoveStatus(res.jobId);
+                    setProgress({ phase: s.phase ?? undefined, pct: Math.round((s.progress || 0) * 100) });
+                    if (s.status === 'completed') {
+                        bytes = s.bytesTransferred || res.bytesTotal || bytes;
+                        break;
+                    }
+                    if (s.status === 'failed') {
+                        throw new Error(s.error || 'Background move failed');
+                    }
+                    if (Date.now() - startedAt > 10 * 60 * 1000) {
+                        throw new Error('Move timed out — check storage and retry.');
+                    }
+                    await new Promise((r) => setTimeout(r, 1000));
+                }
+            }
+
             toast.success(`Moved to ${destBucket}/${destKey}`, {
                 description: bytes ? `${(bytes / 1024 / 1024).toFixed(2)} MB transferred` : undefined,
             });
@@ -72,6 +98,7 @@ export function MoveCrossDialog({
             toast.error('Move failed', { description: e?.message });
         } finally {
             setMoving(false);
+            setProgress(null);
         }
     };
 
@@ -131,6 +158,21 @@ export function MoveCrossDialog({
                             placeholder="folder/filename.ext"
                         />
                     </div>
+
+                    {progress && (
+                        <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                                <span className="capitalize">{progress.phase || 'working'}…</span>
+                                <span>{progress.pct}%</span>
+                            </div>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                                <div
+                                    className="h-full bg-primary transition-all"
+                                    style={{ width: `${progress.pct}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <DialogFooter>

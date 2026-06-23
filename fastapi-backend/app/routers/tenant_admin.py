@@ -7,7 +7,7 @@ authentication (ADMIN_EMAIL cookie session).
 
 import uuid
 import hashlib
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Request, Depends
@@ -358,7 +358,7 @@ async def create_tenant(
     if existing:
         raise HTTPException(status_code=409, detail=f"Slug '{slug}' is already taken")
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     tenant_id = str(uuid.uuid4())
     project_id = str(uuid.uuid4())
 
@@ -441,7 +441,7 @@ async def create_tenant_user(
     if existing_user:
         raise HTTPException(status_code=409, detail=f"User with email '{body.email}' already exists")
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     user_id = str(uuid.uuid4())
     member_id = str(uuid.uuid4())
 
@@ -499,7 +499,7 @@ async def update_tenant(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
         
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     if body.name is not None:
         tenant.name = body.name  # type: ignore[assignment]
     if body.plan is not None:
@@ -531,7 +531,7 @@ async def delete_tenant(
         raise HTTPException(status_code=404, detail="Tenant not found")
 
     tenant.status = "suspended"  # type: ignore[assignment]
-    tenant.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    tenant.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
     db.commit()
 
     return {"success": True, "message": f"Tenant '{tenant.slug}' suspended"}

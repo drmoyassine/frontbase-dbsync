@@ -8,7 +8,7 @@ one or more EdgeEngines (one-to-many).
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, UTC
 import uuid
 import httpx
 
@@ -209,7 +209,7 @@ async def create_edge_queue(payload: EdgeQueueCreate, ctx: TenantContext | None 
                 detail=f"A queue with this URL already exists ('{existing.name}')"
             )
 
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(UTC).isoformat() + "Z"
         
         # If this is set as default, unset all others
         if payload.is_default:
@@ -305,7 +305,7 @@ async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate, ctx: Tenant
                 )
             queue.is_default = payload.is_default  # type: ignore[assignment]
         
-        queue.updated_at = datetime.utcnow().isoformat() + "Z"  # type: ignore[assignment]
+        queue.updated_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
         db.commit()
         db.refresh(queue)
         

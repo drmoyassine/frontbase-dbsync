@@ -5,7 +5,7 @@ Application configuration using pydantic-settings
 import os
 from typing import List, Any, Union
 from pydantic import field_validator, AnyHttpUrl
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -64,10 +64,11 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     sync_state_ttl: int = 14400  # Default 4 hours
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()

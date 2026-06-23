@@ -48,13 +48,13 @@ def init_supertokens():
             # Update user's last login in the DB (cloud only)
             from app.database.config import SessionLocal
             from app.models.auth import User
-            from datetime import datetime
+            from datetime import datetime, UTC
 
             db = SessionLocal()
             try:
                 user = db.query(User).filter(User.id == user_id).first()
                 if user:
-                    user.last_login_at = datetime.utcnow().isoformat() + "Z"  # type: ignore[assignment]
+                    user.last_login_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
                     db.commit()
                     print(f"[SuperTokens Session Hook] Updated last_login_at for user {user_id}")
             except Exception as e:

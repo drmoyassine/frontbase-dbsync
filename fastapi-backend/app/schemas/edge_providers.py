@@ -45,8 +45,9 @@ class EdgeProviderAccountResponse(BaseModel):
                 return None
         return v
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 # =============================================================================

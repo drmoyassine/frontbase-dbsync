@@ -1,6 +1,6 @@
 """Ensure edge_databases and deployment_targets exist locally for dev."""
 import sqlite3, uuid, os
-from datetime import datetime
+from datetime import datetime, UTC
 
 db_path = os.path.join(os.path.dirname(__file__), 'frontbase.db')
 conn = sqlite3.connect(db_path)
@@ -47,7 +47,7 @@ if 'deployment_targets' not in tables:
 # Pre-seed system entries if missing
 LOCAL_DB_ID = "00000000-0000-0000-0000-000000000001"
 LOCAL_TARGET_ID = "00000000-0000-0000-0000-000000000002"
-now = datetime.utcnow().isoformat() + "Z"
+now = datetime.now(UTC).isoformat() + "Z"
 
 c.execute("SELECT id FROM edge_databases WHERE id = ?", (LOCAL_DB_ID,))
 if not c.fetchone():

@@ -10,7 +10,7 @@ Also includes shared concrete methods like compute_folder_size().
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Callable
 
 import httpx
 
@@ -123,6 +123,70 @@ class StorageAdapter(ABC):
             "source": f"{source_bucket}/{source_key}",
             "destination": f"{dest_bucket}/{dest_key}",
             "bytes": len(content),
+        }
+
+    async def get_file_size(self, bucket: str, path: str) -> int:
+        """Best-effort object size in bytes via a HEAD on a short-lived signed URL.
+
+        Returns 0 when the size cannot be determined (provider doesn't support
+        HEAD on signed URLs, or the request failed). Callers treat 0 as
+        "unknown → use the synchronous move path".
+        """
+        try:
+            url = await self.get_signed_url(bucket, path, expires_in=60)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.head(url)
+                resp.raise_for_status()
+                return int(resp.headers.get("content-length", 0) or 0)
+        except Exception:
+            return 0
+
+    async def move_cross_streaming(
+        self,
+        source_bucket: str,
+        source_key: str,
+        dest_adapter: "StorageAdapter",
+        dest_bucket: str,
+        dest_key: str,
+        chunk_size: int = 5 * 1024 * 1024,
+        on_progress: Optional["Callable[[str, int], None]"] = None,
+    ) -> Dict[str, Any]:
+        """Cross-provider move with byte-level download progress (Post-sprint 2.2).
+
+        Streams the source object in chunks, reporting transferred bytes via
+        ``on_progress(phase, bytes)`` (phase ∈ downloading|uploading|completed),
+        then uploads to the destination and deletes the source on success.
+
+        NOTE: the destination ``upload_file`` still receives the assembled bytes
+        (true zero-buffer streaming upload needs per-adapter multipart support —
+        a documented follow-up). Peak memory therefore ~= file size during the
+        upload phase, but the call is non-blocking and progress is reported
+        during the typically-longer download phase. Source-integrity guarantee
+        matches ``move_cross``: source deleted only after a successful dest write.
+        """
+        url = await self.get_signed_url(source_bucket, source_key, expires_in=3600)
+        buf = bytearray()
+        total = 0
+        content_type = "application/octet-stream"
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=10.0)) as client:
+            async with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                content_type = resp.headers.get("content-type", content_type)
+                async for chunk in resp.aiter_bytes(chunk_size):
+                    buf.extend(chunk)
+                    total += len(chunk)
+                    if on_progress:
+                        on_progress("downloading", total)
+        if on_progress:
+            on_progress("uploading", total)
+        await dest_adapter.upload_file(dest_bucket, dest_key, bytes(buf), content_type)
+        await self.delete_files(source_bucket, [source_key])
+        if on_progress:
+            on_progress("completed", total)
+        return {
+            "source": f"{source_bucket}/{source_key}",
+            "destination": f"{dest_bucket}/{dest_key}",
+            "bytes": total,
         }
 
     async def compute_folder_size(self, bucket: str, path: str = "") -> int:

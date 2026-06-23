@@ -8,7 +8,7 @@ one or more EdgeEngines (one-to-many).
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, UTC
 import uuid
 
 from ..database.config import SessionLocal
@@ -169,7 +169,7 @@ async def create_edge_cache(payload: EdgeCacheCreate, ctx: TenantContext | None 
                 detail=f"A cache with this URL already exists ('{existing.name}')"
             )
 
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(UTC).isoformat() + "Z"
         
         # If this is set as default, unset all others
         if payload.is_default:
@@ -261,7 +261,7 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate, ctx: Tenant
                 )
             cache.is_default = payload.is_default  # type: ignore[assignment]
         
-        cache.updated_at = datetime.utcnow().isoformat() + "Z"  # type: ignore[assignment]
+        cache.updated_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
         db.commit()
         db.refresh(cache)
         

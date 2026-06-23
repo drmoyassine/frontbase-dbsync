@@ -10,7 +10,7 @@ are done lazily (inside functions) to avoid a circular import:
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 
 from sqlalchemy.orm import Session
 
@@ -465,7 +465,7 @@ async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: 
         datasources=datasources if datasources else None,
         cssBundle=css_bundle,  # Tree-shaken CSS for this page
         version=1,  # TODO: Increment on re-publish
-        publishedAt=datetime.utcnow().isoformat() + "Z",
+        publishedAt=datetime.now(UTC).isoformat() + "Z",
         contentHash=getattr(page, 'content_hash', None),
         isPublic=bool(page.is_public),
         isHomepage=bool(page.is_homepage),

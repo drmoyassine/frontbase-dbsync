@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { datasourcesApi } from '../api';
 import { Datasource } from '../types';
 import { track } from '@/lib/analytics';
 import { AccountResourcePicker, DiscoveredResource } from '@/components/dashboard/settings/shared/AccountResourcePicker';
 import { PROVIDER_CONFIGS } from '@/components/dashboard/settings/shared/edgeConstants';
-import { Database, TestTube, CheckCircle, XCircle, Loader2, Table, Copy } from 'lucide-react';
+import { Database, TestTube, CheckCircle, XCircle, Loader2, Table, Copy, Zap } from 'lucide-react';
 
 /** Providers with 'database' or 'cms' capability — drives the Database Type selector. */
 const DATABASE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
@@ -79,6 +79,61 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                 : datasourcesApi.testRaw(data),
     });
 
+    // ── Google Sheets add-on connect flow ──────────────────────────────────
+    const [sheetsConnect, setSheetsConnect] = useState<{
+        loading: boolean;
+        token?: string;
+        installUrl?: string;
+        polling?: boolean;
+        error?: string;
+    }>({ loading: false });
+    const sheetsPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const stopSheetsPoll = () => {
+        if (sheetsPollRef.current) {
+            clearInterval(sheetsPollRef.current);
+            sheetsPollRef.current = null;
+        }
+    };
+    // Stop polling if the modal unmounts (e.g. closed) mid-handshake.
+    useEffect(() => () => stopSheetsPoll(), []);
+
+    const startSheetsConnect = async () => {
+        setSheetsConnect({ loading: true, error: undefined });
+        stopSheetsPoll();
+        try {
+            const res = await datasourcesApi.issueSheetsConnect(datasource?.id);
+            const { token, addonInstallUrl } = res.data;
+            setSheetsConnect({ loading: false, token, installUrl: addonInstallUrl, polling: true });
+
+            // Poll until the add-on callback completes (token TTL ~15 min).
+            let attempts = 0;
+            const maxAttempts = Math.floor((13 * 60 * 1000) / 2500);
+            sheetsPollRef.current = setInterval(async () => {
+                attempts += 1;
+                if (attempts > maxAttempts) {
+                    stopSheetsPoll();
+                    setSheetsConnect((s) => ({ ...s, polling: false, error: 'Timed out waiting for the add-on. Retry with a new code.' }));
+                    return;
+                }
+                try {
+                    const s = await datasourcesApi.sheetsConnectStatus(token);
+                    if (s.data?.connected && s.data.datasourceId) {
+                        stopSheetsPoll();
+                        queryClient.invalidateQueries({ queryKey: ['datasources'] });
+                        track('datasource_connected', { datasource_id: s.data.datasourceId, via: 'sheets_addon' });
+                        if (onCreated) onCreated(s.data.datasourceId);
+                        onClose();
+                    }
+                } catch {
+                    /* transient — keep polling */
+                }
+            }, 2500);
+        } catch (e: any) {
+            setSheetsConnect({ loading: false, error: e?.response?.data?.detail || e.message || 'Failed to issue connect code' });
+        }
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         mutation.mutate(formData);
@@ -142,6 +197,69 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                 <div className="flex items-center gap-2 mb-3">
                                     <Table className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                     <h3 className="font-semibold text-blue-900 dark:text-blue-100">Google Sheets Configuration</h3>
+                                </div>
+
+                                {/* Connect via add-on (recommended) */}
+                                <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50 dark:bg-emerald-900/10 p-4">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Zap className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                                        <h4 className="font-semibold text-emerald-900 dark:text-emerald-100">Connect with the add-on (recommended)</h4>
+                                    </div>
+                                    {!sheetsConnect.token ? (
+                                        <>
+                                            <p className="text-xs text-gray-600 dark:text-gray-300 mb-3">
+                                                Install the Frontbase add-on, paste a one-time code, click Configure — no copy-pasting Apps Script or secrets.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={startSheetsConnect}
+                                                disabled={sheetsConnect.loading}
+                                                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                                            >
+                                                {sheetsConnect.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                                                Get connect code
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ol className="text-xs text-gray-700 dark:text-gray-300 space-y-1.5 mb-3 list-decimal list-inside">
+                                                <li>
+                                                    Open the add-on in your Google Sheet
+                                                    {sheetsConnect.installUrl && (
+                                                        <a href={sheetsConnect.installUrl} target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline ml-1">install link</a>
+                                                    )}
+                                                </li>
+                                                <li>In the add-on, paste this code and click <span className="font-semibold">Configure</span>:</li>
+                                            </ol>
+                                            <div className="flex gap-2 mb-2">
+                                                <code className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 rounded-lg font-mono text-sm break-all border border-gray-200 dark:border-gray-700 select-all">
+                                                    {sheetsConnect.token}
+                                                </code>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigator.clipboard.writeText(sheetsConnect.token!)}
+                                                    className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                                    title="Copy code"
+                                                >
+                                                    <Copy className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                            {sheetsConnect.polling ? (
+                                                <p className="text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Waiting for the add-on…
+                                                </p>
+                                            ) : (
+                                                <button type="button" onClick={startSheetsConnect} className="text-xs text-emerald-700 dark:text-emerald-300 underline">Get a new code</button>
+                                            )}
+                                            {sheetsConnect.error && <p className="text-xs text-red-600 mt-2">{sheetsConnect.error}</p>}
+                                        </>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center gap-3 py-1">
+                                    <div className="flex-1 h-px bg-blue-200 dark:bg-blue-800/40" />
+                                    <span className="text-[10px] uppercase tracking-wide text-blue-400 dark:text-blue-500">or configure manually</span>
+                                    <div className="flex-1 h-px bg-blue-200 dark:bg-blue-800/40" />
                                 </div>
 
                                 {/* Spreadsheet ID */}

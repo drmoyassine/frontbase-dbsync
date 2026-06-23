@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional, Any
-from datetime import datetime
+from datetime import datetime, UTC
 import uuid
 import json
 import os
@@ -51,8 +51,9 @@ class AuthFormResponse(AuthFormBase):
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 class SuccessResponse(BaseModel):
@@ -283,7 +284,7 @@ async def create_auth_form(
     """Create a new auth form"""
     try:
         form_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         
         # Config already contains is_primary and is_embeddable from frontend
         config_data = form.config or {}
@@ -381,7 +382,7 @@ async def update_auth_form(
         
         # Build update
         updates = []
-        params = {"id": form_id, "updated_at": datetime.utcnow().isoformat()}
+        params = {"id": form_id, "updated_at": datetime.now(UTC).isoformat()}
         
         if form.name is not None:
             updates.append("name = :name")
@@ -583,12 +584,12 @@ async def set_primary_auth_form(
                 if ctx and ctx.tenant_id:
                     db.execute(
                         text("UPDATE auth_forms SET config = :config, updated_at = :now WHERE id = :id AND tenant_id = :tenant_id"),
-                        {"config": json.dumps(config), "now": datetime.utcnow().isoformat(), "id": row.id, "tenant_id": ctx.tenant_id}
+                        {"config": json.dumps(config), "now": datetime.now(UTC).isoformat(), "id": row.id, "tenant_id": ctx.tenant_id}
                     )
                 else:
                     db.execute(
                         text("UPDATE auth_forms SET config = :config, updated_at = :now WHERE id = :id AND tenant_id IS NULL"),
-                        {"config": json.dumps(config), "now": datetime.utcnow().isoformat(), "id": row.id}
+                        {"config": json.dumps(config), "now": datetime.now(UTC).isoformat(), "id": row.id}
                     )
         db.commit()
 

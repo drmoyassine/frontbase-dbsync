@@ -33,9 +33,10 @@ class DatasourceConfig(BaseModel):
     url: Optional[str] = None  # Safe to publish (no password)
     anon_key: Optional[str] = Field(None, alias="anonKey")  # For Supabase - safe to publish
     secret_env_var: Optional[str] = Field(None, alias="secretEnvVar")  # Env var name, not the actual secret
-    
-    class Config:
-        populate_by_name = True
+
+    model_config = {
+        "populate_by_name": True,
+    }
 
 
 # =============================================================================
@@ -57,9 +58,10 @@ class ForeignKey(BaseModel):
     column: str
     referenced_table: str = Field(..., alias="referencedTable")
     referenced_column: str = Field(..., alias="referencedColumn")
-    
-    class Config:
-        populate_by_name = True
+
+    model_config = {
+        "populate_by_name": True,
+    }
 
 
 class DataRequest(BaseModel):
@@ -76,9 +78,10 @@ class DataRequest(BaseModel):
     query_config: Optional[Dict[str, Any]] = Field(None, alias="queryConfig")  # Added for DataTable RPC config
     fetch_strategy: Optional[str] = Field(None, alias="fetchStrategy")  # "direct" | "proxy" — set at publish time
     datasource_id: Optional[str] = Field(None, alias="datasourceId")  # Datasource ID for proxy strategy (server-side credential resolution)
-    
-    class Config:
-        populate_by_name = True
+
+    model_config = {
+        "populate_by_name": True,
+    }
 
 
 class ComponentBinding(BaseModel):
@@ -109,9 +112,10 @@ class ComponentBinding(BaseModel):
     field_order: Optional[List[str]] = Field(None, alias="fieldOrder")
     data_source_id: Optional[str] = Field(None, alias="dataSourceId")
     
-    class Config:
-        populate_by_name = True
-        extra = "allow"
+    model_config = {
+        "populate_by_name": True,
+        "extra": "allow",
+    }
 
 
 # =============================================================================
@@ -130,8 +134,9 @@ class ViewportOverrides(BaseModel):
     mobile: Optional[Dict[str, Any]] = None
     tablet: Optional[Dict[str, Any]] = None
     
-    class Config:
-        extra = "allow"  # Allow additional viewport names if needed
+    model_config = {
+        "extra": "allow",  # Allow additional viewport names if needed
+    }
 
 
 class StylesData(BaseModel):
@@ -140,9 +145,10 @@ class StylesData(BaseModel):
     activeProperties: Optional[List[str]] = None
     stylingMode: Optional[str] = "visual"
     viewportOverrides: Optional[ViewportOverrides] = None
-    
-    class Config:
-        extra = "allow"
+
+    model_config = {
+        "extra": "allow",
+    }
 
 
 class PageComponent(BaseModel):
@@ -156,9 +162,10 @@ class PageComponent(BaseModel):
     visibilityCondition: Optional[str] = None  # e.g. "local.modalOpen == true"
     children: Optional[List["PageComponent"]] = None
     binding: Optional[ComponentBinding] = None
-    
-    class Config:
-        populate_by_name = True
+
+    model_config = {
+        "populate_by_name": True,
+    }
 
 
 # Allow self-reference
@@ -186,9 +193,10 @@ class SeoData(BaseModel):
     keywords: Optional[List[str]] = None
     og_image: Optional[str] = Field(None, alias="ogImage")
     canonical: Optional[str] = None
-    
-    class Config:
-        populate_by_name = True
+
+    model_config = {
+        "populate_by_name": True,
+    }
 
 
 # =============================================================================
@@ -231,9 +239,10 @@ class PublishPageRequest(BaseModel):
     
     # Global app variables baked at publish time (non-secret only)
     appVariables: Optional[Dict[str, Any]] = Field(None, alias="appVariables")
-    
-    class Config:
-        populate_by_name = True
+
+    model_config = {
+        "populate_by_name": True,
+    }
 
 
 # =============================================================================
@@ -254,9 +263,10 @@ class ImportPageResponse(BaseModel):
     preview_url: Optional[str] = Field(None, alias="previewUrl")
     message: Optional[str] = None
     error: Optional[str] = None
-    
-    class Config:
-        populate_by_name = True
+
+    model_config = {
+        "populate_by_name": True,
+    }
 
 
 # =============================================================================

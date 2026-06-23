@@ -2,7 +2,7 @@
 Sync configuration model - defines how data syncs between master and slave.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -85,11 +85,11 @@ class SyncConfig(Base):
     cron_schedule: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     
     # Metadata
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC)
     )
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     

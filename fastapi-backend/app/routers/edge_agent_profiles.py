@@ -3,7 +3,7 @@ Edge Agent Profiles router — CRUD for AI Agent Personas.
 """
 import uuid
 import json
-from datetime import datetime
+from datetime import datetime, UTC
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
@@ -123,7 +123,7 @@ def create_profile(
     if existing:
         raise HTTPException(400, "Agent profile with this slug already exists on this engine")
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     profile = EdgeAgentProfile(
         id=str(uuid.uuid4()),
         engine_id=engine_id,
@@ -200,7 +200,7 @@ def update_profile(
     if "permissions" in update_data:
         profile.permissions = json.dumps(update_data["permissions"]) if update_data["permissions"] is not None else None  # type: ignore[assignment]
 
-    profile.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    profile.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
     db.commit()
     db.refresh(profile)
 

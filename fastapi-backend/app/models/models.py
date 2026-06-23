@@ -40,6 +40,7 @@ from app.models.actions import AutomationDraft, AutomationExecution  # noqa: F40
 
 # Storage
 from .storage_provider import StorageProvider  # noqa: F401
+from .file_move_job import FileMoveJob  # noqa: F401
 
 # Themes
 from .theme import ComponentTheme  # noqa: F401

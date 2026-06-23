@@ -25,9 +25,10 @@ class FieldMappingResponse(FieldMappingBase):
     """Schema for field mapping response."""
     id: str
     sync_config_id: str
-    
-    class Config:
-        from_attributes = True
+
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 class SyncConfigBase(BaseModel):
@@ -87,6 +88,7 @@ class SyncConfigResponse(SyncConfigBase):
     updated_at: datetime
     last_sync_at: Optional[datetime] = None
     field_mappings: List[FieldMappingResponse] = []
-    
-    class Config:
-        from_attributes = True
+
+    model_config = {
+        "from_attributes": True,
+    }

@@ -11,7 +11,7 @@ import json
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Literal, List
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, UTC
 
 from app.database.config import SessionLocal
 from app.models.models import (
@@ -113,7 +113,7 @@ async def update_my_tenant(
             import json
             tenant.settings = json.dumps(body.settings)  # type: ignore[assignment]
 
-        tenant.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+        tenant.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
         db.commit()
 
         return {

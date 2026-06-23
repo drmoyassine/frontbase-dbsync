@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 
 from sqlalchemy.orm import Session as DBSession
@@ -80,7 +80,7 @@ def provision_tenant(
     if not check_slug_available(db, slug):
         raise ValueError(f"Slug '{slug}' is already taken")
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     tenant_id = str(uuid.uuid4())
     project_id = str(uuid.uuid4())
     member_id = str(uuid.uuid4())
@@ -174,7 +174,7 @@ def attach_user_to_tenant(
 
     Raises ValueError on a full workspace or missing tenant.
     """
-    from datetime import datetime
+    from datetime import datetime, UTC
     import uuid as _uuid
     from app.services.plan_limits import get_plan, plan_limits, UNLIMITED
 
@@ -188,7 +188,7 @@ def attach_user_to_tenant(
     if isinstance(limit, int) and limit != UNLIMITED and member_count >= limit:
         raise ValueError("This workspace has reached its team-member limit")
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # Sync user to public.users to satisfy FKs
     user = User(

@@ -16,7 +16,7 @@ To add a new provider:
 
 import json
 import asyncio
-from datetime import datetime
+from datetime import datetime, UTC
 
 import httpx
 from fastapi import HTTPException
@@ -107,10 +107,10 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
         await _init_supabase_state_db_if_needed(engine, db)
 
         # Update local record
-        deployed_at = datetime.utcnow().isoformat() + "Z"
+        deployed_at = datetime.now(UTC).isoformat() + "Z"
         engine.bundle_checksum = source_hash  # type: ignore[assignment]
         engine.last_deployed_at = deployed_at  # type: ignore[assignment]
-        engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+        engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
 
         # Capture source snapshot for non-forked engines (forked engines keep their snapshot)
         if not is_forked:

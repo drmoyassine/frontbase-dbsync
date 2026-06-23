@@ -42,6 +42,7 @@ import {
     Globe 
 } from 'lucide-react';
 import { isCloud } from '@/lib/edition';
+import { IpRetentionCard } from './IpRetentionCard';
 
 interface SecuritySettingsFormProps {
     withCard?: boolean;
@@ -824,6 +825,9 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
 
                 {/* Tab 3: Security Audit Trail */}
                 <TabsContent value="audit" className="space-y-6 outline-none">
+                    {/* Post-sprint 2.1: configurable full-IP retention for audit logs */}
+                    <IpRetentionCard />
+
                     {/* Section 4: Security Audit Trail */}
                     <Card className="transition-all duration-200 hover:shadow-md">
                         <CardHeader className="flex flex-row items-center justify-between pb-2">

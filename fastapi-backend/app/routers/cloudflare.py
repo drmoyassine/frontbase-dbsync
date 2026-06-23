@@ -19,7 +19,7 @@ Inspector endpoints live in cloudflare_inspector.py.
 import json
 import uuid
 import asyncio
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 
 import httpx
@@ -213,7 +213,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
         source_hash = get_source_hash() or bundle_hash
         try:
             existing = db.query(EdgeEngine).filter(EdgeEngine.url == worker_url).first()
-            now = datetime.utcnow().isoformat()
+            now = datetime.now(UTC).isoformat()
             
             engine_cfg = json.dumps({
                 "worker_name": payload.worker_name,
@@ -223,7 +223,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
             from ..services.edge_client import inject_system_key
             engine_cfg = inject_system_key(engine_cfg)
 
-            deployed_at = datetime.utcnow().isoformat() + "Z"
+            deployed_at = datetime.now(UTC).isoformat() + "Z"
 
             if existing:
                 existing.is_active = True  # type: ignore[assignment]
@@ -428,7 +428,7 @@ async def teardown_cloudflare(payload: TeardownRequest, db: Session = Depends(ge
         engines = engines_query.all()
         for t in engines:
             t.is_active = False  # type: ignore[assignment]
-            t.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+            t.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
         db.commit()
 
         return {

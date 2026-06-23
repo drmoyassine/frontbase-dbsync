@@ -155,8 +155,9 @@ class DatasourceViewResponse(DatasourceViewBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 class DatasourceResponse(BaseModel):
@@ -208,8 +209,9 @@ class DatasourceResponse(BaseModel):
                 return {}
         return v
     
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 class DatasourceTestResult(BaseModel):
@@ -233,9 +235,10 @@ class ColumnSchema(BaseModel):
     foreign_table: Optional[str] = None
     foreign_column: Optional[str] = None
 
-    class Config:
-        extra = "ignore"
-        from_attributes = True
+    model_config = {
+        "extra": "ignore",
+        "from_attributes": True,
+    }
 
 class TableSchema(BaseModel):
     """Schema for a table/resource."""

@@ -17,7 +17,7 @@ from ..services.secrets_builder import build_engine_secrets, FRONTBASE_BINDING_N
 from ..services import engine_deploy
 from ..services.edge_client import resolve_engine_url
 from ..schemas.edge_engines import ReconfigureRequest
-from datetime import datetime
+from datetime import datetime, UTC
 
 
 # Providers that require a full redeploy after env var updates
@@ -272,7 +272,7 @@ async def reconfigure(
         for st_id in payload.storage_ids:
             db.execute(engine_storages.insert().values(engine_id=engine.id, storage_id=st_id))
 
-    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
     db.commit()
     db.refresh(engine)
 
@@ -342,7 +342,7 @@ async def toggle_engine(
     """
     # 1. Update DB
     engine.is_active = is_active # type: ignore[assignment]
-    engine.updated_at = datetime.utcnow().isoformat() # type: ignore[assignment]
+    engine.updated_at = datetime.now(UTC).isoformat() # type: ignore[assignment]
     db.commit()
     db.refresh(engine)
 

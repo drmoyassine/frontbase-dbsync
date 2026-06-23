@@ -2,7 +2,7 @@
 Datasource model - represents a database connection configuration.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -78,12 +78,12 @@ class Datasource(Base):
     # Note: Use naive datetime for PostgreSQL TIMESTAMP WITHOUT TIME ZONE columns
     created_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=datetime.utcnow
+        default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC)
     )
     
     # Relationships

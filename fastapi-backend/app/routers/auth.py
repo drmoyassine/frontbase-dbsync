@@ -19,7 +19,7 @@ import secrets
 import logging
 import uuid
 import ipaddress
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 
 from app.config.edition import is_cloud
 from app.database.config import get_db, SessionLocal
@@ -179,8 +179,8 @@ async def check_lockout(request: Request, email: str) -> None:
             locked_until_str = await cache_get_fn(redis_url, f"security:lockout:{key}")
             if locked_until_str:
                 locked_until = datetime.fromisoformat(locked_until_str)
-                if datetime.utcnow() < locked_until:
-                    remaining_seconds = int((locked_until - datetime.utcnow()).total_seconds())
+                if datetime.now(UTC) < locked_until:
+                    remaining_seconds = int((locked_until - datetime.now(UTC)).total_seconds())
                     remaining_minutes = max(1, remaining_seconds // 60)
                     logger.warning(f"[Auth] Blocked locked out client {key} via Redis for {remaining_minutes} more minutes.")
                     raise HTTPException(
@@ -196,8 +196,8 @@ async def check_lockout(request: Request, email: str) -> None:
     entry = FAILED_LOGIN_ATTEMPTS.get(key)
     if entry:
         locked_until = entry.get("locked_until")
-        if locked_until and datetime.utcnow() < locked_until:
-            remaining_seconds = int((locked_until - datetime.utcnow()).total_seconds())
+        if locked_until and datetime.now(UTC) < locked_until:
+            remaining_seconds = int((locked_until - datetime.now(UTC)).total_seconds())
             remaining_minutes = max(1, remaining_seconds // 60)
             logger.warning(f"[Auth] Blocked locked out client {key} via L1 memory for {remaining_minutes} more minutes.")
             raise HTTPException(
@@ -231,7 +231,7 @@ async def record_failed_attempt(request: Request, email: str) -> None:
             attempts += 1
             
             if attempts >= MAX_FAILED_ATTEMPTS:
-                lockout_until = datetime.utcnow() + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+                lockout_until = datetime.now(UTC) + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
                 lockout_key = f"security:lockout:{key}"
                 await cache_set_fn(redis_url, lockout_key, lockout_until.isoformat(), ttl=LOCKOUT_DURATION_MINUTES * 60)
                 await cache_set_fn(redis_url, fail_key, None, ttl=1)
@@ -250,7 +250,7 @@ async def record_failed_attempt(request: Request, email: str) -> None:
     entry["attempts"] += 1
     
     if entry["attempts"] >= MAX_FAILED_ATTEMPTS:
-        entry["locked_until"] = datetime.utcnow() + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
+        entry["locked_until"] = datetime.now(UTC) + timedelta(minutes=LOCKOUT_DURATION_MINUTES)
         logger.warning(f"[Auth] Client {key} reached max failed attempts. Locked out for {LOCKOUT_DURATION_MINUTES} minutes (L1 memory).")
     else:
         attempts_left = MAX_FAILED_ATTEMPTS - entry["attempts"]
@@ -387,7 +387,7 @@ async def verify_bot_token(token: Optional[str], ip_address: str, route: Literal
                 action="BOT_CHALLENGE_SUCCESS",
                 ip_address=ip_address,
                 details=f"Bot challenge passed using {provider} for {route}",
-                created_at=datetime.utcnow().isoformat() + "Z"
+                created_at=datetime.now(UTC).isoformat() + "Z"
             )
             db.add(audit_log)
             db.commit()
@@ -398,7 +398,7 @@ async def verify_bot_token(token: Optional[str], ip_address: str, route: Literal
                 action="BOT_CHALLENGE_FAILED",
                 ip_address=ip_address,
                 details=f"Bot challenge failed using {provider} for {route}. Details: {details_str}",
-                created_at=datetime.utcnow().isoformat() + "Z"
+                created_at=datetime.now(UTC).isoformat() + "Z"
             )
             db.add(audit_log)
             db.commit()
@@ -417,7 +417,7 @@ async def verify_bot_token(token: Optional[str], ip_address: str, route: Literal
                         id=str(uuid.uuid4()),
                         ip_or_range=ip_address,
                         reason="Bot Protection Auto-Ban (Repeated Failures)",
-                        created_at=datetime.utcnow().isoformat() + "Z"
+                        created_at=datetime.now(UTC).isoformat() + "Z"
                     )
                     db.add(new_ban)
                     
@@ -427,7 +427,7 @@ async def verify_bot_token(token: Optional[str], ip_address: str, route: Literal
                         action="IP_AUTO_BANNED",
                         ip_address=ip_address,
                         details="IP blocked for repeated bot verification failures",
-                        created_at=datetime.utcnow().isoformat() + "Z"
+                        created_at=datetime.now(UTC).isoformat() + "Z"
                     )
                     db.add(ban_audit)
                     db.commit()
@@ -473,8 +473,8 @@ def create_session(
         "tenant_slug": tenant_slug,
         "role": role,
         "is_master": is_master,
-        "created_at": datetime.utcnow().isoformat(),
-        "expires_at": (datetime.utcnow() + timedelta(seconds=SESSION_MAX_AGE)).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
+        "expires_at": (datetime.now(UTC) + timedelta(seconds=SESSION_MAX_AGE)).isoformat(),
     }
     return token
 
@@ -486,27 +486,49 @@ def get_session(token: str) -> Optional[dict]:
         return None
 
     expires_at = datetime.fromisoformat(session["expires_at"])
-    if datetime.utcnow() > expires_at:
+    if datetime.now(UTC) > expires_at:
         del sessions[token]
         return None
 
     return session
 
 
-async def log_security_event(db: Session, user_id: str, action: str, ip_address: Optional[str], user_agent: Optional[str], details: Optional[str] = None, email_alert_recipient: Optional[str] = None):
-    """Log a security event, and send new-IP login warning email if required."""
+async def log_security_event(db: Session, user_id: str, action: str, ip_address: Optional[str], user_agent: Optional[str], details: Optional[str] = None, email_alert_recipient: Optional[str] = None, tenant_slug: Optional[str] = None):
+    """Log a security event, and send new-IP login warning email if required.
+
+    Stores the FULL ip_address (legitimate interest: new-IP login alerts) plus an
+    anonymized copy, with ``ip_full_until`` marking when the full IP should be
+    purged per the tenant's security retention setting (Post-sprint 2.1).
+
+    Args:
+        tenant_slug: Required for per-tenant IP retention lookup in cloud mode.
+    """
+    from app.core.security import anonymize_ip
+    from app.routers.settings import get_security_ip_retention_days
+
+    now = datetime.now(UTC)
+    retention_days = get_security_ip_retention_days(tenant_slug=tenant_slug)
+    if retention_days < 0:
+        ip_full_until_iso: Optional[str] = None            # retain indefinitely
+    elif retention_days == 0:
+        ip_full_until_iso = now.isoformat()                 # already expired → purge on next sweep
+    else:
+        ip_full_until_iso = (now + timedelta(days=retention_days)).isoformat()
+
     audit_log = AuditLog(
         id=str(uuid.uuid4()),
         user_id=user_id,
         action=action,
         ip_address=ip_address,
+        ip_address_anonymized=anonymize_ip(ip_address) if ip_address else None,
+        ip_full_until=ip_full_until_iso,
         user_agent=user_agent,
         details=details,
-        created_at=datetime.utcnow().isoformat() + "Z"
+        created_at=now.isoformat() + "Z",
     )
     db.add(audit_log)
     db.commit()
-    
+
     # If this is a login success and we have an email recipient to notify:
     if action == "LOGIN_SUCCESS" and email_alert_recipient and ip_address and ip_address != "unknown":
         try:
@@ -531,7 +553,7 @@ async def log_security_event(db: Session, user_id: str, action: str, ip_address:
                 <p>We detected a new login to your Frontbase account from an unrecognized IP address.</p>
                 <p><strong>Account:</strong> {email_alert_recipient}</p>
                 <p><strong>IP Address:</strong> {ip_address}</p>
-                <p><strong>Time:</strong> {datetime.utcnow().isoformat()}Z</p>
+                <p><strong>Time:</strong> {datetime.now(UTC).isoformat()}Z</p>
                 <p><strong>User Agent:</strong> {user_agent or 'Unknown'}</p>
                 <br>
                 <p>If this was you, no action is needed. If you do not recognize this login, please change your password immediately.</p>
@@ -542,6 +564,28 @@ async def log_security_event(db: Session, user_id: str, action: str, ip_address:
                 logger.warning(f"[Security] New IP login detected for user {user_id} (IP: {ip_address}). Warning email queued.")
         except Exception as e:
             logger.error(f"[Security] Failed to check new IP / send email alert: {e}")
+
+
+def purge_expired_security_ips(db: Session) -> int:
+    """Anonymize full IPs in ``audit_logs`` whose retention window has expired.
+
+    For rows where ``ip_full_until`` is in the past, set ``ip_address = NULL``
+    (the anonymized value in ``ip_address_anonymized`` is retained long-term for
+    analytics/forensics). Rows with ``ip_full_until IS NULL`` (retention = -1,
+    legitimate-interest mode) are left intact. Idempotent; safe to run from a
+    cron/periodic task. Returns the number of rows purged.
+    """
+    now_iso = datetime.now(UTC).isoformat()
+    rows = db.query(AuditLog).filter(
+        AuditLog.ip_full_until.isnot(None),
+        AuditLog.ip_full_until < now_iso,
+        AuditLog.ip_address.isnot(None),
+    ).all()
+    for row in rows:
+        row.ip_address = None
+    if rows:
+        db.commit()
+    return len(rows)
 
 
 def get_current_user(request: Request) -> Optional[dict]:
@@ -656,7 +700,8 @@ async def login(request: Request, body: LoginRequest, response: Response):
                 ip_address=request.client.host if request.client else "unknown",
                 user_agent=request.headers.get("user-agent"),
                 details=f"Master admin login: {admin['email']}",
-                email_alert_recipient=admin["email"]
+                email_alert_recipient=admin["email"],
+                tenant_slug=None
             )
         except Exception as e:
             logger.error(f"[Security] Master admin login audit failed: {e}")
@@ -717,8 +762,8 @@ async def login(request: Request, body: LoginRequest, response: Response):
 
     logger.info(f"[Auth] Tenant user login: {body.email} (tenant={tenant_slug})")
 
-    now = datetime.utcnow().isoformat()
-    
+    now = datetime.now(UTC).isoformat()
+
     # Update last_login_at in database
     from app.database.config import SessionLocal
     from app.models.auth import User as DBUser
@@ -735,7 +780,8 @@ async def login(request: Request, body: LoginRequest, response: Response):
             ip_address=request.client.host if request.client else "unknown",
             user_agent=request.headers.get("user-agent"),
             details=f"Tenant user login: {body.email} (tenant={tenant_slug})",
-            email_alert_recipient=body.email
+            email_alert_recipient=body.email,
+            tenant_slug=tenant_slug
         )
         db.commit()
     except Exception as e:
@@ -866,7 +912,7 @@ async def signup(request: Request, body: SignupRequest, response: Response):
 
     logger.info(f"[Signup] New tenant: {slug} ({body.email})")
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     return {
         "user": {
             "id": st_user_id,
@@ -1197,7 +1243,7 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest):
         
     # Generate token and expiry
     token = secrets.token_urlsafe(32)
-    expiry = (datetime.utcnow() + timedelta(hours=1)).isoformat() + "Z"
+    expiry = (datetime.now(UTC) + timedelta(hours=1)).isoformat() + "Z"
     
     # Store token in-memory on the admin dict
     admin["reset_token"] = token
@@ -1299,7 +1345,7 @@ async def reset_password(request: Request, body: ResetPasswordRequest):
             # strip 'Z' for parsing if present
             expiry_str = stored_expiry[:-1] if stored_expiry.endswith("Z") else stored_expiry
             expiry_dt = datetime.fromisoformat(expiry_str)
-            if datetime.utcnow() > expiry_dt:
+            if datetime.now(UTC) > expiry_dt:
                 if not is_cloud():
                     await record_failed_attempt(request, email)
                 raise HTTPException(status_code=400, detail="Reset token has expired.")
@@ -1458,7 +1504,7 @@ async def add_ip_ban(
         reason=body.reason,
         tenant_id=tenant_id,
         tenant_slug=tenant_slug,
-        created_at=datetime.utcnow().isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat() + "Z"
     )
     db.add(new_ban)
     
@@ -1470,7 +1516,7 @@ async def add_ip_ban(
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
         details=f"Banned IP/Range: {ip_str}. Reason: {body.reason}",
-        created_at=datetime.utcnow().isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat() + "Z"
     )
     db.add(audit_log)
     db.commit()
@@ -1522,7 +1568,7 @@ async def delete_ip_ban(
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
         details=f"Unbanned IP/Range: {ip_str}",
-        created_at=datetime.utcnow().isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat() + "Z"
     )
     db.add(audit_log)
     db.commit()
@@ -1630,7 +1676,7 @@ async def update_bot_protection_settings(
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
         details=f"Bot protection settings updated. Enabled: {body.enabled}, Provider: {body.provider}",
-        created_at=datetime.utcnow().isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat() + "Z"
     )
     db.add(audit_log)
     db.commit()
@@ -1717,7 +1763,7 @@ async def update_waf_settings(
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
         details=f"WAF toggled to {'ENABLED' if body.enabled else 'DISABLED'}",
-        created_at=datetime.utcnow().isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat() + "Z"
     )
     db.add(audit_log)
     db.commit()

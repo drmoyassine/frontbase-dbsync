@@ -16,7 +16,7 @@ Dependencies:
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, UTC
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -215,8 +215,8 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session, ctx: 
                 provider_account_id=payload.provider_id,
                 is_default=False,
                 is_system=True,  # System-managed, not user-deletable
-                created_at=datetime.utcnow().isoformat(),
-                updated_at=datetime.utcnow().isoformat(),
+                created_at=datetime.now(UTC).isoformat(),
+                updated_at=datetime.now(UTC).isoformat(),
                 project_id=project_id_kv,
             )
             db.add(kv_cache)
@@ -237,7 +237,7 @@ async def provision_and_deploy(payload: GenericDeployRequest, db: Session, ctx: 
     engine_cfg = inject_system_key(json.dumps({config_key: payload.worker_name}))
 
     # --- Create or update engine record ---
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     existing = db.query(EdgeEngine).filter(EdgeEngine.url == engine_url).first()
     engine_id = None
 

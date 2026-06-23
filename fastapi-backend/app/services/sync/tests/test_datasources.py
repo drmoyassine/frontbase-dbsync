@@ -91,11 +91,11 @@ async def test_datasource_tenant_isolation(client, db):
     from app.services.sync.main import sync_app
     from app.middleware.tenant_context import get_tenant_context, TenantContext
     from app.models.models import Tenant, Project, User
-    from datetime import datetime
+    from datetime import datetime, UTC
     import uuid
 
     # Create dummy users, tenants and projects
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     uid = str(uuid.uuid4())[:8]
     
     user_a = User(id=f"u_a_{uid}", username=f"user_a_{uid}", email=f"user_a_{uid}@test.com", password_hash="hash", created_at=now, updated_at=now)
@@ -185,11 +185,11 @@ async def test_datasource_name_uniqueness_scoped(client, db):
     from app.services.sync.main import sync_app
     from app.middleware.tenant_context import get_tenant_context, TenantContext
     from app.models.models import Tenant, Project, User
-    from datetime import datetime
+    from datetime import datetime, UTC
     import uuid
 
     # Create dummy users, tenants and projects
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     uid = str(uuid.uuid4())[:8]
     
     user_a = User(id=f"u_a2_{uid}", username=f"user_a2_{uid}", email=f"user_a2_{uid}@test.com", password_hash="hash", created_at=now, updated_at=now)

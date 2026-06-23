@@ -1,0 +1,29 @@
+{
+  "timeZone": "America/New_York",
+  "dependencies": {},
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/spreadsheets.currentonly",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/script.projects",
+    "https://www.googleapis.com/auth/script.deployments",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/drive.file"
+  ],
+  "addOns": {
+    "common": {
+      "name": "Frontbase for Google Sheets",
+      "logoUrl": "https://app.frontbase.dev/logo.png",
+      "useLocaleFromApp": true,
+      "homepageTrigger": {
+        "runFunction": "onFrontbaseHomepage"
+      }
+    },
+    "sheets": {}
+  },
+  "urlFetchWhitelist": [
+    "https://script.googleapis.com/",
+    "https://app.frontbase.dev/"
+  ]
+}

@@ -4,7 +4,7 @@ Engine Manifest Sync — Fetch and apply /api/manifest from running engines.
 Extracted from routers/edge_engines.py for SRP compliance.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 import uuid
 import httpx
 
@@ -40,7 +40,7 @@ async def sync_engine_manifest(engine: EdgeEngine, db: Session) -> dict:
         return {"synced": False, "reason": f"Could not reach engine: {str(e)}"}
 
     engine_id = str(engine.id)
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(UTC).isoformat()
     synced_models: list[str] = []
 
     # Note: adapter_type is NOT synced from manifest — the DB value

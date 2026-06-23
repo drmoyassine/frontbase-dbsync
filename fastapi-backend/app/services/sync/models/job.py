@@ -2,7 +2,7 @@
 Sync job model - tracks async sync job execution.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional
 from sqlalchemy import String, Text, DateTime, Integer, Enum as SQLEnum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
@@ -59,7 +59,7 @@ class SyncJob(Base):
     # Timing
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     
     # Trigger source
     triggered_by: Mapped[str] = mapped_column(String(50), default="manual")  # manual, schedule, webhook
@@ -79,5 +79,13 @@ class SyncJob(Base):
         """Calculate job duration in seconds."""
         if not self.started_at:
             return None
-        end_time = self.completed_at or datetime.utcnow()
-        return (end_time - self.started_at).total_seconds()
+        end_time = self.completed_at or datetime.now(UTC)
+        started = self.started_at
+        # Sync columns are TIMESTAMP WITHOUT TIME ZONE (naive in Postgres, aware in SQLite tests).
+        # Normalize both operands to the same awareness to avoid naive/aware TypeError.
+        if (end_time.tzinfo is None) != (started.tzinfo is None):
+            if end_time.tzinfo is not None:
+                end_time = end_time.replace(tzinfo=None)
+            else:
+                started = started.replace(tzinfo=None)
+        return (end_time - started).total_seconds()

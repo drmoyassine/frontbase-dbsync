@@ -2,7 +2,7 @@
 DatasourceView model - represents a filtered view of a datasource resource.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -64,13 +64,13 @@ class DatasourceView(Base):
     
     # Metadata
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, 
-        default=datetime.utcnow
+        DateTime,
+        default=lambda: datetime.now(UTC)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, 
-        default=datetime.utcnow, 
-        onupdate=datetime.utcnow
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC)
     )
     
     # Relationships

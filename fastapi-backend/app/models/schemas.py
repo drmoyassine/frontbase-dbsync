@@ -29,8 +29,9 @@ class UserResponse(BaseModel):
     created_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
     updated_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 # Page Models
 class PageCreateRequest(BaseModel):
@@ -42,9 +43,10 @@ class PageCreateRequest(BaseModel):
     is_public: Optional[bool] = Field(default=True, alias="isPublic")  # public by default; private is explicit (see private_pages gate)
     is_homepage: Optional[bool] = Field(default=False, alias="isHomepage")
     layout_data: Optional[Dict[str, Any]] = Field(default_factory=lambda: {"content": [], "root": {}}, alias="layoutData")
-    
-    class Config:
-        populate_by_name = True  # Allow both field name and alias
+
+    model_config = {
+        "populate_by_name": True,  # Allow both field name and alias
+    }
 
 class PageUpdateRequest(BaseModel):
     name: Optional[Annotated[str, StringConstraints(min_length=1, max_length=100)]] = None
@@ -55,9 +57,10 @@ class PageUpdateRequest(BaseModel):
     is_public: Optional[bool] = Field(default=None, alias="isPublic")
     is_homepage: Optional[bool] = Field(default=None, alias="isHomepage")
     layout_data: Optional[Dict[str, Any]] = Field(default=None, alias="layoutData")
-    
-    class Config:
-        populate_by_name = True
+
+    model_config = {
+        "populate_by_name": True,
+    }
 
 class PageResponse(BaseModel):
     id: str
@@ -83,8 +86,9 @@ class PageResponse(BaseModel):
                 return {}
         return v or {}
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 # Database Connection Models
 class DatabaseConnectionRequest(BaseModel):
@@ -114,8 +118,9 @@ class ProjectUpdateRequest(BaseModel):
     supabase_service_key: Optional[Annotated[str, StringConstraints(min_length=1)]] = None
     users_config: Optional[Dict[str, Any]] = Field(default=None, alias="usersConfig")
 
-    class Config:
-        populate_by_name = True  # Accept both field name and alias
+    model_config = {
+        "populate_by_name": True,  # Accept both field name and alias
+    }
 
 class ProjectResponse(BaseModel):
     id: str
@@ -130,9 +135,10 @@ class ProjectResponse(BaseModel):
     created_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
     updated_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
 
-    class Config:
-        from_attributes = True
-        populate_by_name = True
+    model_config = {
+        "from_attributes": True,
+        "populate_by_name": True,
+    }
 
 
     @field_validator('users_config', mode='before')
@@ -170,8 +176,9 @@ class VariableResponse(BaseModel):
     description: Optional[str] = None
     created_at: Annotated[datetime, BeforeValidator(lambda v: datetime.fromisoformat(v) if isinstance(v, str) else v)]
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 # Generic Response Models
 class SuccessResponse(BaseModel):

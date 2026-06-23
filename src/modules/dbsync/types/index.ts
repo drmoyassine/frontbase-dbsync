@@ -173,6 +173,14 @@ export interface PrivacySettings {
     customHeadHtml?: string
 }
 
+// Security-log IP retention (Post-sprint 2.1 — configurable GDPR strict mode).
+//   fullIpRetentionDays > 0 : retain full IP N days, then purge
+//   0  : anonymize immediately (strictest privacy)
+//   -1 : retain indefinitely (legitimate interest)
+export interface SecuritySettings {
+    fullIpRetentionDays: number
+}
+
 export interface EmailProviderSettings {
     provider: 'smtp' | 'resend' | 'mailgun'
     smtp_host: string | null

@@ -18,7 +18,7 @@ All business logic delegated to:
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Literal
-from datetime import datetime
+from datetime import datetime, UTC
 import asyncio
 import json
 import uuid
@@ -250,7 +250,7 @@ async def batch_toggle_engines(
             result.failed.append({"id": eid, "error": "Not found"})
             continue
         engine.is_active = payload.is_active  # type: ignore[assignment]
-        engine.updated_at = datetime.utcnow().isoformat() + "Z"  # type: ignore[assignment]
+        engine.updated_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
         result.success.append(eid)
     
     db.commit()
@@ -272,8 +272,8 @@ async def batch_sync_check(
         provider_name = engine.edge_provider.provider if engine.edge_provider else "unknown"
         test_result = await engine_test.test_connection(url, str(provider_name))
         if test_result.success:
-            engine.last_synced_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
-            engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+            engine.last_synced_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
+            engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
             result.success.append(eid)
         else:
             result.failed.append({"id": eid, "error": test_result.message})
@@ -360,7 +360,7 @@ async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db)
         if not provider:
             raise HTTPException(status_code=400, detail="Invalid edge_provider_id")
 
-    now = datetime.utcnow().isoformat() + "Z"
+    now = datetime.now(UTC).isoformat() + "Z"
     
     project_id = None
     if ctx and ctx.tenant_id:
@@ -480,7 +480,7 @@ async def update_engine(
     for key, value in update_data.items():
         setattr(engine, key, value)
         
-    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
 
     # Sync bindings for datasources
     if datasource_ids is not None:
@@ -778,7 +778,7 @@ async def update_engine_source(
     all_modified = list(set(existing_modified + modified_core))
     engine.modified_core_files = json.dumps(all_modified) if all_modified else None  # type: ignore[assignment]
 
-    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
     db.commit()
 
     return {
@@ -989,10 +989,10 @@ async def sync_engine_logs(
         return {"synced": 0, "detail": f"Edge push error: {str(e)[:200]}"}
 
     # Update last_sync_at
-    log_config["last_sync_at"] = datetime.utcnow().isoformat()
+    log_config["last_sync_at"] = datetime.now(UTC).isoformat()
     config["log_persistence"] = log_config
     engine.engine_config = json.dumps(config)  # type: ignore[assignment]
-    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
     db.commit()
 
     return {"synced": len(result.logs), "detail": "Logs synced to edge DB"}
@@ -1070,7 +1070,7 @@ async def update_log_config(
     config["log_persistence"] = log_config
 
     engine.engine_config = json.dumps(config)  # type: ignore[assignment]
-    engine.updated_at = datetime.utcnow().isoformat()  # type: ignore[assignment]
+    engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
     db.commit()
 
     # TODO: Register/deregister QStash schedule when toggling enabled

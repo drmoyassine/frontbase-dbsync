@@ -106,8 +106,9 @@ class WorkflowDraftResponse(WorkflowDraftBase):
     updated_at: datetime
     created_by: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True,
+    }
 
 
 class WorkflowDraftListResponse(BaseModel):

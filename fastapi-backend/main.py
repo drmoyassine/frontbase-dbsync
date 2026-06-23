@@ -633,12 +633,12 @@ async def record_waf_strike(client_ip: str) -> bool:
                 exists = db.query(IPBlocklist).filter(IPBlocklist.ip_or_range == client_ip).first()
                 if not exists:
                     import uuid
-                    from datetime import datetime
+                    from datetime import datetime, UTC
                     new_ban = IPBlocklist(
                         id=str(uuid.uuid4()),
                         ip_or_range=client_ip,
                         reason="WAF Auto-Ban (3 strikes)",
-                        created_at=datetime.utcnow().isoformat() + "Z"
+                        created_at=datetime.now(UTC).isoformat() + "Z"
                     )
                     db.add(new_ban)
                     db.commit()
@@ -862,7 +862,8 @@ class WAFMiddleware:
                                 action="WAF_AUDIT_ADMIN",
                                 ip_address=client_ip,
                                 user_agent=request.headers.get("user-agent"),
-                                details=details_str
+                                details=details_str,
+                                tenant_slug=None
                             )
                         finally:
                             db.close()
@@ -882,7 +883,8 @@ class WAFMiddleware:
                                 action="WAF_BLOCKED",
                                 ip_address=client_ip,
                                 user_agent=request.headers.get("user-agent"),
-                                details=details_str
+                                details=details_str,
+                                tenant_slug=None
                             )
                             # Record strike & check for auto-ban
                             await record_waf_strike(client_ip)

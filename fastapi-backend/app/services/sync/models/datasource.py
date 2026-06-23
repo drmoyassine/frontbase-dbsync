@@ -78,13 +78,13 @@ class Datasource(Base):
     
     # Note: Use naive datetime for PostgreSQL TIMESTAMP WITHOUT TIME ZONE columns
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, 
-        default=lambda: datetime.now(UTC)
+        DateTime,
+        default=lambda: datetime.utcnow()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC)
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow()
     )
     
     # Relationships

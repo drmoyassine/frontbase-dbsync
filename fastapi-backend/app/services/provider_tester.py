@@ -258,18 +258,24 @@ async def _test_wordpress_plugin(creds: dict) -> dict:
         return {"success": False, "detail": "Username and Application Password are required"}
 
     auth = base64.b64encode(f"{username}:{app_password}".encode()).decode()
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
         # First check if the plugin is installed (no auth required)
         try:
             info_resp = await client.get(
                 f"{base_url}/wp-json/frontbase/v1/info",
             )
+            if info_resp.status_code == 404:
+                return {"success": False, "detail": f"Plugin endpoint not found (404). Is the plugin installed and activated? Tried: {base_url}/wp-json/frontbase/v1/info"}
             if info_resp.status_code != 200:
-                return {"success": False, "detail": "Frontbase plugin not found — please install it on your WordPress site"}
+                return {"success": False, "detail": f"Plugin returned {info_resp.status_code}. Response: {info_resp.text[:200]}"}
             plugin_info = info_resp.json()
             plugin_version = plugin_info.get("version", "unknown")
-        except Exception:
-            return {"success": False, "detail": "Could not reach WordPress site — check the URL"}
+        except httpx.ConnectError as e:
+            return {"success": False, "detail": f"Could not connect to {base_url} — check the URL and network"}
+        except httpx.TimeoutException:
+            return {"success": False, "detail": f"Connection timed out — {base_url} may be slow or unreachable"}
+        except Exception as e:
+            return {"success": False, "detail": f"Error reaching WordPress: {str(e)[:200]}"}
 
         # Then verify authentication via the discover endpoint
         discover_resp = await client.get(
@@ -280,7 +286,7 @@ async def _test_wordpress_plugin(creds: dict) -> dict:
     if discover_resp.status_code == 401:
         return {"success": False, "detail": "Invalid credentials — check your username and Application Password"}
     if discover_resp.status_code != 200:
-        return {"success": False, "detail": f"Plugin API error: {discover_resp.status_code}"}
+        return {"success": False, "detail": f"Discovery endpoint error: {discover_resp.status_code}"}
 
     data = discover_resp.json()
     site_name = data.get("site_name", "WordPress site")

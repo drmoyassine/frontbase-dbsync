@@ -17,14 +17,17 @@ class DatasourceBase(BaseModel):
     database: Optional[str] = Field(None, max_length=255)
     username: Optional[str] = None
     connection_uri: Optional[str] = None
-    
+
     # Supabase/Neon specific
     api_url: Optional[str] = None
     anon_key: Optional[str] = None  # Supabase anon key
-    
+
     # WordPress specific
     table_prefix: str = Field(default="wp_", max_length=50)
-    
+    # WordPress Plugin specific (frontend sends these, we map to api_url/password)
+    base_url: Optional[str] = Field(None, max_length=512)
+    app_password: Optional[str] = None
+
     # Extra config as dict
     extra_config: Optional[Dict[str, Any]] = None
 
@@ -60,8 +63,21 @@ class DatasourceCreate(DatasourceBase):
     @model_validator(mode="before")
     @classmethod
     def parse_connection_uri(cls, data: Any) -> Any:
-        """Parse connection URI if provided."""
-        return _parse_uri_metadata(data)
+        """Parse connection URI and map WordPress Plugin fields."""
+        data = _parse_uri_metadata(data)
+        # Map WordPress Plugin fields to standard fields
+        if isinstance(data, dict) and data.get("type") in [
+            DatasourceType.WORDPRESS_REST,
+            DatasourceType.WORDPRESS_GRAPHQL,
+            DatasourceType.WORDPRESS_PLUGIN,
+        ]:
+            # Map base_url → api_url
+            if data.get("base_url") and not data.get("api_url"):
+                data["api_url"] = data.pop("base_url")
+            # Map app_password → password
+            if data.get("app_password") and not data.get("password"):
+                data["password"] = data.pop("app_password")
+        return data
 
 
 class DatasourceTestRequest(BaseModel):
@@ -78,13 +94,29 @@ class DatasourceTestRequest(BaseModel):
     anon_key: Optional[str] = None  # Supabase anon key
     api_key: Optional[str] = None  # Service role key
     table_prefix: str = Field(default="wp_", max_length=50)
+    # WordPress Plugin specific (frontend sends these, we map to api_url/password)
+    base_url: Optional[str] = None
+    app_password: Optional[str] = None
     extra_config: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="before")
     @classmethod
     def parse_connection_uri(cls, data: Any) -> Any:
         """Parse connection URI if provided."""
-        return _parse_uri_metadata(data)
+        data = _parse_uri_metadata(data)
+        # Map WordPress Plugin fields to standard fields
+        if isinstance(data, dict) and data.get("type") in [
+            DatasourceType.WORDPRESS_REST,
+            DatasourceType.WORDPRESS_GRAPHQL,
+            DatasourceType.WORDPRESS_PLUGIN,
+        ]:
+            # Map base_url → api_url
+            if data.get("base_url") and not data.get("api_url"):
+                data["api_url"] = data.pop("base_url")
+            # Map app_password → password
+            if data.get("app_password") and not data.get("password"):
+                data["password"] = data.pop("app_password")
+        return data
 
 
 class DatasourceUpdate(BaseModel):

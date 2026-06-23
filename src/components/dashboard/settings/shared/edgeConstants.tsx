@@ -39,6 +39,7 @@ const LUCIDE_FALLBACKS: Record<string, React.FC<any>> = {
     netlify: Hexagon,
     deno: Zap,
     wordpress_rest: Globe,
+    wordpress_plugin: Rocket,  // Plugin mode gets a different icon to distinguish from REST
     postgres: Database,
     mysql: HardDrive,
     neon: Database,
@@ -270,15 +271,36 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         ],
     },
     wordpress_rest: {
-        label: 'WordPress API',
-        defaultName: 'WordPress API',
+        label: 'WordPress REST API',
+        defaultName: 'WordPress REST API',
         capabilities: ['database', 'cms'],
         fields: [
             { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
             { key: 'username', label: 'Username', placeholder: 'admin', required: true },
             { key: 'app_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
         ],
-        helpText: <>Generate an Application Password in WordPress → Users → Profile → Application Passwords.</>,
+        helpText: <>Connect using WordPress REST API. Requires posts, pages, and custom post types to be publicly readable. <strong>Note:</strong> Some features like custom field extraction may be limited.</>,
+    },
+    wordpress_plugin: {
+        label: 'WordPress Plugin',
+        defaultName: 'WordPress with Plugin',
+        capabilities: ['database', 'cms'],
+        fields: [
+            { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
+            { key: 'username', label: 'Username', placeholder: 'admin', required: true },
+            { key: 'app_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
+        ],
+        helpText: (
+            <div className="text-xs space-y-2">
+                <p>Connect using the <strong>Frontbase Connector</strong> WordPress plugin for full features.</p>
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                    <li>Install the plugin from <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">docs/plans/wordpress-plugin/</code></li>
+                    <li>Or search <strong>Frontbase Connector</strong> in WordPress plugin directory</li>
+                    <li>Generate an Application Password in WordPress → Users → Profile</li>
+                </ol>
+                <p className="text-green-700 dark:text-green-400">✓ ACF support, shortcode rendering, and custom field extraction</p>
+            </div>
+        ),
     },
     google_sheets: {
         label: 'Google Sheets',

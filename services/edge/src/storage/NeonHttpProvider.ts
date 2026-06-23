@@ -189,6 +189,16 @@ const PG_MIGRATIONS = [
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`,
     `CREATE INDEX IF NOT EXISTS idx_agent_tools_profile ON ${SCHEMA}.agent_tools(profile_slug)`,
+
+    // Tenant secrets (community/shared workers — encrypted per-tenant blobs)
+    `CREATE TABLE IF NOT EXISTS ${SCHEMA}.tenant_secrets (
+        tenant_slug TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (tenant_slug, kind)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_tenant_secrets_tenant ON ${SCHEMA}.tenant_secrets(tenant_slug)`,
 ];
 
 // =============================================================================

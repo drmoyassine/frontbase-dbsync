@@ -22,6 +22,7 @@ class DatasourceType(str, enum.Enum):
     WORDPRESS = "wordpress"
     WORDPRESS_REST = "wordpress_rest"
     WORDPRESS_GRAPHQL = "wordpress_graphql"
+    WORDPRESS_PLUGIN = "wordpress_plugin"  # Frontbase Connector plugin
     NEON = "neon"
     MYSQL = "mysql"
     GOOGLE_SHEETS = "google_sheets"

@@ -277,4 +277,19 @@ export interface IStateProvider {
     upsertAgentTool(tool: AgentToolData): Promise<void>;
     /** Delete an agent tool by ID */
     deleteAgentTool(id: string, tenantSlug?: string): Promise<boolean>;
+
+    // --- Tenant Secrets (community/shared workers only) ---
+    //
+    // Per-tenant encrypted blobs stored in the worker's own state-DB so that
+    // secrets (datasources, auth, …) scale by rows instead of env-var size.
+    // `payload` is opaque AES-256-GCM ciphertext (base64) — providers never
+    // inspect it. The decryption key lives in FRONTBASE_SECRETS_KEY (env).
+    //
+    // See docs/plans/[PERFORMANCE] community-worker-tenant-secrets-in-statedb.md
+    /** Read a tenant secret blob as ciphertext (null if absent). */
+    getTenantSecret(tenantSlug: string, kind: string): Promise<string | null>;
+    /** Upsert a tenant secret blob (ciphertext). */
+    upsertTenantSecret(tenantSlug: string, kind: string, payload: string): Promise<void>;
+    /** Delete a tenant secret blob (on unpublish/offboard). */
+    deleteTenantSecret(tenantSlug: string, kind: string): Promise<void>;
 }

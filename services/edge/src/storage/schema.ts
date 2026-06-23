@@ -9,7 +9,7 @@
  */
 
 import { sql } from 'drizzle-orm';
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, primaryKey } from 'drizzle-orm/sqlite-core';
 
 // =============================================================================
 // Published Pages
@@ -120,6 +120,21 @@ export const agentToolsTable = sqliteTable('agent_tools', {
 });
 
 // =============================================================================
+// Tenant Secrets (community/shared workers — encrypted per-tenant blobs)
+// =============================================================================
+
+export const tenantSecrets = sqliteTable(
+    'tenant_secrets',
+    {
+        tenantSlug: text('tenant_slug').notNull(),
+        kind: text('kind').notNull(),                 // 'datasources' | 'auth' | 'agent_profiles' | 'security' | 'storage'
+        payload: text('payload').notNull(),            // AES-256-GCM ciphertext (base64)
+        updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    },
+    (table) => [primaryKey({ columns: [table.tenantSlug, table.kind] })],
+);
+
+// =============================================================================
 // Inferred Types
 // =============================================================================
 
@@ -131,3 +146,4 @@ export type EdgeLogRow = typeof edgeLogsTable.$inferSelect;
 export type NewEdgeLog = typeof edgeLogsTable.$inferInsert;
 export type AgentToolRow = typeof agentToolsTable.$inferSelect;
 export type NewAgentTool = typeof agentToolsTable.$inferInsert;
+export type TenantSecretRow = typeof tenantSecrets.$inferSelect;

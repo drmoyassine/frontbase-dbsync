@@ -621,4 +621,33 @@ export class CfD1HttpProvider implements IStateProvider {
         }
         return true;
     }
+
+    // =========================================================================
+    // Tenant Secrets (community/shared workers)
+    // =========================================================================
+
+    async getTenantSecret(tenantSlug: string, kind: string): Promise<string | null> {
+        const row = await this.get<{ payload: string }>(
+            `SELECT payload FROM tenant_secrets WHERE tenant_slug = ?1 AND kind = ?2`,
+            [tenantSlug, kind]
+        );
+        return row ? (row.payload as string) : null;
+    }
+
+    async upsertTenantSecret(tenantSlug: string, kind: string, payload: string): Promise<void> {
+        await this.run(
+            `INSERT INTO tenant_secrets (tenant_slug, kind, payload, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(tenant_slug, kind) DO UPDATE SET
+               payload = excluded.payload, updated_at = excluded.updated_at`,
+            [tenantSlug, kind, payload, new Date().toISOString()]
+        );
+    }
+
+    async deleteTenantSecret(tenantSlug: string, kind: string): Promise<void> {
+        await this.run(
+            `DELETE FROM tenant_secrets WHERE tenant_slug = ?1 AND kind = ?2`,
+            [tenantSlug, kind]
+        );
+    }
 }

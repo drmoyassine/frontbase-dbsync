@@ -654,4 +654,32 @@ export abstract class DrizzleStateProvider implements IStateProvider {
             .where(whereClause);
         return true;
     }
+
+    // =========================================================================
+    // Tenant Secrets (community/shared workers)
+    // =========================================================================
+
+    async getTenantSecret(tenantSlug: string, kind: string): Promise<string | null> {
+        const row = await this.getDb().get(sql`
+            SELECT payload FROM tenant_secrets
+            WHERE tenant_slug = ${tenantSlug} AND kind = ${kind}
+        `);
+        return row ? row.payload : null;
+    }
+
+    async upsertTenantSecret(tenantSlug: string, kind: string, payload: string): Promise<void> {
+        await this.getDb().run(sql`
+            INSERT INTO tenant_secrets (tenant_slug, kind, payload, updated_at)
+            VALUES (${tenantSlug}, ${kind}, ${payload}, ${new Date().toISOString()})
+            ON CONFLICT(tenant_slug, kind) DO UPDATE SET
+                payload = excluded.payload,
+                updated_at = excluded.updated_at
+        `);
+    }
+
+    async deleteTenantSecret(tenantSlug: string, kind: string): Promise<void> {
+        await this.getDb().run(sql`
+            DELETE FROM tenant_secrets WHERE tenant_slug = ${tenantSlug} AND kind = ${kind}
+        `);
+    }
 }

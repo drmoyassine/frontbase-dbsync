@@ -20,6 +20,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Use if_not_exists=True because the table may have been created by
+    # Base.metadata.create_all during bootstrap before this migration runs.
+    # This makes the migration idempotent for prod DBs that already ran bootstrap.
     op.create_table(
         'file_move_jobs',
         sa.Column('id', sa.String(), nullable=False),
@@ -39,8 +42,10 @@ def upgrade() -> None:
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint('id'),
+        if_not_exists=True,  # <-- idempotent: no error if table already exists
     )
 
 
 def downgrade() -> None:
-    op.drop_table('file_move_jobs')
+    # Use if_exists=True for idempotent downgrade
+    op.drop_table('file_move_jobs', if_exists=True)

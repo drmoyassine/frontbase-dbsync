@@ -232,6 +232,20 @@ export const MIGRATIONS: Migration[] = [
             `CREATE INDEX IF NOT EXISTS idx_workflow_versions_tenant_slug ON workflow_draft_versions(tenant_slug)`,
         ],
     },
+    {
+        version: 13,
+        description: 'Add tenant_secrets table for encrypted per-tenant credentials on shared workers',
+        sql: [
+            `CREATE TABLE IF NOT EXISTS tenant_secrets (
+                tenant_slug TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (tenant_slug, kind)
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_tenant_secrets_tenant ON tenant_secrets(tenant_slug)`,
+        ],
+    },
 ];
 
 // =============================================================================

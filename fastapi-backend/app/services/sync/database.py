@@ -84,6 +84,84 @@ def _drop_stale_cache_tables(connection):
                 _logger.warning(f"[AUTO-MIGRATE] Could not drop stale table {table.name}: {e}")
 
 
+def _update_enum_check_constraints(connection):
+    """Update CHECK constraints for enum columns to include all current enum values.
+
+    SQLAlchemy creates CHECK constraints for non-native enums that limit values
+    to what existed when the table was created. When new enum values are added,
+    the constraint must be updated to allow them.
+
+    Currently handles:
+    - datasources.type: includes 'wordpress_plugin' and other newer values
+    """
+    import logging
+    from sqlalchemy import text, inspect as sa_inspect
+    from app.services.sync.models.datasource import DatasourceType
+
+    _logger = logging.getLogger("sync.db.migrate")
+    dialect = connection.dialect.name
+
+    if dialect == 'sqlite':
+        return  # SQLite doesn't use CHECK constraints for enums
+
+    if dialect != 'postgresql':
+        return  # Only handle PostgreSQL
+
+    insp = sa_inspect(connection)
+
+    # Update datasources.type CHECK constraint
+    if 'datasources' not in insp.get_table_names():
+        return
+
+    # Find the existing CHECK constraint on the type column
+    constraints = insp.get_check_constraints('datasources')
+    type_constraint = None
+    for constraint in constraints:
+        if 'type' in str(constraint.get('sqltext', '')):
+            type_constraint = constraint.get('name')
+            break
+
+    # Build the list of all valid enum values
+    datasource_type_values = [e.value for e in DatasourceType]
+
+    # Check if wordpress_plugin is in the existing constraint
+    needs_update = False
+    if type_constraint:
+        try:
+            # Get the current constraint definition
+            result = connection.execute(text(f"""
+                SELECT pg_get_constraintdef(oid)
+                FROM pg_constraint
+                WHERE conname = '{type_constraint}' AND conrelid = 'datasources'::regclass
+            """))
+            current_def = result.scalar()
+            # Check if wordpress_plugin is missing
+            if current_def and 'wordpress_plugin' not in current_def:
+                needs_update = True
+                _logger.info(f"[AUTO-MIGRATE] CHECK constraint {type_constraint} missing 'wordpress_plugin'")
+        except Exception as e:
+            _logger.warning(f"[AUTO-MIGRATE] Could not read constraint definition: {e}")
+
+    if needs_update or not type_constraint:
+        # Drop old constraint if it exists
+        if type_constraint:
+            try:
+                connection.execute(text(f'ALTER TABLE datasources DROP CONSTRAINT IF EXISTS {type_constraint}'))
+                _logger.info(f"[AUTO-MIGRATE] Dropped CHECK constraint {type_constraint}")
+            except Exception as e:
+                _logger.warning(f"[AUTO-MIGRATE] Could not drop constraint {type_constraint}: {e}")
+
+        # Add new constraint with all enum values
+        values_list = ', '.join(f"'{v}'" for v in datasource_type_values)
+        try:
+            connection.execute(text(
+                f'ALTER TABLE datasources ADD CONSTRAINT datasources_type_check CHECK (type IN ({values_list}))'
+            ))
+            _logger.info(f"[AUTO-MIGRATE] Added CHECK constraint for datasources.type with {len(datasource_type_values)} values")
+        except Exception as e:
+            _logger.warning(f"[AUTO-MIGRATE] Could not add CHECK constraint: {e}")
+
+
 def _add_missing_columns(connection):
     """Compare model columns against the physical tables and ADD any missing ones.
 
@@ -160,6 +238,11 @@ async def init_db():
         # create_all only creates NEW tables — it won't ALTER existing ones, so an
         # existing Postgres table never gains a newly-added model column without this.
         await conn.run_sync(_add_missing_columns)
+
+        # Auto-migrate: update CHECK constraints for enum columns to include new values.
+        # When new enum values are added to models, existing CHECK constraints need to
+        # be updated to allow them. Without this, INSERTs with new enum values fail.
+        await conn.run_sync(_update_enum_check_constraints)
 
         # Idempotent startup backfill (Phase 1): associate project-less datasources to default project
         from app.config.edition import is_cloud

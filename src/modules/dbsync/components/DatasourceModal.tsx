@@ -41,6 +41,9 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
         anon_key: '',
         api_key: '',
         provider_account_id: (datasource as any)?.provider_account_id || '',
+        // WordPress Plugin specific fields (mapped to api_url/password by backend)
+        base_url: datasource?.api_url || '',  // api_url from datasource is base_url for WP Plugin
+        app_password: '',
         // Google Sheets specific config in extra_config
         extra_config: (() => {
             const cfg = (datasource as any)?.extra_config;
@@ -349,6 +352,78 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                     </div>
                                     <p className="text-xs text-gray-500 mt-1">
                                         Use this secret in your Apps Script Web App code for authentication.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress' ? (
+                            /* WordPress Configuration (inline credentials) */
+                            <div className="space-y-4 p-4 bg-purple-50 dark:bg-purple-900/10 rounded-xl border border-purple-100 dark:border-purple-800/30">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Database className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                                    <h3 className="font-semibold text-purple-900 dark:text-purple-100">
+                                        WordPress Configuration
+                                    </h3>
+                                </div>
+
+                                {formData.type === 'wordpress_plugin' && (
+                                    <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 p-3 mb-4">
+                                        <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                                            <strong>Plugin Mode:</strong> Requires the Frontbase Connector WordPress plugin to be installed and activated on your site.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Base URL / Site URL */}
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
+                                        Site URL
+                                    </label>
+                                    <input
+                                        type="url"
+                                        value={formData.base_url}
+                                        onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        placeholder="https://mysite.com"
+                                        required={formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress'}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Your WordPress site URL (without trailing slash)
+                                    </p>
+                                </div>
+
+                                {/* Username */}
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
+                                        Username
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.username}
+                                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        placeholder="admin"
+                                        required={formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress'}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        WordPress username (must have permission to manage posts)
+                                    </p>
+                                </div>
+
+                                {/* Application Password */}
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
+                                        Application Password
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={formData.app_password}
+                                        onChange={(e) => setFormData({ ...formData, app_password: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        placeholder="xxxx xxxx xxxx xxxx"
+                                        required={formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress'}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Generate in WordPress → Users → Profile → Application Passwords
                                     </p>
                                 </div>
                             </div>

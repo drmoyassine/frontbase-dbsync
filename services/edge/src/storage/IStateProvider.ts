@@ -185,6 +185,13 @@ export interface McpServerToolConfig {
 // State Provider Interface
 // =============================================================================
 
+/** A tenant_secrets row (ciphertext only — never decrypted by providers). */
+export interface TenantSecretEntry {
+    tenantSlug: string;
+    kind: string;
+    payload: string;
+}
+
 export interface IStateProvider {
     // --- Lifecycle ---
     /** Initialize storage (create tables, run migrations, etc.) */
@@ -292,4 +299,10 @@ export interface IStateProvider {
     upsertTenantSecret(tenantSlug: string, kind: string, payload: string): Promise<void>;
     /** Delete a tenant secret blob (on unpublish/offboard). */
     deleteTenantSecret(tenantSlug: string, kind: string): Promise<void>;
+    /**
+     * List ALL tenant secret blobs (ciphertext) — optional. Used by the control
+     * plane for key-rotation read-back / dry-run verification + diagnostics.
+     * Providers without an efficient listing path may omit this (route 501s).
+     */
+    listTenantSecrets?(): Promise<TenantSecretEntry[]>;
 }

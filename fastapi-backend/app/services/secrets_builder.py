@@ -31,6 +31,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_SECURITY',
     'FRONTBASE_STORAGE',
     'FRONTBASE_SECRETS_KEY',  # per-worker AES-256-GCM key for state-DB secrets (shared engines)
+    'FRONTBASE_SECRETS_KEY_OLD',  # V2: retained old key during rotation transition window
 ])
 
 
@@ -767,8 +768,19 @@ def build_engine_secrets(
         is_shared = bool(engine and getattr(engine, 'is_shared', False))
 
     if is_shared and engine is not None:
-        from .edge_secrets_push import get_or_create_secrets_key
-        secrets['FRONTBASE_SECRETS_KEY'] = get_or_create_secrets_key(engine, db)
+        from .edge_secrets_push import resolve_secrets_key, _engine_config
+        secrets['FRONTBASE_SECRETS_KEY'] = resolve_secrets_key(engine, db)
+
+        # V2 rotation transition window: emit the retained old key so the edge
+        # can decrypt ciphertext not yet re-pushed under the new key. Cleared
+        # automatically once the window elapses (prune_expired_rotation).
+        _cfg = _engine_config(engine)
+        _encrypted_old = _cfg.get('secrets_key_old')
+        if _encrypted_old:
+            from ..core.security import decrypt_field as _decrypt
+            _old_key = _decrypt(_encrypted_old)
+            if _old_key:
+                secrets['FRONTBASE_SECRETS_KEY_OLD'] = str(_old_key)
 
     # ─── FRONTBASE_AUTH ──────────────────────────────────────────────────
     auth = _build_auth_config(db, engine_id)

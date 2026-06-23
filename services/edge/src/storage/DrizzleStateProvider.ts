@@ -682,4 +682,15 @@ export abstract class DrizzleStateProvider implements IStateProvider {
             DELETE FROM tenant_secrets WHERE tenant_slug = ${tenantSlug} AND kind = ${kind}
         `);
     }
+
+    async listTenantSecrets(): Promise<{ tenantSlug: string; kind: string; payload: string }[]> {
+        const rows = await this.getDb().all(sql`
+            SELECT tenant_slug, kind, payload FROM tenant_secrets
+        `);
+        return (rows as Array<{ tenant_slug: string; kind: string; payload: string }>).map(r => ({
+            tenantSlug: r.tenant_slug,
+            kind: r.kind,
+            payload: r.payload,
+        }));
+    }
 }

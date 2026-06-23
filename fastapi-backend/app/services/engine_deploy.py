@@ -75,6 +75,15 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
     provider = _resolve_provider(engine, db)
 
     try:
+        # V2 key-rotation lazy cleanup: if a shared engine's transition window
+        # has elapsed, drop the retained old key now so the build below stops
+        # emitting FRONTBASE_SECRETS_KEY_OLD. No-op for non-shared engines.
+        if bool(engine.is_shared):
+            try:
+                from .edge_secrets_push import prune_expired_rotation
+                prune_expired_rotation(engine, db)
+            except Exception as prune_err:
+                print(f"[Redeploy] Rotation prune check failed (non-fatal): {prune_err}")
         # Check if engine has a customized snapshot (forked)
         existing_snapshot = json.loads(str(engine.source_snapshot or '{}')) if str(engine.source_snapshot or '') else {}
         is_forked = bool(engine.is_forked) or any(

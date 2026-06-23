@@ -379,3 +379,19 @@ importRoute.delete('/secrets', async (c) => {
         return c.json({ success: false, error: error instanceof Error ? error.message : 'Failed to delete secret' }, 500);
     }
 });
+
+// GET /api/import/secrets — List every tenant_secrets row (ciphertext only).
+// Used by the control plane for key-rotation dry-run verification + diagnostics.
+// `payload` is opaque AES-GCM ciphertext; the edge never inspects it.
+importRoute.get('/secrets', async (c) => {
+    try {
+        if (typeof stateProvider.listTenantSecrets !== 'function') {
+            return c.json({ success: false, error: 'listTenantSecrets not supported by this state provider' }, 501);
+        }
+        const secrets = await stateProvider.listTenantSecrets();
+        return c.json({ success: true, secrets });
+    } catch (error) {
+        console.error('[Import/Secrets] List failed:', error);
+        return c.json({ success: false, error: error instanceof Error ? error.message : 'Failed to list secrets' }, 500);
+    }
+});

@@ -650,4 +650,16 @@ export class CfD1HttpProvider implements IStateProvider {
             [tenantSlug, kind]
         );
     }
+
+    async listTenantSecrets(): Promise<{ tenantSlug: string; kind: string; payload: string }[]> {
+        const rows = await this.all<{ tenant_slug: string; kind: string; payload: string }>(
+            `SELECT tenant_slug, kind, payload FROM tenant_secrets`,
+            []
+        );
+        return (rows || []).map(r => ({
+            tenantSlug: r.tenant_slug,
+            kind: r.kind,
+            payload: r.payload,
+        }));
+    }
 }

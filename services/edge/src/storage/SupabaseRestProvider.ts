@@ -762,4 +762,17 @@ export class SupabaseRestProvider implements IStateProvider {
             .eq('kind', kind);
         throwIfError(result, `deleteTenantSecret(${tenantSlug}/${kind})`);
     }
+
+    async listTenantSecrets(): Promise<{ tenantSlug: string; kind: string; payload: string }[]> {
+        const client = getClient();
+        const { data, error } = await client
+            .from('tenant_secrets')
+            .select('tenant_slug,kind,payload');
+        if (error) throw new Error(`[SupabaseRest] listTenantSecrets: ${error.message}`);
+        return ((data as Array<{ tenant_slug: string; kind: string; payload: string }>) || []).map(r => ({
+            tenantSlug: r.tenant_slug,
+            kind: r.kind,
+            payload: r.payload,
+        }));
+    }
 }

@@ -17,6 +17,7 @@ All business logic delegated to:
 """
 
 from fastapi import APIRouter, HTTPException, Query, Depends
+from pydantic import BaseModel, Field
 from typing import List, Literal
 from datetime import datetime, UTC
 import asyncio
@@ -572,6 +573,83 @@ async def redeploy_engine(
     result = await engine_deploy.redeploy(engine, db)
     result["engine"] = serialize_engine(engine)
     return result
+
+
+# =============================================================================
+# V2 Key Rotation — rotate the per-worker secrets key on a shared engine
+# =============================================================================
+
+class RotateSecretsKeyRequest(BaseModel):
+    """Request body for POST /api/edge-engines/{engine_id}/rotate-secrets-key."""
+    strategy: Literal['random', 'hkdf'] = Field(
+        'random', description="Key generation strategy: 'random' (new 256-bit key) or 'hkdf' (derive from system_key)."
+    )
+    window_seconds: int = Field(
+        300, ge=0, le=86400, description="Transition window (s) during which the old key stays valid."
+    )
+    dry_run: bool = Field(False, description="If true, validate + plan only; no mutation or deploy.")
+
+
+def _load_engine_for_owner(engine_id: str, db: Session, ctx: TenantContext | None) -> EdgeEngine:
+    """Load an engine scoped to the caller's tenant (mirrors the redeploy pattern)."""
+    query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(EdgeEngine.project_id == project.id)
+        else:
+            raise HTTPException(404, f"Engine '{engine_id}' not found")
+    engine = query.first()
+    if not engine:
+        raise HTTPException(404, f"Engine '{engine_id}' not found")
+    return engine
+
+
+@router.post("/{engine_id}/rotate-secrets-key")
+async def rotate_secrets_key(
+    engine_id: str,
+    payload: RotateSecretsKeyRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Rotate a shared engine's per-worker secrets key (zero-downtime).
+
+    Generates a new key, re-encrypts every tenant secret under it during the
+    next deploy, and keeps the old key valid for `window_seconds` (graceful
+    transition). See services/edge_secrets_push.rotate_secrets_key.
+    """
+    engine = _load_engine_for_owner(engine_id, db, ctx)
+
+    if not bool(engine.is_shared):
+        raise HTTPException(
+            400, "Key rotation only applies to shared/community engines. "
+                 "Dedicated/self-host engines bake secrets into env directly."
+        )
+
+    from ..services.edge_secrets_push import rotate_secrets_key as _rotate
+    try:
+        result = await _rotate(
+            engine, db,
+            strategy=payload.strategy,
+            window_seconds=payload.window_seconds,
+            dry_run=payload.dry_run,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    result["engine"] = serialize_engine(engine)
+    return result
+
+
+@router.get("/{engine_id}/rotation-status")
+async def rotation_status(
+    engine_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Report the current key-rotation state for an engine (active window, versions)."""
+    engine = _load_engine_for_owner(engine_id, db, ctx)
+    from ..services.edge_secrets_push import get_rotation_status
+    return get_rotation_status(engine)
 
 
 # =============================================================================

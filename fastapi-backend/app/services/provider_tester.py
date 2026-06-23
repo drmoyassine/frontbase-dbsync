@@ -258,7 +258,17 @@ async def _test_wordpress_plugin(creds: dict) -> dict:
         return {"success": False, "detail": "Username and Application Password are required"}
 
     auth = base64.b64encode(f"{username}:{app_password}".encode()).decode()
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+
+    # Browser-like headers to avoid 403 from nginx/Cloudflare
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+    }
+
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=headers) as client:
         # First check if the plugin is installed (no auth required)
         try:
             info_resp = await client.get(

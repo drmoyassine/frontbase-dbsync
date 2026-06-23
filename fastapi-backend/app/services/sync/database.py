@@ -93,6 +93,9 @@ def _update_enum_check_constraints(connection):
 
     Currently handles:
     - datasources.type: includes 'wordpress_plugin' and other newer values
+
+    Uses savepoints (nested transactions) to prevent errors from aborting the
+    main transaction.
     """
     import logging
     from sqlalchemy import text, inspect as sa_inspect
@@ -128,17 +131,18 @@ def _update_enum_check_constraints(connection):
     needs_update = False
     if type_constraint:
         try:
-            # Get the current constraint definition
-            result = connection.execute(text(f"""
-                SELECT pg_get_constraintdef(oid)
-                FROM pg_constraint
-                WHERE conname = '{type_constraint}' AND conrelid = 'datasources'::regclass
-            """))
-            current_def = result.scalar()
-            # Check if wordpress_plugin is missing
-            if current_def and 'wordpress_plugin' not in current_def:
-                needs_update = True
-                _logger.info(f"[AUTO-MIGRATE] CHECK constraint {type_constraint} missing 'wordpress_plugin'")
+            with connection.begin_nested():
+                # Get the current constraint definition
+                result = connection.execute(text(f"""
+                    SELECT pg_get_constraintdef(oid)
+                    FROM pg_constraint
+                    WHERE conname = '{type_constraint}' AND conrelid = 'datasources'::regclass
+                """))
+                current_def = result.scalar()
+                # Check if wordpress_plugin is missing
+                if current_def and 'wordpress_plugin' not in current_def:
+                    needs_update = True
+                    _logger.info(f"[AUTO-MIGRATE] CHECK constraint {type_constraint} missing 'wordpress_plugin'")
         except Exception as e:
             _logger.warning(f"[AUTO-MIGRATE] Could not read constraint definition: {e}")
 
@@ -146,18 +150,20 @@ def _update_enum_check_constraints(connection):
         # Drop old constraint if it exists
         if type_constraint:
             try:
-                connection.execute(text(f'ALTER TABLE datasources DROP CONSTRAINT IF EXISTS {type_constraint}'))
-                _logger.info(f"[AUTO-MIGRATE] Dropped CHECK constraint {type_constraint}")
+                with connection.begin_nested():
+                    connection.execute(text(f'ALTER TABLE datasources DROP CONSTRAINT IF EXISTS {type_constraint}'))
+                    _logger.info(f"[AUTO-MIGRATE] Dropped CHECK constraint {type_constraint}")
             except Exception as e:
                 _logger.warning(f"[AUTO-MIGRATE] Could not drop constraint {type_constraint}: {e}")
 
         # Add new constraint with all enum values
         values_list = ', '.join(f"'{v}'" for v in datasource_type_values)
         try:
-            connection.execute(text(
-                f'ALTER TABLE datasources ADD CONSTRAINT datasources_type_check CHECK (type IN ({values_list}))'
-            ))
-            _logger.info(f"[AUTO-MIGRATE] Added CHECK constraint for datasources.type with {len(datasource_type_values)} values")
+            with connection.begin_nested():
+                connection.execute(text(
+                    f'ALTER TABLE datasources ADD CONSTRAINT datasources_type_check CHECK (type IN ({values_list}))'
+                ))
+                _logger.info(f"[AUTO-MIGRATE] Added CHECK constraint for datasources.type with {len(datasource_type_values)} values")
         except Exception as e:
             _logger.warning(f"[AUTO-MIGRATE] Could not add CHECK constraint: {e}")
 

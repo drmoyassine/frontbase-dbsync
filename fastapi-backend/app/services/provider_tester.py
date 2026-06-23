@@ -247,6 +247,46 @@ async def _test_wordpress(creds: dict) -> dict:
     return {"success": True, "detail": f"Connected as {name}"}
 
 
+async def _test_wordpress_plugin(creds: dict) -> dict:
+    import base64
+    base_url = creds.get("base_url", "").rstrip("/")
+    username = creds.get("username", "")
+    app_password = creds.get("app_password", "")
+    if not base_url:
+        return {"success": False, "detail": "Base URL is required"}
+    if not username or not app_password:
+        return {"success": False, "detail": "Username and Application Password are required"}
+
+    auth = base64.b64encode(f"{username}:{app_password}".encode()).decode()
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # First check if the plugin is installed (no auth required)
+        try:
+            info_resp = await client.get(
+                f"{base_url}/wp-json/frontbase/v1/info",
+            )
+            if info_resp.status_code != 200:
+                return {"success": False, "detail": "Frontbase plugin not found — please install it on your WordPress site"}
+            plugin_info = info_resp.json()
+            plugin_version = plugin_info.get("version", "unknown")
+        except Exception:
+            return {"success": False, "detail": "Could not reach WordPress site — check the URL"}
+
+        # Then verify authentication via the discover endpoint
+        discover_resp = await client.get(
+            f"{base_url}/wp-json/frontbase/v1/discover",
+            headers={"Authorization": f"Basic {auth}"},
+        )
+
+    if discover_resp.status_code == 401:
+        return {"success": False, "detail": "Invalid credentials — check your username and Application Password"}
+    if discover_resp.status_code != 200:
+        return {"success": False, "detail": f"Plugin API error: {discover_resp.status_code}"}
+
+    data = discover_resp.json()
+    site_name = data.get("site_name", "WordPress site")
+    return {"success": True, "detail": f"Connected to {site_name} — plugin v{plugin_version}"}
+
+
 async def _test_neon(creds: dict) -> dict:
     api_key = creds.get("api_key", "")
     if not api_key:
@@ -396,20 +436,21 @@ async def _test_mailgun(creds: dict) -> dict:
 # =============================================================================
 
 _TESTERS: dict[str, object] = {
-    "cloudflare":     _test_cloudflare,
-    "supabase":       _test_supabase,
-    "vercel":         _test_vercel,
-    "netlify":        _test_netlify,
-    "deno":           _test_deno,
-    "upstash":        _test_upstash,
-    "turso":          _test_turso,
-    "postgres":       _test_postgres,
-    "mysql":          _test_mysql,
-    "wordpress_rest": _test_wordpress,
-    "neon":           _test_neon,
-    "openai":         _test_openai,
-    "anthropic":      _test_anthropic,
-    "ollama":         _test_ollama,
-    "resend":         _test_resend,
-    "mailgun":        _test_mailgun,
+    "cloudflare":       _test_cloudflare,
+    "supabase":         _test_supabase,
+    "vercel":           _test_vercel,
+    "netlify":          _test_netlify,
+    "deno":             _test_deno,
+    "upstash":          _test_upstash,
+    "turso":            _test_turso,
+    "postgres":         _test_postgres,
+    "mysql":            _test_mysql,
+    "wordpress_rest":   _test_wordpress,
+    "wordpress_plugin": _test_wordpress_plugin,
+    "neon":             _test_neon,
+    "openai":           _test_openai,
+    "anthropic":        _test_anthropic,
+    "ollama":           _test_ollama,
+    "resend":           _test_resend,
+    "mailgun":          _test_mailgun,
 }

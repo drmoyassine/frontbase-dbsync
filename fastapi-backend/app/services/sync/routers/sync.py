@@ -3,7 +3,7 @@ Sync operations API router - execute syncs, check status, manage conflicts.
 """
 
 import json
-from datetime import datetime, UTC
+from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy import select
@@ -177,7 +177,7 @@ async def resolve_conflict(
         )
     
     conflict.resolved_by = data.resolved_by or "admin"
-    conflict.resolved_at = datetime.now(UTC)
+    conflict.resolved_at = datetime.utcnow()
     conflict.resolution_notes = data.notes
     
     await db.commit()

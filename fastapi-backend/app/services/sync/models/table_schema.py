@@ -2,7 +2,7 @@
 Table schema cache model - stores fetched schemas to avoid repeated API calls.
 """
 
-from datetime import datetime, timezone, UTC
+from datetime import datetime
 from typing import Dict, Any, List
 from sqlalchemy import String, DateTime, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -40,7 +40,7 @@ class TableSchemaCache(Base):
     # Note: Use naive datetime for PostgreSQL TIMESTAMP WITHOUT TIME ZONE columns
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=lambda: datetime.now(UTC)
+        default=lambda: datetime.utcnow()
     )
     
     # Unique constraint: one schema per datasource+table

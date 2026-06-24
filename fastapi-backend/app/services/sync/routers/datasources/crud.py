@@ -271,6 +271,15 @@ async def update_datasource(
             setattr(datasource, "password_encrypted", encrypt_field(value))
         elif field == "api_key" and value:
             setattr(datasource, "api_key_encrypted", encrypt_field(value))
+        elif field == "extra_config" and value is not None:
+            # extra_config is a Text column — serialize dicts/lists to JSON.
+            # DatasourceUpdate delivers extra_config as a dict; binding a dict to
+            # VARCHAR raises "expected str, got dict" (BACKEND-6).
+            setattr(
+                datasource,
+                "extra_config",
+                json.dumps(value) if isinstance(value, (dict, list)) else value,
+            )
         elif hasattr(datasource, field) and field in db_columns:
             setattr(datasource, field, value)
             

@@ -2,7 +2,7 @@
 Project settings model - stores user-configurable application settings.
 """
 
-from datetime import datetime, timezone, UTC
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import String, Text, DateTime, Boolean
 from sqlalchemy.orm import Mapped, mapped_column
@@ -33,8 +33,8 @@ class ProjectSettings(Base):
     # Metadata
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, 
-        default=lambda: datetime.now(UTC),
-        onupdate=lambda: datetime.now(UTC)
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow()
     )
     
     def __repr__(self) -> str:

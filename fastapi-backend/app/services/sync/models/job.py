@@ -2,7 +2,7 @@
 Sync job model - tracks async sync job execution.
 """
 
-from datetime import datetime, UTC
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import String, Text, DateTime, Integer, Enum as SQLEnum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
@@ -59,7 +59,7 @@ class SyncJob(Base):
     # Timing
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
     
     # Trigger source
     triggered_by: Mapped[str] = mapped_column(String(50), default="manual")  # manual, schedule, webhook
@@ -79,7 +79,7 @@ class SyncJob(Base):
         """Calculate job duration in seconds."""
         if not self.started_at:
             return None
-        end_time = self.completed_at or datetime.now(UTC)
+        end_time = self.completed_at or datetime.utcnow()
         started = self.started_at
         # Sync columns are TIMESTAMP WITHOUT TIME ZONE (naive in Postgres, aware in SQLite tests).
         # Normalize both operands to the same awareness to avoid naive/aware TypeError.

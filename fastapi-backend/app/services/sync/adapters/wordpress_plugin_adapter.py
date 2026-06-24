@@ -582,6 +582,18 @@ class WordPressPluginAdapter(WordPressBaseApiAdapter):
         from app.core.security import decrypt_field
 
         api_key = decrypt_field(self.datasource.api_key_encrypted) or ""
+        # Detect undecryptable credentials (FERNET_KEY mismatch on redeploy):
+        # Fernet tokens are base64-url and start with 'gAAAAA'. When decryption
+        # fails, decrypt_field returns the raw blob, which always 401s at
+        # WordPress (BACKEND-G). Root cause is operational: FERNET_KEY must
+        # persist across deploys, else stored app_passwords are unrecoverable.
+        if api_key.startswith("gAAAAA"):
+            logger.error(
+                "WP plugin credentials for %s appear undecryptable (FERNET_KEY "
+                "mismatch on redeploy?). Re-enter the app_password after "
+                "persisting FERNET_KEY in the deployment environment.",
+                self.datasource.api_url,
+            )
         username = self.datasource.username or ""
 
         auth_string = api_key

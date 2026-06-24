@@ -21,7 +21,13 @@ class WordPressBaseApiAdapter(DatabaseAdapter):
 
     def __init__(self, datasource: "Datasource"):
         super().__init__(datasource)
-        self._api_url = datasource.api_url.rstrip("/") if datasource.api_url else ""
+        # Normalise scheme (bare hosts get https://) — httpx rejects URLs without
+        # http(s):// with "Request URL is missing an 'http://' or 'https://'
+        # protocol." (BACKEND-C / BACKEND-E)
+        raw = (datasource.api_url or "").strip()
+        if raw and "://" not in raw:
+            raw = f"https://{raw}"
+        self._api_url = raw.rstrip("/")
         
     @property
     def _client(self) -> httpx.AsyncClient:

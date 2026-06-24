@@ -2,7 +2,7 @@
 Conflict model - stores unresolved data conflicts for manual review.
 """
 
-from datetime import datetime, UTC
+from datetime import datetime
 from typing import Optional
 from sqlalchemy import String, Text, DateTime, Enum as SQLEnum, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
@@ -64,7 +64,7 @@ class Conflict(Base):
     resolution_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     # Metadata
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow())
     
     def __repr__(self) -> str:
         return f"<Conflict {self.record_key} ({self.status.value})>"

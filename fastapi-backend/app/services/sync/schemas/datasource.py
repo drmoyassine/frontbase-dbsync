@@ -31,6 +31,24 @@ class DatasourceBase(BaseModel):
     # Extra config as dict
     extra_config: Optional[Dict[str, Any]] = None
 
+def _ensure_url_scheme(url: Optional[str]) -> Optional[str]:
+    """Ensure a URL has an http(s):// scheme.
+
+    Bare hosts (e.g. ``mysite.com``) get ``https://`` prepended — httpx rejects
+    schemeless URLs with "Request URL is missing an 'http://' or 'https://'
+    protocol." (BACKEND-C / BACKEND-E). Already-schemed URLs and empty/None
+    pass through unchanged.
+    """
+    if not url:
+        return url
+    url = url.strip()
+    if not url:
+        return url
+    if "://" not in url:
+        return f"https://{url}"
+    return url
+
+
 def _parse_uri_metadata(data: Any) -> Any:
     """Helper to parse connection URI and inject fields into data dict."""
     if isinstance(data, dict) and data.get("connection_uri"):
@@ -73,7 +91,7 @@ class DatasourceCreate(DatasourceBase):
         ]:
             # Map base_url → api_url
             if data.get("base_url") and not data.get("api_url"):
-                data["api_url"] = data.pop("base_url")
+                data["api_url"] = _ensure_url_scheme(data.pop("base_url"))
             # Map app_password → password for REST/GraphQL, → api_key for Plugin
             # Plugin uses api_key_encrypted, REST uses password_encrypted
             if data.get("app_password"):
@@ -117,7 +135,7 @@ class DatasourceTestRequest(BaseModel):
         ]:
             # Map base_url → api_url
             if data.get("base_url") and not data.get("api_url"):
-                data["api_url"] = data.pop("base_url")
+                data["api_url"] = _ensure_url_scheme(data.pop("base_url"))
             # Map app_password → password for REST/GraphQL, → api_key for Plugin
             # Plugin uses api_key_encrypted, REST uses password_encrypted
             if data.get("app_password"):
@@ -162,7 +180,7 @@ class DatasourceUpdate(BaseModel):
         ]:
             # Map base_url → api_url
             if data.get("base_url") and not data.get("api_url"):
-                data["api_url"] = data.pop("base_url")
+                data["api_url"] = _ensure_url_scheme(data.pop("base_url"))
             # Map app_password → password for REST/GraphQL, → api_key for Plugin
             if data.get("app_password"):
                 if data.get("type") == DatasourceType.WORDPRESS_PLUGIN:

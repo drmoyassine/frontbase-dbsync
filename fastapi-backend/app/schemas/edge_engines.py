@@ -131,6 +131,32 @@ class BatchResult(BaseModel):
     total: int = 0
 
 
+class BatchRotateSecretsRequest(BaseModel):
+    """Request body for POST /api/edge-engines/batch/rotate-secrets-key."""
+    engine_ids: List[str] = Field(..., min_length=1, max_length=50)
+    strategy: Literal['random', 'hkdf'] = 'hkdf'
+    window_seconds: int = Field(3600, ge=0, le=86400)
+    dry_run: bool = False
+
+
+class RollbackRotationRequest(BaseModel):
+    """Request body for POST /api/edge-engines/{engine_id}/rollback-rotation."""
+    rotation_id: str = Field(..., description="Rotation ID to rollback")
+
+
+class RotationHistoryEntry(BaseModel):
+    """One entry in an engine's key-rotation history (engine_config metadata)."""
+    rotation_id: str
+    started_at: str
+    completed_at: Optional[str] = None
+    strategy: Literal['random', 'hkdf']
+    old_key_version: int
+    new_key_version: int
+    tenants_affected: int = 0
+    status: Literal['completed', 'rolled_back', 'expired', 'transitioning']
+    window_seconds: int = 0
+
+
 class GenericDeployRequest(BaseModel):
     """Provider-agnostic deploy request for the Deploy Engine Wizard.
 

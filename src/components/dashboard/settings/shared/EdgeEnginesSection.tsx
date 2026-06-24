@@ -20,6 +20,7 @@ import { PROVIDER_ICONS, ENGINE_PROVIDER_LABELS, ProviderBadge } from './edgeCon
 import { DeleteResourceDialog, BulkDeleteResourceDialog, PROVIDER_LABELS } from './DeleteResourceDialog';
 import { ReconfigureEngineDialog } from './ReconfigureEngineDialog';
 import { EdgeInspectorDialog } from './EdgeInspectorDialog';
+import { RotationDialog } from './RotationDialog';
 
 import { DeployEngineWizard } from './DeployEngineWizard';
 import { FetchEnginesDialog } from './FetchEnginesDialog';
@@ -313,6 +314,9 @@ export function EdgeEnginesSection() {
                                                             />
                                                             <HealthCheckPopover engineId={engine.id} engineUrl={engine.url} variant="icon" />
                                                             <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
+                                                            {isCommunityShared && (
+                                                                <RotationDialog engine={engine} />
+                                                            )}
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"

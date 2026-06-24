@@ -36,6 +36,7 @@ from ..schemas.edge_engines import (
     EdgeEngineCreate, EdgeEngineUpdate, EdgeEngineResponse,
     TestConnectionResult, ReconfigureRequest,
     BatchRequest, BatchDeleteRequest, BatchToggleRequest, BatchResult,
+    BatchRotateSecretsRequest, RollbackRotationRequest,
     GenericDeployRequest,
 )
 from ..services import engine_deploy, engine_test, engine_reconfigure
@@ -297,6 +298,60 @@ async def batch_sync_check(
 
     await asyncio.gather(*[_check_engine(e) for e in engines])
     db.commit()
+    return result
+
+
+@router.post("/batch/rotate-secrets-key", response_model=BatchResult)
+async def batch_rotate_secrets_key(
+    payload: BatchRotateSecretsRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context)
+):
+    """Batch rotate the per-worker secrets key across multiple shared engines.
+
+    Uses asyncio.Semaphore(3) to limit concurrent rotations (each triggers a
+    redeploy) and avoid provider rate limits. Engines that are not found, not
+    owned by the caller, or not shared are reported as failed rather than
+    aborting the batch. See services/edge_secrets_push.rotate_secrets_key.
+    """
+    from ..services.edge_secrets_push import rotate_secrets_key as _rotate
+
+    result = BatchResult(total=len(payload.engine_ids))
+    sem = asyncio.Semaphore(3)
+
+    engines: list[EdgeEngine] = []
+    for eid in payload.engine_ids:
+        query = db.query(EdgeEngine).filter(EdgeEngine.id == eid)
+        if ctx and ctx.tenant_id:
+            project = get_project(db, ctx)
+            if project:
+                query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+            else:
+                result.failed.append({"id": eid, "error": "Not found"})
+                continue
+        engine = query.first()
+        if not engine:
+            result.failed.append({"id": eid, "error": "Not found"})
+            continue
+        if not bool(engine.is_shared):
+            result.failed.append({"id": eid, "error": "Not a shared engine"})
+            continue
+        engines.append(engine)
+
+    async def _safe_rotate(eng: EdgeEngine):
+        async with sem:
+            try:
+                await _rotate(
+                    eng, db,
+                    strategy=payload.strategy,
+                    window_seconds=payload.window_seconds,
+                    dry_run=payload.dry_run,
+                )
+                result.success.append(str(eng.id))
+            except Exception as e:
+                result.failed.append({"id": str(eng.id), "error": str(e)})
+
+    await asyncio.gather(*[_safe_rotate(e) for e in engines])
     return result
 
 
@@ -650,6 +705,47 @@ async def rotation_status(
     engine = _load_engine_for_owner(engine_id, db, ctx)
     from ..services.edge_secrets_push import get_rotation_status
     return get_rotation_status(engine)
+
+
+@router.post("/{engine_id}/rollback-rotation")
+async def rollback_rotation(
+    engine_id: str,
+    payload: RollbackRotationRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Roll back an in-flight key rotation during its transition window.
+
+    Restores the previous key (and resolver mode), records the rotation as
+    'rolled_back' in history, and redeploys. See
+    services/edge_secrets_push.rollback_rotation.
+    """
+    engine = _load_engine_for_owner(engine_id, db, ctx)
+
+    if not bool(engine.is_shared):
+        raise HTTPException(
+            400, "Rollback only applies to shared/community engines."
+        )
+
+    from ..services.edge_secrets_push import rollback_rotation as _rollback
+    try:
+        result = await _rollback(engine, db, payload.rotation_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    result["engine"] = serialize_engine(engine)
+    return result
+
+
+@router.get("/{engine_id}/rotation-history")
+async def rotation_history(
+    engine_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """List key-rotation history for an engine (in-flight transition + past 10)."""
+    engine = _load_engine_for_owner(engine_id, db, ctx)
+    from ..services.edge_secrets_push import list_rotation_history
+    return {"history": list_rotation_history(engine, db)}
 
 
 # =============================================================================

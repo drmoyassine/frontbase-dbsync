@@ -99,6 +99,42 @@ export interface BatchResult {
 }
 
 // ============================================================================
+// Key Rotation types (shared/community engines)
+// ============================================================================
+
+export interface RotationParams {
+    strategy?: 'random' | 'hkdf';
+    window_seconds?: number;
+    dry_run?: boolean;
+}
+
+export interface RotationStatus {
+    active: boolean;
+    rotation_id?: string;
+    strategy?: 'random' | 'hkdf';
+    status?: string;
+    started_at?: string;
+    new_key_version?: number;
+    old_key_version?: number;
+    window_seconds?: number;
+    remaining_seconds?: number | null;
+    use_hkdf?: boolean;
+    key_version?: number;
+}
+
+export interface RotationHistoryEntry {
+    rotation_id: string;
+    started_at: string;
+    completed_at: string | null;
+    strategy: 'random' | 'hkdf';
+    old_key_version: number;
+    new_key_version: number;
+    tenants_affected: number;
+    status: 'completed' | 'rolled_back' | 'expired' | 'transitioning';
+    window_seconds: number;
+}
+
+// ============================================================================
 // API Service
 // ============================================================================
 
@@ -312,6 +348,55 @@ export const edgeInfrastructureApi = {
         if (!res.ok) throw new Error('Batch delete queues failed');
         return res.json();
     },
+
+    // Key Rotation — shared/community engines (V2)
+    rotateSecretsKey: async (engineId: string, params: RotationParams = {}): Promise<any> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/${engineId}/rotate-secrets-key`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Rotation failed');
+        }
+        return res.json();
+    },
+
+    batchRotateSecretsKey: async (engineIds: string[], params: RotationParams = {}): Promise<BatchResult> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/batch/rotate-secrets-key`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ engine_ids: engineIds, ...params }),
+        });
+        if (!res.ok) throw new Error('Batch rotation failed');
+        return res.json();
+    },
+
+    rollbackRotation: async (engineId: string, rotationId: string): Promise<any> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/${engineId}/rollback-rotation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rotation_id: rotationId }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Rollback failed');
+        }
+        return res.json();
+    },
+
+    getRotationHistory: async (engineId: string): Promise<{ history: RotationHistoryEntry[] }> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/${engineId}/rotation-history`);
+        if (!res.ok) throw new Error('Failed to fetch rotation history');
+        return res.json();
+    },
+
+    getRotationStatus: async (engineId: string): Promise<RotationStatus> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/${engineId}/rotation-status`);
+        if (!res.ok) throw new Error('Failed to fetch rotation status');
+        return res.json();
+    },
 };
 
 // ============================================================================
@@ -427,6 +512,54 @@ export function useEngineHealthCheck(engineId: string) {
             const res = await fetch(`${API_BASE}/api/edge-engines/${engineId}/health-check`);
             if (!res.ok) throw new Error('Health check request failed');
             return res.json();
+        },
+    });
+}
+
+// ─── Key Rotation ────────────────────────────────────────────────────────────
+
+export function useRotationStatus(engineId: string | null | undefined) {
+    return useQuery({
+        queryKey: ['rotation-status', engineId],
+        queryFn: () => edgeInfrastructureApi.getRotationStatus(engineId!),
+        staleTime: 60 * 1000,
+        // Poll every 30s only while a transition window is active.
+        refetchInterval: (query) => (query.state.data?.active ? 30_000 : false),
+        enabled: !!engineId,
+    });
+}
+
+export function useRotationHistory(engineId: string | null | undefined) {
+    return useQuery({
+        queryKey: ['rotation-history', engineId],
+        queryFn: () => edgeInfrastructureApi.getRotationHistory(engineId!),
+        staleTime: 5 * 60 * 1000,
+        enabled: !!engineId,
+    });
+}
+
+export function useRotateSecretsKey() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ engineId, params }: { engineId: string; params?: RotationParams }) =>
+            edgeInfrastructureApi.rotateSecretsKey(engineId, params),
+        onSuccess: (_data, { engineId }) => {
+            queryClient.invalidateQueries({ queryKey: ['rotation-status', engineId] });
+            queryClient.invalidateQueries({ queryKey: ['rotation-history', engineId] });
+            queryClient.invalidateQueries({ queryKey: ['edge-engines'] });
+        },
+    });
+}
+
+export function useRollbackRotation() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ engineId, rotationId }: { engineId: string; rotationId: string }) =>
+            edgeInfrastructureApi.rollbackRotation(engineId, rotationId),
+        onSuccess: (_data, { engineId }) => {
+            queryClient.invalidateQueries({ queryKey: ['rotation-status', engineId] });
+            queryClient.invalidateQueries({ queryKey: ['rotation-history', engineId] });
+            queryClient.invalidateQueries({ queryKey: ['edge-engines'] });
         },
     });
 }

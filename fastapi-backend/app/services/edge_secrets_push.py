@@ -24,7 +24,7 @@ import base64
 import json
 import os
 import uuid
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, UTC
 from typing import Any, Literal
 
 import httpx
@@ -55,6 +55,37 @@ def _save_engine_config(engine: EdgeEngine, cfg: dict, db: Session) -> None:
     """Persist an updated engine_config dict and commit."""
     engine.engine_config = json.dumps(cfg)  # type: ignore[assignment]
     db.commit()
+
+
+def _parse_iso(value: Any) -> datetime | None:
+    """Best-effort ISO-8601 parse (tolerates a trailing 'Z' and naive datetimes)."""
+    if value is None:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).rstrip("Z"))
+    except (ValueError, TypeError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
+
+
+# How many past rotations to retain in engine_config['rotation_history'].
+_ROTATION_HISTORY_LIMIT = 10
+
+
+def _record_rotation_history(cfg: dict, entry: dict) -> None:
+    """Append a rotation-history entry to an in-memory engine_config dict.
+
+    Capped at the last _ROTATION_HISTORY_LIMIT entries (most engines will have
+    far fewer). The caller is responsible for persisting cfg via
+    _save_engine_config.
+    """
+    history = cfg.get('rotation_history')
+    if not isinstance(history, list):
+        history = []
+    history.append(entry)
+    cfg['rotation_history'] = history[-_ROTATION_HISTORY_LIMIT:]
 
 
 # =============================================================================
@@ -505,10 +536,14 @@ async def rotate_secrets_key(
     #    afterward so we don't clobber anything resolve wrote.
     old_key = resolve_secrets_key(engine, db)
     cfg = _engine_config(engine)
+    # Capture the pre-rotation resolver mode so rollback can restore it exactly.
+    old_use_hkdf = bool(cfg.get('use_hkdf'))
 
     # Sanity: rotating must actually change the key (hkdf from an unchanged
     # system_key is deterministic — flag it so callers know nothing changed).
     key_changed = new_key != old_key
+
+    now_iso = datetime.now(UTC).isoformat() + "Z"
 
     # 4. Persist: new key active. The old key is retained for a transition
     #    window only when window_seconds > 0; window_seconds == 0 means an
@@ -529,20 +564,34 @@ async def rotate_secrets_key(
         encrypted_old = encrypt_field(old_key)
         if encrypted_old:
             cfg['secrets_key_old'] = encrypted_old
-        started_at = datetime.now(UTC)
         cfg['rotation'] = {
             "id": rotation_id,
-            "started_at": started_at.isoformat() + "Z",
+            "started_at": now_iso,
             "strategy": strategy,
             "window_seconds": window_seconds,
             "status": "transitioning",
             "new_key_version": new_version,
             "old_key_version": old_version,
+            # Captured so rollback/prune can record history without a DB query.
+            "old_use_hkdf": old_use_hkdf,
+            "tenants_affected": tenants_count,
         }
     else:
-        # Immediate cut-over: drop any stale transition metadata.
+        # Immediate cut-over: drop any stale transition metadata and record the
+        # completed rotation in history (no transition window to synthesize).
         cfg.pop('secrets_key_old', None)
         cfg.pop('rotation', None)
+        _record_rotation_history(cfg, {
+            "rotation_id": rotation_id,
+            "started_at": now_iso,
+            "completed_at": now_iso,
+            "strategy": strategy,
+            "old_key_version": old_version,
+            "new_key_version": new_version,
+            "tenants_affected": tenants_count,
+            "status": "completed",
+            "window_seconds": 0,
+        })
 
     _save_engine_config(engine, cfg, db)
 
@@ -592,6 +641,19 @@ def prune_expired_rotation(engine: EdgeEngine, db: Session) -> bool:
     if (datetime.now(UTC) - started).total_seconds() < window:
         return False  # still inside the transition window
 
+    # Window elapsed: record the completed rotation in history, then prune the
+    # transition metadata. tenants_affected was captured at rotation time.
+    _record_rotation_history(cfg, {
+        "rotation_id": rotation.get('id'),
+        "started_at": started_at,
+        "completed_at": datetime.now(UTC).isoformat() + "Z",
+        "strategy": rotation.get('strategy'),
+        "old_key_version": int(rotation.get('old_key_version', 0) or 0),
+        "new_key_version": int(rotation.get('new_key_version', 0) or 0),
+        "tenants_affected": int(rotation.get('tenants_affected', 0) or 0),
+        "status": "completed",
+        "window_seconds": window,
+    })
     cfg.pop('secrets_key_old', None)
     cfg.pop('rotation', None)
     _save_engine_config(engine, cfg, db)
@@ -636,3 +698,198 @@ def get_rotation_status(engine: EdgeEngine) -> dict:
         "use_hkdf": bool(cfg.get('use_hkdf')),
         "key_version": cfg.get('key_version', rotation.get('new_key_version', 1)),
     }
+
+
+# =============================================================================
+# V2 Phase 3 — Rollback, history, and scheduled rotation
+# =============================================================================
+
+async def rollback_rotation(engine: EdgeEngine, db: Session, rotation_id: str) -> dict:
+    """Roll back an in-flight rotation by restoring the previous key as active.
+
+    Only valid while the transition window is still open. Restores both the key
+    material and the pre-rotation resolver mode (HKDF vs random), records the
+    rotation in history as 'rolled_back', then redeploys so the worker stops
+    emitting the new key. Raises ValueError on any precondition failure.
+    """
+    if not bool(engine.is_shared):
+        raise ValueError("Rollback only applies to shared/community engines")
+
+    cfg = _engine_config(engine)
+    rotation = cfg.get('rotation')
+    if not rotation:
+        raise ValueError("No active rotation to roll back")
+    if rotation.get('id') != rotation_id:
+        raise ValueError("Rotation ID mismatch")
+
+    started = _parse_iso(rotation.get('started_at'))
+    window = int(rotation.get('window_seconds', 0) or 0)
+    if started is None or window <= 0:
+        raise ValueError("Rotation has no rollback window")
+    if (datetime.now(UTC) - started).total_seconds() >= window:
+        raise ValueError("Rotation window has expired")
+
+    old_version = int(rotation.get('old_key_version', 1) or 1)
+    new_version = int(rotation.get('new_key_version', old_version) or old_version)
+    old_use_hkdf = bool(rotation.get('old_use_hkdf', False))
+    encrypted_old = cfg.get('secrets_key_old')
+
+    # Restore the resolver to its pre-rotation state.
+    cfg['use_hkdf'] = old_use_hkdf
+    if old_use_hkdf:
+        # Old key was HKDF-derived (deterministic from system_key): no blob to
+        # restore — flipping use_hkdf back is sufficient.
+        cfg.pop('secrets_key', None)
+    else:
+        if not encrypted_old:
+            raise ValueError("Old key not found in config")
+        cfg['secrets_key'] = encrypted_old
+    cfg['key_version'] = old_version
+
+    _record_rotation_history(cfg, {
+        "rotation_id": rotation_id,
+        "started_at": rotation.get('started_at'),
+        "completed_at": datetime.now(UTC).isoformat() + "Z",
+        "strategy": rotation.get('strategy'),
+        "old_key_version": old_version,
+        "new_key_version": new_version,
+        "tenants_affected": int(rotation.get('tenants_affected', 0) or 0),
+        "status": "rolled_back",
+        "window_seconds": window,
+    })
+    cfg.pop('secrets_key_old', None)
+    cfg.pop('rotation', None)
+
+    _save_engine_config(engine, cfg, db)
+
+    from .engine_deploy import redeploy
+    deploy_result = await redeploy(engine, db)
+
+    print(f"[SecretsRotation] Rolled back engine {getattr(engine, 'name', '?')} "
+          f"to v{old_version} (rotation {rotation_id})")
+
+    return {
+        "status": "rolled_back",
+        "rotation_id": rotation_id,
+        "restored_key_version": old_version,
+        "restored_use_hkdf": old_use_hkdf,
+        "deploy": deploy_result,
+    }
+
+
+def list_rotation_history(engine: EdgeEngine, db: Session) -> list[dict]:
+    """Return rotation history for an engine (newest first, last 10).
+
+    An in-flight rotation is synthesized as a 'transitioning' entry (with a live
+    tenant count); past rotations come from engine_config['rotation_history'].
+    """
+    cfg = _engine_config(engine)
+    entries: list[dict] = []
+
+    active = cfg.get('rotation')
+    if active:
+        entries.append({
+            "rotation_id": active.get('id'),
+            "started_at": active.get('started_at'),
+            "completed_at": None,
+            "strategy": active.get('strategy'),
+            "old_key_version": int(active.get('old_key_version', 0) or 0),
+            "new_key_version": int(active.get('new_key_version', 0) or 0),
+            "tenants_affected": len(_tenants_bound_to_engine(engine, db)),
+            "status": "transitioning",
+            "window_seconds": int(active.get('window_seconds', 0) or 0),
+        })
+
+    for h in (cfg.get('rotation_history') or []):
+        entries.append({
+            "rotation_id": h.get('rotation_id') or h.get('id'),
+            "started_at": h.get('started_at'),
+            "completed_at": h.get('completed_at'),
+            "strategy": h.get('strategy'),
+            "old_key_version": int(h.get('old_key_version', 0) or 0),
+            "new_key_version": int(h.get('new_key_version', 0) or 0),
+            "tenants_affected": int(h.get('tenants_affected', 0) or 0),
+            "status": h.get('status', 'completed'),
+            "window_seconds": int(h.get('window_seconds', 0) or 0),
+        })
+
+    entries.sort(key=lambda e: str(e.get('started_at') or ''), reverse=True)
+    return entries[:_ROTATION_HISTORY_LIMIT]
+
+
+def get_engines_requiring_rotation(db: Session, max_age_days: int = 90) -> list[EdgeEngine]:
+    """Return shared+active engines whose last key rotation predates the cutoff.
+
+    Age is determined from (in order) the in-flight rotation's start, the most
+    recent history entry, or the engine's created_at — whichever applies.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
+
+    shared_engines = db.query(EdgeEngine).filter(
+        EdgeEngine.is_shared == True,  # noqa: E712
+        EdgeEngine.is_active == True,  # noqa: E712
+    ).all()
+
+    requiring: list[EdgeEngine] = []
+    for engine in shared_engines:
+        cfg = _engine_config(engine)
+
+        ref_date = _parse_iso((cfg.get('rotation') or {}).get('started_at'))
+        if ref_date is None:
+            history = cfg.get('rotation_history') or []
+            if history:
+                # history is newest-first after list_rotation_history, but the
+                # stored list is append-order; pick the max started_at defensively.
+                ref_date = max(
+                    (_parse_iso(h.get('started_at')) for h in history),
+                    key=lambda d: d or datetime.min.replace(tzinfo=UTC),
+                )
+        if ref_date is None:
+            ref_date = _parse_iso(getattr(engine, 'created_at', None))
+        if ref_date is None:
+            continue  # cannot determine age — skip rather than over-rotate
+
+        if ref_date < cutoff:
+            requiring.append(engine)
+
+    return requiring
+
+
+async def run_scheduled_rotation(max_age_days: int = 90) -> dict:
+    """Rotate every shared engine whose key is older than max_age_days.
+
+    Invoked by the Celery beat task (see services/task_queue.py). Rotates
+    sequentially with a 1-hour transition window, preferring the HKDF strategy
+    (every engine has a system_key injected at creation) and falling back to a
+    random key if one is somehow missing. Returns a small summary dict.
+    """
+    from app.database.config import SessionLocal
+
+    db = SessionLocal()
+    results: dict[str, Any] = {"checked": 0, "rotated": 0, "failed": 0, "errors": []}
+    try:
+        engines = get_engines_requiring_rotation(db, max_age_days=max_age_days)
+        results["checked"] = len(engines)
+
+        for engine in engines:
+            cfg = _engine_config(engine)
+            strategy: Literal['random', 'hkdf'] = 'hkdf' if cfg.get('system_key') else 'random'
+            try:
+                await rotate_secrets_key(
+                    engine, db,
+                    strategy=strategy,
+                    window_seconds=3600,
+                    dry_run=False,
+                )
+                results["rotated"] += 1
+            except Exception as e:  # never let one engine abort the sweep
+                results["failed"] += 1
+                results["errors"].append({
+                    "engine_id": str(engine.id),
+                    "engine_name": str(getattr(engine, 'name', '?')),
+                    "error": str(e),
+                })
+
+        return results
+    finally:
+        db.close()

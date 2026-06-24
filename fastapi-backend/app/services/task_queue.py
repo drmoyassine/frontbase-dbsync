@@ -25,6 +25,12 @@ celery_app.conf.update(
             "task": "app.services.retention.prune_executions",
             "schedule": crontab(minute=17, hour=3),
         },
+        # V2 shared-engine secrets rotation: rotate any shared engine whose
+        # per-worker key is older than 90 days. Daily at 02:00 UTC (off-peak).
+        "rotate-shared-engine-secrets": {
+            "task": "app.services.edge_secrets_push.check_and_rotate_shared_engine_secrets",
+            "schedule": crontab(minute=0, hour=2),
+        },
     },
 )
 
@@ -39,4 +45,16 @@ def prune_executions_task() -> int:
         return prune_old_executions(db)
     finally:
         db.close()
+
+
+@celery_app.task(name="app.services.edge_secrets_push.check_and_rotate_shared_engine_secrets")
+def check_and_rotate_shared_engine_secrets_task() -> dict:
+    """Rotate shared-engine secrets keys older than 90 days.
+
+    Thin Celery wrapper around the async orchestrator so the sweep runs on the
+    beat schedule. Returns a summary: {checked, rotated, failed, errors}.
+    """
+    import asyncio
+    from app.services.edge_secrets_push import run_scheduled_rotation
+    return asyncio.run(run_scheduled_rotation(max_age_days=90))
 

@@ -41,8 +41,7 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
         anon_key: '',
         api_key: '',
         provider_account_id: (datasource as any)?.provider_account_id || '',
-        // WordPress Plugin specific fields (mapped to api_url/password by backend)
-        base_url: datasource?.api_url || '',  // api_url from datasource is base_url for WP Plugin
+        // WordPress Plugin/REST/GraphQL credentials
         app_password: '',
         // Google Sheets specific config in extra_config
         extra_config: (() => {
@@ -209,7 +208,7 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                             name: formData.name || resource.name || '',
                                             // Auto-fill WordPress fields from resource metadata
                                             ...(formData.type.startsWith('wordpress_') && {
-                                                base_url: resource.api_url || formData.base_url,
+                                                api_url: resource.api_url || formData.api_url,
                                                 username: resource.username || formData.username,
                                             }),
                                         });
@@ -422,8 +421,8 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                     </label>
                                     <input
                                         type="url"
-                                        value={formData.base_url}
-                                        onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
+                                        value={formData.api_url}
+                                        onChange={(e) => setFormData({ ...formData, api_url: e.target.value })}
                                         className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
                                         placeholder="https://mysite.com"
                                         required={formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress'}

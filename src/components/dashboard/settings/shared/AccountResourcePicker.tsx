@@ -48,6 +48,12 @@ export interface DiscoveredResource {
     token?: string;
     signing_key?: string;
     next_signing_key?: string;
+    // WordPress
+    api_url?: string;
+    username?: string;
+    // Google Sheets
+    webAppUrl?: string;
+    spreadsheetId?: string;
 }
 
 // Upstash regions available for Redis creation

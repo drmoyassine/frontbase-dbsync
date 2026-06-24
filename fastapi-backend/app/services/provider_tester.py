@@ -227,7 +227,8 @@ async def _test_mysql(creds: dict) -> dict:
 
 async def _test_wordpress(creds: dict) -> dict:
     import base64
-    base_url = creds.get("base_url", "").rstrip("/")
+    # Accept both base_url (legacy) and api_url (new) for compatibility
+    base_url = (creds.get("api_url") or creds.get("base_url", "")).rstrip("/")
     username = creds.get("username", "")
     app_password = creds.get("app_password", "")
     if not base_url:
@@ -249,7 +250,8 @@ async def _test_wordpress(creds: dict) -> dict:
 
 async def _test_wordpress_plugin(creds: dict) -> dict:
     import base64
-    base_url = creds.get("base_url", "").rstrip("/")
+    # Accept both base_url (legacy) and api_url (new) for compatibility
+    base_url = (creds.get("api_url") or creds.get("base_url", "")).rstrip("/")
     username = creds.get("username", "")
     app_password = creds.get("app_password", "")
     if not base_url:

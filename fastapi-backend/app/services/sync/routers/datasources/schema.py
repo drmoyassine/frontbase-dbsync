@@ -28,7 +28,7 @@ async def get_datasource_tables(
 ):
     """Get list of tables/resources from a datasource."""
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             return await adapter.get_tables()
     except Exception as e:
@@ -87,7 +87,7 @@ async def get_table_schema(
     
     # No cache or refresh requested - fetch from source
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             schema = await adapter.get_schema(table)
 

@@ -48,7 +48,7 @@ async def test_datasource(
     """Test a datasource connection."""
     logger.info(f"Testing connection for saved datasource: {datasource.id}")
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         await adapter.connect()
         tables = await adapter.get_tables()
         await adapter.disconnect()
@@ -119,7 +119,7 @@ async def test_new_datasource(data: DatasourceTestRequest):
         if data.connection_uri:
             setattr(datasource, 'connection_uri', data.connection_uri)  # Dynamic attr for test-raw only
 
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         await adapter.connect()
         tables = await adapter.get_tables()
         await adapter.disconnect()

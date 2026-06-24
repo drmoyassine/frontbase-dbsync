@@ -131,7 +131,7 @@ async def start_import(
             detail="options.postTypes must list at least one post type to import.",
         )
 
-    adapter = get_adapter(datasource)
+    adapter = get_adapter(datasource, db)
     tenant_id = ctx.tenant_id if ctx else None
     try:
         import_id = await import_service.start(adapter, str(datasource.id), tenant_id, options)

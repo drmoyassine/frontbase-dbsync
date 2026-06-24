@@ -259,3 +259,76 @@ def is_supabase_connected(db: Session) -> bool:
 
     project = get_project_settings(db, "default")
     return bool(project and project.get("supabase_url") and project.get("supabase_anon_key"))
+
+
+def get_datasource_credentials(
+    db: Session,
+    datasource: "Datasource",
+) -> dict:
+    """Get credentials for a datasource, preferring Connected Account.
+
+    Priority:
+      1. If datasource.provider_account_id exists → use Connected Account
+      2. Fallback to datasource.inline_encrypted_fields (legacy)
+
+    Returns merged dict of credentials + metadata with a "source" key indicating
+    the origin ("connected_account" or "legacy_inline").
+
+    Args:
+        db: SQLAlchemy session
+        datasource: Datasource model instance
+
+    Returns:
+        dict with credentials, metadata, and "source" key
+    """
+    from ..models.models import EdgeProviderAccount
+    from .security import decrypt_field
+
+    # 1. Try Connected Account first
+    if datasource.provider_account_id:
+        provider = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.id == datasource.provider_account_id
+        ).first()
+        if provider:
+            creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
+            metadata = {}
+            if provider.provider_metadata is not None:
+                try:
+                    metadata = json.loads(str(provider.provider_metadata))
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            return {
+                **metadata,
+                **creds,
+                "source": "connected_account",
+                "provider_id": str(provider.id),
+            }
+
+    # 2. Fallback: legacy inline credential fields
+    # Build dict from encrypted fields for backward compatibility
+    legacy = {}
+
+    # Standard encrypted fields
+    if datasource.api_key_encrypted:
+        legacy["api_key"] = decrypt_field(datasource.api_key_encrypted) or ""
+    if datasource.password_encrypted:
+        legacy["password"] = decrypt_field(datasource.password_encrypted) or ""
+    if datasource.anon_key_encrypted:
+        legacy["anon_key"] = decrypt_field(datasource.anon_key_encrypted) or ""
+
+    # Add username and api_url (non-encrypted metadata)
+    if datasource.username:
+        legacy["username"] = datasource.username
+    if datasource.api_url:
+        legacy["api_url"] = datasource.api_url
+
+    # Add extra_config if present (Google Sheets uses this)
+    if datasource.extra_config:
+        try:
+            extra = json.loads(datasource.extra_config)
+            # Merge, letting explicit fields take precedence
+            legacy = {**extra, **legacy}
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return {**legacy, "source": "legacy_inline"}

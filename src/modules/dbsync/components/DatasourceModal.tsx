@@ -194,8 +194,50 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                     </div>
 
                     <div className="space-y-4">
+                        {/* Connected Account Picker — PRIMARY for WordPress and Google Sheets */}
+                        {(formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress_graphql' || formData.type === 'google_sheets') && (
+                            <div className="space-y-3">
+                                <AccountResourcePicker
+                                    compatibleProviders={DATASOURCE_PROVIDER_MAP[formData.type] || [formData.type]}
+                                    label="Connected Account (recommended)"
+                                    autoSelectSingle
+                                    selectedAccountId={formData.provider_account_id || undefined}
+                                    onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
+                                        setFormData({
+                                            ...formData,
+                                            provider_account_id: accountId,
+                                            name: formData.name || resource.name || '',
+                                            // Auto-fill WordPress fields from resource metadata
+                                            ...(formData.type.startsWith('wordpress_') && {
+                                                base_url: resource.api_url || formData.base_url,
+                                                username: resource.username || formData.username,
+                                            }),
+                                        });
+                                    }}
+                                    onClear={() => {
+                                        setFormData({ ...formData, provider_account_id: '' });
+                                    }}
+                                />
+
+                                {formData.provider_account_id ? (
+                                    <div className="rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/40 p-3">
+                                        <p className="text-xs text-green-700 dark:text-green-400 flex items-center gap-2">
+                                            <CheckCircle className="w-4 h-4" />
+                                            <span>Credentials will be resolved from this Connected Account. No need to enter credentials manually.</span>
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-3 py-1">
+                                        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                                        <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">or enter credentials manually</span>
+                                        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Google Sheets Configuration */}
-                        {formData.type === 'google_sheets' ? (
+                        {formData.type === 'google_sheets' && !formData.provider_account_id ? (
                             <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30">
                                 <div className="flex items-center gap-2 mb-3">
                                     <Table className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -355,7 +397,7 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                     </p>
                                 </div>
                             </div>
-                        ) : formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress' ? (
+                        ) : (formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress_graphql' || formData.type === 'wordpress') && !formData.provider_account_id ? (
                             /* WordPress Configuration (inline credentials) */
                             <div className="space-y-4 p-4 bg-purple-50 dark:bg-purple-900/10 rounded-xl border border-purple-100 dark:border-purple-800/30">
                                 <div className="flex items-center gap-2 mb-3">
@@ -428,7 +470,7 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                 </div>
                             </div>
                         ) : (
-                            /* Connected Account Picker — replaces all inline credential fields */
+                            /* Connected Account Picker — for PostgreSQL, MySQL, Supabase, etc. */
                             <AccountResourcePicker
                             compatibleProviders={DATASOURCE_PROVIDER_MAP[formData.type] || [formData.type]}
                             label="Connected Account"

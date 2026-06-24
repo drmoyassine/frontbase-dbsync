@@ -11,8 +11,10 @@ import logging
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.sync.adapters import get_adapter
+from app.services.sync.database import get_db
 from app.services.sync.models.datasource import Datasource, DatasourceType
 from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
 
@@ -26,6 +28,7 @@ logger = logging.getLogger("app.routers.datasources.wordpress")
 )
 async def get_wordpress_discovery(
     datasource: Datasource = Depends(get_scoped_datasource),
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Return the full WordPress discovery manifest for a plugin datasource.
 
@@ -41,7 +44,7 @@ async def get_wordpress_discovery(
             ),
         )
 
-    adapter = get_adapter(datasource)
+    adapter = get_adapter(datasource, db)
     try:
         # WordPressPluginAdapter exposes discover(); guard for safety.
         discover = getattr(adapter, "discover", None)

@@ -31,7 +31,7 @@ async def check_datasource_migration(
         return {"applicable": False, "reason": "Migration only applies to Supabase datasources"}
     
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             if hasattr(adapter, 'check_migration_status'):
                 status = await adapter.check_migration_status()  # type: ignore[attr-defined]
@@ -72,7 +72,7 @@ async def apply_datasource_migration(
         migration_sql = f.read()
     
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             if hasattr(adapter, 'apply_migration'):
                 result = await adapter.apply_migration(migration_sql)  # type: ignore[attr-defined]

@@ -16,10 +16,10 @@ logger = logging.getLogger(__name__)
 
 class WordPressBaseApiAdapter(DatabaseAdapter):
     """Base class for WordPress API-based adapters."""
-    
+
     _shared_client: Optional[httpx.AsyncClient] = None
 
-    def __init__(self, datasource: "Datasource"):
+    def __init__(self, datasource: "Datasource", db: Optional[Any] = None):
         super().__init__(datasource)
         # Normalise scheme (bare hosts get https://) — httpx rejects URLs without
         # http(s):// with "Request URL is missing an 'http://' or 'https://'
@@ -28,7 +28,35 @@ class WordPressBaseApiAdapter(DatabaseAdapter):
         if raw and "://" not in raw:
             raw = f"https://{raw}"
         self._api_url = raw.rstrip("/")
-        
+
+        # Resolve credentials from Connected Account or fallback to inline
+        self._resolved_username: Optional[str] = None
+        self._resolved_api_key: Optional[str] = None
+
+        if db:
+            from app.core.credential_resolver import get_datasource_credentials
+            try:
+                creds = get_datasource_credentials(db, datasource)
+                self._resolved_username = creds.get("username") or datasource.username
+                # WordPress uses app_password for all variants (plugin/rest/graphql)
+                self._resolved_api_key = creds.get("app_password") or creds.get("api_key")
+                self._credential_source = creds.get("source", "unknown")
+            except Exception as e:
+                logger.warning("Failed to resolve credentials from Connected Account: %s", e)
+                self._credential_source = "resolution_failed"
+
+        if not self._resolved_username:
+            self._resolved_username = datasource.username
+        if not self._resolved_api_key:
+            # Fallback: try decrypting inline field
+            from app.core.security import decrypt_field
+            # Try api_key_encrypted first (WordPress Plugin), fallback to password_encrypted (WordPress REST)
+            self._resolved_api_key = (
+                decrypt_field(datasource.api_key_encrypted) or
+                decrypt_field(datasource.password_encrypted) or
+                ""
+            )
+
     @property
     def _client(self) -> httpx.AsyncClient:
         """Access the shared client, initializing it if necessary."""
@@ -41,17 +69,34 @@ class WordPressBaseApiAdapter(DatabaseAdapter):
         return WordPressBaseApiAdapter._shared_client
 
     def _get_auth_header(self) -> Dict[str, str]:
-        """Get Basic Auth header for WordPress Application Passwords."""
-        api_key = self.datasource.api_key_encrypted or ""
-        username = self.datasource.username or ""
-        
+        """Get Basic Auth header for WordPress Application Passwords.
+
+        Credentials are resolved from Connected Account (preferred) or fallback
+        to inline encrypted fields. This ensures safe credential handling.
+        """
+        from app.core.security import decrypt_field
+
+        # Use resolved credentials from __init__ if available
+        username = getattr(self, "_resolved_username", None) or self.datasource.username or ""
+        api_key = getattr(self, "_resolved_api_key", None)
+
+        if not api_key or not username:
+            # Final fallback: try decrypting inline fields
+            api_key = (
+                decrypt_field(self.datasource.api_key_encrypted) or
+                decrypt_field(self.datasource.password_encrypted) or
+                ""
+            )
+            if not api_key:
+                return {}
+
         auth_string = api_key
         if ":" not in api_key and username:
             auth_string = f"{username}:{api_key}"
-            
+
         if ":" not in auth_string:
             return {}
-        
+
         encoded = base64.b64encode(auth_string.encode()).decode()
         return {"Authorization": f"Basic {encoded}"}
 

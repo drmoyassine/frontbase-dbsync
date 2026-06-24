@@ -40,6 +40,7 @@ const LUCIDE_FALLBACKS: Record<string, React.FC<any>> = {
     deno: Zap,
     wordpress_rest: Globe,
     wordpress_plugin: Rocket,  // Plugin mode gets a different icon to distinguish from REST
+    wordpress_graphql: Globe,  // GraphQL uses same icon as REST API
     postgres: Database,
     mysql: HardDrive,
     neon: Database,
@@ -286,7 +287,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         defaultName: 'WordPress with Plugin',
         capabilities: ['database', 'cms'],
         fields: [
-            { key: 'base_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
+            { key: 'api_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
             { key: 'username', label: 'Username', placeholder: 'admin', required: true },
             { key: 'app_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
         ],
@@ -301,6 +302,17 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
                 <p className="text-green-700 dark:text-green-400">✓ ACF support, shortcode rendering, and custom field extraction</p>
             </div>
         ),
+    },
+    wordpress_graphql: {
+        label: 'WordPress GraphQL',
+        defaultName: 'WordPress GraphQL',
+        capabilities: ['database', 'cms'],
+        fields: [
+            { key: 'api_url', label: 'Site URL', placeholder: 'https://mysite.com', required: true },
+            { key: 'username', label: 'Username', placeholder: 'admin', required: true },
+            { key: 'app_password', label: 'Application Password', placeholder: 'xxxx xxxx xxxx xxxx', type: 'password', required: true },
+        ],
+        helpText: <>Connect using the WordPress GraphQL API (WPGraphQL plugin required). Supports queries via GraphQL endpoint.</>,
     },
     google_sheets: {
         label: 'Google Sheets',

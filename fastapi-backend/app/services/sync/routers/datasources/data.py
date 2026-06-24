@@ -149,7 +149,7 @@ async def get_datasource_table_data(
             })
 
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             # If search is provided, use search_records method
             # If search is provided, use search_records method unless we have relations logic
@@ -346,7 +346,7 @@ async def get_datasource_table_aggregate(
             pass
 
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             if hasattr(adapter, "aggregate"):
                 records = await adapter.aggregate(  # type: ignore[attr-defined]
@@ -424,7 +424,7 @@ async def get_distinct_values(
     """Get distinct values for a column (for dropdown filter options)."""
     
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             if hasattr(adapter, 'get_distinct_values'):
                 values = await adapter.get_distinct_values(table, column, limit)  # type: ignore[attr-defined]
@@ -453,7 +453,7 @@ async def create_record(
         raise HTTPException(status_code=400, detail="No data provided")
     
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             if hasattr(adapter, 'create_record'):
                 record = await adapter.create_record(table, data)  # type: ignore[attr-defined]
@@ -482,7 +482,7 @@ async def update_record(
         raise HTTPException(status_code=400, detail="No data provided")
     
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             if hasattr(adapter, 'update_record'):
                 record = await adapter.update_record(table, record_id, data)  # type: ignore[attr-defined]
@@ -508,7 +508,7 @@ async def search_datasource_tables(
     
     matches = []
     try:
-        adapter = get_adapter(datasource)
+        adapter = get_adapter(datasource, db)
         async with adapter:
             tables = await adapter.get_tables()
             

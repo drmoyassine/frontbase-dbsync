@@ -112,7 +112,7 @@ async def get_view_records(
         raise HTTPException(status_code=404, detail="Associated datasource not found")
         
     # 3. Get adapter and fetch data
-    adapter = get_adapter(ds)
+    adapter = get_adapter(ds, db)
     async with adapter:
         records = await adapter.read_records(
             table=db_view.target_table, 
@@ -155,7 +155,7 @@ async def get_view_records(
                             l_ds_result = await db.execute(select(Datasource).where(Datasource.id == l_view.datasource_id))
                             l_ds = l_ds_result.scalar_one_or_none()
                             if l_ds:
-                                l_adapter = get_adapter(l_ds)
+                                l_adapter = get_adapter(l_ds, db)
                                 async with l_adapter:
                                     linked_data = await l_adapter.read_records(
                                         table=l_view.target_table,
@@ -222,7 +222,7 @@ async def get_view_count(
         raise HTTPException(status_code=404, detail="Associated datasource not found")
         
     # 3. Get adapter and count records
-    adapter = get_adapter(ds)
+    adapter = get_adapter(ds, db)
     async with adapter:
         total = await adapter.count_records(
             table=db_view.target_table, 
@@ -261,7 +261,7 @@ async def create_view_record(
     if not ds:
         raise HTTPException(status_code=404, detail="Associated datasource not found")
     
-    adapter = get_adapter(ds)
+    adapter = get_adapter(ds, db)
     async with adapter:
         # Note: adapters use upsert, but we can call it POST for semantic clarity
         success = await adapter.upsert_record(
@@ -298,7 +298,7 @@ async def patch_view_record(
     if not ds:
         raise HTTPException(status_code=404, detail="Associated datasource not found")
     
-    adapter = get_adapter(ds)
+    adapter = get_adapter(ds, db)
     async with adapter:
         # For patch, we might want to fetch existing record first or rely on adapter's upsert
         # Most our current adapters (SQL) handle upsert as 'merge'

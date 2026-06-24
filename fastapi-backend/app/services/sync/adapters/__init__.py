@@ -12,8 +12,21 @@ from app.services.sync.adapters.rest_adapter import RESTAdapter
 from app.services.sync.models.datasource import Datasource, DatasourceType
 
 
-def get_adapter(datasource: Datasource) -> DatabaseAdapter:
-    """Factory function to get the appropriate adapter for a datasource."""
+def get_adapter(datasource: Datasource, db=None) -> DatabaseAdapter:
+    """Factory function to get the appropriate adapter for a datasource.
+
+    Args:
+        datasource: The datasource model instance
+        db: Optional database session for resolving Connected Account credentials.
+            Adapters that support Connected Account credential resolution will
+            use this to fetch credentials from EdgeProviderAccount.
+
+    Returns:
+        Adapter instance for the datasource type
+    """
+    from typing import Optional
+    from sqlalchemy.orm import Session
+
     adapter_map = {
         DatasourceType.SUPABASE: SupabaseAdapter,
         DatasourceType.POSTGRES: PostgresAdapter,
@@ -30,7 +43,12 @@ def get_adapter(datasource: Datasource) -> DatabaseAdapter:
     if not adapter_class:
         raise ValueError(f"Unsupported datasource type: {datasource.type}")
 
-    return adapter_class(datasource)
+    # Try passing db session if adapter supports it (kwargs-compatible)
+    try:
+        return adapter_class(datasource, db=db)
+    except TypeError:
+        # Adapter doesn't accept db parameter (legacy adapter)
+        return adapter_class(datasource)
 
 
 __all__ = [

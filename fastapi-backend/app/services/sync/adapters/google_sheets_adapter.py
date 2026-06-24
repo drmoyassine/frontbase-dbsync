@@ -61,21 +61,37 @@ def _to_wire_filters(where: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]
 class GoogleSheetsAdapter(DatabaseAdapter):
     """DatabaseAdapter backed by a Google Apps Script Web App."""
 
-    def __init__(self, datasource):
+    def __init__(self, datasource, db: Optional[Any] = None):
         super().__init__(datasource)
         cfg = self._read_config()
         self._web_app_url = cfg.get("webAppUrl") or ""
         self._spreadsheet_id = cfg.get("spreadsheetId")
         self._client: Optional[httpx.AsyncClient] = None
 
+        # Resolve secret from Connected Account or fallback to inline config
         secret = cfg.get("webAppSecret")
         encrypted = cfg.get("webAppSecretEncrypted")
+
+        # Try Connected Account first
+        if db and not secret and not encrypted:
+            from app.core.credential_resolver import get_datasource_credentials
+            try:
+                creds = get_datasource_credentials(db, datasource)
+                secret = creds.get("webAppSecret") or ""
+                self._web_app_url = creds.get("webAppUrl") or self._web_app_url
+                self._spreadsheet_id = creds.get("spreadsheetId") or self._spreadsheet_id
+                self._credential_source = creds.get("source", "unknown")
+            except Exception as e:
+                logger.warning("Failed to resolve Google Sheets credentials from Connected Account: %s", e)
+
+        # Fallback to inline encrypted field
         if not secret and encrypted:
             try:
                 from app.core.security import decrypt_field
                 secret = decrypt_field(encrypted) or ""
             except Exception:
                 secret = ""
+
         self._secret = secret or ""
 
         # Debug logging

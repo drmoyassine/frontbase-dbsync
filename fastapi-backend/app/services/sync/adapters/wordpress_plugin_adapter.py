@@ -68,12 +68,35 @@ class WordPressPluginAdapter(WordPressBaseApiAdapter):
     #: REST namespace exposed by the plugin
     PLUGIN_NAMESPACE = "frontbase/v1"
 
-    def __init__(self, datasource: "Datasource") -> None:
+    def __init__(self, datasource: "Datasource", db: Optional[Any] = None) -> None:
         super().__init__(datasource)
         # _api_url is normalised (trailing slash stripped) by the base class
         self._plugin_base = f"{self._api_url}/wp-json/{self.PLUGIN_NAMESPACE}"
         # Short-lived in-process manifest cache (Redis is the durable layer)
         self._manifest_cache: Optional[Dict[str, Any]] = None
+
+        # Resolve credentials from Connected Account or fallback to inline
+        self._resolved_username: Optional[str] = None
+        self._resolved_api_key: Optional[str] = None
+
+        if db:
+            from app.core.credential_resolver import get_datasource_credentials
+            try:
+                creds = get_datasource_credentials(db, datasource)
+                self._resolved_username = creds.get("username") or datasource.username
+                self._resolved_api_key = creds.get("app_password") or creds.get("api_key")
+                # Store source for debugging
+                self._credential_source = creds.get("source", "unknown")
+            except Exception as e:
+                logger.warning("Failed to resolve credentials from Connected Account: %s", e)
+                self._credential_source = "resolution_failed"
+
+        if not self._resolved_username:
+            self._resolved_username = datasource.username
+        if not self._resolved_api_key:
+            # Fallback: try decrypting inline field
+            from app.core.security import decrypt_field
+            self._resolved_api_key = decrypt_field(datasource.api_key_encrypted) or ""
 
     # ------------------------------------------------------------------ #
     # Low-level plugin HTTP helpers
@@ -572,29 +595,31 @@ class WordPressPluginAdapter(WordPressBaseApiAdapter):
     def _get_auth_header(self) -> Dict[str, str]:  # type: ignore[override]
         """Basic Auth header using the decrypted WordPress application password.
 
-        ``api_key_encrypted`` is stored Fernet-encrypted (CRUD layer calls
-        ``encrypt_field``). ``decrypt_field`` gracefully returns the raw value
-        when decryption fails, so this also works for the plaintext values used
-        in the test-raw / test-update connection flows. This fixes the latent
-        bug in WordPressBaseApiAdapter._get_auth_header, which sends the raw
-        encrypted blob for stored datasources.
+        Credentials are resolved from Connected Account (preferred) or fallback
+        to inline encrypted fields. This ensures safe credential handling with
+        proper fallback on decryption failures.
         """
         from app.core.security import decrypt_field
 
-        api_key = decrypt_field(self.datasource.api_key_encrypted) or ""
-        # Detect undecryptable credentials (FERNET_KEY mismatch on redeploy):
-        # Fernet tokens are base64-url and start with 'gAAAAA'. When decryption
-        # fails, decrypt_field returns the raw blob, which always 401s at
-        # WordPress (BACKEND-G). Root cause is operational: FERNET_KEY must
-        # persist across deploys, else stored app_passwords are unrecoverable.
-        if api_key.startswith("gAAAAA"):
-            logger.error(
-                "WP plugin credentials for %s appear undecryptable (FERNET_KEY "
-                "mismatch on redeploy?). Re-enter the app_password after "
-                "persisting FERNET_KEY in the deployment environment.",
-                self.datasource.api_url,
-            )
-        username = self.datasource.username or ""
+        # Use resolved credentials from __init__ if available
+        username = getattr(self, "_resolved_username", None) or self.datasource.username or ""
+        api_key = getattr(self, "_resolved_api_key", None)
+
+        if not api_key:
+            # Final fallback: try decrypting inline field
+            api_key = decrypt_field(self.datasource.api_key_encrypted) or ""
+            # Detect undecryptable credentials (FERNET_KEY mismatch on redeploy):
+            # Fernet tokens are base64-url and start with 'gAAAAA'. When decryption
+            # fails, decrypt_field returns the raw blob, which always 401s at
+            # WordPress (BACKEND-G). Root cause is operational: FERNET_KEY must
+            # persist across deploys, else stored app_passwords are unrecoverable.
+            if api_key and api_key.startswith("gAAAAA"):
+                logger.error(
+                    "WP plugin credentials for %s appear undecryptable (FERNET_KEY "
+                    "mismatch on redeploy?). Re-enter the app_password after "
+                    "persisting FERNET_KEY in the deployment environment.",
+                    self.datasource.api_url,
+                )
 
         auth_string = api_key
         if ":" not in api_key and username:

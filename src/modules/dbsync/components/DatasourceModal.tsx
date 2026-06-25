@@ -82,61 +82,6 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                 : datasourcesApi.testRaw(data),
     });
 
-    // ── Google Sheets add-on connect flow ──────────────────────────────────
-    const [sheetsConnect, setSheetsConnect] = useState<{
-        loading: boolean;
-        token?: string;
-        installUrl?: string;
-        polling?: boolean;
-        error?: string;
-    }>({ loading: false });
-    const sheetsPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    const stopSheetsPoll = () => {
-        if (sheetsPollRef.current) {
-            clearInterval(sheetsPollRef.current);
-            sheetsPollRef.current = null;
-        }
-    };
-    // Stop polling if the modal unmounts (e.g. closed) mid-handshake.
-    useEffect(() => () => stopSheetsPoll(), []);
-
-    const startSheetsConnect = async () => {
-        setSheetsConnect({ loading: true, error: undefined });
-        stopSheetsPoll();
-        try {
-            const res = await datasourcesApi.issueSheetsConnect(datasource?.id);
-            const { token, addonInstallUrl } = res.data;
-            setSheetsConnect({ loading: false, token, installUrl: addonInstallUrl, polling: true });
-
-            // Poll until the add-on callback completes (token TTL ~15 min).
-            let attempts = 0;
-            const maxAttempts = Math.floor((13 * 60 * 1000) / 2500);
-            sheetsPollRef.current = setInterval(async () => {
-                attempts += 1;
-                if (attempts > maxAttempts) {
-                    stopSheetsPoll();
-                    setSheetsConnect((s) => ({ ...s, polling: false, error: 'Timed out waiting for the add-on. Retry with a new code.' }));
-                    return;
-                }
-                try {
-                    const s = await datasourcesApi.sheetsConnectStatus(token);
-                    if (s.data?.connected && s.data.datasourceId) {
-                        stopSheetsPoll();
-                        queryClient.invalidateQueries({ queryKey: ['datasources'] });
-                        track('datasource_connected', { datasource_id: s.data.datasourceId, via: 'sheets_addon' });
-                        if (onCreated) onCreated(s.data.datasourceId);
-                        onClose();
-                    }
-                } catch {
-                    /* transient — keep polling */
-                }
-            }, 2500);
-        } catch (e: any) {
-            setSheetsConnect({ loading: false, error: e?.response?.data?.detail || e.message || 'Failed to issue connect code' });
-        }
-    };
-
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         mutation.mutate(formData);
@@ -194,8 +139,14 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                     </div>
 
                     <div className="space-y-4">
-                        {/* Connected Account Picker — PRIMARY for WordPress and Google Sheets */}
-                        {(formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress_graphql' || formData.type === 'google_sheets') && (
+                        {/* Connected Account Picker — WordPress + Google Sheets + all DB types */}
+                        {formData.type.startsWith('wordpress_') ||
+                         formData.type === 'google_sheets' ||
+                         formData.type === 'postgres' ||
+                         formData.type === 'mysql' ||
+                         formData.type === 'supabase' ||
+                         formData.type === 'neon' ||
+                         formData.type === 'turso' ? (
                             <div className="space-y-3">
                                 <AccountResourcePicker
                                     compatibleProviders={DATASOURCE_PROVIDER_MAP[formData.type] || [formData.type]}
@@ -219,283 +170,16 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                     }}
                                 />
 
-                                {formData.provider_account_id ? (
+                                {formData.provider_account_id && (
                                     <div className="rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/40 p-3">
                                         <p className="text-xs text-green-700 dark:text-green-400 flex items-center gap-2">
                                             <CheckCircle className="w-4 h-4" />
                                             <span>Credentials will be resolved from this Connected Account. No need to enter credentials manually.</span>
                                         </p>
                                     </div>
-                                ) : (
-                                    <div className="flex items-center gap-3 py-1">
-                                        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-                                        <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">or enter credentials manually</span>
-                                        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
-                                    </div>
                                 )}
                             </div>
-                        )}
-
-                        {/* Google Sheets Configuration */}
-                        {formData.type === 'google_sheets' && !formData.provider_account_id ? (
-                            <div className="space-y-4 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800/30">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <Table className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                                    <h3 className="font-semibold text-blue-900 dark:text-blue-100">Google Sheets Configuration</h3>
-                                </div>
-
-                                {/* Connect via add-on (recommended) */}
-                                <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/40 bg-emerald-50 dark:bg-emerald-900/10 p-4">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Zap className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                                        <h4 className="font-semibold text-emerald-900 dark:text-emerald-100">Connect with the add-on (recommended)</h4>
-                                    </div>
-                                    {!sheetsConnect.token ? (
-                                        <>
-                                            <p className="text-xs text-gray-600 dark:text-gray-300 mb-3">
-                                                Install the Frontbase add-on, paste a one-time code, click Configure — no copy-pasting Apps Script or secrets.
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={startSheetsConnect}
-                                                disabled={sheetsConnect.loading}
-                                                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-                                            >
-                                                {sheetsConnect.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                                                Get connect code
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ol className="text-xs text-gray-700 dark:text-gray-300 space-y-1.5 mb-3 list-decimal list-inside">
-                                                <li>
-                                                    Open the add-on in your Google Sheet
-                                                    {sheetsConnect.installUrl && (
-                                                        <a href={sheetsConnect.installUrl} target="_blank" rel="noreferrer" className="text-emerald-700 dark:text-emerald-300 underline ml-1">install link</a>
-                                                    )}
-                                                </li>
-                                                <li>In the add-on, paste this code and click <span className="font-semibold">Configure</span>:</li>
-                                            </ol>
-                                            <div className="flex gap-2 mb-2">
-                                                <code className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 rounded-lg font-mono text-sm break-all border border-gray-200 dark:border-gray-700 select-all">
-                                                    {sheetsConnect.token}
-                                                </code>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => navigator.clipboard.writeText(sheetsConnect.token!)}
-                                                    className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                                    title="Copy code"
-                                                >
-                                                    <Copy className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                            {sheetsConnect.polling ? (
-                                                <p className="text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
-                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Waiting for the add-on…
-                                                </p>
-                                            ) : (
-                                                <button type="button" onClick={startSheetsConnect} className="text-xs text-emerald-700 dark:text-emerald-300 underline">Get a new code</button>
-                                            )}
-                                            {sheetsConnect.error && <p className="text-xs text-red-600 mt-2">{sheetsConnect.error}</p>}
-                                        </>
-                                    )}
-                                </div>
-
-                                <div className="flex items-center gap-3 py-1">
-                                    <div className="flex-1 h-px bg-blue-200 dark:bg-blue-800/40" />
-                                    <span className="text-[10px] uppercase tracking-wide text-blue-400 dark:text-blue-500">or configure manually</span>
-                                    <div className="flex-1 h-px bg-blue-200 dark:bg-blue-800/40" />
-                                </div>
-
-                                {/* Spreadsheet ID */}
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
-                                        Spreadsheet ID
-                                        <span className="text-xs text-gray-500 ml-2">
-                                            From URL: docs.google.com/spreadsheets/d/<span className="font-mono bg-gray-100 dark:bg-gray-800 px-1 rounded">SPREADSHEET_ID</span>/edit
-                                        </span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.extra_config?.spreadsheetId || ''}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
-                                            extra_config: { ...formData.extra_config, spreadsheetId: e.target.value }
-                                        })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
-                                        placeholder="1AbCdEfGhIjKlMnOpQrStUvWxYz"
-                                    />
-                                </div>
-
-                                {/* Web App URL */}
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
-                                        Web App URL
-                                    </label>
-                                    <p className="text-xs text-gray-500 mb-2">
-                                        Deploy the Apps Script Web App and paste the exec URL. See <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">docs/google-sheets-setup.md</code> in the repo.
-                                    </p>
-                                    <input
-                                        type="url"
-                                        value={formData.extra_config?.webAppUrl || ''}
-                                        onChange={(e) => setFormData({
-                                            ...formData,
-                                            extra_config: { ...formData.extra_config, webAppUrl: e.target.value }
-                                        })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
-                                        placeholder="https://script.google.com/macros/s/.../exec"
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Deploy the Apps Script Web App and paste the exec URL here.
-                                    </p>
-                                </div>
-
-                                {/* Shared Secret */}
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
-                                        Shared Secret
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const secret = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
-                                                setFormData({
-                                                    ...formData,
-                                                    extra_config: { ...formData.extra_config, webAppSecret: secret }
-                                                });
-                                            }}
-                                            className="text-primary ml-2 text-xs underline hover:no-underline"
-                                        >
-                                            Generate New
-                                        </button>
-                                    </label>
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            value={formData.extra_config?.webAppSecret || ''}
-                                            onChange={(e) => setFormData({
-                                                ...formData,
-                                                extra_config: { ...formData.extra_config, webAppSecret: e.target.value }
-                                            })}
-                                            className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all font-mono text-sm"
-                                            placeholder="Enter or generate a secret"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                if (formData.extra_config?.webAppSecret) {
-                                                    navigator.clipboard.writeText(formData.extra_config.webAppSecret);
-                                                }
-                                            }}
-                                            className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                                            title="Copy to clipboard"
-                                        >
-                                            <Copy className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Use this secret in your Apps Script Web App code for authentication.
-                                    </p>
-                                </div>
-                            </div>
-                        ) : (formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress_graphql' || formData.type === 'wordpress') && !formData.provider_account_id ? (
-                            /* WordPress Configuration (inline credentials) */
-                            <div className="space-y-4 p-4 bg-purple-50 dark:bg-purple-900/10 rounded-xl border border-purple-100 dark:border-purple-800/30">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <Database className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                                    <h3 className="font-semibold text-purple-900 dark:text-purple-100">
-                                        WordPress Configuration
-                                    </h3>
-                                </div>
-
-                                {formData.type === 'wordpress_plugin' && (
-                                    <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 p-3 mb-4">
-                                        <p className="text-xs text-emerald-800 dark:text-emerald-200">
-                                            <strong>Plugin Mode:</strong> Requires the Frontbase Connector WordPress plugin to be installed and activated on your site.
-                                        </p>
-                                    </div>
-                                )}
-
-                                {/* Base URL / Site URL */}
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
-                                        Site URL
-                                    </label>
-                                    <input
-                                        type="url"
-                                        value={formData.base_url}
-                                        onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
-                                        placeholder="https://mysite.com"
-                                        required={formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress'}
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Your WordPress site URL (without trailing slash)
-                                    </p>
-                                </div>
-
-                                {/* Username */}
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
-                                        Username
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.username}
-                                        onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
-                                        placeholder="admin"
-                                        required={formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress'}
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        WordPress username (must have permission to manage posts)
-                                    </p>
-                                </div>
-
-                                {/* Application Password */}
-                                <div>
-                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">
-                                        Application Password
-                                    </label>
-                                    <input
-                                        type="password"
-                                        value={formData.app_password}
-                                        onChange={(e) => setFormData({ ...formData, app_password: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
-                                        placeholder="xxxx xxxx xxxx xxxx"
-                                        required={formData.type === 'wordpress_plugin' || formData.type === 'wordpress_rest' || formData.type === 'wordpress'}
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Generate in WordPress → Users → Profile → Application Passwords
-                                    </p>
-                                </div>
-                            </div>
-                        ) : (
-                            /* Connected Account Picker — for PostgreSQL, MySQL, Supabase, etc. */
-                            <AccountResourcePicker
-                            compatibleProviders={DATASOURCE_PROVIDER_MAP[formData.type] || [formData.type]}
-                            label="Connected Account"
-                            autoSelectSingle
-                            selectedAccountId={formData.provider_account_id || undefined}
-                            onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
-                                setFormData({
-                                    ...formData,
-                                    provider_account_id: accountId,
-                                    name: formData.name || resource.name || '',
-                                });
-                            }}
-                            onClear={() => {
-                                setFormData({ ...formData, provider_account_id: '' });
-                            }}
-                        />
-                        )}
-
-                        {formData.provider_account_id && (
-                            <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400">
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                Credentials will be resolved from this Connected Account
-                            </div>
-                        )}
-
+                        ) : null /* No other types need manual config */}
                     </div>
 
                     {testRawMutation.data && (

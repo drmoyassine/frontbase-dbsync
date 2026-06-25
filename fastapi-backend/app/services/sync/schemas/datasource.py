@@ -121,6 +121,7 @@ class DatasourceTestRequest(BaseModel):
     base_url: Optional[str] = None
     app_password: Optional[str] = None
     extra_config: Optional[Dict[str, Any]] = None
+    provider_account_id: Optional[str] = None  # Connected Account to resolve creds from
 
     @model_validator(mode="before")
     @classmethod

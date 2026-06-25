@@ -10,12 +10,12 @@ that handshake:
     POST /sheets/connect/callback   — called by the add-on with the token + the
                                       freshly-deployed Web App URL/secret; validates
                                       the token (atomic GETDEL), upserts a google_sheets
-                                      datasource, and triggers schema discovery.
+                                      Connected Account (EdgeProviderAccount).
     GET  /sheets/connect/status     — polled by the modal until the callback lands.
 
-The runtime data path is unchanged: once the datasource exists with extra_config
-{spreadsheetId, webAppUrl, webAppSecretEncrypted}, the edge proxy-http + adapter
-behave exactly as for a manually-configured sheet.
+Phase 2: Callback creates a Connected Account instead of a Datasource.
+The account stores webAppSecret encrypted and webAppUrl/spreadsheetId in metadata.
+At datasource-create time, the AccountResourcePicker resolves the account.
 """
 
 import hashlib
@@ -23,6 +23,8 @@ import json
 import logging
 import os
 import secrets
+import uuid
+import datetime
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -30,16 +32,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, constr
 from sqlalchemy import inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, Session
 
 from app.middleware.tenant_context import TenantContext, get_tenant_context
-from app.models.models import Project
+from app.models.models import Project, EdgeProviderAccount
 from app.services.sync.database import get_db
 from app.services.sync.models.datasource import Datasource, DatasourceType
 from app.services.sync.redis_client import cache_get, cache_getdel, cache_set
 from app.services.sync.services.schema_service import SchemaService
 
-from app.core.security import encrypt_field
+from app.core.security import encrypt_field, encrypt_credentials
+from app.database.config import SessionLocal as MainSessionLocal
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.sheets_connect")
@@ -76,12 +79,12 @@ class SheetsConnectCallback(BaseModel):
 
 class SheetsConnectResult(BaseModel):
     ok: bool
-    datasourceId: Optional[str] = None
+    accountId: Optional[str] = None
 
 
 class SheetsConnectStatus(BaseModel):
     connected: bool
-    datasourceId: Optional[str] = None
+    accountId: Optional[str] = None
     spreadsheetName: Optional[str] = None
 
 
@@ -189,15 +192,18 @@ async def sheets_connect_issue(
 async def sheets_connect_callback(
     body: SheetsConnectCallback,
     db: AsyncSession = Depends(get_db),
+    main_db: Session = Depends(MainSessionLocal),
     request: Request = None,  # type: ignore[assignment]
 ):
-    """Add-on callback: validate token, upsert the google_sheets datasource.
+    """Add-on callback: validate token, upsert a google_sheets Connected Account.
+
+    Phase 2: Creates an EdgeProviderAccount in the main DB (not a Datasource).
+    Stores webAppSecret encrypted and webAppUrl/spreadsheetId in provider_metadata.
 
     No tenant session — the token IS the credential (random, single-use, scoped).
     Rate limited to prevent brute force or DoS attacks.
     """
     # Rate limit: 5 attempts per token per 60 seconds (prevents brute force)
-    # Hash the token for the rate limit key to avoid storing raw tokens
     token_hash = hashlib.sha256(body.token.encode()).hexdigest()[:16]
     if not await _check_rate_limit(request, token_hash, max_attempts=5, window_seconds=60):
         raise HTTPException(
@@ -214,92 +220,76 @@ async def sheets_connect_callback(
         )
 
     project_id = payload.get("project_id")
-    reconnect_id = payload.get("datasource_id")
     token_tenant_id = payload.get("tenant_id")
 
-    # Build extra_config. Secret is encrypted at rest; the adapter decrypts it.
-    extra_config: Dict[str, Any] = {
+    # Build credential storage for google_sheets provider.
+    # Secrets (encrypted): webAppSecret
+    # Metadata (cleartext): webAppUrl, spreadsheetId, spreadsheetName
+    sheet_label = body.spreadsheetName or "Google Sheet"
+    secrets = {"webAppSecret": body.webAppSecret}
+    metadata = {
         "spreadsheetId": body.spreadsheetId,
         "webAppUrl": body.webAppUrl,
-        "webAppSecretEncrypted": encrypt_field(body.webAppSecret),
+        "spreadsheetName": sheet_label,
     }
-    if body.spreadsheetName:
-        extra_config["spreadsheetName"] = body.spreadsheetName
 
-    extra_config_json = json.dumps(extra_config)
-    sheet_label = body.spreadsheetName or "Google Sheet"
+    credentials_str = encrypt_credentials(secrets)
+    metadata_str = json.dumps(metadata)
 
-    # Column-existence guard (mirrors crud.py): don't set fields the DB lacks.
-    db_columns = {col.name for col in inspect(Datasource).columns}
+    now = datetime.datetime.now(datetime.UTC).isoformat()
 
-    datasource: Optional[Datasource] = None
+    # Dedup: reuse an existing google_sheets account with the same spreadsheetId in this project
+    provider: Optional[EdgeProviderAccount] = None
+    query = main_db.query(EdgeProviderAccount).filter(
+        EdgeProviderAccount.provider == "google_sheets",
+        EdgeProviderAccount.project_id == project_id,
+    )
+    for existing in query.all():
+        try:
+            existing_meta = json.loads(str(existing.provider_metadata or "{}"))
+        except (json.JSONDecodeError, TypeError):
+            existing_meta = {}
+        if existing_meta.get("spreadsheetId") == body.spreadsheetId:
+            provider = existing
+            break
 
-    # 1) Explicit reconnect target: MUST validate tenant/project ownership to prevent
-    #    cross-tenant datasource takeover.
-    if reconnect_id:
-        res = await db.execute(
-            select(Datasource).where(
-                Datasource.id == reconnect_id,
-                Datasource.project_id == project_id,  # Tenant-scoped by project_id
-                Datasource.type == DatasourceType.GOOGLE_SHEETS,  # Must be Sheets type
-            )
+    if provider is not None:
+        # Update in place
+        provider.provider_credentials = credentials_str
+        provider.provider_metadata = metadata_str
+        provider.name = sheet_label
+        provider.updated_at = now
+        main_db.commit()
+        main_db.refresh(provider)
+        logger.info(
+            "Sheets connect: updated existing account=%s for spreadsheet=%s",
+            provider.id, body.spreadsheetId,
         )
-        datasource = res.scalar_one_or_none()
-        if datasource is None:
-            # Datasource exists but doesn't belong to this tenant/project or wrong type
-            logger.warning(
-                "Sheets reconnect: datasource %s not found or not owned by project %s",
-                reconnect_id, project_id
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Datasource not found or access denied",
-            )
-
-    # 2) Otherwise, reuse an existing same-project google_sheets datasource with
-    #    the same spreadsheetId (avoids duplicates on repeat connects).
-    if datasource is None:
-        res = await db.execute(
-            select(Datasource).where(
-                Datasource.project_id == project_id,
-                Datasource.type == DatasourceType.GOOGLE_SHEETS,
-            )
-        )
-        for ds in res.scalars().all():
-            try:
-                cfg = json.loads(ds.extra_config) if ds.extra_config else {}
-            except (json.JSONDecodeError, TypeError):
-                cfg = {}
-            if cfg.get("spreadsheetId") == body.spreadsheetId:
-                datasource = ds
-                break
-
-    if datasource is not None:
-        # Update in place.
-        datasource.extra_config = extra_config_json
-        if body.spreadsheetName:
-            datasource.name = sheet_label
-        datasource.last_tested_at = None
-        datasource.last_test_success = None
     else:
-        # Create a new datasource.
-        kwargs: Dict[str, Any] = {
-            "name": sheet_label,
-            "type": DatasourceType.GOOGLE_SHEETS,
-            "table_prefix": "wp_",
-            "extra_config": extra_config_json,
-            "project_id": project_id,
-        }
-        datasource = Datasource(**kwargs)
-        db.add(datasource)
-
-    await db.commit()
-    await db.refresh(datasource)
+        # Create new Connected Account
+        provider = EdgeProviderAccount(
+            id=str(uuid.uuid4()),
+            name=sheet_label,
+            project_id=project_id,
+            provider="google_sheets",
+            provider_credentials=credentials_str,
+            provider_metadata=metadata_str,
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        main_db.add(provider)
+        main_db.commit()
+        main_db.refresh(provider)
+        logger.info(
+            "Sheets connect: created new account=%s for spreadsheet=%s",
+            provider.id, body.spreadsheetId,
+        )
 
     # Surface the result for the /status poller (not single-use — modal polls).
     result_payload = {
         "connected": True,
-        "datasourceId": str(datasource.id),
+        "accountId": str(provider.id),
         "spreadsheetName": sheet_label,
     }
     await cache_set(
@@ -309,34 +299,19 @@ async def sheets_connect_callback(
         ttl=_CONNECT_TOKEN_TTL,
     )
 
-    # Eager schema discovery (best-effort, like crud.create_datasource).
-    try:
-        fresh = await db.execute(
-            select(Datasource)
-            .options(selectinload(Datasource.views))
-            .where(Datasource.id == datasource.id)
-        )
-        datasource = fresh.scalar_one()
-        discovery = await SchemaService.discover_all_schemas(db, datasource)
-        logger.info(
-            "Sheets connect: discovered %s tables, %s FKs for datasource %s",
-            discovery["tables_discovered"],
-            discovery["foreign_keys_discovered"],
-            datasource.id,
-        )
-    except Exception as e:
-        logger.warning("Schema discovery failed for connected sheet %s: %s", datasource.id, e)
-
     logger.info(
-        "Sheets connected: datasource=%s project=%s spreadsheet=%s",
-        datasource.id, project_id, body.spreadsheetId,
+        "Sheets connected: accountId=%s project=%s spreadsheet=%s",
+        provider.id, project_id, body.spreadsheetId,
     )
-    return SheetsConnectResult(ok=True, datasourceId=str(datasource.id))
+    return SheetsConnectResult(ok=True, accountId=str(provider.id))
 
 
 @router.get("/sheets/connect/status/", response_model=SheetsConnectStatus)
 async def sheets_connect_status(token: str):
-    """Polled by the modal until the add-on callback completes the connection."""
+    """Polled by the modal until the add-on callback completes the connection.
+
+    Phase 2: Returns accountId (Connected Account) instead of datasourceId.
+    """
     if len(token) < 10:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
 
@@ -344,7 +319,7 @@ async def sheets_connect_status(token: str):
     if result and result.get("connected"):
         return SheetsConnectStatus(
             connected=True,
-            datasourceId=result.get("datasourceId"),
+            accountId=result.get("accountId"),
             spreadsheetName=result.get("spreadsheetName"),
         )
     return SheetsConnectStatus(connected=False)

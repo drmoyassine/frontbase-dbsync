@@ -275,20 +275,34 @@ def get_datasource_credentials(
     the origin ("connected_account" or "legacy_inline").
 
     Args:
-        db: SQLAlchemy session
+        db: SQLAlchemy session from the caller (unused for the Connected Account
+            lookup — see note below; kept for signature compatibility).
         datasource: Datasource model instance
 
     Returns:
         dict with credentials, metadata, and "source" key
+
+    NOTE: ``EdgeProviderAccount`` lives in the **main** app DB (app.database.config),
+    which is a *different* database/session than the sync DB this resolver is usually
+    called from (datasource adapters receive the sync AsyncSession). Querying it via
+    the passed-in ``db`` fails (wrong DB + AsyncSession has no ``.query``), which used
+    to be silently swallowed by each adapter's try/except — the root cause of WordPress
+    401s (BACKEND-1). We therefore open a dedicated main-DB SessionLocal() here, mirroring
+    the working Supabase path in testing.py.
     """
     from ..models.models import EdgeProviderAccount
-    from .security import decrypt_field
+    from .security import decrypt_credentials, decrypt_field
 
-    # 1. Try Connected Account first
+    # 1. Try Connected Account first — via the MAIN app DB (not the caller's session)
     if datasource.provider_account_id:
-        provider = db.query(EdgeProviderAccount).filter(
-            EdgeProviderAccount.id == datasource.provider_account_id
-        ).first()
+        from ..database.config import SessionLocal
+        main_db = SessionLocal()
+        try:
+            provider = main_db.query(EdgeProviderAccount).filter(
+                EdgeProviderAccount.id == datasource.provider_account_id
+            ).first()
+        finally:
+            main_db.close()
         if provider:
             creds = decrypt_credentials(str(provider.provider_credentials or "{}"))
             metadata = {}

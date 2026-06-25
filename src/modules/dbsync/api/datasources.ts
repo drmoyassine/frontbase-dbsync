@@ -82,7 +82,7 @@ export const datasourcesApi = {
             datasourceId ? { datasource_id: datasourceId } : {}
         ),
     sheetsConnectStatus: (token: string) =>
-        api.get<{ connected: boolean; datasourceId?: string; spreadsheetName?: string }>(
+        api.get<{ connected: boolean; accountId?: string; spreadsheetName?: string }>(
             '/datasources/sheets/connect/status/',
             { params: { token } }
         ),

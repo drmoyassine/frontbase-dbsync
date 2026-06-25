@@ -77,7 +77,7 @@ async def test_datasource(
 
 
 @router.post("/test-raw/", response_model=DatasourceTestResult)
-async def test_new_datasource(data: DatasourceTestRequest):
+async def test_new_datasource(data: DatasourceTestRequest, db: AsyncSession = Depends(get_db)):
     """Test a new datasource connection with raw credentials without saving."""
     logger.info(f"Testing raw connection for new datasource: {data.name or 'Unnamed'} (Type: {data.type})")
     try:
@@ -114,6 +114,13 @@ async def test_new_datasource(data: DatasourceTestRequest):
             table_prefix=data.table_prefix,
             extra_config=json.dumps(data.extra_config) if data.extra_config else None,
         )
+        # Bind the Connected Account so WordPress/Sheets adapters resolve creds from it
+        # (column-existence guard: older DBs may not have the column yet).
+        if data.provider_account_id:
+            try:
+                datasource.provider_account_id = data.provider_account_id
+            except Exception:
+                pass
 
         # If direct DB URI provided, set it
         if data.connection_uri:
@@ -180,7 +187,7 @@ async def test_datasource_update(
     )
     
     try:
-        adapter = get_adapter(test_ds)
+        adapter = get_adapter(test_ds, db)
         await adapter.connect()
         tables = await adapter.get_tables()
         await adapter.disconnect()

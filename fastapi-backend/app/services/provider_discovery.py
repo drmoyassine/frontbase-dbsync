@@ -426,8 +426,14 @@ async def _discover_neon(creds: dict) -> dict:
 
 
 async def _discover_wordpress(creds: dict) -> dict:
-    """Validate WordPress site credentials and return a synthetic resource."""
-    base_url = creds.get("base_url", "").rstrip("/")
+    """Validate WordPress site credentials and return a synthetic resource.
+
+    Shared by REST, Plugin, and GraphQL variants — all authenticate via Basic Auth
+    (username:app_password) against the standard wp/v2 endpoint. Plugin and GraphQL
+    connected accounts store the site under ``api_url``; legacy REST stores
+    ``base_url`` — accept either.
+    """
+    base_url = (creds.get("api_url") or creds.get("base_url", "")).rstrip("/")
     username = creds.get("username", "")
     app_password = creds.get("app_password", "")
     if not base_url:
@@ -450,9 +456,11 @@ async def _discover_wordpress(creds: dict) -> dict:
             "id": "site",
             "name": f"{site_name} — {base_url}",
             "type": "wordpress_site",
-            "base_url": base_url,
+            "api_url": base_url,
+            "base_url": base_url,  # legacy alias for REST accounts
             "username": username,
-            "app_password": app_password,
+            # NOTE: app_password intentionally NOT echoed back to the client —
+            # it's a secret and is resolved server-side from the Connected Account.
         }],
     }
 
@@ -772,6 +780,53 @@ async def _create_cf_queue(creds: dict, *, name: str = "", **_: object) -> dict:
 # Registries — add new providers here
 # =============================================================================
 
+async def _discover_google_sheets(creds: dict) -> dict:
+    """Validate an Apps Script Web App + shared secret; return the sheet.
+
+    Each google_sheets Connected Account represents one spreadsheet. Discovery
+    pings the Web App's ``schema`` action to confirm the secret/URL work, then
+    returns a single synthetic resource the AccountResourcePicker auto-selects.
+    """
+    web_app_url = (creds.get("webAppUrl") or "").strip()
+    spreadsheet_id = creds.get("spreadsheetId") or ""
+    secret = creds.get("webAppSecret") or ""
+    spreadsheet_name = creds.get("spreadsheetName") or "Google Sheet"
+    if not web_app_url:
+        return {"success": False, "detail": "Web App URL is required"}
+
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+        try:
+            resp = await client.post(web_app_url, json={"secret": secret, "action": "schema"})
+        except httpx.ConnectError:
+            return {"success": False, "detail": f"Could not reach the Web App at {web_app_url}"}
+        except httpx.TimeoutException:
+            return {"success": False, "detail": "The Web App timed out — it may still be deploying"}
+    if resp.status_code != 200:
+        return {"success": False, "detail": f"Web App returned HTTP {resp.status_code}"}
+    try:
+        data = resp.json()
+    except Exception:
+        return {"success": False, "detail": "Web App did not return valid JSON"}
+
+    # The Web App rejects a bad secret with an explicit error envelope.
+    if isinstance(data, dict) and data.get("ok") is False:
+        return {"success": False, "detail": data.get("error") or "Invalid shared secret"}
+
+    tables = data.get("tables") if isinstance(data, dict) else None
+    table_count = len(tables) if isinstance(tables, list) else 0
+    return {
+        "success": True,
+        "detail": f"Connected — {table_count} sheet(s)" if table_count else "Connected to Google Sheet",
+        "resources": [{
+            "id": spreadsheet_id or "sheet",
+            "name": f"{spreadsheet_name} — Google Sheet",
+            "type": "google_sheet",
+            "webAppUrl": web_app_url,
+            "spreadsheetId": spreadsheet_id,
+        }],
+    }
+
+
 _DISCOVERERS: dict[str, object] = {
     "supabase":       _discover_supabase,
     "cloudflare":     _discover_cloudflare,
@@ -781,10 +836,13 @@ _DISCOVERERS: dict[str, object] = {
     "neon":           _discover_neon,
     "vercel":         _discover_vercel,
     "deno":           _discover_deno,
-    "wordpress":      _discover_wordpress,
-    "wordpress_rest": _discover_wordpress,
+    "wordpress":        _discover_wordpress,
+    "wordpress_rest":   _discover_wordpress,
+    "wordpress_plugin": _discover_wordpress,
+    "wordpress_graphql": _discover_wordpress,
     "postgres":       _discover_postgres,
     "mysql":          _discover_mysql,
+    "google_sheets":  _discover_google_sheets,
 }
 
 _CREATORS: dict[str, dict[str, object]] = {

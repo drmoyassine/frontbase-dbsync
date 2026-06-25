@@ -1,21 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Cloud, Plus, Trash2, Loader2, Shield, Server, Zap, ChevronDown, ChevronRight, Database, CheckCircle2, XCircle, Pencil } from 'lucide-react';
+import { Cloud, Plus, Trash2, Loader2, Shield, Server, Zap, ChevronDown, ChevronRight, Database, CheckCircle2, XCircle, Pencil, Table, Copy, TestTube } from 'lucide-react';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
     AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useEdgeProviders, edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { API_BASE, PROVIDER_ICONS } from './edgeConstants';
+import { useQueryClient } from '@tanstack/react-query';
+import { datasourcesApi } from '@/modules/dbsync/api';
 
 import { ConnectProviderDialog } from './ConnectProviderDialog';
 
 export function EdgeProvidersSection() {
     const { data: providers = [], isLoading, refetch } = useEdgeProviders();
+    const queryClient = useQueryClient();
     const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+    const [sheetsDialogOpen, setSheetsDialogOpen] = useState(false);
 
     // Edit provider state
     const [editProvider, setEditProvider] = useState<{ id: string; name: string; provider: string } | null>(null);
@@ -29,6 +34,58 @@ export function EdgeProvidersSection() {
     const [tursoTestingDb, setTursoTestingDb] = useState<string | null>(null);
     const [tursoDbResults, setTursoDbResults] = useState<Record<string, { success: boolean; detail: string }>>({});
     const [tursoDatabases, setTursoDatabases] = useState<Record<string, any[]>>({});
+
+    // Google Sheets add-on connect flow
+    const [sheetsConnect, setSheetsConnect] = useState<{
+        loading: boolean;
+        token?: string;
+        installUrl?: string;
+        polling?: boolean;
+        error?: string;
+    }>({ loading: false });
+    const sheetsPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const stopSheetsPoll = () => {
+        if (sheetsPollRef.current) {
+            clearInterval(sheetsPollRef.current);
+            sheetsPollRef.current = null;
+        }
+    };
+    useEffect(() => () => stopSheetsPoll(), []);
+
+    const startSheetsConnect = async () => {
+        setSheetsConnect({ loading: true, error: undefined });
+        stopSheetsPoll();
+        try {
+            const res = await datasourcesApi.issueSheetsConnect();
+            const { token, addonInstallUrl } = res.data;
+            setSheetsConnect({ loading: false, token, installUrl: addonInstallUrl, polling: true });
+
+            let attempts = 0;
+            const maxAttempts = Math.floor((13 * 60 * 1000) / 2500);
+            sheetsPollRef.current = setInterval(async () => {
+                attempts += 1;
+                if (attempts > maxAttempts) {
+                    stopSheetsPoll();
+                    setSheetsConnect((s) => ({ ...s, polling: false, error: 'Timed out waiting for the add-on. Retry with a new code.' }));
+                    return;
+                }
+                try {
+                    const s = await datasourcesApi.sheetsConnectStatus(token);
+                    if (s.data?.connected && s.data.accountId) {
+                        stopSheetsPoll();
+                        queryClient.invalidateQueries({ queryKey: ['edge-providers'] });
+                        setSheetsDialogOpen(false);
+                        setSheetsConnect({ loading: false });
+                    }
+                } catch {
+                    /* transient — keep polling */
+                }
+            }, 2500);
+        } catch (e: any) {
+            setSheetsConnect({ loading: false, error: e?.response?.data?.detail || e.message || 'Failed to issue connect code' });
+        }
+    };
 
     // Auto-fetch Turso databases on mount (card starts expanded for Turso)
     useEffect(() => {
@@ -84,9 +141,14 @@ export function EdgeProvidersSection() {
                     <CardTitle>Edge Providers</CardTitle>
                     <CardDescription>Accounts connected to deploy edge infrastructure.</CardDescription>
                 </div>
-                <Button size="sm" onClick={() => setConnectDialogOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" /> Connect Provider
-                </Button>
+                <div className="flex gap-2">
+                    <Button size="sm" onClick={() => setConnectDialogOpen(true)}>
+                        <Plus className="w-4 h-4 mr-2" /> Connect Provider
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setSheetsDialogOpen(true)}>
+                        <Table className="w-4 h-4 mr-2" /> Connect Google Sheets
+                    </Button>
+                </div>
                 <ConnectProviderDialog
                     open={connectDialogOpen}
                     onOpenChange={setConnectDialogOpen}
@@ -94,6 +156,70 @@ export function EdgeProvidersSection() {
                         refetch();
                     }}
                 />
+
+                {/* Google Sheets Add-on Connect Dialog */}
+                <Dialog open={sheetsDialogOpen} onOpenChange={setSheetsDialogOpen}>
+                    <DialogContent className="max-w-md">
+                        <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                                <Table className="w-5 h-5" />
+                                Connect Google Sheets
+                            </DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                            {!sheetsConnect.token ? (
+                                <>
+                                    <p className="text-sm text-gray-600 dark:text-gray-300">
+                                        Install the Frontbase add-on, paste a one-time code, click Configure — no copy-pasting Apps Script or secrets.
+                                    </p>
+                                    {sheetsConnect.error && (
+                                        <p className="text-xs text-red-600 bg-red-50 dark:bg-red-900/20 p-2 rounded">{sheetsConnect.error}</p>
+                                    )}
+                                    <Button
+                                        onClick={startSheetsConnect}
+                                        disabled={sheetsConnect.loading}
+                                        className="w-full"
+                                    >
+                                        {sheetsConnect.loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />}
+                                        Get connect code
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <ol className="text-sm text-gray-700 dark:text-gray-300 space-y-2 list-decimal list-inside">
+                                        <li>
+                                            Open the add-on in your Google Sheet
+                                            {sheetsConnect.installUrl && (
+                                                <a href={sheetsConnect.installUrl} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 underline ml-1">(install link)</a>
+                                            )}
+                                        </li>
+                                        <li>In the add-on, paste this code and click <span className="font-semibold">Configure</span>:</li>
+                                    </ol>
+                                    <div className="flex gap-2">
+                                        <code className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg font-mono text-sm break-all select-all">
+                                            {sheetsConnect.token}
+                                        </code>
+                                        <button
+                                            onClick={() => navigator.clipboard.writeText(sheetsConnect.token!)}
+                                            className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                            title="Copy code"
+                                        >
+                                            <Copy className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    {sheetsConnect.polling ? (
+                                        <p className="text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Waiting for the add-on…
+                                        </p>
+                                    ) : (
+                                        <button onClick={startSheetsConnect} className="text-sm text-emerald-700 dark:text-emerald-300 underline">Get a new code</button>
+                                    )}
+                                    {sheetsConnect.error && <p className="text-xs text-red-600 mt-2">{sheetsConnect.error}</p>}
+                                </>
+                            )}
+                        </div>
+                    </DialogContent>
+                </Dialog>
                 <ConnectProviderDialog
                     open={!!editProvider}
                     onOpenChange={(o) => { if (!o) setEditProvider(null); }}

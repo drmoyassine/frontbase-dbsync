@@ -88,9 +88,9 @@ export function useConnectProvider(
     const currentConfig = PROVIDER_CONFIGS[effectiveProvider] || PROVIDER_CONFIGS.cloudflare;
     const requiredFieldsFilled = currentConfig.fields.filter(f => f.required).every(f => credFields[f.key]);
 
-    // Datasource-only providers (postgres, mysql, wordpress) belong in the Datasources
+    // Datasource-only providers (postgres, mysql, wordpress, google_sheets) belong in the Datasources
     // screen, not in the Edge Provider connect dialog — they can't host engines, caches, or queues.
-    const DATASOURCE_ONLY = new Set(['postgres', 'mysql', 'wordpress_rest']);
+    const DATASOURCE_ONLY = new Set(['postgres', 'mysql', 'wordpress_rest', 'google_sheets']);
     const visibleProviders = useMemo(
         () => Object.entries(PROVIDER_CONFIGS).filter(([key]) => !DATASOURCE_ONLY.has(key)),
         []

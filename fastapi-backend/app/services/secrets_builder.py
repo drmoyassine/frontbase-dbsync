@@ -15,7 +15,7 @@ Output env vars:
 
 import json
 from sqlalchemy.orm import Session
-from ..models.models import EdgeDatabase, EdgeCache, EdgeQueue
+from ..models.models import EdgeDatabase, EdgeCache, EdgeQueue, EdgeVector
 
 
 # Frontbase-managed binding names — only these are touched during reconfigure
@@ -25,6 +25,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_API_KEYS',
     'FRONTBASE_CACHE',
     'FRONTBASE_QUEUE',
+    'FRONTBASE_VECTOR',
     'FRONTBASE_GPU',
     'FRONTBASE_DATASOURCES',
     'FRONTBASE_AGENT_PROFILES',
@@ -975,6 +976,25 @@ def build_engine_secrets(
                 queue.update(cf_creds)
 
             secrets['FRONTBASE_QUEUE'] = json.dumps(queue)
+
+    # ─── FRONTBASE_VECTOR ────────────────────────────────────────────────
+    # Resolve from engine.edge_vector_id
+    if engine and getattr(engine, 'edge_vector_id', None):
+        edge_vector = db.query(EdgeVector).filter(EdgeVector.id == engine.edge_vector_id).first()
+        if edge_vector:
+            vector_provider = str(edge_vector.provider)
+            vector: dict = {'provider': vector_provider}
+            vector['url'] = str(edge_vector.vector_url)
+            token = decrypt_field(str(edge_vector.vector_token)) if edge_vector.vector_token is not None else None
+            if token:
+                vector['token'] = token
+            
+            # Provider-specific config (like dimensions, metric, etc.)
+            config = _get_provider_config(edge_vector)
+            if config:
+                vector.update(config)
+            
+            secrets['FRONTBASE_VECTOR'] = json.dumps(vector)
 
     # ─── FRONTBASE_DATASOURCES ──────────────────────────────────────────
     if not is_shared:

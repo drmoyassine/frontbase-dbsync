@@ -78,6 +78,14 @@ export interface QueueConfig {
     cfAccountId?: string;
 }
 
+export interface VectorConfig {
+    provider: string;
+    url?: string;
+    token?: string;
+    cfApiToken?: string;
+    cfAccountId?: string;
+}
+
 export interface GpuModel {
     slug: string;
     modelId: string;
@@ -125,6 +133,7 @@ let _authSingle: AuthConfig | null = null;
 let _apiKeys: ApiKeysConfig | null = null;
 let _cache: CacheConfig | null = null;
 let _queue: QueueConfig | null = null;
+let _vector: VectorConfig | null = null;
 let _gpu: GpuModel[] | null = null;
 let _agentProfiles: AgentProfilesConfig | null = null;
 
@@ -182,6 +191,11 @@ export function getQueueConfig(): QueueConfig {
     return (_queue ??= parseEnv<QueueConfig>('FRONTBASE_QUEUE', { provider: 'none' }));
 }
 
+/** Vector config (pgvector | cloudflare | turso | lancedb | none) */
+export function getVectorConfig(): VectorConfig {
+    return (_vector ??= parseEnv<VectorConfig>('FRONTBASE_VECTOR', { provider: 'none' }));
+}
+
 /** GPU models array */
 export function getGpuModels(): GpuModel[] {
     return (_gpu ??= parseEnv<GpuModel[]>('FRONTBASE_GPU', []));
@@ -197,7 +211,7 @@ export function getAgentProfilesConfig(): AgentProfilesConfig {
 // =============================================================================
 
 /** Reset a specific config singleton (forces re-parse on next access) */
-export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'queue' | 'gpu' | 'agentProfiles' | 'all'): void {
+export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'queue' | 'vector' | 'gpu' | 'agentProfiles' | 'all'): void {
     if (key === 'stateDb' || key === 'all') _stateDb = null;
     if (key === 'auth' || key === 'all') {
         _authSingle = null;
@@ -206,6 +220,7 @@ export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'que
     if (key === 'apiKeys' || key === 'all') _apiKeys = null;
     if (key === 'cache' || key === 'all') _cache = null;
     if (key === 'queue' || key === 'all') _queue = null;
+    if (key === 'vector' || key === 'all') _vector = null;
     if (key === 'gpu' || key === 'all') _gpu = null;
     if (key === 'agentProfiles' || key === 'all') _agentProfiles = null;
 }
@@ -217,6 +232,10 @@ export function overrideCacheConfig(config: CacheConfig): void {
 
 export function overrideQueueConfig(config: QueueConfig): void {
     _queue = config;
+}
+
+export function overrideVectorConfig(config: VectorConfig): void {
+    _vector = config;
 }
 
 export function overrideApiKeysConfig(config: ApiKeysConfig): void {

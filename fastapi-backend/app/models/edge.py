@@ -108,6 +108,33 @@ class EdgeQueue(Base):
     provider_account = relationship("EdgeProviderAccount", foreign_keys=[provider_account_id])
 
 
+class EdgeVector(Base):
+    """Named edge vector DB connection — credentials for vector database providers.
+    
+    Each row represents a configured edge-compatible vector database (pgvector,
+    cloudflare_vectorize, turso_vector, etc.) that edge engines can reference.
+    Mirrors the EdgeDatabase / EdgeCache pattern.
+    """
+    __tablename__ = 'edge_vectors'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String(100), nullable=False)
+    provider = Column(String(50), nullable=False)        # "pgvector", "cloudflare_vectorize", "turso_vector", "embedded_lancedb"
+    vector_url = Column(String(500), nullable=False)     # connection string / DSN or endpoint URL
+    vector_token = Column(String(1000), nullable=True)   # auth token / credentials (encrypted at rest)
+    provider_account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=True)  # FK → Connected Account
+    provider_config = Column(Text, nullable=True)        # JSON configuration (e.g. dimensions, model configs)
+    project_id = Column(String, ForeignKey('project.id'), nullable=True)
+    is_default = Column(Boolean, default=False)
+    is_system = Column(Boolean, default=False)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    # Relationships
+    edge_engines = relationship("EdgeEngine", back_populates="edge_vector")
+    provider_account = relationship("EdgeProviderAccount", foreign_keys=[provider_account_id])
+
+
 class EdgeProviderAccount(Base):
     """Authenticated account for an edge provider (e.g., Cloudflare, Vercel).
     
@@ -146,6 +173,7 @@ class EdgeEngine(Base):
     edge_db_id = Column(String, ForeignKey('edge_databases.id'), nullable=True)
     edge_cache_id = Column(String, ForeignKey('edge_caches.id'), nullable=True)
     edge_queue_id = Column(String, ForeignKey('edge_queues.id'), nullable=True)
+    edge_vector_id = Column(String, ForeignKey('edge_vectors.id'), nullable=True)
     edge_auth_id = Column(String, nullable=True)
     engine_config = Column(Text, nullable=True)         # JSON — e.g., {"worker_name": "frontbase-edge"}
     project_id = Column(String, ForeignKey('project.id'), nullable=True)
@@ -168,6 +196,7 @@ class EdgeEngine(Base):
     edge_database = relationship("EdgeDatabase", back_populates="edge_engines")
     edge_cache = relationship("EdgeCache", back_populates="edge_engines")
     edge_queue = relationship("EdgeQueue", back_populates="edge_engines")
+    edge_vector = relationship("EdgeVector", back_populates="edge_engines")
     edge_provider = relationship("EdgeProviderAccount", back_populates="edge_engines")
     page_deployments = relationship("PageDeployment", back_populates="edge_engine", cascade="all, delete-orphan")
     gpu_models = relationship("EdgeGPUModel", back_populates="edge_engine", cascade="all, delete-orphan")

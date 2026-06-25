@@ -31,6 +31,8 @@ export interface EdgeEngine {
     edge_cache_name?: string;
     edge_queue_id: string | null;
     edge_queue_name?: string;
+    edge_vector_id: string | null;
+    edge_vector_name?: string;
     edge_auth_id: string | null;
     datasource_ids?: string[];
     storage_ids?: string[];
@@ -89,6 +91,23 @@ export interface EdgeQueue {
     engine_count: number;
     linked_engines?: { id: string; name: string; provider: string }[];
     provider_account_id?: string | null;
+    supports_remote_delete?: boolean;
+}
+
+export interface EdgeVector {
+    id: string;
+    name: string;
+    provider: string; // 'pgvector', 'cloudflare_vectorize', 'turso_vector', 'embedded_lancedb'
+    vector_url: string;
+    has_token: boolean;
+    is_default: boolean;
+    is_system: boolean;
+    provider_account_id?: string | null;
+    account_name?: string | null;
+    created_at: string;
+    updated_at: string;
+    engine_count: number;
+    linked_engines?: { id: string; name: string; provider: string }[];
     supports_remote_delete?: boolean;
 }
 
@@ -316,6 +335,52 @@ export const edgeInfrastructureApi = {
         return res.json();
     },
 
+    // Edge Vectors
+    getEdgeVectors: async (): Promise<EdgeVector[]> => {
+        const res = await fetch(`${API_BASE}/api/edge-vectors/`);
+        if (!res.ok) throw new Error('Failed to fetch edge vectors');
+        return res.json();
+    },
+    createEdgeVector: async (data: Partial<EdgeVector> & { vector_token?: string }): Promise<EdgeVector> => {
+        const res = await fetch(`${API_BASE}/api/edge-vectors/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to create edge vector store');
+        return res.json();
+    },
+    updateEdgeVector: async ({ id, data }: { id: string; data: Partial<EdgeVector> & { vector_token?: string } }): Promise<EdgeVector> => {
+        const res = await fetch(`${API_BASE}/api/edge-vectors/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to update edge vector store');
+        return res.json();
+    },
+    deleteEdgeVector: async (id: string): Promise<void> => {
+        const res = await fetch(`${API_BASE}/api/edge-vectors/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Failed to delete edge vector store');
+        }
+    },
+    testEdgeVector: async (id: string): Promise<{ success: boolean; message: string }> => {
+        const res = await fetch(`${API_BASE}/api/edge-vectors/${id}/test`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to test vector store connection');
+        return res.json();
+    },
+    testEdgeVectorInline: async (data: { provider: string; vector_url: string; vector_token?: string }): Promise<{ success: boolean; message: string }> => {
+        const res = await fetch(`${API_BASE}/api/edge-vectors/test-connection`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to test vector store connection');
+        return res.json();
+    },
+
     // Batch Operations — Databases
     batchDeleteDatabases: async (ids: string[], delete_remote = false): Promise<BatchResult> => {
         const res = await fetch(`${API_BASE}/api/edge-databases/batch/delete`, {
@@ -346,6 +411,17 @@ export const edgeInfrastructureApi = {
             body: JSON.stringify({ ids, delete_remote }),
         });
         if (!res.ok) throw new Error('Batch delete queues failed');
+        return res.json();
+    },
+
+    // Batch Operations — Vectors
+    batchDeleteVectors: async (ids: string[]): Promise<BatchResult> => {
+        const res = await fetch(`${API_BASE}/api/edge-vectors/batch/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) throw new Error('Batch delete vectors failed');
         return res.json();
     },
 
@@ -439,6 +515,14 @@ export function useEdgeQueues() {
     return useQuery({
         queryKey: ['edge-queues'],
         queryFn: edgeInfrastructureApi.getEdgeQueues,
+        staleTime: STALE.STANDARD,
+    });
+}
+
+export function useEdgeVectors() {
+    return useQuery({
+        queryKey: ['edge-vectors'],
+        queryFn: edgeInfrastructureApi.getEdgeVectors,
         staleTime: STALE.STANDARD,
     });
 }

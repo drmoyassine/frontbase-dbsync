@@ -428,10 +428,10 @@ async def _discover_neon(creds: dict) -> dict:
 async def _discover_wordpress(creds: dict) -> dict:
     """Validate WordPress site credentials and return a synthetic resource.
 
-    Shared by REST, Plugin, and GraphQL variants — all authenticate via Basic Auth
-    (username:app_password) against the standard wp/v2 endpoint. Plugin and GraphQL
-    connected accounts store the site under ``api_url``; legacy REST stores
-    ``base_url`` — accept either.
+    Shared by REST, and GraphQL variants — all authenticate via Basic Auth
+    (username:app_password) against the standard wp/v2 endpoint. Plugin has
+    its own discoverer. GraphQL connected accounts store the site under ``api_url``;
+    legacy REST stores ``base_url`` — accept either.
     """
     base_url = (creds.get("api_url") or creds.get("base_url", "")).rstrip("/")
     username = creds.get("username", "")
@@ -439,11 +439,29 @@ async def _discover_wordpress(creds: dict) -> dict:
     if not base_url:
         return {"success": False, "detail": "Site URL is required"}
     auth = base64.b64encode(f"{username}:{app_password}".encode()).decode()
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(
-            f"{base_url}/wp-json/wp/v2/users/me",
-            headers={"Authorization": f"Basic {auth}"},
-        )
+
+    # Browser-like headers to avoid 403 from nginx/Cloudflare
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=headers) as client:
+            resp = await client.get(
+                f"{base_url}/wp-json/wp/v2/users/me",
+                headers={"Authorization": f"Basic {auth}"},
+            )
+    except httpx.ConnectError:
+        return {"success": False, "detail": f"Could not connect to {base_url} — check the URL and network"}
+    except httpx.TimeoutException:
+        return {"success": False, "detail": f"Connection timed out — {base_url} may be slow or unreachable"}
+    except Exception as e:
+        return {"success": False, "detail": f"Error reaching WordPress: {str(e)[:200]}"}
+
     if resp.status_code == 401:
         return {"success": False, "detail": "Invalid WordPress credentials"}
     if resp.status_code != 200:
@@ -463,6 +481,83 @@ async def _discover_wordpress(creds: dict) -> dict:
             # it's a secret and is resolved server-side from the Connected Account.
         }],
     }
+
+
+async def _discover_wordpress_plugin(creds: dict) -> dict:
+    """Validate WordPress Plugin credentials and return a synthetic resource.
+
+    Checks `/wp-json/frontbase/v1/info` first, then `/wp-json/frontbase/v1/discover`.
+    """
+    base_url = (creds.get("api_url") or creds.get("base_url", "")).rstrip("/")
+    username = creds.get("username", "")
+    app_password = creds.get("app_password", "")
+    if not base_url:
+        return {"success": False, "detail": "Site URL is required"}
+    if not username or not app_password:
+        return {"success": False, "detail": "Username and Application Password are required"}
+
+    auth = base64.b64encode(f"{username}:{app_password}".encode()).decode()
+
+    # Browser-like headers to avoid 403 from nginx/Cloudflare
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers=headers) as client:
+            # First check if the plugin is installed (no auth required)
+            info_resp = await client.get(
+                f"{base_url}/wp-json/frontbase/v1/info",
+            )
+            if info_resp.status_code == 404:
+                return {
+                    "success": False,
+                    "detail": f"Plugin endpoint not found (404). Is the plugin installed and activated? Tried: {base_url}/wp-json/frontbase/v1/info",
+                }
+            if info_resp.status_code != 200:
+                return {
+                    "success": False,
+                    "detail": f"Plugin returned {info_resp.status_code}. Response: {info_resp.text[:200]}",
+                }
+            
+            plugin_info = info_resp.json()
+            plugin_version = plugin_info.get("version", "unknown")
+
+            # Then verify authentication via the discover endpoint
+            discover_resp = await client.get(
+                f"{base_url}/wp-json/frontbase/v1/discover",
+                headers={"Authorization": f"Basic {auth}"},
+            )
+
+        if discover_resp.status_code == 401:
+            return {"success": False, "detail": "Invalid credentials — check your username and Application Password"}
+        if discover_resp.status_code != 200:
+            return {"success": False, "detail": f"Discovery endpoint error: {discover_resp.status_code}"}
+
+        data = discover_resp.json()
+        site_name = data.get("site_name", "WordPress site")
+        
+        return {
+            "success": True,
+            "resources": [{
+                "id": "site",
+                "name": f"{site_name} (v{plugin_version}) — {base_url}",
+                "type": "wordpress_site",
+                "api_url": base_url,
+                "base_url": base_url,
+                "username": username,
+            }],
+        }
+    except httpx.ConnectError:
+        return {"success": False, "detail": f"Could not connect to {base_url} — check the URL and network"}
+    except httpx.TimeoutException:
+        return {"success": False, "detail": f"Connection timed out — {base_url} may be slow or unreachable"}
+    except Exception as e:
+        return {"success": False, "detail": f"Error reaching WordPress: {str(e)[:200]}"}
 
 
 async def _discover_postgres(creds: dict) -> dict:
@@ -838,7 +933,7 @@ _DISCOVERERS: dict[str, object] = {
     "deno":           _discover_deno,
     "wordpress":        _discover_wordpress,
     "wordpress_rest":   _discover_wordpress,
-    "wordpress_plugin": _discover_wordpress,
+    "wordpress_plugin": _discover_wordpress_plugin,
     "wordpress_graphql": _discover_wordpress,
     "postgres":       _discover_postgres,
     "mysql":          _discover_mysql,

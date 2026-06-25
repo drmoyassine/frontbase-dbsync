@@ -288,9 +288,14 @@ async def update_datasource(
         datasource.last_tested_at = None
     
     await db.commit()
-    await db.refresh(datasource)
     
-    return datasource
+    # Re-fetch with relationships to avoid 500 in serialization
+    result = await db.execute(
+        select(Datasource)
+        .where(Datasource.id == datasource.id)
+        .options(selectinload(Datasource.views))
+    )
+    return result.scalar_one()
 
 
 @router.delete("/{datasource_id}/", status_code=status.HTTP_204_NO_CONTENT)

@@ -160,7 +160,7 @@ def _update_enum_check_constraints(connection):
         # This prevents CHECK constraint violations on deployments with legacy data.
         values_list = ', '.join(f"'{v}'" for v in datasource_type_values)
         try:
-            with connection.begin():
+            with connection.begin_nested():
                 # First, identify and delete invalid datasources
                 delete_result = connection.execute(text(f"""
                     DELETE FROM datasources

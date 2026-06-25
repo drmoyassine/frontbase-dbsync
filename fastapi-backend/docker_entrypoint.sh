@@ -59,10 +59,14 @@ except Exception as e:
   " ; then
     echo "Database is readonly (volume ownership issue). Fixing as root..."
 
-    # Fix volume ownership BEFORE creating tables
-    echo "Ensuring /app/data is owned by UID 1000..."
-    chown -R 1000:1000 /app/data
-    chmod -R u+rwX /app/data
+    # Fix volume ownership BEFORE creating tables (only works as root)
+    if [ "$(id -u)" = "0" ]; then
+      echo "Ensuring /app/data is owned by UID 1000..."
+      chown -R 1000:1000 /app/data
+      chmod -R u+rwX /app/data
+    else
+      echo "Not running as root — cannot fix ownership. This may fail in self-host/VPS mode."
+    fi
 
     # Create tables as root (run with escalated privileges)
     python -c "
@@ -76,10 +80,12 @@ Base.metadata.create_all(bind=engine)
 print('Tables created via root (fixed)')
     "
 
-    # Fix ownership again after table creation (ensures any new files are also owned by appuser)
-    echo "Re-applying ownership after bootstrap..."
-    chown -R 1000:1000 /app/data
-    chmod -R u+rwX /app/data
+    # Fix ownership again after table creation (only works as root)
+    if [ "$(id -u)" = "0" ]; then
+      echo "Re-applying ownership after bootstrap..."
+      chown -R 1000:1000 /app/data
+      chmod -R u+rwX /app/data
+    fi
 
     echo "Database ownership fixed and tables created successfully"
   else
@@ -92,11 +98,13 @@ Base.metadata.create_all(bind=engine)
   fi
 fi
 
-# Ensure correct ownership even when bootstrap succeeded
+# Ensure correct ownership even when bootstrap succeeded (only works as root)
 # This catches the case where bootstrap worked on first run but created root-owned files
-echo "Ensuring data directory is writable by appuser..."
-chown -R 1000:1000 /app/data 2>/dev/null || true
-chmod -R u+rwX /app/data 2>/dev/null || true
+if [ "$(id -u)" = "0" ]; then
+  echo "Ensuring data directory is writable by appuser..."
+  chown -R 1000:1000 /app/data 2>/dev/null || true
+  chmod -R u+rwX /app/data 2>/dev/null || true
+fi
 echo "Tables bootstrapped successfully"
 
 # Run Alembic migrations.
@@ -129,7 +137,13 @@ else
 fi
 
 # Start the application with proxy headers support (for HTTPS behind reverse proxy)
-# Run as non-root appuser (security best practice) — the entrypoint handled any
-# needed DB fixes as root above.
+# - Self-host/VPS: Running as root, drop to appuser via gosu (security best practice)
+# - Cloud/Kubernetes: Already running as non-root, skip gosu and run directly
 echo "Starting application..."
-exec gosu appuser uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+if [ "$(id -u)" = "0" ]; then
+  # Running as root — drop privileges to appuser
+  exec gosu appuser uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+else
+  # Already running as non-root (cloud/Kubernetes) — run directly
+  exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+fi

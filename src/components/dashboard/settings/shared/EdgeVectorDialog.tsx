@@ -201,9 +201,9 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
                                     setFormAccountId(accountId);
                                     
                                     // For vectorize, URL isn't natively returned from discovery except as the ID
-                                    const url = (resource as any).url 
-                                        || resource.db_url 
-                                        || (resource.endpoint ? \`https://\${resource.endpoint}\` : '')
+                                    const url = (resource as any).url
+                                        || resource.db_url
+                                        || (resource.endpoint ? `https://${resource.endpoint}` : '')
                                         || resource.id || '';
                                         
                                     if (url) setFormUrl(url);

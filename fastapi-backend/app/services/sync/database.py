@@ -156,12 +156,28 @@ def _update_enum_check_constraints(connection):
             except Exception as e:
                 _logger.warning(f"[AUTO-MIGRATE] Could not drop constraint {type_constraint}: {e}")
 
-        # IMPORTANT: Delete any datasources with invalid types BEFORE adding the constraint.
+        # IMPORTANT: Fix datasource types BEFORE adding the constraint.
         # This prevents CHECK constraint violations on deployments with legacy data.
+        # Strategy: Update case-mismatched types to lowercase, then delete truly invalid.
         values_list = ', '.join(f"'{v}'" for v in datasource_type_values)
         try:
             with connection.begin_nested():
-                # First, identify and delete invalid datasources
+                # Step 1: Update uppercase type variants to lowercase (case-insensitive fix)
+                # This preserves datasources that just have wrong case like SUPABASE -> supabase
+                update_result = connection.execute(text(f"""
+                    UPDATE datasources
+                    SET type = LOWER(type)
+                    WHERE LOWER(type) IN ({values_list}) AND type NOT IN ({values_list})
+                    RETURNING id, name, type
+                """))
+                updated_rows = update_result.fetchall()
+                if updated_rows:
+                    _logger.warning(
+                        f"[AUTO-MIGRATE] Fixed {len(updated_rows)} datasources with wrong case: "
+                        + ", ".join(f"({row[0]}: {row[1]} = {row[2]} → {row[2].lower()})" for row in updated_rows)
+                    )
+
+                # Step 2: Delete any remaining truly invalid datasources (not just case issues)
                 delete_result = connection.execute(text(f"""
                     DELETE FROM datasources
                     WHERE type NOT IN ({values_list})
@@ -174,7 +190,7 @@ def _update_enum_check_constraints(connection):
                         + ", ".join(f"({row[0]}: {row[1]} = {row[2]})" for row in deleted_rows)
                     )
 
-                # Now add the constraint - it should succeed since invalid rows are gone
+                # Step 3: Add the constraint - should succeed now
                 connection.execute(text(
                     f'ALTER TABLE datasources ADD CONSTRAINT datasources_type_check CHECK (type IN ({values_list}))'
                 ))

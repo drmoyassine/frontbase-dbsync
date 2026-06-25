@@ -1,0 +1,3 @@
+Build version: 2025-06-26
+Commit: e851127
+This file forces source cache invalidation on cloud deployments.

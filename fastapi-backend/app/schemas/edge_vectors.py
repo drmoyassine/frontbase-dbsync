@@ -2,14 +2,14 @@
 Edge Vector Schemas — Pydantic models for the edge-vectors API.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 
 
 class EdgeVectorCreate(BaseModel):
     name: str
     provider: str  # "pgvector", "cloudflare_vectorize", "turso_vector", "embedded_lancedb"
-    vector_url: str
+    vector_url: str = Field(max_length=500, description="Vector database connection URL or DSN")
     vector_token: Optional[str] = None
     provider_account_id: Optional[str] = None  # FK → Connected Account
     is_default: bool = False
@@ -18,7 +18,7 @@ class EdgeVectorCreate(BaseModel):
 class EdgeVectorUpdate(BaseModel):
     name: Optional[str] = None
     provider: Optional[str] = None
-    vector_url: Optional[str] = None
+    vector_url: Optional[str] = Field(default=None, max_length=500, description="Vector database connection URL or DSN")
     vector_token: Optional[str] = None
     provider_account_id: Optional[str] = None
     is_default: Optional[bool] = None

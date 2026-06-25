@@ -25,6 +25,20 @@ router = APIRouter(prefix="/api/edge-vectors", tags=["edge-vectors"])
 # =============================================================================
 
 async def test_vector_connection_raw(provider: str, url: str, token: Optional[str] = None) -> dict:
+    """Test connection to a vector database with URL validation to prevent SSRF."""
+    # SSRF protection: restrict URL prefixes to known-safe patterns
+    url_lower = (url or "").lower()
+    allowed_prefixes = (
+        "postgres://", "postgresql://",  # PostgreSQL/pgvector
+        "https://", "http://",            # Cloud providers (Cloudflare Vectorize, Turso, etc.)
+        "file:",                           # Local/embedded (LanceDB) - only for self-hosted
+    )
+    if not url_lower.startswith(allowed_prefixes):
+        return {
+            "success": False,
+            "message": f"Invalid URL format: must start with one of {allowed_prefixes}"
+        }
+
     provider_lower = (provider or "").lower()
     if provider_lower in ("pgvector", "postgres", "postgres_vector", "supabase", "neon"):
         try:
@@ -45,7 +59,8 @@ async def test_vector_connection_raw(provider: str, url: str, token: Optional[st
             finally:
                 await conn.close()
         except Exception as e:
-            return {"success": False, "message": f"Connection failed: {e}"}
+            # Return generic error to prevent information disclosure
+            return {"success": False, "message": "Connection failed: unable to reach database"}
     else:
         # Stubbed backends: cf vectorize, turso, etc.
         return {
@@ -70,7 +85,6 @@ class TestConnectionRequest(BaseModel):
     provider: str
     vector_url: str
     vector_token: Optional[str] = None
-    provider_account_id: Optional[str] = None
 
 
 # =============================================================================
@@ -174,27 +188,21 @@ async def create_edge_vector(payload: EdgeVectorCreate, ctx: TenantContext | Non
         if existing:
             raise HTTPException(
                 status_code=409,
-                detail=f"A vector store with this URL/DSN already exists ('{existing.name}')"
+                detail="A vector store with this URL/DSN already exists"
             )
 
         now = datetime.now(UTC).isoformat() + "Z"
-        
-        # If this is set as default, unset all others
-        if payload.is_default:
-            db.query(EdgeVector).filter(EdgeVector.is_default == True).update(
-                {"is_default": False}
-            )
-        
+
         # If this is the first one, make it default
         count = db.query(EdgeVector).count()
         is_default = payload.is_default or count == 0
-        
+
         project_id = None
         if ctx and ctx.tenant_id:
             project = get_project(db, ctx)
             if project:
                 project_id = project.id
-                
+
         vector = EdgeVector(
             id=str(uuid.uuid4()),
             name=payload.name,
@@ -202,18 +210,30 @@ async def create_edge_vector(payload: EdgeVectorCreate, ctx: TenantContext | Non
             vector_url=payload.vector_url,
             vector_token=encrypt_field(payload.vector_token),
             provider_account_id=payload.provider_account_id,
-            is_default=is_default,
+            is_default=False,  # Start as non-default to avoid race
             created_at=now,
             updated_at=now,
             project_id=project_id,
         )
 
-        # Provider configs can be enriched here if needed in future
         db.add(vector)
+        db.flush()  # Get the ID without committing
+
+        # If set as default, clear others atomically within transaction
+        if is_default:
+            clear_query = db.query(EdgeVector).filter(EdgeVector.id != vector.id)
+            if project_id is not None:
+                clear_query = clear_query.filter(EdgeVector.project_id == project_id)
+            clear_query.update({"is_default": False}, synchronize_session=False)
+            vector.is_default = True  # type: ignore[assignment]
+
         db.commit()
         db.refresh(vector)
-        
+
         return _serialize_vector(vector, db, 0)
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -229,12 +249,12 @@ async def update_edge_vector(vector_id: str, payload: EdgeVectorUpdate, ctx: Ten
             if project:
                 query = query.filter(EdgeVector.project_id == project.id)
             else:
-                raise HTTPException(404, f"Edge vector store '{vector_id}' not found")
-                
+                raise HTTPException(404, "Vector store not found")
+
         vector = query.first()
         if not vector:
-            raise HTTPException(404, f"Edge vector store '{vector_id}' not found")
-        
+            raise HTTPException(404, "Vector store not found")
+
         if payload.provider_account_id is not None:
             _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
 
@@ -250,18 +270,23 @@ async def update_edge_vector(vector_id: str, payload: EdgeVectorUpdate, ctx: Ten
             vector.provider_account_id = payload.provider_account_id  # type: ignore[assignment]
         if payload.is_default is not None:
             if payload.is_default:
-                db.query(EdgeVector).filter(EdgeVector.id != vector_id).update(
-                    {"is_default": False}
-                )
+                # Clear other defaults atomically within transaction
+                clear_query = db.query(EdgeVector).filter(EdgeVector.id != vector_id)
+                if vector.project_id is not None:
+                    clear_query = clear_query.filter(EdgeVector.project_id == vector.project_id)
+                clear_query.update({"is_default": False}, synchronize_session=False)
             vector.is_default = payload.is_default  # type: ignore[assignment]
-        
+
         vector.updated_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
         db.commit()
         db.refresh(vector)
-        
+
         engine_count, linked = _query_linked_engines(db, EdgeEngine.edge_vector_id, vector_id)
-        
+
         return _serialize_vector(vector, db, engine_count, linked)
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -277,11 +302,11 @@ async def delete_edge_vector(vector_id: str, delete_remote: bool = False, ctx: T
             if project:
                 query = query.filter(EdgeVector.project_id == project.id)
             else:
-                raise HTTPException(404, f"Edge vector store '{vector_id}' not found")
-                
+                raise HTTPException(404, "Vector store not found")
+
         vector = query.first()
         if not vector:
-            raise HTTPException(404, f"Edge vector store '{vector_id}' not found")
+            raise HTTPException(404, "Vector store not found")
         
         if getattr(vector, 'is_system', False):
             raise HTTPException(403, "System vector stores cannot be deleted")
@@ -314,11 +339,11 @@ async def test_edge_vector_connection(vector_id: str, ctx: TenantContext | None 
             if project:
                 query = query.filter(EdgeVector.project_id == project.id)
             else:
-                raise HTTPException(404, f"Edge vector store '{vector_id}' not found")
+                raise HTTPException(404, "Vector store not found")
                 
         vector = query.first()
         if not vector:
-            raise HTTPException(404, f"Edge vector store '{vector_id}' not found")
+            raise HTTPException(404, "Vector store not found")
         
         decrypted_token = decrypt_field(str(vector.vector_token)) if vector.vector_token is not None else None
         return await test_vector_connection_raw(str(vector.provider), str(vector.vector_url), decrypted_token)
@@ -347,18 +372,18 @@ async def batch_delete_vectors(payload: BatchDeleteVectorRequest, ctx: TenantCon
                     query = query.filter(EdgeVector.project_id == project.id)
             vector = query.first()
             if not vector:
-                failed.append({"id": vid, "error": "Not found"})
+                failed.append({"id": vid, "error": "Deletion failed"})
                 continue
-                
+
             if getattr(vector, 'is_system', False):
-                failed.append({"id": vid, "error": "System resource cannot be deleted"})
+                failed.append({"id": vid, "error": "Deletion failed"})
                 continue
-                
+
             engines = db.query(EdgeEngine).filter(EdgeEngine.edge_vector_id == vid).all()
             if engines:
-                failed.append({"id": vid, "error": f"In use by {len(engines)} engine(s)"})
+                failed.append({"id": vid, "error": "Deletion failed"})
                 continue
-                
+
             db.delete(vector)
             success.append(vid)
         db.commit()

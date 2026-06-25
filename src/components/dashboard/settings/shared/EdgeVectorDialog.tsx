@@ -111,6 +111,7 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
     }, []);
 
     return (
+        <>
         <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open); }}>
             <DialogTrigger asChild>
                 <Button size="sm" onClick={openCreate}>
@@ -351,5 +352,6 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
+        </>
     );
 };

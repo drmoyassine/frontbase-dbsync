@@ -16,7 +16,6 @@ services:
     build:
       context: .
       dockerfile: fastapi-backend/Dockerfile
-    user: "1000:1000"  # Run as non-root user
     expose:
       - "8000"
     environment:

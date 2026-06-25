@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
   curl \
   sqlite3 \
   dos2unix \
+  gosu \
   && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js (required for Netlify CLI edge function bundling)

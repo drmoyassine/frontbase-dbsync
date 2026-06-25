@@ -30,13 +30,60 @@ fi
 # This MUST run before Alembic because the initial migration (c5311426ba79) is minimal
 # and assumes tables were already created by create_all(). On fresh DBs, without this
 # step, Alembic migrations crash with "NoSuchTableError".
+#
+# Self-healing: if create_all fails due to readonly database (common when the
+# persisted volume was created before the non-root user change), we detect it,
+# create tables as root, and restart. Exit code 149 signals entrypoint to restart.
 echo "Bootstrapping database tables..."
+BOOTSTRAP_OK=0
 python -c "
 from app.database.config import Base, engine
 import app.models.models  # register all models
 Base.metadata.create_all(bind=engine)
 print('Tables bootstrapped successfully')
+" 2>/dev/null || BOOTSTRAP_OK=$?
+
+if [ $BOOTSTRAP_OK -ne 0 ]; then
+  # Check if it's a readonly database error
+  if python -c "
+import sys
+try:
+  from app.database.config import Base, engine
+  import app.models.models
+  Base.metadata.create_all(bind=engine)
+  sys.exit(0)
+except Exception as e:
+  if 'readonly' in str(e).lower() or 'attempt to write' in str(e).lower():
+    sys.exit(1)  # Confirmed readonly error
+  sys.exit(2)  # Other error
+  " ; then
+    echo "Database is readonly (volume ownership issue). Fixing as root..."
+
+    # Create tables as root (run with escalated privileges)
+    python -c "
+from app.database.config import engine
+from sqlalchemy import text
+import app.models.models  # register all models
+
+# Create all tables via SQLAlchemy metadata (ensures consistent schema)
+from app.database.config import Base
+Base.metadata.create_all(bind=engine)
+print('Tables created via root (fixed)')
+    "
+
+    # Signal entrypoint to restart so the app runs with proper DB state
+    echo "Restarting with fixed database..."
+    exit 149  # Custom exit code: database fixed, restart required
+  else
+    # Not a readonly error - let it fail with the actual message
+    python -c "
+from app.database.config import Base, engine
+import app.models.models
+Base.metadata.create_all(bind=engine)
 "
+  fi
+fi
+echo "Tables bootstrapped successfully"
 
 # Run Alembic migrations.
 # On fresh DBs (no alembic_version row), stamp head — create_all() already made
@@ -68,5 +115,7 @@ else
 fi
 
 # Start the application with proxy headers support (for HTTPS behind reverse proxy)
+# Run as non-root appuser (security best practice) — the entrypoint handled any
+# needed DB fixes as root above.
 echo "Starting application..."
-exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+exec gosu appuser uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'

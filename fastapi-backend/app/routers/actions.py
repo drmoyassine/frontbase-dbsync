@@ -6,7 +6,7 @@ Handles CRUD for workflow drafts and publishing to the Actions Runtime.
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List, Optional
 from datetime import datetime, timezone
 from pydantic import BaseModel
@@ -19,8 +19,8 @@ import uuid
 from app.database.utils import get_db, get_project
 from app.middleware.tenant_context import TenantContext, get_tenant_context
 from app.database.config import SessionLocal
-from app.models.actions import AutomationDraft, AutomationExecution
-from app.models.models import EdgeEngine
+from app.models.actions import AutomationDraft, AutomationExecution, AutomationVersion
+from app.models.models import EdgeEngine, Project
 from app.services.edge_client import get_edge_headers, resolve_engine_url
 from app.schemas.actions import (
     WorkflowDraftCreate,
@@ -232,9 +232,14 @@ async def update_draft(
     if not draft:
         raise HTTPException(status_code=404, detail="Draft not found")
     
+    # Record old content hash
+    old_content_hash = str(draft.content_hash) if draft.content_hash is not None else None
+    if old_content_hash is None:
+        old_content_hash = _compute_content_hash(draft)
+
     # Check for duplicate workflow name (if renaming)
     update_data = update.model_dump(exclude_unset=True)
-    if "name" in update_data and update_data["name"] != draft.name:
+    if "name" in update_data and update_data["name"] != str(draft.name):
         existing = db.execute(
             _scoped_draft_select(db, ctx).where(
                 AutomationDraft.name == update_data["name"],
@@ -268,10 +273,23 @@ async def update_draft(
         setattr(draft, key, value)
     
     # Recompute content hash for staleness detection
-    draft.content_hash = _compute_content_hash(draft)  # type: ignore[assignment]
+    new_content_hash = _compute_content_hash(draft)
+    setattr(draft, 'content_hash', new_content_hash)
     
     db.commit()
     db.refresh(draft)
+
+    # Auto-save snapshot if hash changed
+    if old_content_hash != new_content_hash:
+        try:
+            created_by_user = None
+            if ctx and ctx.user_id:
+                created_by_user = ctx.user_id
+            elif ctx and ctx.email:
+                created_by_user = ctx.email
+            create_automation_version_snapshot(db, draft, created_by=created_by_user)
+        except Exception as e:
+            logger.warning(f"Failed to auto-save version snapshot on draft update: {e}")
     
     return WorkflowDraftResponse.model_validate(draft)
 
@@ -1505,3 +1523,250 @@ async def get_execution_stats():
             
     except httpx.ConnectError:
         return {"stats": [], "error": "Actions Engine not available"}
+
+
+# ============ Version History & Rollback ============
+
+class AutomationVersionLabelRequest(BaseModel):
+    label: Optional[str] = None
+
+
+class AutomationRollbackRequest(BaseModel):
+    version_id: str
+
+
+def check_workflow_ownership(db: Session, draft_id: str, ctx: TenantContext | None):
+    """
+    Ensure the workflow draft belongs to the project owned by the current tenant context.
+    Raises 404 if the draft does not exist or does not belong to the tenant.
+    """
+    if ctx and ctx.tenant_id and not ctx.is_master:
+        project_ids = (
+            db.query(Project.id)
+            .filter(Project.tenant_id == ctx.tenant_id)
+            .scalar_subquery()
+        )
+        owned = db.query(AutomationDraft.id).filter(
+            AutomationDraft.id == draft_id, AutomationDraft.project_id.in_(project_ids)
+        ).first()
+        if not owned:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+    elif ctx and ctx.is_master:
+        owned = db.query(AutomationDraft.id).filter(
+            AutomationDraft.id == draft_id, AutomationDraft.project_id == None
+        ).first()
+        if not owned:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+
+
+def serialize_version(v: AutomationVersion) -> dict:
+    """Convert an AutomationVersion to camelCase API dict, excluding large collections."""
+    return {
+        "id": v.id,
+        "automationId": v.automation_id,
+        "versionNumber": v.version_number,
+        "name": v.name,
+        "description": v.description,
+        "triggerType": v.trigger_type,
+        "contentHash": v.content_hash,
+        "label": v.label,
+        "createdAt": v.created_at.isoformat() if v.created_at is not None else None,
+        "createdBy": v.created_by,
+    }
+
+
+def serialize_version_detail(v: AutomationVersion) -> dict:
+    """Convert an AutomationVersion to a full detailed dict, including JSON collections."""
+    return {
+        "id": v.id,
+        "automationId": v.automation_id,
+        "versionNumber": v.version_number,
+        "name": v.name,
+        "description": v.description,
+        "triggerType": v.trigger_type,
+        "triggerConfig": v.trigger_config or {},
+        "nodes": v.nodes or [],
+        "edges": v.edges or [],
+        "settings": v.settings or {},
+        "contentHash": v.content_hash,
+        "label": v.label,
+        "createdAt": v.created_at.isoformat() if v.created_at is not None else None,
+        "createdBy": v.created_by,
+    }
+
+
+def create_automation_version_snapshot(db: Session, draft: AutomationDraft, created_by: Optional[str] = None) -> AutomationVersion:
+    """
+    Create a new version snapshot of the current automation state.
+    Auto-increments version_number per automation.
+    """
+    # Find the current max version number for this automation draft
+    max_version = db.query(AutomationVersion.version_number).filter(
+        AutomationVersion.automation_id == str(draft.id)
+    ).order_by(AutomationVersion.version_number.desc()).first()
+
+    next_version = (max_version[0] + 1) if max_version else 1
+
+    version = AutomationVersion(
+        id=str(uuid.uuid4()),
+        automation_id=str(draft.id),
+        version_number=next_version,
+        name=draft.name,
+        description=draft.description,
+        trigger_type=draft.trigger_type,
+        trigger_config=draft.trigger_config,
+        nodes=draft.nodes,
+        edges=draft.edges,
+        settings=draft.settings,
+        content_hash=draft.content_hash,
+        created_by=created_by or draft.created_by,
+    )
+    db.add(version)
+    db.commit()
+    db.refresh(version)
+    return version
+
+
+@router.get("/drafts/{draft_id}/versions/")
+async def list_automation_versions(
+    draft_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """List all version snapshots for a workflow automation, newest first."""
+    check_workflow_ownership(db, draft_id, ctx)
+    
+    versions = db.query(AutomationVersion).filter(
+        AutomationVersion.automation_id == draft_id
+    ).order_by(AutomationVersion.version_number.desc()).limit(50).all()
+
+    return {
+        "success": True,
+        "data": [serialize_version(v) for v in versions],
+    }
+
+
+@router.get("/drafts/{draft_id}/versions/{version_id}/")
+async def get_automation_version_detail(
+    draft_id: str,
+    version_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Get a specific workflow automation version including nodes/edges details."""
+    check_workflow_ownership(db, draft_id, ctx)
+    
+    version = db.query(AutomationVersion).filter(
+        AutomationVersion.id == version_id,
+        AutomationVersion.automation_id == draft_id,
+    ).first()
+    
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+
+    return {
+        "success": True,
+        "data": serialize_version_detail(version),
+    }
+
+
+@router.post("/drafts/{draft_id}/versions/")
+async def create_manual_automation_version(
+    draft_id: str,
+    request: AutomationVersionLabelRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Manually create a named version snapshot of a workflow draft."""
+    check_workflow_ownership(db, draft_id, ctx)
+    draft = db.query(AutomationDraft).filter(AutomationDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Workflow draft not found")
+
+    # Recompute content hash if missing
+    if draft.content_hash is None:
+        setattr(draft, 'content_hash', _compute_content_hash(draft))
+        db.commit()
+
+    created_by_user = None
+    if ctx and ctx.user_id:
+        created_by_user = ctx.user_id
+    elif ctx and ctx.email:
+        created_by_user = ctx.email
+
+    version = create_automation_version_snapshot(db, draft, created_by=created_by_user)
+
+    # Apply optional label
+    if request.label:
+        version.label = request.label  # type: ignore[assignment]
+        db.commit()
+        db.refresh(version)
+
+    return {
+        "success": True,
+        "data": serialize_version(version),
+    }
+
+
+@router.post("/drafts/{draft_id}/rollback/")
+async def rollback_automation_to_version(
+    draft_id: str,
+    request: AutomationRollbackRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """
+    Roll back an automation draft to a previous version.
+    Creates a NEW version snapshot of the current state BEFORE overwriting,
+    so the rollback itself can be undone.
+    """
+    check_workflow_ownership(db, draft_id, ctx)
+    draft = db.query(AutomationDraft).filter(AutomationDraft.id == draft_id).first()
+    if not draft:
+        raise HTTPException(status_code=404, detail="Workflow draft not found")
+
+    target_version = db.query(AutomationVersion).filter(
+        AutomationVersion.id == request.version_id,
+        AutomationVersion.automation_id == draft_id,
+    ).first()
+    
+    if not target_version:
+        raise HTTPException(status_code=404, detail="Target version not found")
+
+    # 1. Snapshot current state before overwriting
+    if draft.content_hash is None:
+        setattr(draft, 'content_hash', _compute_content_hash(draft))
+        db.commit()
+
+    created_by_user = None
+    if ctx and ctx.user_id:
+        created_by_user = ctx.user_id
+    elif ctx and ctx.email:
+        created_by_user = ctx.email
+
+    pre_rollback = create_automation_version_snapshot(db, draft, created_by=created_by_user)
+    pre_rollback.label = f"Auto-saved before rollback to v{target_version.version_number}"  # type: ignore[assignment]
+    db.commit()
+
+    # 2. Overwrite automation draft with the target version's snapshot
+    draft.name = target_version.name
+    draft.description = target_version.description
+    draft.trigger_type = target_version.trigger_type
+    draft.trigger_config = target_version.trigger_config
+    draft.nodes = target_version.nodes
+    draft.edges = target_version.edges
+    draft.settings = target_version.settings
+    setattr(draft, 'content_hash', target_version.content_hash)
+    setattr(draft, 'updated_at', func.now())
+    
+    db.commit()
+    db.refresh(draft)
+
+    return {
+        "success": True,
+        "message": f"Rolled back to version {target_version.version_number}",
+        "data": {
+            "preRollbackVersionId": pre_rollback.id,
+            "restoredVersionNumber": target_version.version_number,
+        }
+    }

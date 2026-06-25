@@ -36,7 +36,7 @@ from .edge import (  # noqa: F401
 from .page import Page, PageDeployment, PageVersion  # noqa: F401
 
 # Actions (registered with Base via side-effect import)
-from app.models.actions import AutomationDraft, AutomationExecution  # noqa: F401
+from app.models.actions import AutomationDraft, AutomationExecution, AutomationVersion  # noqa: F401
 
 # Storage
 from .storage_provider import StorageProvider  # noqa: F401

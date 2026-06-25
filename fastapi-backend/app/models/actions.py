@@ -5,6 +5,7 @@ Stores workflow drafts and published versions.
 """
 
 from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, JSON, ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database.config import Base
 import uuid
@@ -44,6 +45,14 @@ class AutomationDraft(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     created_by = Column(String(255), nullable=True)
+
+    # Relationships
+    versions = relationship(
+        "AutomationVersion",
+        back_populates="automation",
+        cascade="all, delete-orphan",
+        order_by="AutomationVersion.version_number.desc()"
+    )
     
     def __repr__(self):
         return f"<AutomationDraft {self.name} (id={self.id})>"
@@ -75,3 +84,30 @@ class AutomationExecution(Base):
     
     def __repr__(self):
         return f"<AutomationExecution {self.id} status={self.status}>"
+
+
+class AutomationVersion(Base):
+    """Immutable snapshot of an automation draft. Created on save/publish."""
+    __tablename__ = "automation_versions"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    automation_id = Column(String(36), ForeignKey('automation_drafts.id', ondelete='CASCADE'), nullable=False)
+    version_number = Column(Integer, nullable=False)          # Auto-incremented per workflow
+    
+    # Snapshot of workflow definition fields
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    trigger_type = Column(String(50), nullable=False)
+    trigger_config = Column(JSON, nullable=True)
+    nodes = Column(JSON, nullable=False)
+    edges = Column(JSON, nullable=False)
+    settings = Column(JSON, nullable=True)
+    content_hash = Column(String(64), nullable=True)
+    
+    # Metadata
+    label = Column(String(200), nullable=True)                 # Human label ("v1.0 Release")
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_by = Column(String(255), nullable=True)
+
+    # Relationships
+    automation = relationship("AutomationDraft", back_populates="versions")

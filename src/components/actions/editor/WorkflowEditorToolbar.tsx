@@ -28,6 +28,7 @@ import {
     DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { WorkflowSettingsPanel, type WorkflowSettings } from './WorkflowSettingsPanel';
+import { WorkflowVersionHistoryDialog } from './WorkflowVersionHistoryDialog';
 import { useActionsStore } from '@/stores/actions';
 import { useAuthStore } from '@/stores/auth';
 import { cn } from '@/lib/utils';
@@ -83,6 +84,7 @@ export function WorkflowEditorToolbar({
 }: WorkflowEditorToolbarProps) {
     const [publishOpen, setPublishOpen] = useState(false);
     const [selectedTargets, setSelectedTargets] = useState<Set<string>>(new Set());
+    const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 
     // Determine if a target is synced (deploy hash matches content hash)
     const isTargetSynced = (engineId: string) => {
@@ -348,6 +350,19 @@ export function WorkflowEditorToolbar({
                         <X className="w-4 h-4" />
                     </Button>
                 )}
+                {/* Versions History Dialog Trigger */}
+                {currentDraftId && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setVersionHistoryOpen(true)}
+                        className="gap-1.5"
+                    >
+                        <History className="w-4 h-4" />
+                        Versions
+                    </Button>
+                )}
+
                 {/* History Toggle */}
                 <Button
                     variant={showHistory ? 'default' : 'outline'}
@@ -364,6 +379,12 @@ export function WorkflowEditorToolbar({
                     ) : null}
                 </Button>
             </div>
+
+            <WorkflowVersionHistoryDialog
+                open={versionHistoryOpen}
+                onOpenChange={setVersionHistoryOpen}
+                currentDraftId={currentDraftId}
+            />
         </div>
     );
 }

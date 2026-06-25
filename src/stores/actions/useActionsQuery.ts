@@ -553,3 +553,102 @@ export function useExecutionResult(executionId: string | null, options?: { enabl
         },
     });
 }
+
+// ============ Version History & Rollback ============
+
+export interface AutomationVersion {
+    id: string;
+    automationId: string;
+    versionNumber: number;
+    name: string;
+    description?: string;
+    triggerType: string;
+    triggerConfig?: Record<string, any>;
+    nodes?: WorkflowNode[];
+    edges?: WorkflowEdge[];
+    settings?: Record<string, any> | null;
+    contentHash?: string;
+    label?: string;
+    createdAt: string;
+    createdBy?: string;
+}
+
+async function fetchWorkflowVersions(draftId: string): Promise<{ success: boolean; data: AutomationVersion[] }> {
+    const response = await fetch(`${API_BASE}/drafts/${draftId}/versions/`);
+    if (!response.ok) throw new Error('Failed to fetch workflow versions');
+    return response.json();
+}
+
+async function fetchWorkflowVersionDetail(draftId: string, versionId: string): Promise<{ success: boolean; data: AutomationVersion }> {
+    const response = await fetch(`${API_BASE}/drafts/${draftId}/versions/${versionId}/`);
+    if (!response.ok) throw new Error('Failed to fetch workflow version detail');
+    return response.json();
+}
+
+async function createManualWorkflowVersion(
+    { draftId, label }: { draftId: string; label?: string }
+): Promise<{ success: boolean; data: AutomationVersion }> {
+    const response = await fetch(`${API_BASE}/drafts/${draftId}/versions/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+    });
+    if (!response.ok) throw new Error('Failed to create workflow version');
+    return response.json();
+}
+
+async function rollbackWorkflowToVersion(
+    { draftId, versionId }: { draftId: string; versionId: string }
+): Promise<{ success: boolean; message: string; data: { preRollbackVersionId: string; restoredVersionNumber: number } }> {
+    const response = await fetch(`${API_BASE}/drafts/${draftId}/rollback/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version_id: versionId }),
+    });
+    if (!response.ok) throw new Error('Failed to rollback workflow to version');
+    return response.json();
+}
+
+export function useWorkflowVersions(draftId: string | null) {
+    return useQuery({
+        queryKey: ['workflow-versions', draftId],
+        queryFn: () => fetchWorkflowVersions(draftId!),
+        enabled: !!draftId,
+        staleTime: STALE.STANDARD,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+}
+
+export function useWorkflowVersionDetail(draftId: string | null, versionId: string | null) {
+    return useQuery({
+        queryKey: ['workflow-version-detail', draftId, versionId],
+        queryFn: () => fetchWorkflowVersionDetail(draftId!, versionId!),
+        enabled: !!draftId && !!versionId,
+        staleTime: STALE.IMMUTABLE,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+}
+
+export function useCreateManualWorkflowVersion() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: createManualWorkflowVersion,
+        onSuccess: (_, { draftId }) => {
+            queryClient.invalidateQueries({ queryKey: ['workflow-versions', draftId] });
+        },
+    });
+}
+
+export function useRollbackWorkflowToVersion() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: rollbackWorkflowToVersion,
+        onSuccess: (_, { draftId }) => {
+            queryClient.invalidateQueries({ queryKey: ['workflow-versions', draftId] });
+            queryClient.invalidateQueries({ queryKey: ['workflow-draft', draftId] });
+            queryClient.invalidateQueries({ queryKey: ['workflow-drafts'] });
+        },
+    });
+}

@@ -451,6 +451,28 @@ def _build_datasources_config(db: Session, engine_id: str | None) -> dict:
             if ds.api_url:
                 entry['apiUrl'] = str(ds.api_url)
 
+            # Resolve missing credentials from Connected Account
+            if ds.provider_account_id and (not entry.get('apiKey') or not entry.get('apiUrl')):
+                from app.models.models import EdgeProviderAccount
+                from ..core.security import decrypt_credentials
+                provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == ds.provider_account_id).first()
+                if provider:
+                    # Resolve URL from metadata
+                    if not entry.get('apiUrl') and provider.provider_metadata is not None:
+                        try:
+                            meta = json.loads(str(provider.provider_metadata))
+                            resolved_url = meta.get("api_url") or meta.get("base_url")
+                            if resolved_url:
+                                entry['apiUrl'] = resolved_url
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    # Resolve keys from decrypted credentials
+                    if not entry.get('apiKey') and provider.provider_credentials is not None:
+                        creds = decrypt_credentials(str(provider.provider_credentials))
+                        resolved_key = creds.get("app_password") or creds.get("api_key") or creds.get("anon_key")
+                        if resolved_key:
+                            entry['apiKey'] = resolved_key
+
             # Extra config (JSON string with provider-specific fields)
             if ds.extra_config:
                 try:
@@ -482,6 +504,7 @@ def _build_tenant_datasources_blob(
     """
     from app.models.edge import engine_datasources
     from app.services.sync.models.datasource import Datasource
+    from ..core.security import decrypt_field, decrypt_credentials
     import sqlalchemy as sa
 
     datasources: dict[str, dict] = {}
@@ -535,6 +558,28 @@ def _build_tenant_datasources_blob(
 
             if ds.api_url:
                 entry['apiUrl'] = str(ds.api_url)
+
+            # Resolve missing credentials from Connected Account
+            if ds.provider_account_id and (not entry.get('apiKey') or not entry.get('apiUrl')):
+                from app.models.models import EdgeProviderAccount
+                from ..core.security import decrypt_credentials
+                provider = db.query(EdgeProviderAccount).filter(EdgeProviderAccount.id == ds.provider_account_id).first()
+                if provider:
+                    # Resolve URL from metadata
+                    if not entry.get('apiUrl') and provider.provider_metadata is not None:
+                        try:
+                            meta = json.loads(str(provider.provider_metadata))
+                            resolved_url = meta.get("api_url") or meta.get("base_url")
+                            if resolved_url:
+                                entry['apiUrl'] = resolved_url
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    # Resolve keys from decrypted credentials
+                    if not entry.get('apiKey') and provider.provider_credentials is not None:
+                        creds = decrypt_credentials(str(provider.provider_credentials))
+                        resolved_key = creds.get("app_password") or creds.get("api_key") or creds.get("anon_key")
+                        if resolved_key:
+                            entry['apiKey'] = resolved_key
 
             if ds.extra_config:
                 try:

@@ -156,10 +156,25 @@ def _update_enum_check_constraints(connection):
             except Exception as e:
                 _logger.warning(f"[AUTO-MIGRATE] Could not drop constraint {type_constraint}: {e}")
 
-        # Add new constraint with all enum values
+        # IMPORTANT: Delete any datasources with invalid types BEFORE adding the constraint.
+        # This prevents CHECK constraint violations on deployments with legacy data.
         values_list = ', '.join(f"'{v}'" for v in datasource_type_values)
         try:
-            with connection.begin_nested():
+            with connection.begin():
+                # First, identify and delete invalid datasources
+                delete_result = connection.execute(text(f"""
+                    DELETE FROM datasources
+                    WHERE type NOT IN ({values_list})
+                    RETURNING id, name, type
+                """))
+                deleted_rows = delete_result.fetchall()
+                if deleted_rows:
+                    _logger.warning(
+                        f"[AUTO-MIGRATE] Deleted {len(deleted_rows)} datasources with invalid types: "
+                        + ", ".join(f"({row[0]}: {row[1]} = {row[2]})" for row in deleted_rows)
+                    )
+
+                # Now add the constraint - it should succeed since invalid rows are gone
                 connection.execute(text(
                     f'ALTER TABLE datasources ADD CONSTRAINT datasources_type_check CHECK (type IN ({values_list}))'
                 ))

@@ -23,6 +23,35 @@ def init_supertokens():
     supertokens_uri = os.environ.get("SUPERTOKENS_URI") or "http://supertokens:3567"
     api_key = os.environ.get("SUPERTOKENS_API_KEY") or "frontbase-dev-secret-key-change-me"
 
+    # Pre-check: Ensure SuperTokens default tenant exists to prevent duplicate key errors.
+    # The library tries to INSERT the default (public, public) tenant on every init.
+    # We use raw SQL to check and create it before the library tries (and fails).
+    try:
+        from sqlalchemy import create_engine, text
+        from app.database.config import SYNC_DATABASE_URL
+
+        engine = create_engine(SYNC_DATABASE_URL, pool_pre_ping=True)
+        with engine.connect() as conn:
+            # Check if default tenant exists
+            result = conn.execute(text(
+                "SELECT tenant_id FROM supertokens.tenants WHERE app_id = 'public' AND tenant_id = 'public'"
+            )).fetchone()
+
+            if result is None:
+                # Create the default tenant using ON CONFLICT to prevent duplicate errors
+                conn.execute(text("""
+                    INSERT INTO supertokens.tenants (app_id, tenant_id, created_at_time)
+                    VALUES ('public', 'public', NOW())
+                    ON CONFLICT (app_id, tenant_id) DO NOTHING
+                """))
+                conn.commit()
+                print("[SuperTokens] Created default tenant (public, public)")
+            else:
+                print("[SuperTokens] Default tenant (public, public) already exists")
+    except Exception as e:
+        # If this fails, the library will handle it (may log duplicate error, but harmless)
+        print(f"[SuperTokens] Could not pre-check default tenant: {e}")
+
     # ── Override: disable built-in sign-up endpoint ─────────────────────
     # We use a custom POST /api/auth/signup endpoint in auth.py that
     # calls emailpassword.sign_up() internally + provisions a Tenant.

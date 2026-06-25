@@ -49,6 +49,9 @@ interface EdgeVectorDialogProps {
     // Account link (optional)
     formAccountId?: string | null;
     setFormAccountId?: (v: string | null) => void;
+    /** Provider-specific, non-secret config (dimensions, metric, table name, …) */
+    formProviderConfig?: Record<string, any>;
+    setFormProviderConfig?: (v: Record<string, any>) => void;
     /** URLs already imported — for duplicate prevention */
     existingUrls?: string[];
 }
@@ -61,6 +64,8 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
     isSaving, testingId, openCreate, resetForm,
     handleSave, handleTestInline,
     formAccountId, setFormAccountId,
+    formProviderConfig = {},
+    setFormProviderConfig,
     existingUrls = [],
 }) => {
     // State for provider switch confirmation
@@ -85,24 +90,26 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
             // Safe to proceed - form is empty or we're editing
             setSelectedProvider(provider);
             if (setFormAccountId) setFormAccountId(null);
+            if (setFormProviderConfig) setFormProviderConfig({});
             setFormUrl('');
             setFormToken('');
             setFormName('');
         }
-    }, [hasUnsavedContent, editingId, setSelectedProvider, setFormAccountId]);
+    }, [hasUnsavedContent, editingId, setSelectedProvider, setFormAccountId, setFormProviderConfig]);
 
     // Confirm provider switch
     const confirmProviderSwitch = useCallback(() => {
         if (pendingProvider) {
             setSelectedProvider(pendingProvider);
             if (setFormAccountId) setFormAccountId(null);
+            if (setFormProviderConfig) setFormProviderConfig({});
             setFormUrl('');
             setFormToken('');
             setFormName('');
         }
         setPendingProvider(null);
         setShowConfirmSwitch(false);
-    }, [pendingProvider, setSelectedProvider, setFormAccountId]);
+    }, [pendingProvider, setSelectedProvider, setFormAccountId, setFormProviderConfig]);
 
     // Cancel provider switch
     const cancelProviderSwitch = useCallback(() => {
@@ -287,6 +294,64 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
                             )}
                         </div>
                     )}
+
+                    {/* Provider-specific configuration (dimensions, metric, table name) */}
+                    {(() => {
+                        if (!setFormProviderConfig) return null;
+                        const prov = EDGE_VECTOR_PROVIDERS.find(p => p.value === selectedProvider);
+                        const cfg = formProviderConfig || {};
+                        const setKey = (k: string, v: string) => setFormProviderConfig({ ...cfg, [k]: v });
+
+                        if (prov?.value === 'cloudflare_vectorize') {
+                            return (
+                                <div className="space-y-3 p-3 rounded-lg border bg-muted/40">
+                                    <Label className="text-sm font-semibold">Vectorize Configuration</Label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs text-muted-foreground">Dimensions (optional)</Label>
+                                            <Input
+                                                type="number"
+                                                placeholder="Auto-detected"
+                                                value={cfg.dimensions != null ? String(cfg.dimensions) : ''}
+                                                onChange={e => setKey('dimensions', e.target.value)}
+                                                className="h-8"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs text-muted-foreground">Metric (optional)</Label>
+                                            <select
+                                                value={cfg.metric != null ? String(cfg.metric) : ''}
+                                                onChange={e => setKey('metric', e.target.value)}
+                                                className="w-full h-8 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                                            >
+                                                <option value="">Auto-detected</option>
+                                                <option value="cosine">Cosine</option>
+                                                <option value="euclidean">Euclidean</option>
+                                                <option value="dotproduct">Dot Product</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        }
+                        if (prov?.value === 'pgvector') {
+                            return (
+                                <div className="space-y-2 p-3 rounded-lg border bg-muted/40">
+                                    <Label className="text-sm font-semibold">pgvector Configuration</Label>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs text-muted-foreground">Table name (optional)</Label>
+                                        <Input
+                                            placeholder="documents"
+                                            value={cfg.table_name != null ? String(cfg.table_name) : ''}
+                                            onChange={e => setKey('table_name', e.target.value)}
+                                            className="h-8"
+                                        />
+                                    </div>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
 
                     {/* Default toggle */}
                     <div className="flex items-center gap-2">

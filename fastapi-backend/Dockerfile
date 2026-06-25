@@ -53,7 +53,8 @@ RUN dos2unix /usr/local/bin/docker_entrypoint.sh && chmod +x /usr/local/bin/dock
 RUN mkdir -p /app/data
 
 # Create non-root user for production (security best practice)
-RUN groupadd -r appuser && useradd -r -g appuser -u 1000 appuser \
+# -m creates home directory for tldextract cache
+RUN groupadd -r appuser && useradd -r -g appuser -u 1000 -m appuser \
     && chown -R appuser:appuser /app
 
 # Environment variables

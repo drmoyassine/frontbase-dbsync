@@ -104,6 +104,9 @@ services:
       args:
         # Empty = use relative URLs (recommended for production)
         VITE_API_URL: ""
+        # Force rebuild: set to current timestamp or '1' to invalidate Docker layer cache
+        # Use: docker compose build --build-arg FORCE_REBUILD=$(date +%s) frontend
+        FORCE_REBUILD: ${FORCE_REBUILD:-}
     expose:
       - "80"
     depends_on:

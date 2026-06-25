@@ -3,6 +3,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Cache busting: set FORCE_REBUILD timestamp to invalidate Docker layer cache
+# Use: docker build --build-arg FORCE_REBUILD=$(date +%s) ...
+ARG FORCE_REBUILD=unspecified
+RUN echo "Force rebuild timestamp: ${FORCE_REBUILD}" && \
+    test "$FORCE_REBUILD" != "unspecified" || echo "No force rebuild requested"
+
 # Copy package files
 COPY package*.json ./
 

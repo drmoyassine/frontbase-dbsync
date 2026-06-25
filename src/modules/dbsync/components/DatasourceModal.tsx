@@ -160,6 +160,11 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                                             name: formData.name || resource.name || '',
                                             // Auto-fill WordPress fields from resource metadata
                                             ...(formData.type.startsWith('wordpress_') && {
+                                                // Store the site URL under api_url (the column the backend
+                                                // adapter reads) AND base_url (legacy alias) so the datasource
+                                                // row is self-describing without relying solely on the
+                                                // Connected Account at read time.
+                                                api_url: resource.api_url || formData.api_url,
                                                 base_url: resource.api_url || formData.base_url,
                                                 username: resource.username || formData.username,
                                             }),

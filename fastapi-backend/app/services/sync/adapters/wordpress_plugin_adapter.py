@@ -87,6 +87,20 @@ class WordPressPluginAdapter(WordPressBaseApiAdapter):
                 self._resolved_api_key = creds.get("app_password") or creds.get("api_key")
                 # Store source for debugging
                 self._credential_source = creds.get("source", "unknown")
+                # Resolve the site URL from the Connected Account when the
+                # datasource row doesn't carry it. Datasources created purely
+                # from a Connected Account have an empty api_url column; without
+                # this _plugin_base points at "/wp-json/frontbase/v1" (no host)
+                # and every /discover + /extract call 404s, surfacing as an empty
+                # Data Inspector with no error. Recompute _plugin_base because it
+                # was derived from the (previously empty) _api_url above.
+                if not self._api_url:
+                    resolved_url = (creds.get("api_url") or creds.get("base_url") or "").strip()
+                    if resolved_url:
+                        if "://" not in resolved_url:
+                            resolved_url = f"https://{resolved_url}"
+                        self._api_url = resolved_url.rstrip("/")
+                        self._plugin_base = f"{self._api_url}/wp-json/{self.PLUGIN_NAMESPACE}"
             except Exception as e:
                 logger.warning("Failed to resolve credentials from Connected Account: %s", e)
                 self._credential_source = "resolution_failed"

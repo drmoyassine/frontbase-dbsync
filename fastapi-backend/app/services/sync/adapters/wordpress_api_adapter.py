@@ -41,6 +41,18 @@ class WordPressBaseApiAdapter(DatabaseAdapter):
                 # WordPress uses app_password for all variants (plugin/rest/graphql)
                 self._resolved_api_key = creds.get("app_password") or creds.get("api_key")
                 self._credential_source = creds.get("source", "unknown")
+                # Resolve the site URL from the Connected Account when the
+                # datasource row doesn't carry it. Datasources created purely
+                # from a Connected Account have an empty api_url column; without
+                # this the adapter builds a bogus base URL and every /discover +
+                # /extract call 404s, surfacing as an empty Data Inspector with
+                # no error. Accept api_url or the legacy base_url alias.
+                if not self._api_url:
+                    resolved_url = (creds.get("api_url") or creds.get("base_url") or "").strip()
+                    if resolved_url:
+                        if "://" not in resolved_url:
+                            resolved_url = f"https://{resolved_url}"
+                        self._api_url = resolved_url.rstrip("/")
             except Exception as e:
                 logger.warning("Failed to resolve credentials from Connected Account: %s", e)
                 self._credential_source = "resolution_failed"

@@ -484,6 +484,8 @@ export function useEdgeProviders() {
         queryKey: ['edge-providers'],
         queryFn: edgeInfrastructureApi.getProviders,
         staleTime: STALE.STANDARD,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -492,6 +494,8 @@ export function useEdgeEngines() {
         queryKey: ['edge-engines'],
         queryFn: edgeInfrastructureApi.getEngines,
         staleTime: STALE.STANDARD,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -500,6 +504,8 @@ export function useEdgeDatabases() {
         queryKey: ['edge-databases'],
         queryFn: edgeInfrastructureApi.getEdgeDatabases,
         staleTime: STALE.STANDARD,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -508,6 +514,8 @@ export function useEdgeCaches() {
         queryKey: ['edge-caches'],
         queryFn: edgeInfrastructureApi.getEdgeCaches,
         staleTime: STALE.STANDARD,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -516,6 +524,8 @@ export function useEdgeQueues() {
         queryKey: ['edge-queues'],
         queryFn: edgeInfrastructureApi.getEdgeQueues,
         staleTime: STALE.STANDARD,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 }
 
@@ -524,6 +534,8 @@ export function useEdgeVectors() {
         queryKey: ['edge-vectors'],
         queryFn: edgeInfrastructureApi.getEdgeVectors,
         staleTime: STALE.STANDARD,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 }
 

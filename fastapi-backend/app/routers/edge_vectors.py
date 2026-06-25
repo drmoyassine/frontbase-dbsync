@@ -9,6 +9,10 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, UTC
 import uuid
+import ipaddress
+import socket
+import urllib.parse
+from sqlalchemy import func
 
 from ..database.config import SessionLocal
 from ..models.models import EdgeVector, EdgeEngine, EdgeProviderAccount
@@ -24,14 +28,51 @@ router = APIRouter(prefix="/api/edge-vectors", tags=["edge-vectors"])
 # Helper connection tester
 # =============================================================================
 
-async def test_vector_connection_raw(provider: str, url: str, token: Optional[str] = None) -> dict:
+# Metadata IP ranges that MUST be blocked (cloud provider metadata services)
+METADATA_IP_RANGES = (
+    ipaddress.ip_network('169.254.0.0/16'),  # AWS, GCP, Azure metadata
+    ipaddress.ip_network('100.100.0.0/16'),  # Aliyun metadata
+    ipaddress.ip_network('192.0.0.2/32'),     # Cloudflare DNS (metadata-like)
+)
+
+def _is_safe_url(url: str) -> bool:
+    """Check if URL points to a safe global IP, preventing SSRF to local/metadata IPs."""
+    try:
+        hostname = urllib.parse.urlparse(url).hostname
+        if not hostname:
+            return False
+        ip = ipaddress.ip_address(socket.gethostbyname(hostname))
+
+        # Explicitly check against metadata IP ranges
+        if any(ip in network for network in METADATA_IP_RANGES):
+            return False
+
+        return ip.is_global
+    except Exception:
+        return False
+
+
+async def test_vector_connection_raw(provider: str, url: str, token: Optional[str] = None, provider_account_id: Optional[str] = None) -> dict:
     """Test connection to a vector database with URL validation to prevent SSRF."""
-    # SSRF protection: restrict URL prefixes to known-safe patterns
+    provider_lower = (provider or "").lower()
     url_lower = (url or "").lower()
+
+    # Self-hosted embedded LanceDB check
+    if provider_lower == "embedded_lancedb":
+        if not url_lower.startswith("/app/data/") and not url_lower.startswith("./data/"):
+            return {
+                "success": False,
+                "message": "Embedded LanceDB path must be under /app/data/ or ./data/ (self-hosted only)"
+            }
+        return {
+            "success": True,
+            "message": "Local LanceDB path validated."
+        }
+
+    # SSRF protection: restrict URL prefixes to known-safe patterns
     allowed_prefixes = (
         "postgres://", "postgresql://",  # PostgreSQL/pgvector
         "https://", "http://",            # Cloud providers (Cloudflare Vectorize, Turso, etc.)
-        "file:",                           # Local/embedded (LanceDB) - only for self-hosted
     )
     if not url_lower.startswith(allowed_prefixes):
         return {
@@ -39,7 +80,13 @@ async def test_vector_connection_raw(provider: str, url: str, token: Optional[st
             "message": f"Invalid URL format: must start with one of {allowed_prefixes}"
         }
 
-    provider_lower = (provider or "").lower()
+    if url_lower.startswith("http://") or url_lower.startswith("https://"):
+        if not _is_safe_url(url):
+            return {
+                "success": False,
+                "message": "Invalid URL: resolved IP is private or reserved (SSRF protection)"
+            }
+
     if provider_lower in ("pgvector", "postgres", "postgres_vector", "supabase", "neon"):
         try:
             import asyncpg
@@ -62,7 +109,11 @@ async def test_vector_connection_raw(provider: str, url: str, token: Optional[st
             # Return generic error to prevent information disclosure
             return {"success": False, "message": "Connection failed: unable to reach database"}
     else:
-        # Stubbed backends: cf vectorize, turso, etc.
+        # Phase 1: Stubbed backends (cf vectorize, turso, etc.)
+        # TODO: Phase 2 - Implement actual connection validation:
+        # - Cloudflare Vectorize: Ping https://api.cloudflare.com/client/v4/accounts/{account_id}/vectorize/indexes
+        # - Turso Vector: Execute a simple vector query via libsql client
+        # Consider using httpx for HTTP-based validation and async-libsql for Turso
         return {
             "success": True,
             "message": f"Verification bypassed: provider '{provider}' is accepted, connection check is stubbed."
@@ -85,14 +136,18 @@ class TestConnectionRequest(BaseModel):
     provider: str
     vector_url: str
     vector_token: Optional[str] = None
+    provider_account_id: Optional[str] = None
 
 
 # =============================================================================
 # Helpers
 # =============================================================================
 
-def _query_linked_engines(db, fk_column, resource_id) -> tuple[int, list[dict]]:
-    engines = db.query(EdgeEngine).filter(fk_column == resource_id).all()
+def _query_linked_engines(db, fk_column, resource_id, project_id: Optional[str] = None) -> tuple[int, list[dict]]:
+    query = db.query(EdgeEngine).filter(fk_column == resource_id)
+    if project_id:
+        query = query.filter(EdgeEngine.project_id == project_id)
+    engines = query.all()
     linked = [
         {
             "id": str(e.id),
@@ -157,6 +212,7 @@ async def list_edge_vectors(ctx: TenantContext | None = Depends(get_tenant_conte
     db = SessionLocal()
     try:
         query = db.query(EdgeVector)
+        project = None
         if ctx and ctx.tenant_id:
             project = get_project(db, ctx)
             if project:
@@ -165,10 +221,26 @@ async def list_edge_vectors(ctx: TenantContext | None = Depends(get_tenant_conte
                 return []
                 
         vectors = query.order_by(EdgeVector.created_at.desc()).all()
+        
+        # Pre-fetch engine counts + linked engines to avoid N+1 query
+        # We query all engines linked to ANY of these vector stores for this tenant
+        vector_ids = [v.id for v in vectors]
+        engine_query = db.query(EdgeEngine).filter(EdgeEngine.edge_vector_id.in_(vector_ids))
+        if ctx and ctx.tenant_id and project:
+            engine_query = engine_query.filter(EdgeEngine.project_id == project.id)
+            
+        linked_engines_map = {vid: [] for vid in vector_ids}
+        for e in engine_query.all():
+            linked_engines_map[e.edge_vector_id].append({
+                "id": str(e.id),
+                "name": str(e.name),
+                "provider": str(e.edge_provider.provider) if getattr(e, 'edge_provider', None) else "unknown",
+            })
+
         result = []
         for vec in vectors:
-            engine_count, linked = _query_linked_engines(db, EdgeEngine.edge_vector_id, vec.id)
-            result.append(_serialize_vector(vec, db, engine_count, linked))
+            linked = linked_engines_map.get(vec.id, [])
+            result.append(_serialize_vector(vec, db, len(linked), linked))
         return result
     finally:
         db.close()
@@ -346,7 +418,12 @@ async def test_edge_vector_connection(vector_id: str, ctx: TenantContext | None 
             raise HTTPException(404, "Vector store not found")
         
         decrypted_token = decrypt_field(str(vector.vector_token)) if vector.vector_token is not None else None
-        return await test_vector_connection_raw(str(vector.provider), str(vector.vector_url), decrypted_token)
+        return await test_vector_connection_raw(
+            provider=str(vector.provider), 
+            url=str(vector.vector_url), 
+            token=decrypted_token,
+            provider_account_id=str(vector.provider_account_id) if vector.provider_account_id is not None else None
+        )
     finally:
         db.close()
 
@@ -354,7 +431,12 @@ async def test_edge_vector_connection(vector_id: str, ctx: TenantContext | None 
 @router.post("/test-connection")
 async def test_connection_inline(payload: TestConnectionRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test connection using raw fields (pre-save)."""
-    return await test_vector_connection_raw(payload.provider, payload.vector_url, payload.vector_token)
+    return await test_vector_connection_raw(
+        provider=payload.provider, 
+        url=payload.vector_url, 
+        token=payload.vector_token,
+        provider_account_id=payload.provider_account_id
+    )
 
 
 @router.post("/batch/delete", response_model=BatchResult)
@@ -363,6 +445,7 @@ async def batch_delete_vectors(payload: BatchDeleteVectorRequest, ctx: TenantCon
     db = SessionLocal()
     success = []
     failed = []
+    project = None
     try:
         for vid in payload.ids:
             query = db.query(EdgeVector).filter(EdgeVector.id == vid)
@@ -379,7 +462,11 @@ async def batch_delete_vectors(payload: BatchDeleteVectorRequest, ctx: TenantCon
                 failed.append({"id": vid, "error": "Deletion failed"})
                 continue
 
-            engines = db.query(EdgeEngine).filter(EdgeEngine.edge_vector_id == vid).all()
+            engine_query = db.query(EdgeEngine).filter(EdgeEngine.edge_vector_id == vid)
+            if ctx and ctx.tenant_id and project:
+                engine_query = engine_query.filter(EdgeEngine.project_id == project.id)
+            engines = engine_query.all()
+            
             if engines:
                 failed.append({"id": vid, "error": "Deletion failed"})
                 continue

@@ -324,7 +324,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
     turso: {
         label: 'Turso',
         defaultName: 'Turso Databases',
-        capabilities: ['database'],
+        capabilities: ['database', 'vector_db'],
         fields: [
             { key: 'db_url', label: 'Database URL', placeholder: 'libsql://your-db.turso.io', required: true },
             { key: 'db_token', label: 'Auth Token', placeholder: 'Database auth token', type: 'password', required: true },
@@ -415,6 +415,11 @@ export const EMAIL_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
     .filter(([, c]) => c.capabilities?.includes('email'))
     .map(([k]) => k);
 
+// Derived: providers that support vector db
+export const VECTOR_CAPABLE_PROVIDERS = Object.entries(PROVIDER_CONFIGS)
+    .filter(([, c]) => c.capabilities?.includes('vector_db'))
+    .map(([k]) => k);
+
 // ============================================================================
 // Edge Resource Provider Registries
 //
@@ -494,6 +499,17 @@ export const EDGE_STORAGE_PROVIDERS: EdgeResourceProvider[] = [
     { value: 'gcs',        label: 'Google Cloud',        icon: Cloud,                                 accountProvider: null,         active: false },
 ];
 
+/**
+ * Vector providers — derived from PROVIDER_CONFIGS capabilities.
+ * Includes all providers with 'vector_db' capability, plus some stubs.
+ */
+export const EDGE_VECTOR_PROVIDERS: EdgeResourceProvider[] = [
+    { value: 'pgvector',             label: 'pgvector (Postgres)',   icon: PROVIDER_ICONS.supabase || Database, accountProvider: 'supabase',   active: true,  resourceTypeFilter: 'supabase_project' },
+    { value: 'cloudflare_vectorize', label: 'CF Vectorize',          icon: PROVIDER_ICONS.cloudflare || Cloud,  accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'vectorize' },
+    { value: 'turso_vector',         label: 'Turso Vector',          icon: PROVIDER_ICONS.turso || Cloud,       accountProvider: 'turso',      active: true,  resourceTypeFilter: 'turso_db' },
+    { value: 'embedded_lancedb',     label: 'Embedded LanceDB',      icon: HardDrive,                           accountProvider: null,         active: true,  platformLock: 'docker', compatHint: 'Embedded LanceDB only works on self-hosted Docker engines.' },
+];
+
 // ============================================================================
 // Engine Provider Labels — used by edge engine cards
 // ============================================================================
@@ -518,10 +534,11 @@ const ALL_RESOURCE_PROVIDERS = [
     ...EDGE_CACHE_PROVIDERS,
     ...EDGE_QUEUE_PROVIDERS,
     ...EDGE_STORAGE_PROVIDERS,
+    ...EDGE_VECTOR_PROVIDERS,
 ];
 
 /** Look up the human label for a provider key, falling back to the key itself */
-export function getProviderLabel(providerKey: string, resourceType?: 'database' | 'cache' | 'queue' | 'storage' | 'engine'): string {
+export function getProviderLabel(providerKey: string, resourceType?: 'database' | 'cache' | 'queue' | 'storage' | 'engine' | 'vector_db'): string {
     if (resourceType === 'engine') return ENGINE_PROVIDER_LABELS[providerKey] || providerKey;
     // Try resource registries first (they have the most specific label)
     const match = ALL_RESOURCE_PROVIDERS.find(p => p.value === providerKey);

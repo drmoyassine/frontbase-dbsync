@@ -8,12 +8,8 @@ import { useEdgeVectors, EdgeVector, edgeInfrastructureApi } from '@/hooks/useEd
 import { toast } from 'sonner';
 import { showTestToast, TestResult } from '@/components/dashboard/settings/shared/edgeTestToast';
 
-export const EDGE_VECTOR_PROVIDERS = [
-    { value: 'pgvector', label: 'pgvector (Postgres)' },
-    { value: 'cloudflare_vectorize', label: 'Cloudflare Vectorize (Stub)' },
-    { value: 'turso_vector', label: 'Turso Vector (Stub)' },
-    { value: 'embedded_lancedb', label: 'embedded LanceDB (Stub)' },
-];
+import { EDGE_VECTOR_PROVIDERS } from '@/components/dashboard/settings/shared/edgeConstants';
+export { EDGE_VECTOR_PROVIDERS };
 
 const API_BASE = '';
 

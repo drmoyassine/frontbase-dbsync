@@ -2,9 +2,10 @@
  * EdgeVectorDialog — Create/Edit dialog for edge vector stores.
  */
 
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -12,8 +13,15 @@ import {
     Dialog, DialogContent, DialogDescription, DialogFooter,
     DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Loader2, Zap, AlertTriangle, Database } from 'lucide-react';
-import { EDGE_VECTOR_PROVIDERS } from '@/hooks/useEdgeVectorForm';
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel,
+    AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+    AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Plus, Loader2, Check, Zap, AlertTriangle, Database } from 'lucide-react';
+import { EDGE_VECTOR_PROVIDERS } from '@/components/dashboard/settings/shared/edgeConstants';
+import { AccountResourcePicker, DiscoveredResource } from './AccountResourcePicker';
+import { PROVIDER_ICONS } from './edgeConstants';
 
 interface EdgeVectorDialogProps {
     dialogOpen: boolean;
@@ -38,6 +46,11 @@ interface EdgeVectorDialogProps {
     resetForm: () => void;
     handleSave: () => void;
     handleTestInline: () => void;
+    // Account link (optional)
+    formAccountId?: string | null;
+    setFormAccountId?: (v: string | null) => void;
+    /** URLs already imported — for duplicate prevention */
+    existingUrls?: string[];
 }
 
 export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
@@ -47,7 +60,56 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
     formToken, setFormToken, formIsDefault, setFormIsDefault,
     isSaving, testingId, openCreate, resetForm,
     handleSave, handleTestInline,
+    formAccountId, setFormAccountId,
+    existingUrls = [],
 }) => {
+    // State for provider switch confirmation
+    const [pendingProvider, setPendingProvider] = useState<string | null>(null);
+    const [showConfirmSwitch, setShowConfirmSwitch] = useState(false);
+
+    // Check if form has unsaved content
+    const hasUnsavedContent = useCallback(() => {
+        return !editingId && (formName.trim() !== '' || formUrl.trim() !== '' || formToken.trim() !== '');
+    }, [editingId, formName, formUrl, formToken]);
+
+    // Handle provider selection with confirmation if needed
+    const handleProviderSelect = useCallback((provider: string) => {
+        const providerConfig = EDGE_VECTOR_PROVIDERS.find(p => p.value === provider);
+        if (!providerConfig?.active) return;
+
+        // Check if we need confirmation
+        if (hasUnsavedContent() && !editingId) {
+            setPendingProvider(provider);
+            setShowConfirmSwitch(true);
+        } else {
+            // Safe to proceed - form is empty or we're editing
+            setSelectedProvider(provider);
+            if (setFormAccountId) setFormAccountId(null);
+            setFormUrl('');
+            setFormToken('');
+            setFormName('');
+        }
+    }, [hasUnsavedContent, editingId, setSelectedProvider, setFormAccountId]);
+
+    // Confirm provider switch
+    const confirmProviderSwitch = useCallback(() => {
+        if (pendingProvider) {
+            setSelectedProvider(pendingProvider);
+            if (setFormAccountId) setFormAccountId(null);
+            setFormUrl('');
+            setFormToken('');
+            setFormName('');
+        }
+        setPendingProvider(null);
+        setShowConfirmSwitch(false);
+    }, [pendingProvider, setSelectedProvider, setFormAccountId]);
+
+    // Cancel provider switch
+    const cancelProviderSwitch = useCallback(() => {
+        setPendingProvider(null);
+        setShowConfirmSwitch(false);
+    }, []);
+
     return (
         <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetForm(); } setDialogOpen(open); }}>
             <DialogTrigger asChild>
@@ -73,67 +135,157 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
                         </Alert>
                     )}
 
-                    {/* Provider selector */}
+                    {/* Provider selector — derived from EDGE_VECTOR_PROVIDERS registry */}
                     <div className="space-y-2">
                         <Label>Provider</Label>
                         <div className="grid grid-cols-2 gap-2">
                             {EDGE_VECTOR_PROVIDERS.map(opt => {
-                                const isStub = opt.value !== 'pgvector';
+                                const Icon = opt.icon || Database;
                                 return (
                                     <button
                                         key={opt.value}
                                         type="button"
-                                        onClick={() => { setSelectedProvider(opt.value); }}
-                                        className={`flex flex-col items-start gap-1 p-3 rounded-lg border text-sm transition-colors text-left relative
+                                        onClick={() => handleProviderSelect(opt.value)}
+                                        disabled={!opt.active}
+                                        className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm transition-colors text-left relative
                                             ${selectedProvider === opt.value
                                                 ? 'border-primary bg-primary/5 text-primary'
-                                                : 'border-border hover:bg-accent'
+                                                : opt.active
+                                                    ? 'border-border hover:bg-accent'
+                                                    : 'border-border opacity-50 cursor-not-allowed'
                                             }`}
                                     >
-                                        <div className="font-medium flex items-center gap-1.5">
-                                            <Database className="h-4 w-4 shrink-0" />
-                                            <span className="truncate">{opt.label}</span>
-                                        </div>
-                                        {isStub && (
-                                            <span className="text-[10px] text-muted-foreground opacity-75">v1 Stub</span>
+                                        <Icon className="h-4 w-4 shrink-0" />
+                                        <span className="truncate">{opt.label}</span>
+                                        {opt.platformLock && (
+                                            <Badge variant="outline" className="text-[10px] ml-auto px-1.5 py-0 border-amber-400 text-amber-500">{opt.platformLock} only</Badge>
+                                        )}
+                                        {!opt.active && (
+                                            <Badge variant="outline" className="text-[10px] ml-auto px-1.5 py-0">Soon</Badge>
                                         )}
                                     </button>
                                 );
                             })}
                         </div>
+
+                        {/* Platform-lock compatibility warning */}
+                        {(() => {
+                            const prov = EDGE_VECTOR_PROVIDERS.find(p => p.value === selectedProvider);
+                            if (!prov?.platformLock || !prov.compatHint) return null;
+                            return (
+                                <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+                                    <AlertTriangle className="h-4 w-4 text-amber-500" />
+                                    <AlertDescription className="text-xs text-amber-700 dark:text-amber-400">
+                                        {prov.compatHint}
+                                    </AlertDescription>
+                                </Alert>
+                            );
+                        })()}
                     </div>
 
-                    <div className="space-y-3">
-                        <div className="space-y-1">
-                            <Label>Connection Name</Label>
-                            <Input
-                                placeholder="e.g. Production pgvector"
-                                value={formName}
-                                onChange={e => setFormName(e.target.value)}
+                    {/* Account resource picker — PRIMARY for active providers */}
+                    {(() => {
+                        const prov = EDGE_VECTOR_PROVIDERS.find(p => p.value === selectedProvider);
+                        if (!prov?.active || !prov.accountProvider || editingId || !setFormAccountId) return null;
+                        return (
+                            <AccountResourcePicker
+                                key={selectedProvider}
+                                compatibleProviders={[prov.accountProvider]}
+                                resourceTypeFilter={prov.resourceTypeFilter}
+                                createResourceType={prov.createResourceType}
+                                label={`Select ${prov.label}`}
+                                existingUrls={existingUrls}
+                                autoSelectSingle
+                                hideConnectDisplayName={!prov.createResourceType}
+                                onResourceSelected={(resource: DiscoveredResource, accountId: string) => {
+                                    setFormAccountId(accountId);
+                                    
+                                    // For vectorize, URL isn't natively returned from discovery except as the ID
+                                    const url = (resource as any).url 
+                                        || resource.db_url 
+                                        || (resource.endpoint ? \`https://\${resource.endpoint}\` : '')
+                                        || resource.id || '';
+                                        
+                                    if (url) setFormUrl(url);
+                                    if (resource.rest_token) setFormToken(resource.rest_token);
+                                    else if ((resource as any).token) setFormToken((resource as any).token);
+                                    
+                                    if (!formName) setFormName(resource.name || '');
+                                }}
+                                onClear={() => {
+                                    setFormAccountId(null);
+                                    setFormUrl('');
+                                    setFormToken('');
+                                }}
                             />
-                        </div>
+                        );
+                    })()}
 
-                        <div className="space-y-1">
-                            <Label>{selectedProvider === 'pgvector' ? 'Postgres DSN (Connection String)' : 'Connection URL'}</Label>
-                            <Input
-                                placeholder={selectedProvider === 'pgvector' ? 'postgresql://user:pass@host:5432/db' : 'https://vector-db.example.com'}
-                                value={formUrl}
-                                onChange={e => setFormUrl(e.target.value)}
-                            />
-                        </div>
-
-                        {selectedProvider !== 'pgvector' && (
+                    {/* Auto-discovered summary — show when account picked */}
+                    {formAccountId && (
+                        <div className="space-y-3">
+                            <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-3">
+                                <p className="text-sm text-green-700 dark:text-green-400 flex items-center gap-2">
+                                    <Check className="h-4 w-4" />
+                                    Credentials auto-filled from connected account
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">URL and auth token are configured automatically.</p>
+                            </div>
                             <div className="space-y-1">
-                                <Label>Auth Token / Key (Optional)</Label>
+                                <Label>Connection Name</Label>
                                 <Input
-                                    type="password"
-                                    placeholder="Enter authorization credentials"
-                                    value={formToken}
-                                    onChange={e => setFormToken(e.target.value)}
+                                    placeholder="e.g. Production pgvector"
+                                    value={formName}
+                                    onChange={e => setFormName(e.target.value)}
                                 />
                             </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
+                    
+                    {/* Manual Form (Hidden if auto-discovered and account picked) */}
+                    {(!formAccountId || editingId) && (
+                        <div className="space-y-3">
+                            <div className="space-y-1">
+                                <Label>Connection Name</Label>
+                                <Input
+                                    placeholder="e.g. Production Vector Store"
+                                    value={formName}
+                                    onChange={e => setFormName(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="space-y-1">
+                                <Label>{
+                                    selectedProvider === 'pgvector' ? 'Postgres DSN (Connection String)' :
+                                    selectedProvider === 'cloudflare_vectorize' ? 'Vectorize Index Name' :
+                                    selectedProvider === 'embedded_lancedb' ? 'Data Directory' :
+                                    'Connection URL'
+                                }</Label>
+                                <Input
+                                    placeholder={
+                                        selectedProvider === 'pgvector' ? 'postgresql://user:pass@host:5432/db' : 
+                                        selectedProvider === 'cloudflare_vectorize' ? 'my-vector-index' :
+                                        selectedProvider === 'embedded_lancedb' ? '/app/data/lancedb' :
+                                        'https://vector-db.example.com'
+                                    }
+                                    value={formUrl}
+                                    onChange={e => setFormUrl(e.target.value)}
+                                />
+                            </div>
+
+                            {selectedProvider !== 'pgvector' && selectedProvider !== 'embedded_lancedb' && (
+                                <div className="space-y-1">
+                                    <Label>Auth Token / Key (Optional)</Label>
+                                    <Input
+                                        type="password"
+                                        placeholder="Enter authorization credentials"
+                                        value={formToken}
+                                        onChange={e => setFormToken(e.target.value)}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Default toggle */}
                     <div className="flex items-center gap-2">
@@ -181,5 +333,23 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        {/* Provider Switch Confirmation Dialog */}
+        <AlertDialog open={showConfirmSwitch} onOpenChange={setShowConfirmSwitch}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Clear unsaved changes?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        You have unsaved changes in this form. Switching providers will clear all entered data. Do you want to continue?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={cancelProviderSwitch}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmProviderSwitch}>
+                        Switch & Clear
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
     );
 };

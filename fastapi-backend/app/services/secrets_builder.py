@@ -994,6 +994,11 @@ def build_engine_secrets(
             if config:
                 vector.update(config)
             
+            # CF Vectorize: embed CF credentials directly
+            if vector_provider == 'cloudflare_vectorize':
+                cf_creds = _resolve_cf_credentials(db, edge_vector)
+                vector.update(cf_creds)
+            
             secrets['FRONTBASE_VECTOR'] = json.dumps(vector)
 
     # ─── FRONTBASE_DATASOURCES ──────────────────────────────────────────

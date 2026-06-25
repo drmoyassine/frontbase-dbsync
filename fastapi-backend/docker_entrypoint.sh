@@ -59,6 +59,11 @@ except Exception as e:
   " ; then
     echo "Database is readonly (volume ownership issue). Fixing as root..."
 
+    # Fix volume ownership BEFORE creating tables
+    echo "Ensuring /app/data is owned by UID 1000..."
+    chown -R 1000:1000 /app/data
+    chmod -R u+rwX /app/data
+
     # Create tables as root (run with escalated privileges)
     python -c "
 from app.database.config import engine
@@ -71,9 +76,12 @@ Base.metadata.create_all(bind=engine)
 print('Tables created via root (fixed)')
     "
 
-    # Signal entrypoint to restart so the app runs with proper DB state
-    echo "Restarting with fixed database..."
-    exit 149  # Custom exit code: database fixed, restart required
+    # Fix ownership again after table creation (ensures any new files are also owned by appuser)
+    echo "Re-applying ownership after bootstrap..."
+    chown -R 1000:1000 /app/data
+    chmod -R u+rwX /app/data
+
+    echo "Database ownership fixed and tables created successfully"
   else
     # Not a readonly error - let it fail with the actual message
     python -c "
@@ -83,6 +91,12 @@ Base.metadata.create_all(bind=engine)
 "
   fi
 fi
+
+# Ensure correct ownership even when bootstrap succeeded
+# This catches the case where bootstrap worked on first run but created root-owned files
+echo "Ensuring data directory is writable by appuser..."
+chown -R 1000:1000 /app/data 2>/dev/null || true
+chmod -R u+rwX /app/data 2>/dev/null || true
 echo "Tables bootstrapped successfully"
 
 # Run Alembic migrations.

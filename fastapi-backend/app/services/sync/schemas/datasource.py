@@ -31,6 +31,28 @@ class DatasourceBase(BaseModel):
     # Extra config as dict
     extra_config: Optional[Dict[str, Any]] = None
 
+    @field_validator("type", mode="before")
+    @classmethod
+    def normalize_type(cls, v: Any) -> Any:
+        """Normalize datasource type to lowercase enum value.
+
+        Handles case mismatches (e.g., "WORDPRESS_PLUGIN" → "wordpress_plugin")
+        by converting to lowercase and validating against enum values.
+        """
+        if isinstance(v, str):
+            # Convert to lowercase and match against enum values
+            v_lower = v.lower()
+            # Check if it matches any enum value
+            for enum_member in DatasourceType:
+                if enum_member.value == v_lower:
+                    return DatasourceType(v_lower)
+            # If no match, raise validation error
+            valid_values = [e.value for e in DatasourceType]
+            raise ValueError(
+                f"Invalid datasource type '{v}'. Valid types: {valid_values}"
+            )
+        return v
+
 def _ensure_url_scheme(url: Optional[str]) -> Optional[str]:
     """Ensure a URL has an http(s):// scheme.
 
@@ -122,6 +144,21 @@ class DatasourceTestRequest(BaseModel):
     app_password: Optional[str] = None
     extra_config: Optional[Dict[str, Any]] = None
     provider_account_id: Optional[str] = None  # Connected Account to resolve creds from
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def normalize_type(cls, v: Any) -> Any:
+        """Normalize datasource type to lowercase enum value."""
+        if isinstance(v, str):
+            v_lower = v.lower()
+            for enum_member in DatasourceType:
+                if enum_member.value == v_lower:
+                    return DatasourceType(v_lower)
+            valid_values = [e.value for e in DatasourceType]
+            raise ValueError(
+                f"Invalid datasource type '{v}'. Valid types: {valid_values}"
+            )
+        return v
 
     @model_validator(mode="before")
     @classmethod

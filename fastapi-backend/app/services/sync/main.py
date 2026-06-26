@@ -10,9 +10,6 @@ from app.services.sync.config import settings
 from app.services.sync.database import init_db
 from app.services.sync.routers import (
     datasources as datasources_router,
-    sync_configs as sync_configs_router,
-    sync as sync_router,
-    webhooks as webhooks_router,
     views as views_router,
     settings as settings_api_router,
     wordpress as wordpress_router,
@@ -137,16 +134,7 @@ async def get_views_openapi():
 # Prefixes are modified to be relative to the mount point (/api/sync)
 logger.info("Including routers...")
 sync_app.include_router(datasources_router.router, prefix="/datasources", tags=["Datasources"]) # Was /api/datasources
-sync_app.include_router(sync_configs_router.router, prefix="/sync-configs", tags=["Sync Configs"]) # Was /api/sync-configs
-sync_app.include_router(sync_router.router, prefix="/operations", tags=["Sync Operations"]) # Was /api/sync -> /operations
 sync_app.include_router(views_router.router, prefix="/views", tags=["Views"]) # Was /api -> /views (to separate from data APIs)
-# Wait, /api/views prefix was just /api in original file line 82.
-# "app.include_router(views_router.router, prefix="/api", tags=["Views"])"
-# If I change it to /views, it becomes /api/sync/views.
-# Original was /api/data? No, viewed file said prefix="/api".
-# Let's check views router content later. For now /views is safe.
-
-sync_app.include_router(webhooks_router.router, prefix="/webhooks", tags=["Webhooks"]) # Keep /webhooks
 sync_app.include_router(settings_api_router.router, prefix="/settings", tags=["Settings"]) # Was /api/settings
 sync_app.include_router(wordpress_router.router, prefix="/wordpress", tags=["WordPress Import"])
 logger.info("Routers included successfully")

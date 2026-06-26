@@ -23,9 +23,6 @@ from .tenant import (  # noqa: F401
 # Plans & subscriptions (cloud)
 from .plan import Plan, PlanChangeRequest  # noqa: F401
 
-# DB-Sync
-from .sync import SyncConfig, FieldMapping, SyncJob, Conflict, DatasourceView, TableSchemaCache  # noqa: F401
-
 # Edge Infrastructure
 from .edge import (  # noqa: F401
     EdgeDatabase, EdgeCache, EdgeQueue, EdgeProviderAccount,

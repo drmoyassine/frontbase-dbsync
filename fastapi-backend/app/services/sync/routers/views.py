@@ -3,6 +3,7 @@ Router for Datasource Views.
 """
 
 import logging
+import os
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -325,7 +326,7 @@ async def forward_webhook(url: str, payload: Dict[str, Any]):
 
 async def trigger_actions_engine(workflow_id: str, payload: Dict[str, Any]):
     """Forward data change events to the Actions Engine."""
-    actions_engine_url = "http://localhost:3002"
+    actions_engine_url = os.getenv("EDGE_URL", "http://localhost:3002")
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(

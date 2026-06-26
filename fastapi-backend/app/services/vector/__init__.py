@@ -98,7 +98,7 @@ def _resolve_edge_proxy_backend(provider: str, db: Session, tenant_id: Optional[
         raise ValueError("System edge engine has no URL configured")
 
     # Decrypt system_key from engine_config
-    from app.services.secrets_builder import decrypt_field
+    from app.core.security import decrypt_field
 
     config = json.loads(sys_engine.engine_config or "{}")
     system_key = decrypt_field(config.get("system_key", ""))

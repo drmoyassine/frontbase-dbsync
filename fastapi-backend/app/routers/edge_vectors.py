@@ -10,7 +10,6 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime, UTC
 import uuid
 import ipaddress
-import socket
 import urllib.parse
 import json
 import logging
@@ -36,6 +35,7 @@ from ..services.security_logger import (
     VECTOR_AUTH_FAILED,
     CREDENTIAL_RESOLUTION_FAILED,
 )
+from ..services.dns_cache import resolve_all
 
 router = APIRouter(prefix="/api/edge-vectors", tags=["edge-vectors"])
 
@@ -46,15 +46,34 @@ logger = logging.getLogger(__name__)
 # SSRF guard
 # =============================================================================
 
+def _ip_is_unsafe(ip: ipaddress._BaseAddress) -> bool:
+    """True if a resolved address must never be dialed from a connection tester.
+
+    Rejects IPv4-mapped IPv6 (``::ffff:x.x.x.x`` — can slip past ``is_global``
+    while routing to private IPv4), anything in the configured blocklist (cloud
+    metadata + RFC1918 + loopback), and any non-globally-routable address.
+    """
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        return True
+    if any(ip in network for network in DEFAULT_BLOCKED_IP_RANGES):
+        return True
+    return not ip.is_global
+
+
 def _is_safe_url(url: str, ctx: Optional[object] = None, source_ip: Optional[str] = None) -> bool:
-    """Check if URL points to a safe global IP, preventing SSRF to local/metadata IPs.
+    """Check if URL points only to safe global IPs, preventing SSRF to local/metadata IPs.
 
-    Resolves the hostname and rejects any address inside the configured blocklist
-    (cloud metadata + RFC1918 + loopback). Allowlisted domains bypass the check.
-    Failures (unresolvable host, etc.) are treated as unsafe and logged.
+    Resolves the hostname to **every** A/AAAA record (via the TTL-stabilized
+    ``dns_cache.resolve_all``) and rejects the URL if **any** resolved address
+    is private, link-local, cloud-metadata, or IPv4-mapped. Checking all records
+    (rather than the single address ``gethostbyname`` happens to return) closes
+    the mixed-A-record DNS-rebinding variant: a hostname that advertises both a
+    public and a private address is treated as unsafe. Allowlisted domains
+    bypass the check entirely; unresolvable hosts are unsafe and logged.
 
-    Also blocks IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) which can bypass
-    ip.is_global checks while mapping to private IPv4 addresses.
+    Note: the synthetic ``https://{host}/`` form is also used by the pgvector
+    DSN path (see ``_extract_pgdsn_host``) so the check can run without leaking
+    embedded DSN credentials into the security-event log.
     """
     try:
         hostname = urllib.parse.urlparse(url).hostname
@@ -65,62 +84,46 @@ def _is_safe_url(url: str, ctx: Optional[object] = None, source_ip: Optional[str
         if hostname in ALLOWED_DOMAINS:
             return True
 
-        ip = ipaddress.ip_address(socket.gethostbyname(hostname))
+        resolved = resolve_all(hostname)
+        if not resolved:
+            if SSRF_LOG_ENABLED and SSRF_LOG_ATTEMPTS:
+                log_security_event(
+                    SSRF_ATTEMPT_BLOCKED,
+                    severity="medium",
+                    details={
+                        "url": url,
+                        "hostname": hostname,
+                        "reason": "DNS resolution returned no addresses",
+                    },
+                    ctx=ctx,
+                    source_ip=source_ip,
+                )
+            return False
 
-        # Detect IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) which can bypass
-        # ip.is_global checks while mapping to private IPv4 addresses.
-        # IPv4-mapped prefix: ::ffff:0:0/96 (80 bits followed by 16 bits of ffff)
-        if ip.version == 6:
-            # Check if this is an IPv4-mapped IPv6 address
-            # Format: ::ffff:xxxx:xxxx where the last 32 bits represent an IPv4 address
-            if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
-                # Extract the embedded IPv4 address and check it against the blocklist
-                ipv4 = ip.ipv4_mapped
-                if ipv4 and any(ipv4 in network for network in DEFAULT_BLOCKED_IP_RANGES):
-                    if SSRF_LOG_ENABLED and SSRF_LOG_ATTEMPTS:
-                        log_security_event(
-                            SSRF_ATTEMPT_BLOCKED,
-                            severity="high",
-                            details={
-                                "url": url,
-                                "resolved_ip": str(ip),
-                                "ipv4_mapped": str(ipv4),
-                                "hostname": hostname,
-                                "reason": "IPv4-mapped IPv6 address blocked",
-                            },
-                            ctx=ctx,
-                            source_ip=source_ip,
-                        )
-                    return False
-                # Also reject the mapped address even if not in blocklist (defense in depth)
+        for ip_str in resolved:
+            ip = ipaddress.ip_address(ip_str)
+            if _ip_is_unsafe(ip):
                 if SSRF_LOG_ENABLED and SSRF_LOG_ATTEMPTS:
                     log_security_event(
                         SSRF_ATTEMPT_BLOCKED,
                         severity="high",
                         details={
                             "url": url,
-                            "resolved_ip": str(ip),
-                            "ipv4_mapped": str(ipv4) if ipv4 else "unknown",
                             "hostname": hostname,
-                            "reason": "IPv4-mapped IPv6 address blocked",
+                            "resolved_ips": resolved,
+                            "blocked_ip": ip_str,
+                            "ipv4_mapped": (
+                                str(ip.ipv4_mapped)
+                                if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped
+                                else None
+                            ),
                         },
                         ctx=ctx,
                         source_ip=source_ip,
                     )
                 return False
 
-        if any(ip in network for network in DEFAULT_BLOCKED_IP_RANGES):
-            if SSRF_LOG_ENABLED and SSRF_LOG_ATTEMPTS:
-                log_security_event(
-                    SSRF_ATTEMPT_BLOCKED,
-                    severity="high",
-                    details={"url": url, "resolved_ip": str(ip), "hostname": hostname},
-                    ctx=ctx,
-                    source_ip=source_ip,
-                )
-            return False
-
-        return ip.is_global
+        return True
     except Exception as e:
         if SSRF_LOG_ENABLED and SSRF_LOG_ATTEMPTS:
             log_security_event(
@@ -131,6 +134,38 @@ def _is_safe_url(url: str, ctx: Optional[object] = None, source_ip: Optional[str
                 source_ip=source_ip,
             )
         return False
+
+
+def _extract_pgdsn_host(url: str) -> Optional[str]:
+    """Extract the hostname from a Postgres DSN/URL for SSRF validation.
+
+    Handles the two DSN shapes asyncpg accepts:
+      - URL-style:   ``postgresql://user:pass@host:5432/db``
+      - key=value:   ``host=db.example.com port=5432 user=admin``
+
+    Returns the bare hostname (no credentials/port) so it can be SSRF-checked
+    via the synthetic ``https://{host}/`` form without leaking the password
+    that would be embedded in a URL-style DSN. Returns ``None`` when no host
+    can be parsed.
+    """
+    if not url:
+        return None
+    try:
+        lowered = url.lower()
+        # URL-style DSN — urlparse strips userinfo (password) from .hostname.
+        if "://" in url and ("postgres://" in lowered or "postgresql://" in lowered):
+            host = urllib.parse.urlparse(url).hostname
+            return host or None
+
+        # libpq key=value DSN — pick the first host= token.
+        if "host=" in lowered:
+            for part in url.split():
+                if part.lower().startswith("host="):
+                    host = part.split("=", 1)[1].strip().strip("'\"")
+                    return host or None
+    except Exception:
+        return None
+    return None
 
 
 # =============================================================================
@@ -377,6 +412,23 @@ async def test_vector_connection_raw(
 
     # ── pgvector / Postgres ──────────────────────────────────────────────
     if provider_lower in ("pgvector", "postgres", "postgres_vector", "supabase", "neon"):
+        # SSRF: the DSN host is not covered by the dial-out check above (which
+        # only covers http(s)/libsql). Resolve it and reject private/metadata
+        # IPs before handing the DSN to asyncpg. The synthetic https://{host}/
+        # form keeps any embedded password out of the security-event log.
+        pg_host = _extract_pgdsn_host(url)
+        if pg_host and not _is_safe_url(f"https://{pg_host}/", ctx=ctx):
+            return {
+                "success": False,
+                "message": "Invalid DSN: resolved IP is private or reserved (SSRF protection)",
+                "error_code": "SSRF_BLOCKED",
+            }
+        if not pg_host:
+            return {
+                "success": False,
+                "message": "Invalid DSN: could not parse a hostname from the connection string.",
+                "error_code": "INVALID_CONFIG",
+            }
         try:
             import asyncpg
             conn = await asyncpg.connect(url, timeout=5)

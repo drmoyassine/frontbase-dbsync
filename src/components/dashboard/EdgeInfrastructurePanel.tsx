@@ -20,8 +20,9 @@ import { EdgeDatabasesForm } from './settings/shared/EdgeDatabasesForm';
 import { EdgeQueuesForm } from './settings/shared/EdgeQueuesForm';
 import { EdgeVectorsForm } from './settings/shared/EdgeVectorsForm';
 import { EdgeEnginesPanel } from './settings/shared/EdgeEnginesPanel';
+import { SecurityEventsPanel } from './settings/shared/SecurityEventsPanel';
 
-const VALID_TABS = ['compute', 'database', 'caching', 'queues', 'vectors'] as const;
+const VALID_TABS = ['compute', 'database', 'caching', 'queues', 'vectors', 'security'] as const;
 type EdgeTab = typeof VALID_TABS[number];
 
 export const EdgeInfrastructurePanel: React.FC = () => {
@@ -45,12 +46,13 @@ export const EdgeInfrastructurePanel: React.FC = () => {
             </div>
 
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="grid w-full grid-cols-5 lg:w-[800px]">
+                <TabsList className="grid w-full grid-cols-3 md:grid-cols-6 lg:w-[900px]">
                     <TabsTrigger value="compute">Edge Compute</TabsTrigger>
                     <TabsTrigger value="database">Edge Database</TabsTrigger>
                     <TabsTrigger value="caching">Edge Caching</TabsTrigger>
                     <TabsTrigger value="queues">Edge Queues</TabsTrigger>
                     <TabsTrigger value="vectors">Edge Vector</TabsTrigger>
+                    <TabsTrigger value="security">Security</TabsTrigger>
                 </TabsList>
 
                 {/* Edge Compute (Engines + AI) Tab */}
@@ -76,6 +78,11 @@ export const EdgeInfrastructurePanel: React.FC = () => {
                 {/* Edge Vector Tab */}
                 <TabsContent value="vectors" className="space-y-6 mt-6">
                     <EdgeVectorsForm withCard />
+                </TabsContent>
+
+                {/* Security Events Tab */}
+                <TabsContent value="security" className="space-y-6 mt-6">
+                    <SecurityEventsPanel withCard />
                 </TabsContent>
 
             </Tabs>

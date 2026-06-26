@@ -483,13 +483,20 @@ async def test_vector_connection_raw(
                 if resp.is_success:
                     return {"success": True, "message": f"Connected to local edge vector store ({provider})."}
                 
-                # /api/vector/test returned an error — extract the detail from the response body
+                # /api/vector/test returned an error — extract and LOG the full detail
                 edge_error = ""
                 try:
                     body = resp.json()
                     edge_error = body.get("message") or body.get("error") or body.get("details") or ""
                 except Exception:
-                    edge_error = resp.text[:200] if resp.text else ""
+                    edge_error = resp.text[:500] if resp.text else ""
+                
+                import logging
+                _logger = logging.getLogger(__name__)
+                _logger.warning(
+                    "[Vector Test] Edge /api/vector/test returned %d: %s",
+                    resp.status_code, edge_error or resp.text[:500],
+                )
                 
                 # For system (local) providers, a 500 on /api/vector/test often means the
                 # DB file hasn't been written yet (first run) but the edge engine itself is

@@ -48,8 +48,9 @@ def supports_remote_delete_for_model(model_kind: str, provider: str) -> bool:
     """Check if a model_kind/provider combo supports remote deletion.
 
     Args:
-        model_kind: "database", "cache", or "queue"
-        provider: the edge resource provider (e.g. "cloudflare", "upstash", "turso")
+        model_kind: "database", "cache", "queue", or "vector"
+        provider: the edge resource provider (e.g. "cloudflare", "upstash", "turso",
+                  "cloudflare_vectorize", "turso_vector")
     """
     resource_type = _RESOURCE_TYPE_MAP.get(model_kind, {}).get(provider, "")
     return supports_remote_delete(provider, resource_type)
@@ -75,6 +76,13 @@ _RESOURCE_TYPE_MAP: dict[str, dict[str, str]] = {
     "queue": {
         "cloudflare": "queue",
     },
+    # edge_vectors provider → resource_type
+    # NB: vector providers differ from their account provider (e.g.
+    # cloudflare_vectorize → cloudflare account), so they get their own keys.
+    "vector": {
+        "cloudflare_vectorize": "vectorize",
+        "turso_vector": "turso_db",  # a Turso vector store IS a Turso DB
+    },
 }
 
 
@@ -89,8 +97,9 @@ async def delete_resource_for_edge_model(
     """Convenience wrapper: resolve creds from connected account, delete the remote resource.
 
     Args:
-        model_kind: "database", "cache", or "queue"
-        provider: the edge resource provider (e.g. "cloudflare", "upstash", "turso")
+        model_kind: "database", "cache", "queue", or "vector"
+        provider: the edge resource provider (e.g. "cloudflare", "upstash", "turso",
+                  "cloudflare_vectorize", "turso_vector")
         resource_url: the stored URL (e.g. "d1://uuid", rest URL, libsql:// URL)
         provider_config_json: JSON string with extra config (e.g. cf_account_id)
         provider_account_id: FK to edge_providers_accounts
@@ -228,6 +237,52 @@ async def _delete_cf_kv(creds: dict[str, object], **kwargs: object) -> dict[str,
 
 async def _delete_cf_queue(creds: dict[str, object], **kwargs: object) -> dict[str, object]:
     return await _delete_cf_resource(creds, "queue", **kwargs)
+
+
+async def _delete_cf_vectorize(creds: dict[str, object], **kwargs: object) -> dict[str, object]:
+    """Delete a Cloudflare Vectorize index by name.
+
+    The stored resource URL is the index name (optionally prefixed with a
+    synthetic ``vectorize://`` scheme). The account ID is resolved from config
+    or the first account reachable by the token.
+    """
+    token = str(creds.get("api_token", ""))
+    if not token:
+        return {"success": False, "detail": "No API token in credentials"}
+
+    config: dict[str, object] = dict(kwargs.get("config", {}))  # type: ignore[arg-type]
+    resource_url = str(kwargs.get("resource_url", ""))
+
+    index_name = resource_url
+    for prefix in ("vectorize://", "cfv://", "cf-vectorize://"):
+        index_name = index_name.replace(prefix, "")
+    index_name = index_name.strip()
+    if not index_name:
+        return {"success": False, "detail": "Could not extract Vectorize index name"}
+
+    acct_id = await _resolve_cf_account_id(creds, config)
+    if not acct_id:
+        return {"success": False, "detail": "Could not resolve CF account ID"}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.delete(
+            f"https://api.cloudflare.com/client/v4/accounts/{acct_id}/vectorize/v2/indexes/{index_name}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    if resp.status_code in (200, 204):
+        data = resp.json() if resp.status_code == 200 else {}
+        if resp.status_code == 204 or data.get("success"):
+            return {"success": True}
+        errors = data.get("errors", [{}])
+        return {"success": False, "detail": errors[0].get("message", "Delete failed")}
+
+    try:
+        data = resp.json()
+        errors = data.get("errors", [{}])
+        return {"success": False, "detail": errors[0].get("message", f"HTTP {resp.status_code}")}
+    except Exception:
+        return {"success": False, "detail": f"HTTP {resp.status_code}"}
 
 
 # =============================================================================
@@ -444,5 +499,13 @@ _DELETERS: dict[str, dict[str, object]] = {
     },
     "postgres": {
         "pg_schema": _delete_pg_schema,
+    },
+    # Vector providers are keyed by their edge-resource provider (which differs
+    # from the account provider) so supports_remote_delete_for_model resolves.
+    "cloudflare_vectorize": {
+        "vectorize": _delete_cf_vectorize,
+    },
+    "turso_vector": {
+        "turso_db": _delete_turso_db,  # reuse: a Turso vector store is a Turso DB
     },
 }

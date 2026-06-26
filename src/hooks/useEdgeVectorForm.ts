@@ -30,6 +30,8 @@ export function useEdgeVectorForm() {
     const [formIsDefault, setFormIsDefault] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [formAccountId, setFormAccountId] = useState<string | null>(null);
+    // Provider-specific, non-secret config (dimensions, metric, table name, …).
+    const [formProviderConfig, setFormProviderConfig] = useState<Record<string, any>>({});
 
     // Test connection & Delete
     const [testingId, setTestingId] = useState<string | null>(null);
@@ -45,6 +47,7 @@ export function useEdgeVectorForm() {
         setFormToken('');
         setFormIsDefault(false);
         setFormAccountId(null);
+        setFormProviderConfig({});
         setError(null);
     };
 
@@ -60,6 +63,7 @@ export function useEdgeVectorForm() {
         setFormName(vector.name);
         setFormUrl(vector.vector_url);
         setFormIsDefault(vector.is_default);
+        setFormProviderConfig(vector.provider_config ? { ...vector.provider_config } : {});
         setDialogOpen(true);
     };
 
@@ -75,6 +79,9 @@ export function useEdgeVectorForm() {
             };
             if (formToken) payload.vector_token = formToken;
             if (formAccountId) payload.provider_account_id = formAccountId;
+            // Provider-specific config. Backend cleans empties on create and
+            // merges (preserving server-side keys) on update.
+            payload.provider_config = { ...formProviderConfig };
 
             const url = editingId
                 ? `${API_BASE}/api/edge-vectors/${editingId}`
@@ -100,16 +107,18 @@ export function useEdgeVectorForm() {
         }
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = async (id: string, deleteRemote = false) => {
         setDeletingId(id);
         try {
-            const url = `${API_BASE}/api/edge-vectors/${id}`;
+            const qs = deleteRemote ? '?delete_remote=true' : '';
+            const url = `${API_BASE}/api/edge-vectors/${id}${qs}`;
             const res = await fetch(url, { method: 'DELETE' });
             if (!res.ok) {
                 const data = await res.json();
                 throw new Error(data.detail || `HTTP ${res.status}`);
             }
-            toast.success('Vector store connection deleted');
+            const data = await res.json().catch(() => ({}));
+            toast.success(data.message || 'Vector store connection deleted');
             refetchVectors();
         } catch (e: any) {
             toast.error(e.message || 'Delete failed');
@@ -176,6 +185,9 @@ export function useEdgeVectorForm() {
         formIsDefault,
         setFormIsDefault,
         isSaving,
+        // Provider-specific config
+        formProviderConfig,
+        setFormProviderConfig,
         // Actions
         openCreate,
         openEdit,

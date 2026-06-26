@@ -44,3 +44,7 @@ from .file_move_job import FileMoveJob  # noqa: F401
 
 # Themes
 from .theme import ComponentTheme  # noqa: F401
+
+# Security auditing — registered with Base via side-effect import so the
+# startup create_all() provisions the `security_events` table.
+from app.services.security_logger import SecurityEvent  # noqa: F401

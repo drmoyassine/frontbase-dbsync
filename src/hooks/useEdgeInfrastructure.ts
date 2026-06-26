@@ -104,6 +104,8 @@ export interface EdgeVector {
     is_system: boolean;
     provider_account_id?: string | null;
     account_name?: string | null;
+    /** Provider-specific, non-secret config (dimensions, metric, table name, …). Already redacted server-side. */
+    provider_config?: Record<string, any> | null;
     created_at: string;
     updated_at: string;
     engine_count: number;
@@ -359,8 +361,9 @@ export const edgeInfrastructureApi = {
         if (!res.ok) throw new Error('Failed to update edge vector store');
         return res.json();
     },
-    deleteEdgeVector: async (id: string): Promise<void> => {
-        const res = await fetch(`${API_BASE}/api/edge-vectors/${id}`, { method: 'DELETE' });
+    deleteEdgeVector: async (id: string, deleteRemote = false): Promise<void> => {
+        const qs = deleteRemote ? '?delete_remote=true' : '';
+        const res = await fetch(`${API_BASE}/api/edge-vectors/${id}${qs}`, { method: 'DELETE' });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             throw new Error(err.detail || 'Failed to delete edge vector store');
@@ -415,11 +418,11 @@ export const edgeInfrastructureApi = {
     },
 
     // Batch Operations — Vectors
-    batchDeleteVectors: async (ids: string[]): Promise<BatchResult> => {
+    batchDeleteVectors: async (ids: string[], delete_remote = false): Promise<BatchResult> => {
         const res = await fetch(`${API_BASE}/api/edge-vectors/batch/delete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids }),
+            body: JSON.stringify({ ids, delete_remote }),
         });
         if (!res.ok) throw new Error('Batch delete vectors failed');
         return res.json();

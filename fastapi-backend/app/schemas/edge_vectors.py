@@ -3,7 +3,7 @@ Edge Vector Schemas — Pydantic models for the edge-vectors API.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 
 class EdgeVectorCreate(BaseModel):
@@ -13,6 +13,13 @@ class EdgeVectorCreate(BaseModel):
     vector_token: Optional[str] = None
     provider_account_id: Optional[str] = None  # FK → Connected Account
     is_default: bool = False
+    # Provider-specific, non-secret tuning (dimensions, metric, table name, …).
+    # Secrets never belong here — they live in the encrypted vector_token or are
+    # resolved from the linked Connected Account at deploy time.
+    provider_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Provider-specific config like dimensions, metric type, table name (no secrets)",
+    )
 
 
 class EdgeVectorUpdate(BaseModel):
@@ -22,6 +29,7 @@ class EdgeVectorUpdate(BaseModel):
     vector_token: Optional[str] = None
     provider_account_id: Optional[str] = None
     is_default: Optional[bool] = None
+    provider_config: Optional[Dict[str, Any]] = None
 
 
 class EdgeVectorResponse(BaseModel):
@@ -34,6 +42,8 @@ class EdgeVectorResponse(BaseModel):
     is_system: bool = False  # True = pre-seeded, cannot be deleted
     provider_account_id: Optional[str] = None
     account_name: Optional[str] = None
+    # Provider-specific config — already redacted of secrets server-side.
+    provider_config: Optional[Dict[str, Any]] = None
     created_at: str
     updated_at: str
     engine_count: int = 0  # Number of edge engines using this vector store

@@ -11,9 +11,29 @@ export interface TestResult {
     success: boolean;
     message: string;
     latency_ms?: number;
+    error_code?: string;
 }
 
+/**
+ * Actionable guidance for known backend error codes. Shown as a second line in
+ * the failure toast so users know exactly what to fix instead of guessing.
+ */
+const ERROR_CODE_GUIDANCE: Record<string, string> = {
+    AUTH_FAILED: 'Check the auth token / API key, or relink the Connected Account.',
+    EXTENSION_MISSING: "Run: CREATE EXTENSION vector;  on the target database.",
+    NOT_FOUND: 'The resource was not found under this account — verify the URL/index name.',
+    SSRF_BLOCKED: 'The URL resolves to a private or reserved IP and was blocked for security.',
+    TIMEOUT: 'The provider did not respond in time. Retry, or check network egress.',
+    INVALID_URL: 'URL scheme is not supported. Use https://, postgres://, or libsql://.',
+    INVALID_CONFIG: 'A required field is missing — check the connection details.',
+    NO_ACCOUNT: 'No provider account is accessible with these credentials.',
+};
+
 export const showTestToast = (result: TestResult, label: string) => {
+    const guidance = !result.success && result.error_code
+        ? ERROR_CODE_GUIDANCE[result.error_code]
+        : undefined;
+
     toast.custom((id) => (
         React.createElement('div', {
             className: 'w-[356px] rounded-lg border bg-background shadow-lg p-3 space-y-2',
@@ -31,7 +51,15 @@ export const showTestToast = (result: TestResult, label: string) => {
                     React.createElement('span', { className: 'text-sm font-medium' }, label),
                     React.createElement('span', { className: 'text-xs text-muted-foreground ml-2' }, result.message)
                 )
-            )
+            ),
+            // Actionable guidance line for known failure codes.
+            guidance
+                ? React.createElement('div', { className: 'flex items-start gap-1.5 pl-7' },
+                    React.createElement('span', { className: 'text-[11px] text-amber-600 dark:text-amber-400 leading-snug' },
+                        guidance
+                    )
+                )
+                : null
         )
     ), { duration: result.success ? 4000 : 8000 });
 };

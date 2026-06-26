@@ -6,118 +6,414 @@ Mirrors the EdgeDatabase/EdgeCache pattern.
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, UTC
 import uuid
 import ipaddress
 import socket
 import urllib.parse
-from sqlalchemy import func
+import json
+import logging
+import httpx
 
 from ..database.config import SessionLocal
 from ..models.models import EdgeVector, EdgeEngine, EdgeProviderAccount
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
 from ..schemas.edge_vectors import EdgeVectorCreate, EdgeVectorUpdate, EdgeVectorResponse
-from ..core.security import encrypt_field, decrypt_field
+from ..core.security import encrypt_field, decrypt_field, get_provider_creds
+from ..config.edge_security import (
+    DEFAULT_BLOCKED_IP_RANGES,
+    ALLOWED_URL_SCHEMES,
+    ALLOWED_DOMAINS,
+    SSRF_LOG_ENABLED,
+    SSRF_LOG_ATTEMPTS,
+)
+from ..services.security_logger import (
+    log_security_event,
+    SSRF_ATTEMPT_BLOCKED,
+    VECTOR_CONNECTION_FAILED,
+    VECTOR_AUTH_FAILED,
+    CREDENTIAL_RESOLUTION_FAILED,
+)
 
 router = APIRouter(prefix="/api/edge-vectors", tags=["edge-vectors"])
 
+logger = logging.getLogger(__name__)
+
 
 # =============================================================================
-# Helper connection tester
+# SSRF guard
 # =============================================================================
 
-# Metadata IP ranges that MUST be blocked (cloud provider metadata services)
-METADATA_IP_RANGES = (
-    ipaddress.ip_network('169.254.0.0/16'),  # AWS, GCP, Azure metadata
-    ipaddress.ip_network('100.100.0.0/16'),  # Aliyun metadata
-    ipaddress.ip_network('192.0.0.2/32'),     # Cloudflare DNS (metadata-like)
-)
+def _is_safe_url(url: str, ctx: Optional[object] = None, source_ip: Optional[str] = None) -> bool:
+    """Check if URL points to a safe global IP, preventing SSRF to local/metadata IPs.
 
-def _is_safe_url(url: str) -> bool:
-    """Check if URL points to a safe global IP, preventing SSRF to local/metadata IPs."""
+    Resolves the hostname and rejects any address inside the configured blocklist
+    (cloud metadata + RFC1918 + loopback). Allowlisted domains bypass the check.
+    Failures (unresolvable host, etc.) are treated as unsafe and logged.
+
+    Also blocks IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) which can bypass
+    ip.is_global checks while mapping to private IPv4 addresses.
+    """
     try:
         hostname = urllib.parse.urlparse(url).hostname
         if not hostname:
             return False
+
+        # Allowlisted internal domains bypass the IP gate.
+        if hostname in ALLOWED_DOMAINS:
+            return True
+
         ip = ipaddress.ip_address(socket.gethostbyname(hostname))
 
-        # Explicitly check against metadata IP ranges
-        if any(ip in network for network in METADATA_IP_RANGES):
+        # Detect IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) which can bypass
+        # ip.is_global checks while mapping to private IPv4 addresses.
+        # IPv4-mapped prefix: ::ffff:0:0/96 (80 bits followed by 16 bits of ffff)
+        if ip.version == 6:
+            # Check if this is an IPv4-mapped IPv6 address
+            # Format: ::ffff:xxxx:xxxx where the last 32 bits represent an IPv4 address
+            if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+                # Extract the embedded IPv4 address and check it against the blocklist
+                ipv4 = ip.ipv4_mapped
+                if ipv4 and any(ipv4 in network for network in DEFAULT_BLOCKED_IP_RANGES):
+                    if SSRF_LOG_ENABLED and SSRF_LOG_ATTEMPTS:
+                        log_security_event(
+                            SSRF_ATTEMPT_BLOCKED,
+                            severity="high",
+                            details={
+                                "url": url,
+                                "resolved_ip": str(ip),
+                                "ipv4_mapped": str(ipv4),
+                                "hostname": hostname,
+                                "reason": "IPv4-mapped IPv6 address blocked",
+                            },
+                            ctx=ctx,
+                            source_ip=source_ip,
+                        )
+                    return False
+                # Also reject the mapped address even if not in blocklist (defense in depth)
+                if SSRF_LOG_ENABLED and SSRF_LOG_ATTEMPTS:
+                    log_security_event(
+                        SSRF_ATTEMPT_BLOCKED,
+                        severity="high",
+                        details={
+                            "url": url,
+                            "resolved_ip": str(ip),
+                            "ipv4_mapped": str(ipv4) if ipv4 else "unknown",
+                            "hostname": hostname,
+                            "reason": "IPv4-mapped IPv6 address blocked",
+                        },
+                        ctx=ctx,
+                        source_ip=source_ip,
+                    )
+                return False
+
+        if any(ip in network for network in DEFAULT_BLOCKED_IP_RANGES):
+            if SSRF_LOG_ENABLED and SSRF_LOG_ATTEMPTS:
+                log_security_event(
+                    SSRF_ATTEMPT_BLOCKED,
+                    severity="high",
+                    details={"url": url, "resolved_ip": str(ip), "hostname": hostname},
+                    ctx=ctx,
+                    source_ip=source_ip,
+                )
             return False
 
         return ip.is_global
-    except Exception:
+    except Exception as e:
+        if SSRF_LOG_ENABLED and SSRF_LOG_ATTEMPTS:
+            log_security_event(
+                SSRF_ATTEMPT_BLOCKED,
+                severity="medium",
+                details={"url": url, "error": str(e)},
+                ctx=ctx,
+                source_ip=source_ip,
+            )
         return False
 
 
-async def test_vector_connection_raw(provider: str, url: str, token: Optional[str] = None, provider_account_id: Optional[str] = None) -> dict:
-    """Test connection to a vector database with URL validation to prevent SSRF."""
+# =============================================================================
+# Helpers: provider_config redaction + Cloudflare credential resolution
+# =============================================================================
+
+# Substrings that mark a provider_config key as secret — never echoed to clients.
+_SENSITIVE_CONFIG_HINTS = ("token", "secret", "password", "credential", "key", "value")
+
+
+def _redact_provider_config(raw: Any) -> Optional[Dict[str, Any]]:
+    """Parse + redact a provider_config blob for safe return to the client.
+
+    Drops any key whose name hints at a secret (token/secret/password/...).
+    Returns None when there is nothing to surface.
+    """
+    if not raw:
+        return None
+    try:
+        cfg = json.loads(str(raw)) if isinstance(raw, str) else dict(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(cfg, dict) or not cfg:
+        return None
+    redacted = {
+        k: v for k, v in cfg.items()
+        if not any(h in str(k).lower() for h in _SENSITIVE_CONFIG_HINTS)
+    }
+    return redacted or None
+
+
+def _resolve_cf_vectorize_creds(
+    db: object | None,
+    token: Optional[str],
+    provider_account_id: Optional[str],
+    provider_config: Optional[Dict[str, Any]],
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve (api_token, account_id) for a Cloudflare Vectorize connection.
+
+    Precedence: explicit vector_token → provider_config.cf_account_id, then fall
+    back to the linked Connected Account for whatever is still missing.
+    """
+    api_token = token or None
+    account_id = None
+    if provider_config:
+        account_id = provider_config.get("cf_account_id") or None
+
+    if (not api_token or not account_id) and provider_account_id and db:
+        try:
+            creds = get_provider_creds(str(provider_account_id), db)  # type: ignore[arg-type]
+            if not api_token:
+                api_token = creds.get("api_token") or creds.get("access_token")
+            if not account_id:
+                account_id = creds.get("account_id") or creds.get("cf_account_id")
+        except Exception as e:
+            log_security_event(
+                CREDENTIAL_RESOLUTION_FAILED,
+                severity="medium",
+                details={"provider": "cloudflare_vectorize", "error": str(e)},
+            )
+    return api_token, account_id
+
+
+# =============================================================================
+# Provider connection testers
+# =============================================================================
+
+async def _test_cloudflare_vectorize(
+    index_name: str,
+    api_token: Optional[str],
+    account_id: Optional[str],
+    ctx: Optional[object] = None,
+) -> dict:
+    """Verify a Cloudflare Vectorize index exists and the token can read it."""
+    index_name = (index_name or "").strip()
+    if not index_name:
+        return {"success": False, "message": "Missing Vectorize index name.", "error_code": "INVALID_CONFIG"}
+    if not api_token:
+        log_security_event(
+            VECTOR_AUTH_FAILED, severity="high",
+            details={"provider": "cloudflare_vectorize", "reason": "no_api_token"}, ctx=ctx,
+        )
+        return {
+            "success": False,
+            "message": "No Cloudflare API token. Link a Cloudflare Connected Account or enter credentials.",
+            "error_code": "AUTH_FAILED",
+        }
+
+    headers = {"Authorization": f"Bearer {api_token}"}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Resolve account ID by listing accounts when not supplied.
+            accounts: List[Dict[str, Any]] = []
+            if account_id:
+                accounts = [{"id": str(account_id)}]
+            else:
+                acct_resp = await client.get(
+                    "https://api.cloudflare.com/client/v4/accounts", headers=headers
+                )
+                if acct_resp.status_code in (401, 403):
+                    log_security_event(
+                        VECTOR_AUTH_FAILED, severity="high",
+                        details={"provider": "cloudflare_vectorize", "reason": "bad_token"}, ctx=ctx,
+                    )
+                    return {"success": False, "message": "Cloudflare authentication failed: invalid API token.", "error_code": "AUTH_FAILED"}
+                if not acct_resp.is_success:
+                    return {"success": False, "message": f"Cloudflare API error (HTTP {acct_resp.status_code}).", "error_code": "PROVIDER_ERROR"}
+                accounts = acct_resp.json().get("result", []) or []
+                if not accounts:
+                    return {"success": False, "message": "No Cloudflare accounts accessible with this token.", "error_code": "NO_ACCOUNT"}
+
+            last_status: Optional[int] = None
+            for acct in accounts:
+                acct_id = acct.get("id")
+                resp = await client.get(
+                    f"https://api.cloudflare.com/client/v4/accounts/{acct_id}/vectorize/v2/indexes/{index_name}",
+                    headers=headers,
+                )
+                if resp.status_code == 200:
+                    result = (resp.json().get("result") or {})
+                    cfg = result.get("config") or {}
+                    dims = cfg.get("dimensions", "unknown")
+                    metric = cfg.get("metric", "unknown")
+                    return {
+                        "success": True,
+                        "message": f"Connected to Vectorize index '{index_name}' (dimensions: {dims}, metric: {metric}).",
+                    }
+                if resp.status_code in (401, 403):
+                    return {"success": False, "message": "Cloudflare token lacks Vectorize read access.", "error_code": "AUTH_FAILED"}
+                last_status = resp.status_code
+
+            if last_status == 404:
+                return {"success": False, "message": f"Vectorize index '{index_name}' not found.", "error_code": "NOT_FOUND"}
+            return {"success": False, "message": f"Cloudflare API error (HTTP {last_status}).", "error_code": "PROVIDER_ERROR"}
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Connection timeout: Cloudflare API did not respond.", "error_code": "TIMEOUT"}
+    except Exception as e:
+        log_security_event(
+            VECTOR_CONNECTION_FAILED, severity="medium",
+            details={"provider": "cloudflare_vectorize", "error": str(e)}, ctx=ctx,
+        )
+        return {"success": False, "message": f"Connection failed: {e}", "error_code": "CONNECTION_ERROR"}
+
+
+async def _test_turso_vector(
+    url: str,
+    token: Optional[str],
+    provider_account_id: Optional[str],
+    db: object | None = None,
+    ctx: Optional[object] = None,
+) -> dict:
+    """Verify a Turso (libsql) database is reachable and the token is valid."""
+    raw_url = (url or "").strip()
+    if not raw_url:
+        return {"success": False, "message": "Missing Turso database URL.", "error_code": "INVALID_CONFIG"}
+
+    # Resolve token from the linked Connected Account when not supplied inline.
+    if not token and provider_account_id and db:
+        try:
+            creds = get_provider_creds(str(provider_account_id), db)  # type: ignore[arg-type]
+            token = creds.get("db_token") or creds.get("api_token") or token
+        except Exception as e:
+            log_security_event(
+                CREDENTIAL_RESOLUTION_FAILED, severity="medium",
+                details={"provider": "turso_vector", "error": str(e)}, ctx=ctx,
+            )
+    if not token:
+        log_security_event(
+            VECTOR_AUTH_FAILED, severity="high",
+            details={"provider": "turso_vector", "reason": "no_token"}, ctx=ctx,
+        )
+        return {
+            "success": False,
+            "message": "No Turso credentials. Link a Turso Connected Account to authorize access.",
+            "error_code": "AUTH_FAILED",
+        }
+
+    api_url = raw_url.replace("libsql://", "https://")
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # libsql-server (Turso) HTTP API: array of SQL strings over the root endpoint.
+            resp = await client.post(api_url, json={"statements": ["SELECT 1"]}, headers=headers)
+            if resp.status_code in (401, 403):
+                return {"success": False, "message": "Turso authentication failed: invalid token.", "error_code": "AUTH_FAILED"}
+            if resp.status_code == 404:
+                return {"success": False, "message": "Turso database not found: check the database URL.", "error_code": "NOT_FOUND"}
+            if not resp.is_success:
+                return {"success": False, "message": f"Turso API error (HTTP {resp.status_code}).", "error_code": "PROVIDER_ERROR"}
+            return {"success": True, "message": "Connected to Turso database. Vector tables are created on first use."}
+    except httpx.TimeoutException:
+        return {"success": False, "message": "Connection timeout: Turso did not respond.", "error_code": "TIMEOUT"}
+    except Exception as e:
+        log_security_event(
+            VECTOR_CONNECTION_FAILED, severity="medium",
+            details={"provider": "turso_vector", "error": str(e)}, ctx=ctx,
+        )
+        return {"success": False, "message": f"Connection failed: {e}", "error_code": "CONNECTION_ERROR"}
+
+
+async def test_vector_connection_raw(
+    provider: str,
+    url: str,
+    token: Optional[str] = None,
+    provider_account_id: Optional[str] = None,
+    provider_config: Optional[Dict[str, Any]] = None,
+    db: object | None = None,
+    ctx: Optional[object] = None,
+) -> dict:
+    """Test connection to a vector database with SSRF validation.
+
+    Dispatches to a provider-specific tester and returns a dict with
+    ``success``, ``message`` and (on failure) ``error_code``.
+    """
     provider_lower = (provider or "").lower()
     url_lower = (url or "").lower()
 
-    # Self-hosted embedded LanceDB check
+    # Self-hosted embedded LanceDB — local path only, never dialed out.
     if provider_lower == "embedded_lancedb":
         if not url_lower.startswith("/app/data/") and not url_lower.startswith("./data/"):
             return {
                 "success": False,
-                "message": "Embedded LanceDB path must be under /app/data/ or ./data/ (self-hosted only)"
+                "message": "Embedded LanceDB path must be under /app/data/ or ./data/ (self-hosted only)",
+                "error_code": "INVALID_CONFIG",
             }
-        return {
-            "success": True,
-            "message": "Local LanceDB path validated."
-        }
+        return {"success": True, "message": "Local LanceDB path validated."}
 
-    # SSRF protection: restrict URL prefixes to known-safe patterns
-    allowed_prefixes = (
-        "postgres://", "postgresql://",  # PostgreSQL/pgvector
-        "https://", "http://",            # Cloud providers (Cloudflare Vectorize, Turso, etc.)
-    )
-    if not url_lower.startswith(allowed_prefixes):
+    # SSRF protection: restrict URL schemes to a known-safe allowlist.
+    if not url_lower.startswith(ALLOWED_URL_SCHEMES):
         return {
             "success": False,
-            "message": f"Invalid URL format: must start with one of {allowed_prefixes}"
+            "message": f"Invalid URL format: must start with one of {', '.join(ALLOWED_URL_SCHEMES)}",
+            "error_code": "INVALID_URL",
         }
 
-    if url_lower.startswith("http://") or url_lower.startswith("https://"):
-        if not _is_safe_url(url):
+    # For dial-out schemes, resolve the host and reject private/metadata IPs.
+    if url_lower.startswith(("http://", "https://", "libsql://")):
+        if not _is_safe_url(url, ctx=ctx):
             return {
                 "success": False,
-                "message": "Invalid URL: resolved IP is private or reserved (SSRF protection)"
+                "message": "Invalid URL: resolved IP is private or reserved (SSRF protection)",
+                "error_code": "SSRF_BLOCKED",
             }
 
+    # ── pgvector / Postgres ──────────────────────────────────────────────
     if provider_lower in ("pgvector", "postgres", "postgres_vector", "supabase", "neon"):
         try:
             import asyncpg
-            # Simple connect check
             conn = await asyncpg.connect(url, timeout=5)
             try:
                 await conn.execute("SELECT 1")
                 has_vector = await conn.fetchval(
                     "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector')"
                 )
-                message = "Successfully connected to database."
-                if has_vector:
-                    message += " pgvector extension is available."
-                else:
-                    message += " WARNING: pgvector extension is NOT installed. Run 'CREATE EXTENSION vector' on database."
-                return {"success": True, "message": message}
+                if not has_vector:
+                    return {
+                        "success": False,
+                        "message": "Reached the database, but the pgvector extension is not installed. "
+                                   "Run 'CREATE EXTENSION vector;' on your database.",
+                        "error_code": "EXTENSION_MISSING",
+                    }
+                return {"success": True, "message": "Connected to pgvector database; extension is available."}
             finally:
                 await conn.close()
-        except Exception as e:
-            # Return generic error to prevent information disclosure
-            return {"success": False, "message": "Connection failed: unable to reach database"}
-    else:
-        # Phase 1: Stubbed backends (cf vectorize, turso, etc.)
-        # TODO: Phase 2 - Implement actual connection validation:
-        # - Cloudflare Vectorize: Ping https://api.cloudflare.com/client/v4/accounts/{account_id}/vectorize/indexes
-        # - Turso Vector: Execute a simple vector query via libsql client
-        # Consider using httpx for HTTP-based validation and async-libsql for Turso
-        return {
-            "success": True,
-            "message": f"Verification bypassed: provider '{provider}' is accepted, connection check is stubbed."
-        }
+        except Exception:
+            # Generic message to avoid leaking topology / credentials.
+            return {"success": False, "message": "Connection failed: unable to reach or authenticate with the database.", "error_code": "CONNECTION_ERROR"}
+
+    # ── Cloudflare Vectorize ─────────────────────────────────────────────
+    if provider_lower == "cloudflare_vectorize":
+        api_token, account_id = _resolve_cf_vectorize_creds(db, token, provider_account_id, provider_config)
+        return await _test_cloudflare_vectorize(url, api_token, account_id, ctx)
+
+    # ── Turso Vector ─────────────────────────────────────────────────────
+    if provider_lower == "turso_vector":
+        return await _test_turso_vector(url, token, provider_account_id, db, ctx)
+
+    # Unknown / future providers — accept but flag that validation is a no-op.
+    return {
+        "success": True,
+        "message": f"Provider '{provider}' accepted; connection validation is not yet implemented for this provider.",
+        "error_code": "VALIDATION_SKIPPED",
+    }
 
 
 # =============================================================================
@@ -126,6 +422,7 @@ async def test_vector_connection_raw(provider: str, url: str, token: Optional[st
 
 class BatchDeleteVectorRequest(BaseModel):
     ids: List[str]
+    delete_remote: bool = False
 
 class BatchResult(BaseModel):
     success: List[str] = []
@@ -137,6 +434,7 @@ class TestConnectionRequest(BaseModel):
     vector_url: str
     vector_token: Optional[str] = None
     provider_account_id: Optional[str] = None
+    provider_config: Optional[Dict[str, Any]] = None
 
 
 # =============================================================================
@@ -194,6 +492,7 @@ def _serialize_vector(vector, db, engine_count: int = 0, linked_engines: Optiona
         is_system=bool(getattr(vector, 'is_system', False)),
         provider_account_id=str(vector.provider_account_id) if vector.provider_account_id is not None else None,
         account_name=account_name,
+        provider_config=_redact_provider_config(getattr(vector, 'provider_config', None)),
         created_at=str(vector.created_at),
         updated_at=str(vector.updated_at),
         engine_count=engine_count,
@@ -219,16 +518,16 @@ async def list_edge_vectors(ctx: TenantContext | None = Depends(get_tenant_conte
                 query = query.filter(EdgeVector.project_id == project.id)
             else:
                 return []
-                
+
         vectors = query.order_by(EdgeVector.created_at.desc()).all()
-        
+
         # Pre-fetch engine counts + linked engines to avoid N+1 query
         # We query all engines linked to ANY of these vector stores for this tenant
         vector_ids = [v.id for v in vectors]
         engine_query = db.query(EdgeEngine).filter(EdgeEngine.edge_vector_id.in_(vector_ids))
         if ctx and ctx.tenant_id and project:
             engine_query = engine_query.filter(EdgeEngine.project_id == project.id)
-            
+
         linked_engines_map = {vid: [] for vid in vector_ids}
         for e in engine_query.all():
             linked_engines_map[e.edge_vector_id].append({
@@ -275,6 +574,13 @@ async def create_edge_vector(payload: EdgeVectorCreate, ctx: TenantContext | Non
             if project:
                 project_id = project.id
 
+        # Store only truthy, user-supplied config values. Server-side keys
+        # (cf_account_id, scoped tokens, …) are added later by lifecycle hooks.
+        cleaned_config = {
+            k: v for k, v in (payload.provider_config or {}).items() if v
+        } if payload.provider_config else None
+        provider_config_json = json.dumps(cleaned_config) if cleaned_config else None
+
         vector = EdgeVector(
             id=str(uuid.uuid4()),
             name=payload.name,
@@ -282,6 +588,7 @@ async def create_edge_vector(payload: EdgeVectorCreate, ctx: TenantContext | Non
             vector_url=payload.vector_url,
             vector_token=encrypt_field(payload.vector_token),
             provider_account_id=payload.provider_account_id,
+            provider_config=provider_config_json,  # type: ignore[assignment]
             is_default=False,  # Start as non-default to avoid race
             created_at=now,
             updated_at=now,
@@ -340,6 +647,35 @@ async def update_edge_vector(vector_id: str, payload: EdgeVectorUpdate, ctx: Ten
             vector.vector_token = encrypt_field(payload.vector_token)  # type: ignore[assignment]
         if payload.provider_account_id is not None:
             vector.provider_account_id = payload.provider_account_id  # type: ignore[assignment]
+        if payload.provider_config is not None:
+            # Merge user-supplied config over existing, preserving server-managed
+            # keys (cf_account_id, scoped tokens, …) the redacted client can't see.
+            # Truthy values set/update a key; empty values clear it.
+            # An empty dict {} explicitly clears all user-visible config keys.
+            existing_cfg: Dict[str, Any] = {}
+            if vector.provider_config:
+                try:
+                    existing_cfg = json.loads(str(vector.provider_config)) or {}
+                except (json.JSONDecodeError, TypeError):
+                    existing_cfg = {}
+
+            # Empty dict {} means clear all user-visible config
+            if len(payload.provider_config) == 0:
+                # Keep only server-managed keys (those with sensitive-sounding names)
+                # that the client can't see in the redacted response
+                server_managed = {
+                    k: v for k, v in existing_cfg.items()
+                    if any(h in str(k).lower() for h in _SENSITIVE_CONFIG_HINTS)
+                }
+                vector.provider_config = json.dumps(server_managed) if server_managed else None  # type: ignore[assignment]
+            else:
+                # Merge: apply user updates, preserving server-managed keys
+                for k, v in payload.provider_config.items():
+                    if v:
+                        existing_cfg[k] = v
+                    else:
+                        existing_cfg.pop(k, None)
+                vector.provider_config = json.dumps(existing_cfg) if existing_cfg else None  # type: ignore[assignment]
         if payload.is_default is not None:
             if payload.is_default:
                 # Clear other defaults atomically within transaction
@@ -365,7 +701,11 @@ async def update_edge_vector(vector_id: str, payload: EdgeVectorUpdate, ctx: Ten
 
 @router.delete("/{vector_id}")
 async def delete_edge_vector(vector_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
-    """Delete an edge vector store connection."""
+    """Delete an edge vector store connection.
+
+    If delete_remote=True and the store was created from a Connected Account,
+    also delete the resource at the provider (e.g. CF Vectorize index).
+    """
     db = SessionLocal()
     try:
         query = db.query(EdgeVector).filter(EdgeVector.id == vector_id)
@@ -379,12 +719,15 @@ async def delete_edge_vector(vector_id: str, delete_remote: bool = False, ctx: T
         vector = query.first()
         if not vector:
             raise HTTPException(404, "Vector store not found")
-        
+
         if getattr(vector, 'is_system', False):
             raise HTTPException(403, "System vector stores cannot be deleted")
-        
-        # Check for referencing engines
-        engines = db.query(EdgeEngine).filter(EdgeEngine.edge_vector_id == vector_id).all()
+
+        # Check for referencing engines (scoped to tenant's project for isolation)
+        engine_query = db.query(EdgeEngine).filter(EdgeEngine.edge_vector_id == vector_id)
+        if project:
+            engine_query = engine_query.filter(EdgeEngine.project_id == project.id)
+        engines = engine_query.all()
         if engines:
             names = ", ".join([f"'{e.name}'" for e in engines])
             raise HTTPException(
@@ -393,9 +736,29 @@ async def delete_edge_vector(vector_id: str, delete_remote: bool = False, ctx: T
                        f"Reconfigure or detach them first."
             )
 
+        remote_deleted = False
+        vector_provider = str(vector.provider)
+
+        # Remote resource delete via unified service
+        if delete_remote and getattr(vector, 'provider_account_id', None):
+            from ..services.provider_resource_deleter import delete_resource_for_edge_model
+            remote_deleted = await delete_resource_for_edge_model(
+                model_kind="vector",
+                provider=vector_provider,
+                resource_url=str(vector.vector_url),
+                provider_config_json=str(vector.provider_config) if vector.provider_config is not None else None,
+                provider_account_id=str(vector.provider_account_id),
+                db_session=db,
+            )
+
+        vector_name = str(vector.name)
         db.delete(vector)
         db.commit()
-        return {"success": True, "id": vector_id}
+
+        msg = f"Vector store '{vector_name}' deleted"
+        if remote_deleted:
+            msg += f" (also removed from {vector_provider})"
+        return {"success": True, "id": vector_id, "message": msg, "remote_deleted": remote_deleted}
     finally:
         db.close()
 
@@ -412,17 +775,27 @@ async def test_edge_vector_connection(vector_id: str, ctx: TenantContext | None 
                 query = query.filter(EdgeVector.project_id == project.id)
             else:
                 raise HTTPException(404, "Vector store not found")
-                
+
         vector = query.first()
         if not vector:
             raise HTTPException(404, "Vector store not found")
-        
+
         decrypted_token = decrypt_field(str(vector.vector_token)) if vector.vector_token is not None else None
+        provider_config = None
+        if vector.provider_config is not None:
+            try:
+                provider_config = json.loads(str(vector.provider_config))
+            except (json.JSONDecodeError, TypeError):
+                provider_config = None
+
         return await test_vector_connection_raw(
-            provider=str(vector.provider), 
-            url=str(vector.vector_url), 
+            provider=str(vector.provider),
+            url=str(vector.vector_url),
             token=decrypted_token,
-            provider_account_id=str(vector.provider_account_id) if vector.provider_account_id is not None else None
+            provider_account_id=str(vector.provider_account_id) if vector.provider_account_id is not None else None,
+            provider_config=provider_config,
+            db=db,
+            ctx=ctx,
         )
     finally:
         db.close()
@@ -431,48 +804,85 @@ async def test_edge_vector_connection(vector_id: str, ctx: TenantContext | None 
 @router.post("/test-connection")
 async def test_connection_inline(payload: TestConnectionRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test connection using raw fields (pre-save)."""
-    return await test_vector_connection_raw(
-        provider=payload.provider, 
-        url=payload.vector_url, 
-        token=payload.vector_token,
-        provider_account_id=payload.provider_account_id
-    )
+    db = SessionLocal()
+    try:
+        _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
+        return await test_vector_connection_raw(
+            provider=payload.provider,
+            url=payload.vector_url,
+            token=payload.vector_token,
+            provider_account_id=payload.provider_account_id,
+            provider_config=payload.provider_config,
+            db=db,
+            ctx=ctx,
+        )
+    finally:
+        db.close()
 
 
 @router.post("/batch/delete", response_model=BatchResult)
 async def batch_delete_vectors(payload: BatchDeleteVectorRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Batch delete multiple edge vector stores."""
+    import asyncio
     db = SessionLocal()
     success = []
     failed = []
     project = None
     try:
+        records_to_delete: list[EdgeVector] = []
         for vid in payload.ids:
             query = db.query(EdgeVector).filter(EdgeVector.id == vid)
             if ctx and ctx.tenant_id:
-                project = get_project(db, ctx)
+                project = get_project(db, ctx) or project
                 if project:
                     query = query.filter(EdgeVector.project_id == project.id)
+                else:
+                    query = query.filter(EdgeVector.id == "not-found")
             vector = query.first()
             if not vector:
-                failed.append({"id": vid, "error": "Deletion failed"})
+                failed.append({"id": vid, "error": "Not found"})
                 continue
 
             if getattr(vector, 'is_system', False):
-                failed.append({"id": vid, "error": "Deletion failed"})
+                failed.append({"id": vid, "error": "Cannot delete system vector store"})
                 continue
 
             engine_query = db.query(EdgeEngine).filter(EdgeEngine.edge_vector_id == vid)
             if ctx and ctx.tenant_id and project:
                 engine_query = engine_query.filter(EdgeEngine.project_id == project.id)
-            engines = engine_query.all()
-            
-            if engines:
-                failed.append({"id": vid, "error": "Deletion failed"})
+            if engine_query.count() > 0:
+                failed.append({"id": vid, "error": "In use by edge engine(s)"})
                 continue
 
-            db.delete(vector)
-            success.append(vid)
+            records_to_delete.append(vector)
+
+        if payload.delete_remote:
+            async def _safe_delete(rec: EdgeVector) -> None:
+                try:
+                    if getattr(rec, 'provider_account_id', None):
+                        from ..services.provider_resource_deleter import delete_resource_for_edge_model
+                        await delete_resource_for_edge_model(
+                            model_kind="vector",
+                            provider=str(rec.provider),
+                            resource_url=str(rec.vector_url),
+                            provider_config_json=str(rec.provider_config) if rec.provider_config is not None else None,
+                            provider_account_id=str(rec.provider_account_id),
+                            db_session=db,
+                        )
+                except Exception as e:
+                    failed.append({"id": str(rec.id), "error": f"Remote delete failed: {e}"})
+            await asyncio.gather(*[_safe_delete(rec) for rec in records_to_delete])
+
+        for rec in records_to_delete:
+            rid = str(rec.id)
+            if any(f.get("id") == rid for f in failed):
+                continue
+            try:
+                db.delete(rec)
+                success.append(rid)
+            except Exception as e:
+                failed.append({"id": rid, "error": str(e)})
+
         db.commit()
         return BatchResult(success=success, failed=failed, total=len(payload.ids))
     finally:

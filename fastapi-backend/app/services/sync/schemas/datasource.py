@@ -39,18 +39,32 @@ class DatasourceBase(BaseModel):
         Handles case mismatches (e.g., "WORDPRESS_PLUGIN" → "wordpress_plugin")
         by converting to lowercase and validating against enum values.
         """
+        import logging
+        logger = logging.getLogger("datasource.schema")
+        logger.info(f"[NORMALIZE-TYPE] Input: {v!r}, type: {type(v)}")
+
         if isinstance(v, str):
             # Convert to lowercase and match against enum values
             v_lower = v.lower()
             # Check if it matches any enum value
             for enum_member in DatasourceType:
                 if enum_member.value == v_lower:
-                    return DatasourceType(v_lower)
+                    result = DatasourceType(v_lower)
+                    logger.info(f"[NORMALIZE-TYPE] Converted {v!r} -> {result!r}, value={result.value!r}")
+                    return result
             # If no match, raise validation error
             valid_values = [e.value for e in DatasourceType]
+            logger.warning(f"[NORMALIZE-TYPE] Invalid type {v!r}, valid: {valid_values}")
             raise ValueError(
                 f"Invalid datasource type '{v}'. Valid types: {valid_values}"
             )
+
+        # If already an enum, log and return
+        if isinstance(v, DatasourceType):
+            logger.info(f"[NORMALIZE-TYPE] Already enum: {v!r}, value={v.value!r}")
+        else:
+            logger.info(f"[NORMALIZE-TYPE] Non-string, non-enum: {v!r}")
+
         return v
 
 def _ensure_url_scheme(url: Optional[str]) -> Optional[str]:

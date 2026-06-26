@@ -57,9 +57,15 @@ export const EdgeVectorsForm: React.FC<EdgeVectorsFormProps> = ({ withCard = fal
     const handleBulkDelete = async (deleteRemote: boolean) => {
         setBulkLoading(true);
         try {
-            const result = await edgeInfrastructureApi.batchDeleteVectors([...selectedIds]);
+            const result = await edgeInfrastructureApi.batchDeleteVectors([...selectedIds], deleteRemote);
             if (result.failed.length > 0) toast.error(`${result.failed.length} vector store(s) failed to delete`);
-            if (result.success.length > 0) toast.success(`${result.success.length} vector store(s) deleted`);
+            if (result.success.length > 0) {
+                toast.success(
+                    deleteRemote
+                        ? `${result.success.length} vector store(s) deleted (including remote resources)`
+                        : `${result.success.length} vector store(s) deleted`
+                );
+            }
             setSelectedIds(new Set());
             queryClient.invalidateQueries({ queryKey: ['edge-vectors'] });
         } catch (e: any) {
@@ -187,7 +193,7 @@ export const EdgeVectorsForm: React.FC<EdgeVectorsFormProps> = ({ withCard = fal
                                             supportsRemoteDelete={!!vector.supports_remote_delete}
                                             dependentCount={vector.engine_count}
                                             dependentLabel="edge engine"
-                                            onDelete={(deleteRemote) => handleDelete(vector.id)}
+                                            onDelete={(deleteRemote) => handleDelete(vector.id, deleteRemote)}
                                         />
                                     </>
                                 )}

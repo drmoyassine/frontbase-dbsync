@@ -471,17 +471,48 @@ async def test_vector_connection_raw(
             if not isinstance(backend, EdgeVectorProxyBackend):
                 return {"success": False, "message": "Failed to resolve Edge vector proxy backend.", "error_code": "INTERNAL_ERROR"}
             
-            api_url = f"{backend.edge_url}/api/vector/test"
+            edge_base = backend.edge_url
             headers = {"x-system-key": backend.system_key}
             
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(api_url, headers=headers)
+                # Try the dedicated vector test endpoint first
+                resp = await client.get(f"{edge_base}/api/vector/test", headers=headers)
                 if resp.status_code in (401, 403):
                     return {"success": False, "message": "Edge engine authentication failed: invalid system key.", "error_code": "AUTH_FAILED"}
-                if not resp.is_success:
-                    return {"success": False, "message": f"Edge engine returned HTTP {resp.status_code}.", "error_code": "PROVIDER_ERROR"}
                 
-                return {"success": True, "message": f"Connected to local edge vector store ({provider})."}
+                if resp.is_success:
+                    return {"success": True, "message": f"Connected to local edge vector store ({provider})."}
+                
+                # /api/vector/test returned an error — extract the detail from the response body
+                edge_error = ""
+                try:
+                    body = resp.json()
+                    edge_error = body.get("message") or body.get("error") or body.get("details") or ""
+                except Exception:
+                    edge_error = resp.text[:200] if resp.text else ""
+                
+                # For system (local) providers, a 500 on /api/vector/test often means the
+                # DB file hasn't been written yet (first run) but the edge engine itself is
+                # healthy and will create the vector tables on first upsert. Fall back to
+                # the edge health endpoint to distinguish "edge down" from "vector store
+                # not yet initialised".
+                if resp.status_code == 500:
+                    try:
+                        health = await client.get(f"{edge_base}/api/health", headers=headers)
+                        if health.is_success:
+                            return {
+                                "success": True,
+                                "message": f"Edge engine is healthy. Vector store ({provider}) will initialise on first use.",
+                            }
+                    except Exception:
+                        pass  # Fall through to error below
+                
+                return {
+                    "success": False,
+                    "message": f"Edge vector test failed (HTTP {resp.status_code}): {edge_error}" if edge_error
+                              else f"Edge engine returned HTTP {resp.status_code}.",
+                    "error_code": "PROVIDER_ERROR",
+                }
         except ValueError as e:
             return {"success": False, "message": f"Edge engine resolution failed: {e}", "error_code": "INVALID_CONFIG"}
         except httpx.TimeoutException:

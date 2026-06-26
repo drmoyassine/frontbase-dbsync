@@ -260,6 +260,42 @@ export const MIGRATIONS: Migration[] = [
             `CREATE INDEX IF NOT EXISTS idx_edge_secrets_updated_at ON edge_secrets(updated_at)`,
         ],
     },
+    {
+        version: 15,
+        description: 'Add edge_secret_audit table for the vault audit trail (Phase 2)',
+        sql: [
+            `CREATE TABLE IF NOT EXISTS edge_secret_audit (
+                id TEXT PRIMARY KEY,
+                operation TEXT NOT NULL,
+                secret_name TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                error_message TEXT,
+                initiated_by TEXT NOT NULL,
+                timestamp TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                metadata TEXT
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_edge_secret_audit_timestamp ON edge_secret_audit(timestamp DESC)`,
+            `CREATE INDEX IF NOT EXISTS idx_edge_secret_audit_secret ON edge_secret_audit(secret_name, timestamp DESC)`,
+        ],
+    },
+    {
+        version: 16,
+        description: 'Add edge_secret_versions table for vault rollback support (Phase 2)',
+        sql: [
+            `CREATE TABLE IF NOT EXISTS edge_secret_versions (
+                id TEXT PRIMARY KEY,
+                secret_name TEXT NOT NULL,
+                version INTEGER NOT NULL,
+                value TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created_via TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 0
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_edge_secret_versions_secret ON edge_secret_versions(secret_name, version DESC)`,
+            `CREATE INDEX IF NOT EXISTS idx_edge_secret_versions_active ON edge_secret_versions(secret_name, is_active)`,
+        ],
+    },
 ];
 
 // =============================================================================

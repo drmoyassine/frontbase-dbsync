@@ -196,7 +196,58 @@ export interface TenantSecretEntry {
 export interface EdgeSecretMeta {
     name: string;
     version: number;
+    createdAt: string;
     updatedAt: string;
+}
+
+/** Full metadata for one edge_secrets row, including createdAt (for GET /secrets/:name). */
+export interface EdgeSecretDetail extends EdgeSecretMeta {
+    createdAt: string;
+    value: string; // ciphertext — only used internally; never returned over the API as-is
+}
+
+// =============================================================================
+// Edge Secret Audit (Phase 2) — append-only audit trail of vault operations
+// =============================================================================
+
+export type AuditOperation = 'create' | 'update' | 'delete' | 'read' | 'rotate' | 'export' | 'import' | 'rollback';
+export type AuditStatus = 'success' | 'failure' | 'partial';
+
+/** Input shape for writing an audit entry (id + timestamp assigned by the provider). */
+export interface AuditEntryInput {
+    operation: AuditOperation;
+    secretName: string;          // '*' for vault-wide ops (export/import/rotate)
+    version: number;             // version AFTER the operation (0 for vault-wide)
+    status: AuditStatus;
+    errorMessage?: string | null;
+    initiatedBy: string;         // 'system' | 'api'
+    metadata?: Record<string, unknown> | null;
+}
+
+/** A persisted audit entry (metadata field parsed back to an object). */
+export interface AuditEntry {
+    id: string;
+    operation: AuditOperation;
+    secretName: string;
+    version: number;
+    status: AuditStatus;
+    errorMessage: string | null;
+    initiatedBy: string;
+    timestamp: string;
+    metadata: Record<string, unknown> | null;
+}
+
+// =============================================================================
+// Edge Secret Versioning (Phase 2) — per-secret history for rollback
+// =============================================================================
+
+/** Metadata for one version row (the ciphertext `value` is never surfaced via this type). */
+export interface EdgeSecretVersionMeta {
+    id: string;
+    version: number;
+    createdAt: string;
+    createdVia: string;          // create | update | rotate | rollback
+    isActive: boolean;
 }
 
 export interface IStateProvider {
@@ -323,12 +374,35 @@ export interface IStateProvider {
     // FRONTBASE_SYSTEM_KEY (see config/edgeSecrets.ts).
     //
     // See docs/edge-local-vault.md
-    /** Upsert an edge secret (ciphertext). Bumps `version` on update. */
-    setEdgeSecret?(name: string, value: string): Promise<void>;
+    /** Upsert an edge secret (ciphertext). Bumps `version` on update. Returns the resulting version. */
+    setEdgeSecret?(name: string, value: string): Promise<number>;
     /** Read one edge secret's ciphertext + version (null if absent). */
     getEdgeSecret?(name: string): Promise<{ value: string; version: number } | null>;
+    /**
+     * Read one edge secret's full row incl. createdAt + ciphertext (null if absent).
+     * Optional — used by GET /secrets/:name to surface createdAt; providers without it
+     * fall back to updatedAt. The ciphertext MUST NOT be returned over the API.
+     */
+    getEdgeSecretDetail?(name: string): Promise<EdgeSecretDetail | null>;
     /** List edge secret metadata (names + versions + timestamps — never ciphertext). */
     listEdgeSecrets?(): Promise<EdgeSecretMeta[]>;
-    /** Delete an edge secret by name. */
+    /** Delete an edge secret by name (also removes its version history). */
     deleteEdgeSecret?(name: string): Promise<void>;
+
+    // --- Edge Secret Audit (Phase 2; optional — providers without persistence omit
+    //     these and the audit facade no-ops) ---
+    /** Append an audit entry. Best-effort: never throws from the caller's perspective. */
+    logAudit?(entry: AuditEntryInput): Promise<void>;
+    /** Recent audit entries for a single secret (newest first). */
+    getAuditHistory?(secretName: string, limit?: number): Promise<AuditEntry[]>;
+    /** Paginated audit entries across all secrets (newest first). */
+    getAuditEntries?(limit?: number, offset?: number): Promise<{ entries: AuditEntry[]; total: number }>;
+
+    // --- Edge Secret Versioning (Phase 2; optional) ---
+    /** Version history for a secret (newest first). Never returns ciphertext. */
+    getSecretVersions?(name: string): Promise<EdgeSecretVersionMeta[]>;
+    /** Restore a secret to a prior version's ciphertext. Throws if the version is absent. */
+    rollbackSecret?(name: string, targetVersion: number): Promise<{ version: number }>;
+    /** Delete a specific (non-active) version row. Throws if it is the active version. */
+    deleteSecretVersion?(name: string, version: number): Promise<void>;
 }

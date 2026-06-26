@@ -241,3 +241,101 @@ export function overrideVectorConfig(config: VectorConfig): void {
 export function overrideApiKeysConfig(config: ApiKeysConfig): void {
     _apiKeys = config;
 }
+
+// =============================================================================
+// Secret Tiers (Phase 2) — classification + on-demand vault loading
+// =============================================================================
+//
+//   Tier 1 (Critical)    — required to boot; always loaded from the vault at
+//                          startup (datasources, storage, cache, queue, …).
+//   Tier 2 (Operational) — important but read through lazy singletons; loaded
+//                          at boot today, with an on-demand `loadLazySecret`
+//                          primitive for recovery/explicit materialization.
+//   Tier 3 (Config)      — bootstrap or non-sensitive; never sourced from the
+//                          vault (e.g. FRONTBASE_STATE_DB selects the provider
+//                          before the vault can even be read).
+//
+// The full async "scoped accessor" refactor (making every getter vault-aware)
+// is deferred to Phase 3 per docs/edge-local-vault-phase2-spec.md §2.8; this
+// delivers the classification + on-demand primitive + cache invalidation now.
+
+/** Tier 1 — loaded eagerly at boot (engine cannot function without these). */
+export const TIER_1_SECRETS = new Set<string>([
+    'FRONTBASE_DATASOURCES',
+    'FRONTBASE_STORAGE',
+    'FRONTBASE_CACHE',
+    'FRONTBASE_QUEUE',
+    'FRONTBASE_SECRETS_KEY',
+    'FRONTBASE_SECRETS_KEY_OLD',
+]);
+
+/** Tier 2 — operational; on-demand loadable. */
+export const TIER_2_SECRETS = new Set<string>([
+    'FRONTBASE_AUTH',
+    'FRONTBASE_API_KEYS',
+    'FRONTBASE_SECURITY',
+    'FRONTBASE_AGENT_PROFILES',
+    'FRONTBASE_VECTOR',
+    'FRONTBASE_GPU',
+]);
+
+/** Tier 3 — bootstrap / non-sensitive; never loaded from the vault. */
+export const TIER_3_SECRETS = new Set<string>([
+    'FRONTBASE_STATE_DB',
+]);
+
+/** Resolve the tier for a vault secret name (unknown names default to Tier 2). */
+export function getSecretTier(name: string): 1 | 2 | 3 {
+    if (TIER_1_SECRETS.has(name)) return 1;
+    if (TIER_3_SECRETS.has(name)) return 3;
+    return 2; // TIER_2_SECRETS + any unclassified FRONTBASE_* var
+}
+
+/**
+ * In-memory cache of secrets materialized on demand from the vault, so repeated
+ * access does not re-hit the state DB / re-run crypto. Cleared by
+ * `clearLazySecretCache()` whenever the vault is mutated.
+ */
+const _lazySecretCache = new Map<string, string>();
+
+/** Drop the on-demand cache (call after any vault write/rollback/rotate). */
+export function clearLazySecretCache(): void {
+    _lazySecretCache.clear();
+}
+
+/**
+ * Materialize a single secret on demand, honoring the same precedence as the
+ * boot loader: a value already in process.env ALWAYS wins, then the cache,
+ * then the vault. Decrypts + caches on first access. Returns null when the
+ * secret is absent, the vault is disabled/unsupported, or decryption fails.
+ *
+ * Dynamic imports keep this foundational module free of top-level cycles with
+ * `edgeSecrets.ts` and `storage/index.ts` (both of which import this module).
+ */
+export async function loadLazySecret(name: string): Promise<string | null> {
+    // 1. Manual override always wins.
+    if (process.env[name] !== undefined && process.env[name] !== '') {
+        return process.env[name] as string;
+    }
+    // 2. Cache.
+    if (_lazySecretCache.has(name)) {
+        return _lazySecretCache.get(name)!;
+    }
+    // 3. Vault.
+    try {
+        const { stateProvider } = await import('../storage/index.js');
+        const { getVaultSystemKey, decryptSecret } = await import('./edgeSecrets.js');
+        const systemKey = getVaultSystemKey();
+        if (!systemKey || typeof stateProvider.getEdgeSecret !== 'function') {
+            return null;
+        }
+        const row = await stateProvider.getEdgeSecret(name);
+        if (!row) return null;
+        const plaintext = await decryptSecret(row.value, systemKey);
+        _lazySecretCache.set(name, plaintext);
+        return plaintext;
+    } catch (err) {
+        console.error(`[LazySecret] Failed to load '${name}' from vault:`, err);
+        return null;
+    }
+}

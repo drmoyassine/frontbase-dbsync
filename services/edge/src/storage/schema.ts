@@ -148,6 +148,38 @@ export const edgeSecrets = sqliteTable('edge_secrets', {
 });
 
 // =============================================================================
+// Edge Secret Audit (local vault — Phase 2: append-only audit trail of every
+// secret operation: create/update/delete/read/rotate/export/import/rollback)
+// =============================================================================
+
+export const edgeSecretAudit = sqliteTable('edge_secret_audit', {
+    id: text('id').primaryKey(),
+    operation: text('operation').notNull(),       // create | update | delete | read | rotate | export | import | rollback
+    secretName: text('secret_name').notNull(),     // '*' for vault-wide ops (export/import/rotate)
+    version: integer('version').notNull(),         // version AFTER the operation (0 for vault-wide)
+    status: text('status').notNull(),              // success | failure | partial
+    errorMessage: text('error_message'),           // null on success
+    initiatedBy: text('initiated_by').notNull(),   // system | api
+    timestamp: text('timestamp').notNull().default(sql`CURRENT_TIMESTAMP`),
+    metadata: text('metadata'),                    // JSON: rotation progress, rollback-from, etc.
+});
+
+// =============================================================================
+// Edge Secret Versions (local vault — Phase 2: per-secret version history for
+// rollback support; one row per write, only the `is_active` row matches edge_secrets)
+// =============================================================================
+
+export const edgeSecretVersions = sqliteTable('edge_secret_versions', {
+    id: text('id').primaryKey(),
+    secretName: text('secret_name').notNull(),
+    version: integer('version').notNull(),
+    value: text('value').notNull(),                // AES-256-GCM ciphertext (base64) — same format as edge_secrets
+    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    createdVia: text('created_via').notNull(),     // create | update | rotate | rollback
+    isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
+});
+
+// =============================================================================
 // Inferred Types
 // =============================================================================
 
@@ -161,3 +193,5 @@ export type AgentToolRow = typeof agentToolsTable.$inferSelect;
 export type NewAgentTool = typeof agentToolsTable.$inferInsert;
 export type TenantSecretRow = typeof tenantSecrets.$inferSelect;
 export type EdgeSecretRow = typeof edgeSecrets.$inferSelect;
+export type EdgeSecretAuditRow = typeof edgeSecretAudit.$inferSelect;
+export type EdgeSecretVersionRow = typeof edgeSecretVersions.$inferSelect;

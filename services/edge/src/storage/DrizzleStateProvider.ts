@@ -22,6 +22,7 @@ import type {
     IStateProvider, ProjectSettingsData, PublishedPageSummary,
     WorkflowData, ExecutionData, NewExecutionData, ExecutionStats, DeadLetterData,
     AgentToolData, WorkflowVersionData,
+    EdgeSecretDetail, AuditEntryInput, AuditEntry, EdgeSecretVersionMeta,
 } from './IStateProvider';
 import { isMultiTenantSlug } from './IStateProvider';
 import { publishedPages, projectSettings, workflowsTable, executionsTable, agentToolsTable, type NewPublishedPage } from './schema';
@@ -47,6 +48,29 @@ function rowToVersion(row: any): WorkflowVersionData {
     };
 }
 
+/** Map a raw edge_secret_audit row to AuditEntry (parses the JSON metadata column). */
+function rowToAudit(row: any): AuditEntry {
+    let metadata: Record<string, unknown> | null = null;
+    if (row.metadata) {
+        try {
+            metadata = JSON.parse(row.metadata);
+        } catch {
+            metadata = null;
+        }
+    }
+    return {
+        id: row.id,
+        operation: row.operation,
+        secretName: row.secret_name,
+        version: row.version,
+        status: row.status,
+        errorMessage: row.error_message ?? null,
+        initiatedBy: row.initiated_by,
+        timestamp: row.timestamp,
+        metadata,
+    };
+}
+
 // =============================================================================
 // Abstract Base (subclasses provide getDb())
 // =============================================================================
@@ -59,6 +83,18 @@ export abstract class DrizzleStateProvider implements IStateProvider {
 
     async initSettings(): Promise<void> {
         // Settings table is created by migration v1
+    }
+
+    /**
+     * Raw-SQL single-row read that returns null for an empty result set.
+     *
+     * drizzle-orm's libsql `.get()` throws on an empty result set (its
+     * `normalizeRow(rows[0])` calls `Object.keys(undefined)`), so any lookup
+     * whose row may be absent MUST go through here instead of `.get()`.
+     */
+    protected async getOne<T = any>(query: any): Promise<T | null> {
+        const rows: any[] = await this.getDb().all(query);
+        return rows && rows.length > 0 ? (rows[0] as T) : null;
     }
 
     // =========================================================================
@@ -695,42 +731,275 @@ export abstract class DrizzleStateProvider implements IStateProvider {
     }
 
     // =========================================================================
-    // Edge Secrets (local vault — standalone/self-hosted engines)
+    // Edge Secrets (local vault — standalone/self-hosted engines) + Phase 2
+    // audit logging & versioning. See docs/edge-local-vault*.md.
     // =========================================================================
 
-    async setEdgeSecret(name: string, value: string): Promise<void> {
+    /**
+     * Upsert an edge secret (ciphertext). Computes the next monotonic version,
+     * updates the active row, and snapshots the value into the version history
+     * for rollback. Returns the resulting version number.
+     *
+     * Versioning model: versions are strictly monotonic per secret — rollback
+     * creates a NEW higher version holding the old ciphertext rather than
+     * resetting the counter, so version numbers never collide.
+     */
+    async setEdgeSecret(name: string, value: string): Promise<number> {
+        const database = this.getDb();
         const now = new Date().toISOString();
-        await this.getDb().run(sql`
+
+        const existing = await this.getEdgeSecret(name);
+        const newVersion = existing ? existing.version + 1 : 1;
+        const createdVia = existing ? 'update' : 'create';
+
+        await database.run(sql`
             INSERT INTO edge_secrets (name, value, version, created_at, updated_at)
-            VALUES (${name}, ${value}, 1, ${now}, ${now})
+            VALUES (${name}, ${value}, ${newVersion}, ${now}, ${now})
             ON CONFLICT(name) DO UPDATE SET
                 value = excluded.value,
-                version = edge_secrets.version + 1,
+                version = excluded.version,
                 updated_at = excluded.updated_at
         `);
+
+        // Snapshot is best-effort — never fail a control-plane write over it.
+        try {
+            await this._storeSecretVersion(name, value, newVersion, createdVia);
+        } catch (err) {
+            console.warn('[DrizzleStateProvider] version snapshot failed:', err);
+        }
+
+        return newVersion;
     }
 
     async getEdgeSecret(name: string): Promise<{ value: string; version: number } | null> {
-        const row = await this.getDb().get(sql`
+        const row = await this.getOne<{ value: string; version: number }>(sql`
             SELECT value, version FROM edge_secrets WHERE name = ${name}
         `);
         return row ? { value: row.value, version: row.version } : null;
     }
 
-    async listEdgeSecrets(): Promise<{ name: string; version: number; updatedAt: string }[]> {
-        const rows = await this.getDb().all(sql`
-            SELECT name, version, updated_at FROM edge_secrets ORDER BY name
+    async getEdgeSecretDetail(name: string): Promise<EdgeSecretDetail | null> {
+        const row = await this.getOne<{ name: string; value: string; version: number; created_at: string; updated_at: string }>(sql`
+            SELECT name, value, version, created_at, updated_at FROM edge_secrets WHERE name = ${name}
         `);
-        return (rows as Array<{ name: string; version: number; updated_at: string }>).map(r => ({
+        if (!row) return null;
+        return {
+            name: row.name,
+            value: row.value,
+            version: row.version,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+        };
+    }
+
+    async listEdgeSecrets(): Promise<{ name: string; version: number; createdAt: string; updatedAt: string }[]> {
+        const rows = await this.getDb().all(sql`
+            SELECT name, version, created_at, updated_at FROM edge_secrets ORDER BY name
+        `);
+        return (rows as Array<{ name: string; version: number; created_at: string; updated_at: string }>).map(r => ({
             name: r.name,
             version: r.version,
+            createdAt: r.created_at,
             updatedAt: r.updated_at,
         }));
     }
 
     async deleteEdgeSecret(name: string): Promise<void> {
-        await this.getDb().run(sql`
-            DELETE FROM edge_secrets WHERE name = ${name}
+        const database = this.getDb();
+        // Remove version history too — a deleted secret has nothing to roll back to.
+        await database.run(sql`DELETE FROM edge_secret_versions WHERE secret_name = ${name}`);
+        await database.run(sql`DELETE FROM edge_secrets WHERE name = ${name}`);
+    }
+
+    // ── Versioning helpers ────────────────────────────────────────────────
+
+    /**
+     * Snapshot one version of a secret and mark it active. Versions are
+     * monotonic per secret (the caller passes an already-incremented version),
+     * so (secret_name, version) is effectively unique.
+     */
+    private async _storeSecretVersion(
+        name: string,
+        value: string,
+        version: number,
+        createdVia: string,
+    ): Promise<void> {
+        const database = this.getDb();
+        const now = new Date().toISOString();
+        // uuid suffix guards against any pathological duplicate-version write.
+        const id = `ver_${name}_${version}_${crypto.randomUUID()}`;
+
+        await database.run(sql`
+            INSERT INTO edge_secret_versions (id, secret_name, version, value, created_at, created_via, is_active)
+            VALUES (${id}, ${name}, ${version}, ${value}, ${now}, ${createdVia}, 1)
         `);
+
+        // Exactly one active version per secret.
+        await database.run(sql`
+            UPDATE edge_secret_versions SET is_active = 0
+            WHERE secret_name = ${name} AND id != ${id}
+        `);
+
+        await this._pruneSecretVersions(name);
+    }
+
+    /** Keep only the N most-recent versions (SECRET_VERSION_RETENTION, default 10). */
+    private async _pruneSecretVersions(name: string): Promise<void> {
+        const limit = parseInt(process.env.SECRET_VERSION_RETENTION || '10', 10);
+        if (!Number.isFinite(limit) || limit <= 0) return; // 0 / unset ⇒ unlimited
+        const database = this.getDb();
+        // Delete everything beyond the newest `limit`, but NEVER the active row.
+        await database.run(sql`
+            DELETE FROM edge_secret_versions
+            WHERE secret_name = ${name}
+              AND is_active = 0
+              AND version NOT IN (
+                SELECT version FROM edge_secret_versions
+                WHERE secret_name = ${name}
+                ORDER BY version DESC
+                LIMIT ${limit}
+              )
+        `);
+    }
+
+    async getSecretVersions(name: string): Promise<EdgeSecretVersionMeta[]> {
+        const rows = await this.getDb().all(sql`
+            SELECT id, version, created_at, created_via, is_active
+            FROM edge_secret_versions
+            WHERE secret_name = ${name}
+            ORDER BY version DESC
+        `);
+        return (rows || []).map((r: any) => ({
+            id: r.id,
+            version: r.version,
+            createdAt: r.created_at,
+            createdVia: r.created_via,
+            isActive: !!r.is_active,
+        }));
+    }
+
+    /**
+     * Roll a secret back to a prior version's ciphertext. Append-only: creates
+     * a new (higher) version holding the target value rather than resetting the
+     * version counter, so history stays monotonic and collision-free. Returns
+     * the new active version number.
+     */
+    async rollbackSecret(name: string, targetVersion: number): Promise<{ version: number }> {
+        const database = this.getDb();
+        const now = new Date().toISOString();
+
+        const target = await this.getOne<{ value: string; version: number }>(sql`
+            SELECT value, version FROM edge_secret_versions
+            WHERE secret_name = ${name} AND version = ${targetVersion}
+            ORDER BY created_at DESC LIMIT 1
+        `);
+        if (!target) {
+            throw new Error(`Version ${targetVersion} not found for secret ${name}`);
+        }
+
+        const current = await this.getEdgeSecret(name);
+        const newVersion = current ? current.version + 1 : 1;
+
+        await database.run(sql`
+            INSERT INTO edge_secrets (name, value, version, created_at, updated_at)
+            VALUES (${name}, ${target.value}, ${newVersion}, ${now}, ${now})
+            ON CONFLICT(name) DO UPDATE SET
+                value = excluded.value,
+                version = excluded.version,
+                updated_at = excluded.updated_at
+        `);
+
+        await this._storeSecretVersion(name, target.value, newVersion, 'rollback');
+
+        return { version: newVersion };
+    }
+
+    async deleteSecretVersion(name: string, version: number): Promise<void> {
+        const database = this.getDb();
+        const row = await this.getOne<{ is_active: number }>(sql`
+            SELECT is_active FROM edge_secret_versions
+            WHERE secret_name = ${name} AND version = ${version}
+            ORDER BY created_at DESC LIMIT 1
+        `);
+        if (!row) {
+            throw new Error(`Version ${version} not found for secret ${name}`);
+        }
+        if (row.is_active) {
+            throw new Error('Cannot delete the active version');
+        }
+        await database.run(sql`
+            DELETE FROM edge_secret_versions
+            WHERE secret_name = ${name} AND version = ${version}
+        `);
+    }
+
+    // ── Audit logging (Phase 2) ───────────────────────────────────────────
+
+    async logAudit(entry: AuditEntryInput): Promise<void> {
+        const database = this.getDb();
+        const id = `audit_${crypto.randomUUID()}`;
+        const now = new Date().toISOString();
+        await database.run(sql`
+            INSERT INTO edge_secret_audit
+                (id, operation, secret_name, version, status, error_message, initiated_by, timestamp, metadata)
+            VALUES (${id}, ${entry.operation}, ${entry.secretName}, ${entry.version},
+                    ${entry.status}, ${entry.errorMessage ?? null}, ${entry.initiatedBy}, ${now},
+                    ${entry.metadata ? JSON.stringify(entry.metadata) : null})
+        `);
+        await this._pruneAuditEntries(entry.secretName);
+    }
+
+    /** Enforce per-secret count + age retention. */
+    private async _pruneAuditEntries(secretName: string): Promise<void> {
+        const database = this.getDb();
+
+        const perSecret = parseInt(process.env.FRONTBASE_AUDIT_MAX_PER_SECRET || '100', 10);
+        if (Number.isFinite(perSecret) && perSecret > 0) {
+            // Keep the newest `perSecret` rows for this secret; delete the rest.
+            // rowid is the monotonic insertion-order tiebreaker (entries often
+            // share a millisecond timestamp).
+            await database.run(sql`
+                DELETE FROM edge_secret_audit
+                WHERE secret_name = ${secretName} AND id IN (
+                    SELECT id FROM edge_secret_audit
+                    WHERE secret_name = ${secretName}
+                    ORDER BY timestamp DESC, rowid DESC
+                    LIMIT -1 OFFSET ${perSecret}
+                )
+            `);
+        }
+
+        const retentionDays = parseInt(process.env.FRONTBASE_AUDIT_RETENTION_DAYS || '30', 10);
+        if (Number.isFinite(retentionDays) && retentionDays > 0) {
+            const cutoff = new Date();
+            cutoff.setUTCDate(cutoff.getUTCDate() - retentionDays);
+            await database.run(sql`
+                DELETE FROM edge_secret_audit WHERE timestamp < ${cutoff.toISOString()}
+            `);
+        }
+    }
+
+    async getAuditHistory(secretName: string, limit: number = 50): Promise<AuditEntry[]> {
+        const rows = await this.getDb().all(sql`
+            SELECT id, operation, secret_name, version, status, error_message, initiated_by, timestamp, metadata
+            FROM edge_secret_audit
+            WHERE secret_name = ${secretName}
+            ORDER BY timestamp DESC, rowid DESC
+            LIMIT ${limit}
+        `);
+        return (rows || []).map(rowToAudit);
+    }
+
+    async getAuditEntries(limit: number = 100, offset: number = 0): Promise<{ entries: AuditEntry[]; total: number }> {
+        const database = this.getDb();
+        const countRow = await this.getOne<{ count: number }>(sql`SELECT COUNT(*) AS count FROM edge_secret_audit`);
+        const total = countRow?.count ?? 0;
+        const rows = await database.all(sql`
+            SELECT id, operation, secret_name, version, status, error_message, initiated_by, timestamp, metadata
+            FROM edge_secret_audit
+            ORDER BY timestamp DESC, rowid DESC
+            LIMIT ${limit} OFFSET ${offset}
+        `);
+        return { entries: (rows || []).map(rowToAudit), total };
     }
 }

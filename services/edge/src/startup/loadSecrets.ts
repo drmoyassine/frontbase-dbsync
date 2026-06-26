@@ -21,7 +21,7 @@
 
 import { stateProvider } from '../storage/index.js';
 import { getVaultSystemKey, decryptSecret } from '../config/edgeSecrets.js';
-import { resetConfig } from '../config/env.js';
+import { resetConfig, getSecretTier } from '../config/env.js';
 
 /**
  * Env vars that must NOT be sourced from the vault at boot:
@@ -68,6 +68,7 @@ export async function loadEdgeSecrets(): Promise<void> {
     let loaded = 0;
     let skipped = 0;
     const failed: string[] = [];
+    const tierCounts = { 1: 0, 2: 0 };
 
     for (const name of names) {
         if (BOOT_EXCLUDED.has(name)) {
@@ -81,6 +82,14 @@ export async function loadEdgeSecrets(): Promise<void> {
             continue;
         }
 
+        // Tier 3 (bootstrap / non-sensitive) should never be sourced from the
+        // vault. If one is present, skip it loudly rather than silently.
+        if (getSecretTier(name) === 3) {
+            console.warn(`[EdgeSecrets] Tier-3 secret '${name}' found in vault — skipping (bootstrap/config only)`);
+            skipped++;
+            continue;
+        }
+
         try {
             const row = await stateProvider.getEdgeSecret?.(name);
             if (!row) {
@@ -90,6 +99,10 @@ export async function loadEdgeSecrets(): Promise<void> {
             const plaintext = await decryptSecret(row.value, systemKey);
             process.env[name] = plaintext;
             loaded++;
+            // Tier 1 + Tier 2 both load eagerly at boot — Tier 2 vars (auth,
+            // agent profiles, …) are read through synchronous singletons by
+            // middleware, so deferring them would regress until the next boot.
+            tierCounts[getSecretTier(name) === 1 ? 1 : 2]++;
         } catch (err) {
             failed.push(name);
             console.error(`[EdgeSecrets] Failed to load '${name}':`, err);
@@ -103,7 +116,8 @@ export async function loadEdgeSecrets(): Promise<void> {
 
     console.log(
         `[EdgeSecrets] Loaded ${loaded} secret(s) from vault` +
-            (skipped ? `, skipped ${skipped} (env override / excluded)` : '') +
+            ` (T1: ${tierCounts[1]}, T2: ${tierCounts[2]})` +
+            (skipped ? `, skipped ${skipped} (env override / excluded / tier-3)` : '') +
             (failed.length ? `, failed: ${failed.join(', ')}` : ''),
     );
 }

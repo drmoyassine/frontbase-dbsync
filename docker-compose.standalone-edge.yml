@@ -26,9 +26,7 @@ services:
       - PORT=3002
       # Storage provider (must be 'cloud' for standalone)
       - FRONTBASE_DEPLOYMENT_MODE=cloud
-      # Turso state DB (required)
-      - FRONTBASE_STATE_DB_URL=${TURSO_DB_URL}
-      - FRONTBASE_STATE_DB_TOKEN=${TURSO_DB_TOKEN}
+      # State DB (Uses local SQLite by default. For multi-node setups, configure Turso in .env)`n      - FRONTBASE_STATE_DB=${FRONTBASE_STATE_DB:-{`"provider`":`"sqlite`"}}
       # Upstash Redis L2 cache (optional but recommended)
       - FRONTBASE_REDIS_URL=${UPSTASH_REDIS_URL:-}
       - FRONTBASE_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}
@@ -47,5 +45,6 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
+
 
 

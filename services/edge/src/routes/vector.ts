@@ -65,21 +65,29 @@ class LibsqlVectorStore implements VectorStore {
     }
 
     async test() {
+        // Step 1: Verify basic database connectivity
         try {
-            // First verify database connection with a simple query
             await client.execute('SELECT 1', []);
         } catch (err: any) {
             throw new Error(`Database connection failed: ${err.message}`);
         }
 
-        // Try to list vector tables, but handle errors gracefully
+        // Step 2: Verify vector extension is available by probing the vector cast function
+        // This confirms libSQL was compiled with vector support WITHOUT requiring any tables.
+        let vectorReady = false;
+        try {
+            await client.execute("SELECT typeof(cast('[1.0, 0.0]' as F32_BLOB))", []);
+            vectorReady = true;
+        } catch {
+            // Vector functions not available — libSQL build may lack vector support
+        }
+
+        // Step 3: Count existing vector tables (optional, never fails the test)
         let tables: string[] = [];
         try {
             tables = await this._listTables();
-        } catch (err: any) {
-            // If sqlite_master query fails (e.g., no such table on first run), that's OK
-            // This happens when the database file doesn't exist yet
-            console.error('[LibsqlVectorStore] Failed to list tables:', err);
+        } catch {
+            // No tables yet — expected on first run
         }
 
         return {
@@ -87,6 +95,7 @@ class LibsqlVectorStore implements VectorStore {
             dataPath: `./data/${this.dataPath}`,
             version: 'libsql',
             tableCount: tables.length,
+            vectorReady,
         };
     }
 
@@ -489,6 +498,7 @@ const testRoute = createRoute({
                 dataPath: z.string(),
                 version: z.string(),
                 tableCount: z.number(),
+                vectorReady: z.boolean().optional(),
             }) } },
         },
         500: { description: 'Connection failed', content: { 'application/json': { schema: ErrorSchema } } },

@@ -40,7 +40,11 @@ DEFAULT_BLOCKED_IP_RANGES: FrozenSet[ipaddress._BaseNetwork] = frozenset({
 
 # Allowlisted hostnames that bypass the IP blocklist (e.g. internal services on
 # private space that the platform legitimately needs to reach). Empty by default.
-ALLOWED_DOMAINS: FrozenSet[str] = frozenset()
+# 'edge' is the Docker service name for the local edge engine, used for vector DB
+# proxy requests from the backend to the edge container.
+# 'local-edge' is the hostname used in libsql:// URLs for the embedded libsql vector DB.
+# 'localhost' is for local development environments.
+ALLOWED_DOMAINS: FrozenSet[str] = frozenset({"edge", "local-edge", "localhost"})
 
 # URL schemes the connection testers are permitted to dial. Anything else is
 # rejected before DNS resolution. Kept narrow on purpose.

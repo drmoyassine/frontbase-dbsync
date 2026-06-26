@@ -59,12 +59,20 @@ COPY services/edge/drizzle.config.ts ./
 COPY services/edge/start.sh ./start.sh
 RUN chmod +x ./start.sh
 
-# Create data directory
-RUN mkdir -p /app/data
+# Create data directory (vectors persist under /app/data —
+# mount a named volume here so data survives container recreation).
+RUN mkdir -p /app/data /app/data/lancedb
 
 # Environment
 ENV NODE_ENV=production
 ENV PORT=3002
+# Vector store selection: libsql_vector is the default (pure SQL, no native binary).
+# LanceDB is opt-in via LANCEDB_ENABLED=true (requires Alpine musl binary verification).
+# Set to "true" to use LanceDB instead of libSQL.
+ENV LANCEDB_ENABLED=false
+# On-disk path for LanceDB (only used when LANCEDB_ENABLED=true).
+# Must match the backend's EMBEDDED_LANCEDB_PATH and live under the persisted /app/data volume.
+ENV EMBEDDED_LANCEDB_PATH=/app/data/lancedb
 
 EXPOSE 3002
 

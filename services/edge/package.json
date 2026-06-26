@@ -76,5 +76,8 @@
         "vite": "^7.3.1",
         "vitest": "^4.0.18",
         "wrangler": "^4.0.0"
+    },
+    "optionalDependencies": {
+        "@lancedb/lancedb": "^0.30.0"
     }
 }

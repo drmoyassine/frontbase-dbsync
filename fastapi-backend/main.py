@@ -37,10 +37,12 @@ if is_cloud() and os.getenv("SENTRY_DSN"):
 def _ensure_local_edge():
     """Seed the Local Edge system records in dev / self-host mode.
 
-    Creates three is_system=True records (idempotent):
+    Creates is_system=True records (idempotent):
       1. EdgeDatabase  → "Local SQLite"
       2. EdgeCache     → "Local Redis"
-      3. EdgeEngine    → "Local Edge" (linked to 1 & 2)
+      3. EdgeQueue     → "Local BullMQ"
+      4. EdgeVector    → "Local LanceDB" (only when EMBEDDED_LANCEDB_ENABLED=true)
+      5. EdgeEngine    → "Local Edge" (linked to 1, 2, 3, and optionally 4)
 
     Skipped in cloud (multi-tenant) mode — the edge container still runs
     for build-time services, but won't appear in the UI or as a publish target.
@@ -51,7 +53,11 @@ def _ensure_local_edge():
     from datetime import datetime, timezone
     import uuid
     from app.database.config import SessionLocal
-    from app.models.models import EdgeEngine, EdgeDatabase, EdgeCache, EdgeQueue
+    from app.models.models import EdgeEngine, EdgeDatabase, EdgeCache, EdgeQueue, EdgeVector
+
+    # Vector store selection: libsql_vector is the default (pure SQL, no native binary),
+    # LanceDB is opt-in via LANCEDB_ENABLED=true (requires Alpine musl binary verification).
+    lancedb_enabled = os.getenv("LANCEDB_ENABLED", "false").lower() == "true"
 
     edge_url = os.getenv("EDGE_URL", "http://localhost:3002")
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -129,6 +135,66 @@ def _ensure_local_edge():
                 sys_queue.is_default = False  # type: ignore[assignment]
                 logger.info("[Startup] Cleared is_default on system queue")
 
+        # --- 2.75 Local vector store system record (libsql_vector default, LanceDB opt-in) ---
+        sys_vector = None
+        if lancedb_enabled:
+            # LanceDB opt-in: seed embedded_lancedb system record
+            sys_vector = db.query(EdgeVector).filter(EdgeVector.is_system == True).first()
+            lancedb_path = os.getenv("EMBEDDED_LANCEDB_PATH", "/app/data/lancedb")
+            if not sys_vector:
+                sys_vector = EdgeVector(
+                    id=str(uuid.uuid4()),
+                    name="Local LanceDB",
+                    provider="embedded_lancedb",
+                    vector_url=f"file:{lancedb_path}",
+                    is_default=False,
+                    is_system=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(sys_vector)
+                db.flush()
+                logger.info(f"[Startup] ✅ Local LanceDB vector store seeded (path: {lancedb_path})")
+            else:
+                # Keep the recorded path in sync with the configured location.
+                expected_url = f"file:{lancedb_path}"
+                if str(sys_vector.vector_url) != expected_url:
+                    sys_vector.vector_url = expected_url  # type: ignore[assignment]
+                    logger.info("[Startup] Patched sys_vector URL to configured LanceDB path")
+                if bool(sys_vector.is_default):
+                    sys_vector.is_default = False  # type: ignore[assignment]
+                    logger.info("[Startup] Cleared is_default on system vector store")
+            logger.info("[Startup] ⚠️  LanceDB enabled (native binary unverified on Alpine/musl)")
+        else:
+            # Default: libsql_vector system record (pure SQL, no native binary)
+            sys_vector = db.query(EdgeVector).filter(EdgeVector.is_system == True).first()
+            if not sys_vector:
+                sys_vector = EdgeVector(
+                    id=str(uuid.uuid4()),
+                    name="Local Vector (libSQL)",
+                    provider="libsql_vector",
+                    vector_url="libsql://local-edge",  # Marker string, not a real URL
+                    is_default=False,
+                    is_system=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(sys_vector)
+                db.flush()
+                logger.info("[Startup] ✅ Local libSQL vector store seeded (default)")
+            else:
+                # Update existing system record if provider was different (e.g., from LanceDB)
+                if sys_vector.provider != "libsql_vector":
+                    sys_vector.provider = "libsql_vector"
+                    sys_vector.name = "Local Vector (libSQL)"
+                    sys_vector.vector_url = "libsql://local-edge"
+                    sys_vector.updated_at = now
+                    logger.info("[Startup] Migrated system vector store to libsql_vector")
+                if bool(sys_vector.is_default):
+                    sys_vector.is_default = False  # type: ignore[assignment]
+                    logger.info("[Startup] Cleared is_default on system vector store")
+            logger.info("[Startup] ℹ️  LanceDB disabled (libsql_vector is default)")
+
         # --- 3. Local Edge system engine ---
         sys_engine = db.query(EdgeEngine).filter(EdgeEngine.is_system == True).first()  # noqa: E712
         if sys_engine:
@@ -146,9 +212,17 @@ def _ensure_local_edge():
             if str(sys_engine.edge_queue_id or "") != str(sys_queue.id):
                 sys_engine.edge_queue_id = sys_queue.id  # type: ignore[assignment]
                 changed = True
+            # Bind (or unbind) the system vector store. When LanceDB is enabled we
+            # link it; when disabled we clear any stale binding so the engine never
+            # references a vector store that isn't (or shouldn't be) provisioned.
+            desired_vector_id = sys_vector.id if sys_vector else None
+            if str(sys_engine.edge_vector_id or "") != str(desired_vector_id or ""):
+                sys_engine.edge_vector_id = desired_vector_id  # type: ignore[assignment]
+                changed = True
             if changed:
                 sys_engine.updated_at = now  # type: ignore[assignment]
-                logger.info("[Startup] Local Edge bindings updated")
+                vector_label = "LanceDB" if lancedb_enabled else "libSQL"
+                logger.info(f"[Startup] Local Edge bindings updated (vector: {vector_label})")
         else:
             sys_engine = EdgeEngine(
                 id=str(uuid.uuid4()),
@@ -159,13 +233,15 @@ def _ensure_local_edge():
                 edge_db_id=sys_db.id,
                 edge_cache_id=sys_cache.id,
                 edge_queue_id=sys_queue.id,
+                edge_vector_id=sys_vector.id if sys_vector else None,
                 is_active=True,
                 is_system=True,
                 created_at=now,
                 updated_at=now,
             )
             db.add(sys_engine)
-            logger.info(f"[Startup] ✅ Local Edge seeded at {edge_url}")
+            vector_label = "LanceDB" if lancedb_enabled else "libSQL"
+            logger.info(f"[Startup] ✅ Local Edge seeded at {edge_url} (vector: {vector_label})")
 
         db.commit()
     finally:

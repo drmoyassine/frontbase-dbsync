@@ -445,6 +445,11 @@ export interface EdgeResourceProvider {
     platformLock?: string;
     /** Human-readable compatibility hint shown when platformLock doesn't match engine */
     compatHint?: string;
+    /** Hide this provider from the "Connect ..." modal without removing it from the
+     *  registry. Used for system/auto-provisioned resources (e.g. embedded_lancedb)
+     *  that are seeded by the backend and should never appear as a connectable
+     *  option. The entry stays in the array so label/icon resolution still works. */
+    hiddenFromConnectModal?: boolean;
 }
 
 /**
@@ -507,7 +512,8 @@ export const EDGE_VECTOR_PROVIDERS: EdgeResourceProvider[] = [
     { value: 'pgvector',             label: 'pgvector (Postgres)',   icon: PROVIDER_ICONS.supabase || Database, accountProvider: 'supabase',   active: true,  resourceTypeFilter: 'supabase_project' },
     { value: 'cloudflare_vectorize', label: 'CF Vectorize',          icon: PROVIDER_ICONS.cloudflare || Cloud,  accountProvider: 'cloudflare', active: true,  resourceTypeFilter: 'vectorize' },
     { value: 'turso_vector',         label: 'Turso Vector',          icon: PROVIDER_ICONS.turso || Cloud,       accountProvider: 'turso',      active: true,  resourceTypeFilter: 'turso_db' },
-    { value: 'embedded_lancedb',     label: 'Embedded LanceDB',      icon: HardDrive,                           accountProvider: null,         active: true,  platformLock: 'docker', compatHint: 'Embedded LanceDB only works on self-hosted Docker engines.' },
+    { value: 'libsql_vector',        label: 'libSQL Vector',         icon: Cloud,                                 accountProvider: null,         active: true,  platformLock: 'docker', compatHint: 'libSQL vector is the default on self-hosted Docker engines.', hiddenFromConnectModal: true },
+    { value: 'embedded_lancedb',     label: 'Embedded LanceDB',      icon: HardDrive,                           accountProvider: null,         active: true,  platformLock: 'docker', compatHint: 'Embedded LanceDB requires LANCEDB_ENABLED=true (native binary unverified on Alpine/musl).', hiddenFromConnectModal: true },
 ];
 
 // ============================================================================

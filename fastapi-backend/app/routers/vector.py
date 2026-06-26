@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends
 
+from app.database.config import get_db
 from app.middleware.tenant_context import TenantContext, get_tenant_context
 from app.services.vector import get_vector_backend
 from app.services.vector.embeddings import EmbeddingConfig, embed, assert_dimensions
@@ -55,9 +55,9 @@ class VectorUpsertParams(BaseModel):
     embedding: EmbeddingParams
 
 
-def _backend(provider: str, dsn: Optional[str]):
+def _backend(provider: str, dsn: Optional[str], db, tenant_id: Optional[str] = None):
     try:
-        return get_vector_backend(provider, dsn=dsn)
+        return get_vector_backend(provider, dsn=dsn, db=db, tenant_id=tenant_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -65,10 +65,11 @@ def _backend(provider: str, dsn: Optional[str]):
 @router.post("/search")
 async def vector_search(
     params: VectorSearchParams,
+    db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Embed the query and return the top_k nearest rows from the vector store."""
-    backend = _backend(params.provider, params.dsn)
+    backend = _backend(params.provider, params.dsn, db, ctx.tenant_id if ctx else None)
     emb_cfg = EmbeddingConfig(**params.embedding.model_dump())
 
     try:
@@ -99,12 +100,13 @@ async def vector_search(
 @router.post("/upsert")
 async def vector_upsert(
     params: VectorUpsertParams,
+    db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """Embed a batch of texts and upsert them into the vector store."""
     if not params.items:
         return {"success": True, "upserted": 0}
-    backend = _backend(params.provider, params.dsn)
+    backend = _backend(params.provider, params.dsn, db, ctx.tenant_id if ctx else None)
     emb_cfg = EmbeddingConfig(**params.embedding.model_dump())
     dims = params.dimensions or emb_cfg.dimensions
 

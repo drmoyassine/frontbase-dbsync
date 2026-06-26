@@ -143,11 +143,14 @@ export const EdgeVectorDialog: React.FC<EdgeVectorDialogProps> = ({
                         </Alert>
                     )}
 
-                    {/* Provider selector — derived from EDGE_VECTOR_PROVIDERS registry */}
+                    {/* Provider selector — derived from EDGE_VECTOR_PROVIDERS registry.
+                        System/auto-provisioned providers (e.g. embedded_lancedb) are
+                        hidden from the connect modal — they're seeded by the backend,
+                        so users never pick them manually. */}
                     <div className="space-y-2">
                         <Label>Provider</Label>
                         <div className="grid grid-cols-2 gap-2">
-                            {EDGE_VECTOR_PROVIDERS.map(opt => {
+                            {EDGE_VECTOR_PROVIDERS.filter(opt => !opt.hiddenFromConnectModal).map(opt => {
                                 const Icon = opt.icon || Database;
                                 return (
                                     <button

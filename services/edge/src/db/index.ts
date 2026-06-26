@@ -49,3 +49,6 @@ const client = createClient({
 // Single driver type - no union!
 export const db = drizzle(client, { schema });
 export type DbClient = typeof db;
+
+// Export the raw client for vector operations (need to run custom SQL with vector functions)
+export { client };

@@ -16,6 +16,12 @@ import { fileURLToPath } from 'url';
 import { fullApp } from './engine/full.js';
 import { runStartupSync } from './startup/sync.js';
 
+// Embedded LanceDB vector router — Docker-only (see routes/vector.ts header).
+// Imported here and NOT in engine/lite.ts so its native @lancedb/lancedb binding
+// never enters the cloud edge bundles.
+import { vectorRoute } from './routes/vector.js';
+import { systemKeyAuth } from './middleware/auth.js';
+
 // =============================================================================
 // Docker-Specific Middleware
 // =============================================================================
@@ -34,6 +40,14 @@ fullApp.use('/static/*', serveStatic({
     root: publicPath,
     rewriteRequestPath: (p) => p.replace(/^\/static/, '')
 }));
+
+// =============================================================================
+// Embedded LanceDB Vector API (Docker-only)
+// Backs the auto-provisioned "Local LanceDB" EdgeVector record. Endpoints return
+// 503 when EMBEDDED_LANCEDB_ENABLED=false, so the engine boots either way.
+// =============================================================================
+fullApp.use('/api/vector/*', systemKeyAuth);
+fullApp.route('/api/vector', vectorRoute);
 
 // =============================================================================
 // Build Bundle Endpoint (Docker-only — delegates CF bundle builds)

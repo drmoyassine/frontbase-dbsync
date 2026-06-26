@@ -54,6 +54,7 @@ def _ensure_local_edge():
     import uuid
     from app.database.config import SessionLocal
     from app.models.models import EdgeEngine, EdgeDatabase, EdgeCache, EdgeQueue, EdgeVector
+    from app.services.edge_client import inject_system_key
 
     # Vector store selection: libsql_vector is the default (pure SQL, no native binary),
     # LanceDB is opt-in via LANCEDB_ENABLED=true (requires Alpine musl binary verification).
@@ -219,6 +220,13 @@ def _ensure_local_edge():
             if str(sys_engine.edge_vector_id or "") != str(desired_vector_id or ""):
                 sys_engine.edge_vector_id = desired_vector_id  # type: ignore[assignment]
                 changed = True
+                
+            # Ensure engine_config has a system_key
+            new_config = inject_system_key(sys_engine.engine_config)
+            if str(new_config) != str(sys_engine.engine_config):
+                sys_engine.engine_config = new_config  # type: ignore[assignment]
+                changed = True
+                
             if changed:
                 sys_engine.updated_at = now  # type: ignore[assignment]
                 vector_label = "LanceDB" if lancedb_enabled else "libSQL"
@@ -234,6 +242,7 @@ def _ensure_local_edge():
                 edge_cache_id=sys_cache.id,
                 edge_queue_id=sys_queue.id,
                 edge_vector_id=sys_vector.id if sys_vector else None,
+                engine_config=inject_system_key(None),
                 is_active=True,
                 is_system=True,
                 created_at=now,

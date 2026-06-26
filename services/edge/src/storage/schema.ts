@@ -135,6 +135,19 @@ export const tenantSecrets = sqliteTable(
 );
 
 // =============================================================================
+// Edge Secrets (local vault — encrypted engine-level infrastructure credentials
+// for standalone/self-hosted deployments; eliminates manual .env juggling)
+// =============================================================================
+
+export const edgeSecrets = sqliteTable('edge_secrets', {
+    name: text('name').primaryKey(),                    // e.g. 'FRONTBASE_DATASOURCES'
+    value: text('value').notNull(),                     // AES-256-GCM ciphertext (base64)
+    version: integer('version').notNull().default(1),   // bumped on each upsert (rotation support)
+    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+// =============================================================================
 // Inferred Types
 // =============================================================================
 
@@ -147,3 +160,4 @@ export type NewEdgeLog = typeof edgeLogsTable.$inferInsert;
 export type AgentToolRow = typeof agentToolsTable.$inferSelect;
 export type NewAgentTool = typeof agentToolsTable.$inferInsert;
 export type TenantSecretRow = typeof tenantSecrets.$inferSelect;
+export type EdgeSecretRow = typeof edgeSecrets.$inferSelect;

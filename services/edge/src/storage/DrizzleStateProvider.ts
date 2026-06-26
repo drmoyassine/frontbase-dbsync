@@ -693,4 +693,44 @@ export abstract class DrizzleStateProvider implements IStateProvider {
             payload: r.payload,
         }));
     }
+
+    // =========================================================================
+    // Edge Secrets (local vault — standalone/self-hosted engines)
+    // =========================================================================
+
+    async setEdgeSecret(name: string, value: string): Promise<void> {
+        const now = new Date().toISOString();
+        await this.getDb().run(sql`
+            INSERT INTO edge_secrets (name, value, version, created_at, updated_at)
+            VALUES (${name}, ${value}, 1, ${now}, ${now})
+            ON CONFLICT(name) DO UPDATE SET
+                value = excluded.value,
+                version = edge_secrets.version + 1,
+                updated_at = excluded.updated_at
+        `);
+    }
+
+    async getEdgeSecret(name: string): Promise<{ value: string; version: number } | null> {
+        const row = await this.getDb().get(sql`
+            SELECT value, version FROM edge_secrets WHERE name = ${name}
+        `);
+        return row ? { value: row.value, version: row.version } : null;
+    }
+
+    async listEdgeSecrets(): Promise<{ name: string; version: number; updatedAt: string }[]> {
+        const rows = await this.getDb().all(sql`
+            SELECT name, version, updated_at FROM edge_secrets ORDER BY name
+        `);
+        return (rows as Array<{ name: string; version: number; updated_at: string }>).map(r => ({
+            name: r.name,
+            version: r.version,
+            updatedAt: r.updated_at,
+        }));
+    }
+
+    async deleteEdgeSecret(name: string): Promise<void> {
+        await this.getDb().run(sql`
+            DELETE FROM edge_secrets WHERE name = ${name}
+        `);
+    }
 }

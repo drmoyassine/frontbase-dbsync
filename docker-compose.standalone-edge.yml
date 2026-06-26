@@ -27,11 +27,18 @@ services:
       # Storage provider (must be 'cloud' for standalone)
       - FRONTBASE_DEPLOYMENT_MODE=cloud
       
-      # Optional external providers (configured via .env JSON blocks)
+      # Optional external providers.
+      # FRONTBASE_STATE_DB defaults to local SQLite (bootstrap — the vault
+      # itself lives in this DB, so it cannot come from the vault).
       - FRONTBASE_STATE_DB=${FRONTBASE_STATE_DB:-{"provider":"sqlite"}}
-      - FRONTBASE_CACHE=${FRONTBASE_CACHE:-{"provider":"none"}}
-      - FRONTBASE_QUEUE=${FRONTBASE_QUEUE:-{"provider":"none"}}
-      - FRONTBASE_AUTH=${FRONTBASE_AUTH:-{"provider":"none"}}
+      # CACHE / QUEUE / AUTH are intentionally left EMPTY unless set in .env:
+      # when empty the engine falls back to {provider:"none"}, but the local
+      # vault (POST /api/config/secrets) can populate them at runtime. Setting
+      # a value in .env still wins (manual override precedence). See
+      # docs/edge-local-vault.md.
+      - FRONTBASE_CACHE=${FRONTBASE_CACHE:-}
+      - FRONTBASE_QUEUE=${FRONTBASE_QUEUE:-}
+      - FRONTBASE_AUTH=${FRONTBASE_AUTH:-}
       
       # Edge database (auto-mounted by volume)
       - SQLITE_PATH=/app/data/edge.db

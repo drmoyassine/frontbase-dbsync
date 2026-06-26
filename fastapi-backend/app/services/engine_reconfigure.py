@@ -240,12 +240,12 @@ async def reconfigure(
     db: Session,
 ) -> dict:
     """Live-reconfigure an engine's DB/cache/queue bindings.
-    
+
     Provider routing:
       - CF:               PATCH Settings API (instant, preserves non-FB bindings)
       - Supabase/Deno:    Push env vars via API (instant, no redeploy)
       - Vercel/Netlify:   Push env vars via API + trigger full redeploy
-      - Docker:           POST to engine /api/update
+      - Standalone/Docker: POST secrets to engine /api/config/secrets (local vault)
     """
     # 1. Resolve provider type
     provider_type = _resolve_provider_type(engine, db)
@@ -291,7 +291,12 @@ async def reconfigure(
     bindings_set = list(new_bindings.keys())
     bindings_removed: list[str] = []
 
-    if provider_type == 'cloudflare':
+    if provider_type is None:
+        # Standalone/Docker edge (no provider account): push the full secrets
+        # map to the engine's local vault (POST /api/config/secrets). The edge
+        # encrypts each value at rest and hot-applies it — no .env editing.
+        settings_patched = await engine_deploy._push_standalone_secrets(engine, new_bindings)
+    elif provider_type == 'cloudflare':
         cf_creds = _resolve_cf_credentials(engine, db)
         if cf_creds:
             settings_patched, bindings_set, bindings_removed = await _patch_cf_settings(

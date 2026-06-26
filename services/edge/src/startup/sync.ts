@@ -64,6 +64,13 @@ export async function runStartupSync(): Promise<void> {
     // Initialize state database (runs migrations including v2 for workflows/executions)
     await stateProvider.init();
 
+    // Load encrypted secrets from the local vault into process.env (standalone/
+    // self-hosted engines). No-op when the vault is empty or unsupported. Must
+    // run AFTER init() (table needs to exist) and BEFORE any config getters
+    // cache their values.
+    const { loadEdgeSecrets } = await import('./loadSecrets.js');
+    await loadEdgeSecrets();
+
     const platform = getPlatform();
     if (platform === 'docker') {
         // Docker platform: init embedded Redis (no backend call needed)

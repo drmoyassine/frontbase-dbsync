@@ -192,6 +192,13 @@ export interface TenantSecretEntry {
     payload: string;
 }
 
+/** Metadata for an edge_secrets row (the ciphertext value is never surfaced). */
+export interface EdgeSecretMeta {
+    name: string;
+    version: number;
+    updatedAt: string;
+}
+
 export interface IStateProvider {
     // --- Lifecycle ---
     /** Initialize storage (create tables, run migrations, etc.) */
@@ -305,4 +312,23 @@ export interface IStateProvider {
      * Providers without an efficient listing path may omit this (route 501s).
      */
     listTenantSecrets?(): Promise<TenantSecretEntry[]>;
+
+    // --- Edge Secrets (local vault — standalone/self-hosted engines) ---
+    //
+    // Engine-level infrastructure credentials (datasources, cache, queue, …)
+    // stored as AES-256-GCM ciphertext so users never hand-edit `.env`. The
+    // control plane pushes these via POST /api/config/secrets; the boot loader
+    // decrypts them into process.env at startup. `value` is opaque ciphertext
+    // — providers never inspect it. The decryption key is derived from
+    // FRONTBASE_SYSTEM_KEY (see config/edgeSecrets.ts).
+    //
+    // See docs/edge-local-vault.md
+    /** Upsert an edge secret (ciphertext). Bumps `version` on update. */
+    setEdgeSecret?(name: string, value: string): Promise<void>;
+    /** Read one edge secret's ciphertext + version (null if absent). */
+    getEdgeSecret?(name: string): Promise<{ value: string; version: number } | null>;
+    /** List edge secret metadata (names + versions + timestamps — never ciphertext). */
+    listEdgeSecrets?(): Promise<EdgeSecretMeta[]>;
+    /** Delete an edge secret by name. */
+    deleteEdgeSecret?(name: string): Promise<void>;
 }

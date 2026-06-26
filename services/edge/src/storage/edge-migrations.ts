@@ -246,6 +246,20 @@ export const MIGRATIONS: Migration[] = [
             `CREATE INDEX IF NOT EXISTS idx_tenant_secrets_tenant ON tenant_secrets(tenant_slug)`,
         ],
     },
+    {
+        version: 14,
+        description: 'Add edge_secrets table for the local vault (encrypted engine-level infra credentials)',
+        sql: [
+            `CREATE TABLE IF NOT EXISTS edge_secrets (
+                name TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )`,
+            `CREATE INDEX IF NOT EXISTS idx_edge_secrets_updated_at ON edge_secrets(updated_at)`,
+        ],
+    },
 ];
 
 // =============================================================================

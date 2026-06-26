@@ -109,6 +109,24 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
             await PROVIDER_DEPLOYERS[provider](engine, db, script_content, adapter_type)
         else:
             await _deploy_docker(engine, engine_url, script_content, source_hash)
+            # Standalone/Docker (self-hosted): seed the local vault with the
+            # engine's current secrets. Must run AFTER /api/update so the new
+            # bundle (which defines the /api/config/secrets route) is live, and
+            # after the health-wait so the engine can accept the POST. Shared
+            # engines take a cloud-provider branch above; guard regardless.
+            if not bool(engine.is_shared):
+                try:
+                    vault_secrets = build_engine_secrets(
+                        db,
+                        edge_db_id=str(engine.edge_db_id) if engine.edge_db_id is not None else None,
+                        edge_cache_id=str(engine.edge_cache_id) if engine.edge_cache_id is not None else None,
+                        edge_queue_id=str(engine.edge_queue_id) if engine.edge_queue_id is not None else None,
+                        engine_id=str(engine.id),
+                        deploy_provider='docker',
+                    )
+                    await _push_standalone_secrets(engine, vault_secrets)
+                except Exception as push_err:
+                    print(f"[Redeploy] Standalone vault seed failed (non-fatal): {push_err}")
 
         # 3. Initialize Supabase state DB at deploy time (provider-agnostic).
         #    If the engine's state DB is on Supabase, create schema + tables
@@ -343,4 +361,48 @@ async def _flush_cache(engine: EdgeEngine, engine_url: str) -> bool:
             resp = await client.post(f"{engine_url}/api/cache/flush", headers=auth_headers, timeout=10.0)
             return resp.status_code in (200, 204)
     except Exception:
+        return False
+
+
+async def _push_standalone_secrets(engine: EdgeEngine, secrets: dict[str, str]) -> bool:
+    """POST the FRONTBASE_* secrets map to a standalone/Docker edge's local vault.
+
+    The edge encrypts each value at rest (`edge_secrets` table) and applies it to
+    its running process, so standalone/self-hosted users never hand-edit `.env`
+    — they configure `FRONTBASE_SYSTEM_KEY` once and the control plane pushes
+    everything else here. Endpoint: POST /api/config/secrets (x-system-key auth).
+
+    Best-effort + non-fatal: a failure is retried on the next reconfigure/redeploy.
+    Returns True on success. See docs/edge-local-vault.md.
+    """
+    if not secrets:
+        return True
+    engine_url = resolve_engine_url(engine).rstrip('/')
+    if not engine_url:
+        print(f"[Deploy] Engine '{engine.name}' has no URL — skipping standalone secrets push")
+        return False
+    auth_headers = get_edge_headers(engine)
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{engine_url}/api/config/secrets",
+                json=secrets,
+                headers=auth_headers,
+                timeout=30.0,
+            )
+            if resp.status_code in (200, 204):
+                try:
+                    result = resp.json()
+                    updated = result.get('updated', []) if isinstance(result, dict) else []
+                    errs = result.get('errors', []) if isinstance(result, dict) else []
+                    print(f"[Deploy] Pushed {len(updated)} secrets to standalone vault "
+                          f"for '{engine.name}'" + (f" (errors: {len(errs)})" if errs else ""))
+                except Exception:
+                    print(f"[Deploy] Pushed secrets to standalone vault for '{engine.name}'")
+                return True
+            print(f"[Deploy] Standalone secrets push failed for '{engine.name}': "
+                  f"{resp.status_code} {resp.text[:200]}")
+            return False
+    except Exception as e:
+        print(f"[Deploy] Standalone secrets push error for '{engine.name}': {e}")
         return False

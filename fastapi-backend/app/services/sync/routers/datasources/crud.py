@@ -79,12 +79,6 @@ async def create_datasource(
     # This handles cases where the model has a field but the migration hasn't been applied yet
     db_columns = {col.name for col in inspect(Datasource).columns}
 
-    # DEBUG: Log the type value being received
-    import logging
-    logger.info(f"[CREATE-DS] Received type: {data.type!r}, type: {type(data.type)}")
-    if hasattr(data.type, 'value'):
-        logger.info(f"[CREATE-DS] Enum value: {data.type.value!r}")
-
     # Build datasource kwargs, only including fields that exist in the database
     datasource_kwargs = {
         "name": data.name,

@@ -45,7 +45,12 @@ class Datasource(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     project_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     type: Mapped[DatasourceType] = mapped_column(
-        SQLEnum(DatasourceType, native_enum=False, length=50), 
+        SQLEnum(
+            DatasourceType,
+            native_enum=False,
+            length=50,
+            values_callable=lambda obj: [e.value for e in obj]
+        ),
         nullable=False
     )
     

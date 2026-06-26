@@ -1,12 +1,9 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { Database, RefreshCw, AlertTriangle, History, Plus } from 'lucide-react'
+import { Database, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const tabs = [
     { path: 'datasources', label: 'Datasources', icon: Database },
-    { path: 'sync-configs', label: 'Sync Configs', icon: RefreshCw },
-    { path: 'conflicts', label: 'Conflicts', icon: AlertTriangle },
-    { path: 'jobs', label: 'Jobs', icon: History },
 ]
 
 export function DataStudio() {

@@ -21,9 +21,6 @@ import { Layout as UnifiedShell } from "./modules/dbsync/components/Layout";
 import { Dashboard as Overview } from "./modules/dbsync/pages/Dashboard";
 import { DataStudio } from "./modules/dbsync/pages/DataStudio";
 import { Datasources } from "./modules/dbsync/pages/Datasources";
-import { SyncConfigs } from "./modules/dbsync/pages/SyncConfigs";
-import { Conflicts } from "./modules/dbsync/pages/Conflicts";
-import { Jobs } from "./modules/dbsync/pages/Jobs";
 
 // Frontbase Panels
 import { PagesPanel } from "@/components/dashboard/PagesPanel";
@@ -163,9 +160,6 @@ const App = () => {
                   <Route path="/data-studio" element={<DataStudio />}>
                     <Route index element={<Navigate to="datasources" replace />} />
                     <Route path="datasources" element={<Datasources />} />
-                    <Route path="sync-configs" element={<SyncConfigs />} />
-                    <Route path="conflicts" element={<Conflicts />} />
-                    <Route path="jobs" element={<Jobs />} />
                   </Route>
 
                   <Route path="/users" element={<UsersPanel />} />

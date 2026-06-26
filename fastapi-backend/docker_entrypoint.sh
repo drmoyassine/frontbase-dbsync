@@ -111,6 +111,8 @@ echo "Tables bootstrapped successfully"
 # On fresh DBs (no alembic_version row), stamp head — create_all() already made
 # all tables, so running incremental migrations would fail on existing tables.
 # On existing DBs, run upgrade normally for incremental changes.
+# On DBs created via create_all() but no alembic_version: detect schema state
+# and stamp to appropriate version, then run migrations to catch up.
 echo "Running database migrations..."
 DB_STATE=$(python -c "
 from app.database.config import engine
@@ -128,9 +130,53 @@ with engine.connect() as conn:
             print('existing')
 ")
 if [ "$DB_STATE" = "fresh" ]; then
-  echo "Fresh database detected, stamping Alembic to head..."
-  alembic stamp head
-  echo "Database stamped to head"
+  echo "No alembic_version table found, checking if database already has tables..."
+  # Check if this is a DB created by create_all() (tables exist but no alembic_version)
+  TABLES_EXIST=$(python -c "
+from app.database.config import engine
+from sqlalchemy import text, inspect
+with engine.connect() as conn:
+    inspector = inspect(conn)
+    tables = inspector.get_table_names()
+    # Check for a few core tables that indicate create_all() was run
+    if 'edge_engines' in tables and 'datasources' in tables:
+        print('yes')
+    else:
+        print('no')
+")
+  if [ "$TABLES_EXIST" = "yes" ]; then
+    echo "Tables exist but no alembic_version (created via create_all), detecting schema state..."
+    # Detect which migrations have already been applied by checking for key columns
+    # We'll check for edge_vector_id (added in 0053) to determine current state
+    SCHEMA_VERSION=$(python -c "
+from app.database.config import engine
+from sqlalchemy import text, inspect
+with engine.connect() as conn:
+    inspector = inspect(conn)
+    tables = inspector.get_table_names()
+    if 'edge_engines' not in tables:
+        print('0050')  # Base: before edge_vectors work
+    else:
+        columns = [c['name'] for c in inspector.get_columns('edge_engines')]
+        if 'edge_vector_id' in columns:
+            print('head')  # Already at or past 0053
+        else:
+            print('0052')  # Before edge_vectors (0053), need to run 0053+
+")
+    if [ "$SCHEMA_VERSION" = "head" ]; then
+      echo "Schema is already at latest version, stamping Alembic to head..."
+      alembic stamp head
+    else
+      echo "Detected schema at pre-$SCHEMA_VERSION state, stamping to $SCHEMA_VERSION then upgrading..."
+      alembic stamp "$SCHEMA_VERSION"
+      echo "Now running alembic upgrade to apply pending migrations..."
+      alembic upgrade head
+    fi
+  else
+    echo "Fresh database detected, stamping Alembic to head..."
+    alembic stamp head
+    echo "Database stamped to head"
+  fi
 else
   echo "Existing database, running alembic upgrade..."
   alembic upgrade head

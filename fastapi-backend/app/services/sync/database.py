@@ -125,7 +125,8 @@ def _update_enum_check_constraints(connection):
             break
 
     # Build the list of all valid enum values
-    datasource_type_values = [e.value for e in DatasourceType]
+    # IMPORTANT: Use e.name (uppercase) because SQLAlchemy's non-native Enum stores .name, not .value
+    datasource_type_values = [e.name for e in DatasourceType]
 
     # Check if wordpress_plugin is in the existing constraint
     needs_update = False
@@ -139,10 +140,10 @@ def _update_enum_check_constraints(connection):
                     WHERE conname = '{type_constraint}' AND conrelid = 'datasources'::regclass
                 """))
                 current_def = result.scalar()
-                # Check if wordpress_plugin is missing
-                if current_def and 'wordpress_plugin' not in current_def:
+                # Check if WORDPRESS_PLUGIN is missing (note: uppercase, enum.name not .value)
+                if current_def and 'WORDPRESS_PLUGIN' not in current_def:
                     needs_update = True
-                    _logger.info(f"[AUTO-MIGRATE] CHECK constraint {type_constraint} missing 'wordpress_plugin'")
+                    _logger.info(f"[AUTO-MIGRATE] CHECK constraint {type_constraint} missing 'WORDPRESS_PLUGIN'")
         except Exception as e:
             _logger.warning(f"[AUTO-MIGRATE] Could not read constraint definition: {e}")
 
@@ -158,15 +159,16 @@ def _update_enum_check_constraints(connection):
 
         # IMPORTANT: Fix datasource types BEFORE adding the constraint.
         # This prevents CHECK constraint violations on deployments with legacy data.
-        # Strategy: Update case-mismatched types to lowercase, then delete truly invalid.
+        # Strategy: Update case-mismatched types to uppercase (enum.name), then delete truly invalid.
+        # Note: SQLAlchemy's non-native Enum stores the enum .name (UPPERCASE), not .value (lowercase)
         values_list = ', '.join(f"'{v}'" for v in datasource_type_values)
         try:
             with connection.begin_nested():
-                # Step 1: Update uppercase type variants to lowercase (case-insensitive fix)
-                # This preserves datasources that just have wrong case like SUPABASE -> supabase
+                # Step 1: Update lowercase type variants to uppercase (case fix)
+                # This fixes datasources stored as lowercase (e.g., 'wordpress_plugin' -> 'WORDPRESS_PLUGIN')
                 update_result = connection.execute(text(f"""
                     UPDATE datasources
-                    SET type = LOWER(type)
+                    SET type = UPPER(type)
                     WHERE LOWER(type) IN ({values_list}) AND type NOT IN ({values_list})
                     RETURNING id, name, type
                 """))
@@ -174,7 +176,7 @@ def _update_enum_check_constraints(connection):
                 if updated_rows:
                     _logger.warning(
                         f"[AUTO-MIGRATE] Fixed {len(updated_rows)} datasources with wrong case: "
-                        + ", ".join(f"({row[0]}: {row[1]} = {row[2]} → {row[2].lower()})" for row in updated_rows)
+                        + ", ".join(f"({row[0]}: {row[1]} = {row[2]} → {row[2].upper()})" for row in updated_rows)
                     )
 
                 # Step 2: Delete any remaining truly invalid datasources (not just case issues)

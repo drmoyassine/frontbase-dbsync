@@ -460,6 +460,35 @@ async def test_vector_connection_raw(
     if provider_lower == "turso_vector":
         return await _test_turso_vector(url, token, provider_account_id, db, ctx)
 
+    # ── Edge Proxy Backends (libsql_vector, embedded_lancedb, etc.) ──────
+    if provider_lower in ("libsql_vector", "embedded_lancedb", "embedded_sql_vector", "lancedb"):
+        if not db:
+            return {"success": False, "message": "Database session required to validate edge proxy backends.", "error_code": "INTERNAL_ERROR"}
+        try:
+            from app.services.vector import get_vector_backend
+            from app.services.vector.edge_proxy_backend import EdgeVectorProxyBackend
+            backend = get_vector_backend(provider_lower, db=db)
+            if not isinstance(backend, EdgeVectorProxyBackend):
+                return {"success": False, "message": "Failed to resolve Edge vector proxy backend.", "error_code": "INTERNAL_ERROR"}
+            
+            api_url = f"{backend.edge_url}/api/vector/test"
+            headers = {"x-system-key": backend.system_key}
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(api_url, headers=headers)
+                if resp.status_code in (401, 403):
+                    return {"success": False, "message": "Edge engine authentication failed: invalid system key.", "error_code": "AUTH_FAILED"}
+                if not resp.is_success:
+                    return {"success": False, "message": f"Edge engine returned HTTP {resp.status_code}.", "error_code": "PROVIDER_ERROR"}
+                
+                return {"success": True, "message": f"Connected to local edge vector store ({provider})."}
+        except ValueError as e:
+            return {"success": False, "message": f"Edge engine resolution failed: {e}", "error_code": "INVALID_CONFIG"}
+        except httpx.TimeoutException:
+            return {"success": False, "message": "Connection timeout: Edge engine did not respond.", "error_code": "TIMEOUT"}
+        except Exception as e:
+            return {"success": False, "message": f"Connection failed: {e}", "error_code": "CONNECTION_ERROR"}
+
     # Unknown / future providers — accept but flag that validation is a no-op.
     return {
         "success": True,

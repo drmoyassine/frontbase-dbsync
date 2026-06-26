@@ -81,6 +81,8 @@ services:
       - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
       # Webhook API keys (comma-separated)
       - API_KEYS=${API_KEYS:-}
+      # System key for local backend-to-edge management traffic
+      - FRONTBASE_API_KEYS={"systemKey":"fb_sys_local_dev_key"}
       # Public URL for preview links (set PRIMARY_DOMAIN or leave empty for auto-detect)
       - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
     volumes:

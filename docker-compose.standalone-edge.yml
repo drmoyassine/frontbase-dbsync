@@ -32,8 +32,14 @@ services:
       # Upstash Redis L2 cache (optional but recommended)
       - FRONTBASE_REDIS_URL=${UPSTASH_REDIS_URL:-}
       - FRONTBASE_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}
-      # Public URL for link generation
-      - PUBLIC_URL=${PUBLIC_URL:-}
+      # Edge database (auto-mounted by volume)
+      - SQLITE_PATH=/app/data/edge.db
+      - DATABASE_URL=file:/app/data/edge.db
+      - PAGES_DB_URL=file:/app/data/pages.db
+      # System key for backend-to-edge management traffic (MUST match backend)
+      - FRONTBASE_API_KEYS={"systemKey":"fb_sys_local_dev_key"}
+      # Public URL for preview links
+      - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3002/api/health" ]

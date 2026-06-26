@@ -222,7 +222,8 @@ def _ensure_local_edge():
                 changed = True
                 
             # Ensure engine_config has a system_key
-            new_config = inject_system_key(sys_engine.engine_config)
+            # The local edge container expects this specific key (set in docker-compose.yml)
+            new_config = inject_system_key(sys_engine.engine_config, force_key="fb_sys_local_dev_key")
             if str(new_config) != str(sys_engine.engine_config):
                 sys_engine.engine_config = new_config  # type: ignore[assignment]
                 changed = True
@@ -242,7 +243,7 @@ def _ensure_local_edge():
                 edge_cache_id=sys_cache.id,
                 edge_queue_id=sys_queue.id,
                 edge_vector_id=sys_vector.id if sys_vector else None,
-                engine_config=inject_system_key(None),
+                engine_config=inject_system_key(None, force_key="fb_sys_local_dev_key"),
                 is_active=True,
                 is_system=True,
                 created_at=now,

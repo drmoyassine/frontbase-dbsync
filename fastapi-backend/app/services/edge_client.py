@@ -20,10 +20,11 @@ def generate_system_key() -> str:
     return f"fb_sys_{secrets_mod.token_hex(32)}"
 
 
-def inject_system_key(engine_config_json: str | None) -> str:
+def inject_system_key(engine_config_json: str | None, force_key: str | None = None) -> str:
     """Inject an encrypted system key into engine_config JSON string.
     
-    If the config already has a system_key, it is preserved.
+    If force_key is provided, it overwrites any existing key.
+    Otherwise, if the config already has a system_key, it is preserved.
     Returns the updated JSON string.
     """
     try:
@@ -31,7 +32,11 @@ def inject_system_key(engine_config_json: str | None) -> str:
     except (json.JSONDecodeError, TypeError):
         cfg = {}
     
-    if 'system_key' not in cfg:
+    if force_key:
+        encrypted = encrypt_field(force_key)
+        if encrypted:
+            cfg['system_key'] = encrypted
+    elif 'system_key' not in cfg:
         raw_key = generate_system_key()
         encrypted = encrypt_field(raw_key)
         if encrypted:

@@ -37,7 +37,8 @@ services:
       - DATABASE_URL=file:/app/data/edge.db
       - PAGES_DB_URL=file:/app/data/pages.db
       # System key for backend-to-edge management traffic (MUST match backend)
-      - FRONTBASE_API_KEYS={"systemKey":"fb_sys_local_dev_key"}
+      # Define this in your .env file as: FRONTBASE_API_KEYS={"systemKey":"your_secure_key"}
+      - FRONTBASE_API_KEYS=${FRONTBASE_API_KEYS:-}
       # Public URL for preview links
       - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
     restart: unless-stopped
@@ -46,3 +47,4 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
+

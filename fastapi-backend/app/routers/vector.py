@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.database.config import get_db
 from app.middleware.tenant_context import TenantContext, get_tenant_context

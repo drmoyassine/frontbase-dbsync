@@ -262,7 +262,7 @@ async def init_db():
     """Initialize database tables and auto-migrate missing columns."""
     async with engine.begin() as conn:
         # Import models to register them with Base
-        from app.services.sync.models import datasource, sync_config, job, conflict, view, project_settings, table_schema  # noqa
+        from app.services.sync.models import datasource, view, project_settings, table_schema  # noqa
 
         # Drop stale cache tables whose schema diverged (safe — cache is rebuilt).
         # Runs on SQLite AND Postgres: the sync tables are managed by create_all,

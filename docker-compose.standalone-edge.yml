@@ -7,7 +7,7 @@
 #
 # Usage:
 #   1. Create a Turso database and run turso-schema.sql
-#   2. Copy .env.standalone.example → .env
+#   2. Copy .env.standalone.example -> .env
 #   3. docker-compose -f docker-compose.standalone-edge.yml up -d
 #
 # ==============================================================================
@@ -26,17 +26,21 @@ services:
       - PORT=3002
       # Storage provider (must be 'cloud' for standalone)
       - FRONTBASE_DEPLOYMENT_MODE=cloud
-      # State DB (Uses local SQLite by default. For multi-node setups, configure Turso in .env)`n      - FRONTBASE_STATE_DB=${FRONTBASE_STATE_DB:-{`"provider`":`"sqlite`"}}
-      # Upstash Redis L2 cache (optional but recommended)
-      - FRONTBASE_REDIS_URL=${UPSTASH_REDIS_URL:-}
-      - FRONTBASE_REDIS_TOKEN=${UPSTASH_REDIS_TOKEN:-}
+      
+      # Optional external providers (configured via .env JSON blocks)
+      - FRONTBASE_STATE_DB=${FRONTBASE_STATE_DB:-{"provider":"sqlite"}}
+      - FRONTBASE_CACHE=${FRONTBASE_CACHE:-{"provider":"none"}}
+      - FRONTBASE_QUEUE=${FRONTBASE_QUEUE:-{"provider":"none"}}
+      - FRONTBASE_AUTH=${FRONTBASE_AUTH:-{"provider":"none"}}
+      
       # Edge database (auto-mounted by volume)
       - SQLITE_PATH=/app/data/edge.db
       - DATABASE_URL=file:/app/data/edge.db
       - PAGES_DB_URL=file:/app/data/pages.db
+      
       # System key for backend-to-edge management traffic (MUST match backend)
-      # Define this in your .env file as: FRONTBASE_SYSTEM_KEY=your_secure_key
       - FRONTBASE_API_KEYS={"systemKey":"${FRONTBASE_SYSTEM_KEY:-}"}
+      
       # Public URL for preview links
       - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
     restart: unless-stopped
@@ -45,7 +49,3 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
-
-
-
-

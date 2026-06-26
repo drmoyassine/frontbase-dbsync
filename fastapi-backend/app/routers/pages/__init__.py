@@ -9,9 +9,9 @@ from .versions import router as versions_router
 
 # Combined router with prefix and tags
 router = APIRouter(prefix="/api/pages", tags=["pages"])
+router.include_router(public_router)
 router.include_router(crud_router)
 router.include_router(publish_router)
-router.include_router(public_router)
 router.include_router(versions_router)
 
 __all__ = ['router']

@@ -181,6 +181,20 @@ export function getApiKeysConfig(): ApiKeysConfig {
     return _apiKeys;
 }
 
+/**
+ * Synchronous snapshot of the cached API-keys config (hot-path fallback).
+ *
+ * Phase 3 background-prewarms Tier-2 secrets instead of blocking boot on them,
+ * so `FRONTBASE_API_KEYS` may not yet be in process.env for the first few
+ * milliseconds after boot. Auth middleware uses this to take the fast path when
+ * the config is already materialized, and falls back to `getApiKeysConfigAsync()`
+ * (an explicit vault load) only when this returns null. Returns null — never a
+ * default — so callers can distinguish "not loaded yet" from "configured empty".
+ */
+export function getApiKeysConfigSync(): ApiKeysConfig | null {
+    return _apiKeys;
+}
+
 /** Cache config (upstash | cloudflare | deno_kv | none) */
 export function getCacheConfig(): CacheConfig {
     return (_cache ??= parseEnv<CacheConfig>('FRONTBASE_CACHE', { provider: 'none' }));
@@ -338,4 +352,116 @@ export async function loadLazySecret(name: string): Promise<string | null> {
         console.error(`[LazySecret] Failed to load '${name}' from vault:`, err);
         return null;
     }
+}
+
+// =============================================================================
+// Phase 3 — Async Scoped Accessors + Background Tier-2 Prewarm
+// =============================================================================
+//
+// The synchronous getters above read from process.env, which is populated at
+// boot. Phase 3 changes the boot loader to block on Tier-1 only and prewarm
+// Tier-2 in the background (see startup/loadSecrets.ts). These async accessors
+// are the explicit, vault-aware entry points: they guarantee the underlying
+// secret is materialized into process.env (from the vault, on demand) before
+// the cached singleton is (re)built. Callers that already run in an async
+// context and want a guaranteed-fresh value can await these; existing sync
+// call sites keep working unchanged because the background prewarm (or an
+// earlier boot load) has already populated the env.
+
+/**
+ * Ensure a single FRONTBASE_* secret is in process.env, materializing it from
+ * the vault on demand if missing. No-op when already set or when the vault is
+ * disabled/empty. Honors manual env precedence via loadLazySecret().
+ */
+async function materializeSecret(name: string): Promise<void> {
+    if (process.env[name] !== undefined && process.env[name] !== '') return;
+    const loaded = await loadLazySecret(name);
+    if (loaded) process.env[name] = loaded;
+}
+
+/** Auth config — vault-aware async accessor (also refreshes the singleton). */
+export async function getAuthConfigAsync(tenantSlug?: string): Promise<AuthConfig> {
+    await materializeSecret('FRONTBASE_AUTH');
+    // Drop the cached singleton so it re-parses from the (now populated) env.
+    _authSingle = null;
+    _authMap.clear();
+    return getAuthConfig(tenantSlug);
+}
+
+/** API-keys config — vault-aware async accessor (also refreshes the singleton). */
+export async function getApiKeysConfigAsync(): Promise<ApiKeysConfig> {
+    await materializeSecret('FRONTBASE_API_KEYS');
+    await materializeSecret('FRONTBASE_AUTH'); // legacy fallback source
+    _apiKeys = null;
+    return getApiKeysConfig();
+}
+
+/** Cache config — vault-aware async accessor (also refreshes the singleton). */
+export async function getCacheConfigAsync(): Promise<CacheConfig> {
+    await materializeSecret('FRONTBASE_CACHE');
+    _cache = null;
+    return getCacheConfig();
+}
+
+/** Queue config — vault-aware async accessor (also refreshes the singleton). */
+export async function getQueueConfigAsync(): Promise<QueueConfig> {
+    await materializeSecret('FRONTBASE_QUEUE');
+    _queue = null;
+    return getQueueConfig();
+}
+
+/** Vector config — vault-aware async accessor (also refreshes the singleton). */
+export async function getVectorConfigAsync(): Promise<VectorConfig> {
+    await materializeSecret('FRONTBASE_VECTOR');
+    _vector = null;
+    return getVectorConfig();
+}
+
+/** GPU models — vault-aware async accessor (also refreshes the singleton). */
+export async function getGpuModelsAsync(): Promise<GpuModel[]> {
+    await materializeSecret('FRONTBASE_GPU');
+    _gpu = null;
+    return getGpuModels();
+}
+
+/** Agent profiles — vault-aware async accessor (also refreshes the singleton). */
+export async function getAgentProfilesConfigAsync(): Promise<AgentProfilesConfig> {
+    await materializeSecret('FRONTBASE_AGENT_PROFILES');
+    _agentProfiles = null;
+    return getAgentProfilesConfig();
+}
+
+/**
+ * Materialize every Tier-2 secret from the vault into process.env in the
+ * background, then force all lazy config singletons to re-parse.
+ *
+ * Called fire-and-forget right after the Tier-1 boot load so the engine serves
+ * traffic without blocking on Tier-2 decrypts. Idempotent and best-effort: a
+ * failure to load one secret is logged and skipped (the getter falls back to
+ * its default, exactly as it would today if the env var were unset).
+ *
+ * @returns a small summary { loaded, failed } for logging/testing.
+ */
+export async function prewarmTier2(): Promise<{ loaded: number; failed: string[] }> {
+    const names = [...TIER_2_SECRETS];
+    let loaded = 0;
+    const failed: string[] = [];
+    for (const name of names) {
+        try {
+            await materializeSecret(name);
+            if (process.env[name] !== undefined && process.env[name] !== '') {
+                loaded++;
+            }
+        } catch (err) {
+            failed.push(name);
+            console.error(`[Prewarm] Failed to materialize '${name}':`, err);
+        }
+    }
+    // Force every lazy config singleton to re-parse from the now-populated env.
+    resetConfig('all');
+    console.log(
+        `[Prewarm] Tier-2 background load complete: ${loaded}/${names.length} materialized` +
+            (failed.length ? `, failed: ${failed.join(', ')}` : ''),
+    );
+    return { loaded, failed };
 }

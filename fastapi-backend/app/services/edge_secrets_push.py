@@ -254,11 +254,14 @@ async def push_tenant_secret(
     db: Session,
 ) -> bool:
     """Encrypt and push a single tenant secret. Returns True on success."""
+    from .tenant_secrets_audit import log_tenant_secret_audit
     secrets_key = resolve_secrets_key(engine, db)
     try:
         ciphertext = encrypt_tenant_secret(payload_plaintext, secrets_key)
     except Exception as e:
         print(f"[SecretsPush] Encryption failed for {tenant_slug}/{kind}: {e}")
+        log_tenant_secret_audit(db, str(engine.id), 'push', tenant_slug, kind, 'failure',
+                                error=f"Encryption failed: {e}")
         return False
 
     try:
@@ -270,9 +273,12 @@ async def push_tenant_secret(
             )
             resp.raise_for_status()
             print(f"[SecretsPush] Pushed {kind} for tenant {tenant_slug}")
+            log_tenant_secret_audit(db, str(engine.id), 'push', tenant_slug, kind, 'success')
             return True
     except httpx.HTTPError as e:
         print(f"[SecretsPush] Push failed for {tenant_slug}/{kind}: {e}")
+        log_tenant_secret_audit(db, str(engine.id), 'push', tenant_slug, kind, 'failure',
+                                error=str(e))
         return False
 
 
@@ -314,9 +320,24 @@ async def push_tenant_secrets_batch(
             )
             resp.raise_for_status()
             body = resp.json()
-            return body.get('results', [])
+            results = body.get('results', [])
+            # Audit each item's outcome (best-effort; never breaks the batch).
+            from .tenant_secrets_audit import log_tenant_secret_audit
+            for r in results:
+                log_tenant_secret_audit(
+                    db, str(engine.id), 'push',
+                    r.get('tenantSlug', ''), r.get('kind', ''),
+                    'success' if r.get('success') else 'failure',
+                    error=r.get('error'),
+                )
+            return results
     except httpx.HTTPError as e:
         print(f"[SecretsPush] Batch push failed: {e}")
+        # Audit the whole-batch failure per item (best-effort).
+        from .tenant_secrets_audit import log_tenant_secret_audit
+        for i in encrypted_items:
+            log_tenant_secret_audit(db, str(engine.id), 'push', i["tenantSlug"], i["kind"],
+                                    'failure', error=str(e))
         # Surface a failure for every item so callers can retry.
         return [
             {"tenantSlug": i["tenantSlug"], "kind": i["kind"], "success": False, "error": str(e)}
@@ -332,8 +353,19 @@ async def delete_tenant_secret(
     engine: EdgeEngine,
     tenant_slug: str,
     kind: Kind,
+    db: Session | None = None,
 ) -> bool:
-    """Delete a tenant secret blob from the worker's state-DB."""
+    """Delete a tenant secret blob from the worker's state-DB.
+
+    When ``db`` is provided, the outcome is recorded in the tenant-secrets audit
+    trail (best-effort). Omit it for legacy callers that don't have a session.
+    """
+    def _audit(status: str, error: str | None = None) -> None:
+        if db is None:
+            return
+        from .tenant_secrets_audit import log_tenant_secret_audit
+        log_tenant_secret_audit(db, str(engine.id), 'delete', tenant_slug, kind, status, error=error)
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.delete(
@@ -342,9 +374,11 @@ async def delete_tenant_secret(
                 params={"tenantSlug": tenant_slug, "kind": kind},
             )
             resp.raise_for_status()
+            _audit('success')
             return True
     except httpx.HTTPError as e:
         print(f"[SecretsPush] Delete failed for {tenant_slug}/{kind}: {e}")
+        _audit('failure', error=str(e))
         return False
 
 
@@ -595,13 +629,37 @@ async def rotate_secrets_key(
 
     _save_engine_config(engine, cfg, db)
 
+    # Audit metadata captured regardless of deploy outcome (the key material is
+    # already persisted at this point, so a deploy failure is a real rotation
+    # event worth recording).
+    from .tenant_secrets_audit import log_tenant_secret_audit
+    rotation_meta = {
+        "rotation_id": rotation_id,
+        "old_key_version": old_version,
+        "new_key_version": new_version,
+        "strategy": strategy,
+        "window_seconds": window_seconds,
+        "tenants_affected": tenants_count,
+        "key_changed": key_changed,
+    }
+
     # 5. Redeploy: propagates new+old keys as env and re-pushes ciphertext
     #    re-encrypted with the new key (via the deploy's post-sync step).
     from .engine_deploy import redeploy
-    deploy_result = await redeploy(engine, db)
+    try:
+        deploy_result = await redeploy(engine, db)
+    except Exception as deploy_err:
+        # Key rotated but redeploy failed — record the partial outcome, then
+        # re-raise so the caller sees the deploy error.
+        log_tenant_secret_audit(db, str(engine.id), 'rotate', '*', '*',
+                                'failure', error=f"Redeploy failed: {deploy_err}",
+                                metadata=rotation_meta)
+        raise
 
     print(f"[SecretsRotation] Rotated engine {getattr(engine, 'name', '?')} "
           f"v{old_version}→v{new_version} ({strategy}), {tenants_count} tenant(s)")
+    log_tenant_secret_audit(db, str(engine.id), 'rotate', '*', '*', 'success',
+                            metadata={**rotation_meta, "deploy": deploy_result})
 
     return {
         "status": "completed",

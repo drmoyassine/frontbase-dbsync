@@ -748,6 +748,39 @@ async def rotation_history(
     return {"history": list_rotation_history(engine, db)}
 
 
+@router.get("/{engine_id}/audit/tenant-secrets")
+async def tenant_secrets_audit_logs(
+    engine_id: str,
+    tenant_slug: str | None = Query(None, description="Filter to a single tenant slug"),
+    operation: str | None = Query(None, description="Filter by operation: push | delete | rotate"),
+    status: str | None = Query(None, description="Filter by status: success | failure"),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """List the tenant-secrets audit trail for an engine (newest first).
+
+    Returns control-plane operations (push/delete/rotate) on the engine's
+    per-tenant secrets, with optional tenant_slug / operation / status filters.
+    Mirrors the edge-side vault audit, but centralized in the backend DB.
+    See services/tenant_secrets_audit.py.
+    """
+    engine = _load_engine_for_owner(engine_id, db, ctx)
+    from ..services.tenant_secrets_audit import (
+        query_tenant_secret_audit, serialize_audit_row,
+    )
+    rows = query_tenant_secret_audit(
+        db, str(engine.id),
+        tenant_slug=tenant_slug, operation=operation, status=status, limit=limit,
+    )
+    return {
+        "engine_id": str(engine.id),
+        "is_shared": bool(engine.is_shared),
+        "filters": {"tenant_slug": tenant_slug, "operation": operation, "status": status},
+        "logs": [serialize_audit_row(r) for r in rows],
+    }
+
+
 # =============================================================================
 # Sync Manifest — read self-describing metadata from a running engine
 # =============================================================================

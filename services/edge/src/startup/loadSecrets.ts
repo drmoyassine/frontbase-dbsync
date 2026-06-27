@@ -21,7 +21,7 @@
 
 import { stateProvider } from '../storage/index.js';
 import { getVaultSystemKey, decryptSecret } from '../config/edgeSecrets.js';
-import { resetConfig, getSecretTier } from '../config/env.js';
+import { resetConfig, getSecretTier, prewarmTier2 } from '../config/env.js';
 
 /**
  * Env vars that must NOT be sourced from the vault at boot:
@@ -33,9 +33,17 @@ import { resetConfig, getSecretTier } from '../config/env.js';
 const BOOT_EXCLUDED = new Set<string>(['FRONTBASE_STATE_DB']);
 
 /**
- * Load all vault secrets into process.env. Call once during startup, after
+ * Load vault secrets into process.env. Call once during startup, after
  * `stateProvider.init()` has applied migrations (so the `edge_secrets` table
  * exists). Safe to call when the vault is empty or unsupported (no-op).
+ *
+ * Phase 3 boot strategy (see docs/plans/phase-3-async-accessors.md):
+ *   - Tier-1 (boot-critical) secrets are decrypted EAGERLY (blocking). The
+ *     engine cannot initialize its providers without them.
+ *   - Tier-2 (operational) secrets are deferred to a background prewarm
+ *     (prewarmTier2, fired below) so boot latency stays O(Tier-1) instead of
+ *     O(all secrets). The async accessors (getXxxConfigAsync) and the prewarm
+ *     materialize them on demand / shortly after boot.
  */
 export async function loadEdgeSecrets(): Promise<void> {
     const systemKey = getVaultSystemKey();
@@ -67,8 +75,8 @@ export async function loadEdgeSecrets(): Promise<void> {
 
     let loaded = 0;
     let skipped = 0;
+    let deferred = 0;
     const failed: string[] = [];
-    const tierCounts = { 1: 0, 2: 0 };
 
     for (const name of names) {
         if (BOOT_EXCLUDED.has(name)) {
@@ -90,6 +98,14 @@ export async function loadEdgeSecrets(): Promise<void> {
             continue;
         }
 
+        // Phase 3: defer Tier-2 (operational) secrets to the background prewarm
+        // so boot does not block on their decrypts. They load on-demand via the
+        // async accessors, or shortly after boot via prewarmTier2() below.
+        if (getSecretTier(name) !== 1) {
+            deferred++;
+            continue;
+        }
+
         try {
             const row = await stateProvider.getEdgeSecret?.(name);
             if (!row) {
@@ -99,10 +115,6 @@ export async function loadEdgeSecrets(): Promise<void> {
             const plaintext = await decryptSecret(row.value, systemKey);
             process.env[name] = plaintext;
             loaded++;
-            // Tier 1 + Tier 2 both load eagerly at boot — Tier 2 vars (auth,
-            // agent profiles, …) are read through synchronous singletons by
-            // middleware, so deferring them would regress until the next boot.
-            tierCounts[getSecretTier(name) === 1 ? 1 : 2]++;
         } catch (err) {
             failed.push(name);
             console.error(`[EdgeSecrets] Failed to load '${name}':`, err);
@@ -115,9 +127,18 @@ export async function loadEdgeSecrets(): Promise<void> {
     resetConfig('all');
 
     console.log(
-        `[EdgeSecrets] Loaded ${loaded} secret(s) from vault` +
-            ` (T1: ${tierCounts[1]}, T2: ${tierCounts[2]})` +
+        `[EdgeSecrets] Loaded ${loaded} Tier-1 secret(s) from vault` +
+            (deferred ? `, deferred ${deferred} Tier-2 (background prewarm)` : '') +
             (skipped ? `, skipped ${skipped} (env override / excluded / tier-3)` : '') +
             (failed.length ? `, failed: ${failed.join(', ')}` : ''),
     );
+
+    // Phase 3: background-prewarm the deferred Tier-2 secrets without blocking
+    // boot. A failure here is logged inside prewarmTier2 and never fatal — the
+    // async accessors can still materialize on demand later.
+    if (deferred > 0) {
+        void prewarmTier2().catch((err) => {
+            console.error('[EdgeSecrets] Tier-2 background prewarm failed:', err);
+        });
+    }
 }

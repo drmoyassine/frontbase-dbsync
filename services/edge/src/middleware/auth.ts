@@ -15,7 +15,7 @@
 import { jwt } from 'hono/jwt';
 import { csrf } from 'hono/csrf';
 import type { Context, Next } from 'hono';
-import { getApiKeysConfig, getAuthConfig } from '../config/env.js';
+import { getApiKeysConfig, getApiKeysConfigSync, getApiKeysConfigAsync, getAuthConfig, getAuthConfigAsync } from '../config/env.js';
 
 // =============================================================================
 // Shared Helpers
@@ -27,6 +27,16 @@ interface APIKeyHashEntry {
     scope?: string;       // 'user' | 'management' | 'all'
     expires_at?: string | null;
     tenantSlug?: string;
+}
+
+/**
+ * Resolve the API-keys config, doing an on-demand vault load if the Phase 3
+ * background prewarm hasn't populated it yet. Returns the cached singleton
+ * immediately in the steady state (zero added latency once materialized).
+ */
+async function resolveApiKeysConfig() {
+    if (getApiKeysConfigSync()) return;
+    await getApiKeysConfigAsync();
 }
 
 /** Parse API key hashes from FRONTBASE_API_KEYS config. Returns null if not configured. */
@@ -90,6 +100,9 @@ async function validateApiKey(
  * Dev mode: if no FRONTBASE_SYSTEM_KEY is configured, all requests pass through.
  */
 export const systemKeyAuth = async (c: Context, next: Next) => {
+    // Phase 3: materialize FRONTBASE_API_KEYS on demand if the background
+    // prewarm hasn't landed yet; no-op once cached.
+    await resolveApiKeysConfig();
     const systemKey = getApiKeysConfig().systemKey;
 
     if (!systemKey) {
@@ -161,6 +174,9 @@ export const systemKeyAuth = async (c: Context, next: Next) => {
  * Dev mode: if no API key hashes are configured, all requests pass through.
  */
 export const userApiKeyAuth = async (c: Context, next: Next) => {
+    // Phase 3: materialize FRONTBASE_API_KEYS on demand if the background
+    // prewarm hasn't landed yet; no-op once cached.
+    await resolveApiKeysConfig();
     const config = getApiKeysConfig();
     const isDev = (process.env.NODE_ENV || 'development') === 'development';
 
@@ -259,9 +275,15 @@ export const createSupabaseJwtAuth = (secret: string) => jwt({
  * Factory to create JWT auth from environment.
  * Falls back to allowing all if no secret configured (dev mode).
  */
-export const supabaseJwtAuth = (c: Context, next: Next) => {
+export const supabaseJwtAuth = async (c: Context, next: Next) => {
     const tenantSlug = (c as any).get('tenantSlug') as string | undefined;
-    const secret = getAuthConfig(tenantSlug).jwtSecret;
+    let secret = getAuthConfig(tenantSlug).jwtSecret;
+
+    // Phase 3: FRONTBASE_AUTH is a Tier-2 secret that may still be warming up
+    // via the background prewarm. Materialize it on demand before failing.
+    if (!secret) {
+        secret = (await getAuthConfigAsync(tenantSlug)).jwtSecret;
+    }
 
     if (!secret) {
         const isDev = (process.env.NODE_ENV || 'development') === 'development';

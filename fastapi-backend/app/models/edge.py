@@ -280,3 +280,37 @@ class EdgeAgentProfile(Base):
 
     # Relationship
     edge_engine = relationship("EdgeEngine", back_populates="agent_profiles")
+
+
+class TenantSecretAudit(Base):
+    """Audit trail of tenant-secrets operations on shared/community engines.
+
+    Community engines store per-tenant secret blobs (datasources, auth, …)
+    encrypted in the worker's state-DB, pushed by the control plane. This table
+    is the authoritative, centralized record of those control-plane operations
+    (push / delete / rotate) — who pushed what, when, and whether it succeeded.
+
+    Lives in the backend DB (not the worker state-DB) because the control plane
+    is the authority for tenant secrets and multi-tenant SaaS needs a unified,
+    redeploy-surviving view across all workers. Mirrors the edge-side
+    `edge_secret_audit` vault table, adapted for the multi-tenant model:
+    `tenant_slug` + `kind` identify the blob instead of a single secret name.
+
+    See docs/plans/phase-3-async-accessors.md (Part 2).
+    """
+    __tablename__ = 'tenant_secrets_audit'
+
+    id = Column(String, primary_key=True)
+    operation = Column(String(50), nullable=False)   # push | delete | rotate
+    tenant_slug = Column(String(100), nullable=False)
+    kind = Column(String(50), nullable=False)         # datasources | auth | agent_profiles | security | storage | (rotate='*')
+    status = Column(String(20), nullable=False)       # success | failure
+    error_message = Column(String(500), nullable=True)
+    engine_id = Column(String, ForeignKey('edge_engines.id', ondelete='CASCADE'), nullable=True, index=True)
+    initiated_by = Column(String(50), nullable=False)  # control_plane | api | worker
+    initiated_by_user_id = Column(String, nullable=True)
+    timestamp = Column(String, nullable=False, index=True)
+    audit_metadata = Column(Text, nullable=True)      # JSON: rotation_id, key_version, etc.
+
+    # Relationship
+    edge_engine = relationship("EdgeEngine")

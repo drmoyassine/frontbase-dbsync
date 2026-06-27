@@ -55,6 +55,7 @@ export interface VariableMutation {
 interface ExecutionContext {
     executionId: string;
     workflowId: string;
+    tenantSlug?: string;
     parameters: Record<string, any>;
     nodeOutputs: Record<string, Record<string, any>>;
     nodeExecutions: NodeExecution[];
@@ -88,7 +89,8 @@ export async function executeWorkflow(
     executionId: string,
     workflow: WorkflowData,
     inputParameters: Record<string, any>,
-    settings?: WorkflowSettings
+    settings?: WorkflowSettings,
+    tenantSlug?: string
 ): Promise<ExecutionResult> {
     const s = settings || (workflow.settings ? JSON.parse(workflow.settings) : {});
     const timeoutMs = s.execution_timeout_ms || 30000;
@@ -110,6 +112,7 @@ export async function executeWorkflow(
     const context: ExecutionContext = {
         executionId,
         workflowId: workflow.id,
+        tenantSlug,
         parameters: inputParameters,
         nodeOutputs: {},
         nodeExecutions: nodes.map(n => ({
@@ -328,7 +331,8 @@ export async function executeSingleNode(
     executionId: string,
     workflow: WorkflowData,
     targetNodeId: string,
-    inputParameters: Record<string, any>
+    inputParameters: Record<string, any>,
+    tenantSlug?: string
 ): Promise<void> {
     const nodes: WorkflowNode[] = JSON.parse(workflow.nodes);
     const edges: WorkflowEdge[] = JSON.parse(workflow.edges);
@@ -341,6 +345,7 @@ export async function executeSingleNode(
     const context: ExecutionContext = {
         executionId,
         workflowId: workflow.id,
+        tenantSlug,
         parameters: inputParameters,
         nodeOutputs: {},
         nodeExecutions: [],

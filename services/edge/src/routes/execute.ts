@@ -206,7 +206,7 @@ executeRoute.openapi(route, async (c) => {
     });
 
     try {
-        const result = await executeWorkflow(executionId, workflow, body.parameters || {}, settings);
+        const result = await executeWorkflow(executionId, workflow, body.parameters || {}, settings, tenantSlug);
         
         return c.json({
             executionId,
@@ -302,7 +302,7 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
     });
 
     try {
-        await executeSingleNode(executionId, workflow, nodeId, body.parameters || {});
+        await executeSingleNode(executionId, workflow, nodeId, body.parameters || {}, tenantSlug);
         return c.json({
             executionId,
             status: 'completed' as const,

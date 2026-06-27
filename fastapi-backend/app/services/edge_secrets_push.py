@@ -36,7 +36,7 @@ from ..core.security import decrypt_field, encrypt_field
 from .edge_client import get_edge_headers, resolve_engine_url
 
 
-Kind = Literal['datasources', 'auth', 'agent_profiles', 'security', 'storage']
+Kind = Literal['datasources', 'auth', 'agent_profiles', 'security', 'storage', 'integrations']
 
 
 # =============================================================================
@@ -420,8 +420,8 @@ def _tenants_bound_to_engine(engine: EdgeEngine, db: Session) -> list[tuple[str,
 
 
 async def sync_shared_engine_tenant_secrets(engine: EdgeEngine, db: Session) -> dict:
-    """Push the current per-tenant datasources blob for every tenant bound to
-    a shared engine.
+    """Push the current per-tenant datasources + integrations blobs for every
+    tenant bound to a shared engine.
 
     Best-effort and non-fatal: called after a successful deploy so the state-DB
     is populated before/at the time the trimmed env takes effect. A push
@@ -441,7 +441,8 @@ async def sync_shared_engine_tenant_secrets(engine: EdgeEngine, db: Session) -> 
 
     items: list[dict] = []
     for tenant_id, tenant_slug in tenants:
-        blobs = build_tenant_secret_blobs(db, str(engine.id), tenant_id, kinds={'datasources'})
+        # Push both datasources and integrations for workflow self-sufficiency
+        blobs = build_tenant_secret_blobs(db, str(engine.id), tenant_id, kinds={'datasources', 'integrations'})
         for kind, plaintext in blobs.items():
             items.append({"tenantSlug": tenant_slug, "kind": kind, "payload": plaintext})
 

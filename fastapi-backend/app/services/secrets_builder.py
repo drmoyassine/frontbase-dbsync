@@ -11,6 +11,7 @@ Output env vars:
   FRONTBASE_QUEUE         — Queue config (provider-discriminated JSON)
   FRONTBASE_GPU           — GPU model registry (JSON array)
   FRONTBASE_DATASOURCES   — Datasource credentials for proxy-strategy data fetching (JSON)
+  FRONTBASE_INTEGRATIONS  — Email provider credentials for workflow automation (JSON)
 """
 
 import json
@@ -28,6 +29,7 @@ FRONTBASE_BINDING_NAMES = frozenset([
     'FRONTBASE_VECTOR',
     'FRONTBASE_GPU',
     'FRONTBASE_DATASOURCES',
+    'FRONTBASE_INTEGRATIONS',  # Email provider credentials for workflow automation
     'FRONTBASE_AGENT_PROFILES',
     'FRONTBASE_SECURITY',
     'FRONTBASE_STORAGE',
@@ -597,6 +599,65 @@ def _build_tenant_datasources_blob(
     return json.dumps(datasources)
 
 
+def _build_integrations_config(db: Session, engine_id: str | None) -> dict:
+    """Build FRONTBASE_INTEGRATIONS JSON blob.
+
+    Maps provider IDs → credentials needed for workflow automation (email, etc.).
+    Includes active email providers (Resend, Mailgun) configured for this engine.
+
+    Shape: { "<provider_account_id>": { "provider": "resend", "api_key": "...", ... } }
+    """
+    if not engine_id:
+        return {}
+
+    from ..models.models import EdgeProviderAccount
+    from ..core.security import decrypt_credentials
+
+    integrations: dict[str, dict] = {}
+
+    try:
+        # Query active email provider accounts bound to projects using this engine
+        # For now, we include all active email providers - tenant isolation happens
+        # at the workflow level via _tenantSlug lookup
+        providers = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.provider.in_(["resend", "mailgun"]),
+            EdgeProviderAccount.is_active == True,
+        ).all()
+
+        for provider in providers:
+            entry: dict[str, str] = {"provider": str(provider.provider)}
+
+            # Decrypt credentials
+            if provider.provider_credentials:
+                try:
+                    creds = decrypt_credentials(str(provider.provider_credentials))
+                    entry["api_key"] = creds.get("api_key") or creds.get("apiToken") or ""
+
+                    # Mailgun-specific fields
+                    if str(provider.provider) == "mailgun":
+                        entry["domain"] = creds.get("domain") or ""
+                        entry["region"] = creds.get("region") or "us"
+                except Exception as e:
+                    print(f"[SecretsBuilder] Could not decrypt credentials for provider {provider.id}: {e}")
+                    continue
+
+            # Resolve domain from provider metadata for Mailgun
+            if str(provider.provider) == "mailgun" and not entry.get("domain"):
+                try:
+                    meta = json.loads(str(provider.provider_metadata)) if provider.provider_metadata else {}
+                    entry["domain"] = meta.get("domain") or ""
+                    entry["region"] = meta.get("region") or "us"
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            integrations[str(provider.id)] = entry
+
+    except Exception as e:
+        print(f"[SecretsBuilder] Could not build integrations config: {e}")
+
+    return integrations
+
+
 def build_tenant_secret_blobs(
     db: Session,
     engine_id: str,
@@ -605,8 +666,8 @@ def build_tenant_secret_blobs(
 ) -> dict:
     """Build per-tenant secret blobs for state-DB routing (shared engines).
 
-    Returns {kind: plaintext_json_string} for the given tenant. Only
-    `datasources` is routed in v1 (other kinds land in follow-up sprints).
+    Returns {kind: plaintext_json_string} for the given tenant. Supported
+    kinds: datasources, integrations (email providers).
 
     Each blob is the same JSON that would have gone into the env var, but
     scoped to ONE tenant only. The push layer AES-256-GCM-encrypts it before
@@ -624,7 +685,70 @@ def build_tenant_secret_blobs(
     if 'datasources' in kinds:
         result['datasources'] = _build_tenant_datasources_blob(db, engine_id, tenant_project_ids)
 
+    if 'integrations' in kinds:
+        result['integrations'] = _build_tenant_integrations_blob(db, tenant_project_ids)
+
     return result
+
+
+def _build_tenant_integrations_blob(
+    db: Session,
+    tenant_project_ids: list[str],
+) -> str:
+    """Build the FRONTBASE_INTEGRATIONS JSON blob scoped to ONE tenant.
+
+    Mirrors `_build_integrations_config`, but only includes provider accounts
+    that are (a) active email providers and (b) owned by one of the tenant's
+    projects. This is the per-tenant plaintext pushed to the worker's
+    state-DB on shared engines.
+    """
+    from ..models.models import EdgeProviderAccount
+    from ..core.security import decrypt_credentials
+
+    integrations: dict[str, dict] = {}
+    if not tenant_project_ids:
+        return json.dumps(integrations)
+
+    try:
+        # Query active email provider accounts owned by this tenant's projects
+        providers = db.query(EdgeProviderAccount).filter(
+            EdgeProviderAccount.provider.in_(["resend", "mailgun"]),
+            EdgeProviderAccount.is_active == True,
+            EdgeProviderAccount.project_id.in_(tenant_project_ids),
+        ).all()
+
+        for provider in providers:
+            entry: dict[str, str] = {"provider": str(provider.provider)}
+
+            # Decrypt credentials
+            if provider.provider_credentials:
+                try:
+                    creds = decrypt_credentials(str(provider.provider_credentials))
+                    entry["api_key"] = creds.get("api_key") or creds.get("apiToken") or ""
+
+                    # Mailgun-specific fields
+                    if str(provider.provider) == "mailgun":
+                        entry["domain"] = creds.get("domain") or ""
+                        entry["region"] = creds.get("region") or "us"
+                except Exception as e:
+                    print(f"[SecretsBuilder] Could not decrypt credentials for provider {provider.id}: {e}")
+                    continue
+
+            # Resolve domain from provider metadata for Mailgun
+            if str(provider.provider) == "mailgun" and not entry.get("domain"):
+                try:
+                    meta = json.loads(str(provider.provider_metadata)) if provider.provider_metadata else {}
+                    entry["domain"] = meta.get("domain") or ""
+                    entry["region"] = meta.get("region") or "us"
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            integrations[str(provider.id)] = entry
+
+    except Exception as e:
+        print(f"[SecretsBuilder] Could not build tenant integrations blob: {e}")
+
+    return json.dumps(integrations)
 
 
 def _build_storage_config(db: Session, engine_id: str | None) -> dict:
@@ -1011,6 +1135,15 @@ def build_engine_secrets(
     # Shared engines: datasources are pushed to the worker's state-DB per
     # tenant at deploy time (edge_secrets_push.sync_shared_engine_tenant_secrets),
     # NOT baked into env. The edge resolves them via getTenantSecret().
+
+    # ─── FRONTBASE_INTEGRATIONS ─────────────────────────────────────────────
+    # Email provider credentials for workflow automation (Resend, Mailgun).
+    # For shared engines, integrations are pushed to state-DB per tenant.
+    # For dedicated/self-host, bake into env (single tenant).
+    if not is_shared:
+        integrations = _build_integrations_config(db, engine_id)
+        if integrations:
+            secrets['FRONTBASE_INTEGRATIONS'] = json.dumps(integrations)
 
     # ─── FRONTBASE_STORAGE ───────────────────────────────────────────────
     storage = _build_storage_config(db, engine_id)

@@ -25,6 +25,7 @@ import {
 interface ExecutionContext {
     executionId: string;
     workflowId: string;
+    tenantSlug?: string;
     parameters: Record<string, any>;
     nodeOutputs: Record<string, Record<string, any>>;
     nodeExecutions: NodeExecution[];
@@ -95,7 +96,7 @@ export async function executeNode(
         }
 
         case 'data_request': {
-            const dataResult = await executeDataRequest(node, inputs);
+            const dataResult = await executeDataRequest(node, inputs, context);
             await cacheStore(node, inputs, context, dataResult);
             return dataResult;
         }
@@ -245,14 +246,19 @@ async function cacheStore(
 }
 
 /**
- * Data Request Node - Query database via FastAPI proxy
+ * Data Request Node - Query database using edge-local credential resolution.
+ *
+ * Refactored to use the existing executeDataRequest from routes/data.ts,
+ * which properly resolves datasource credentials from FRONTBASE_DATASOURCES
+ * (single-tenant) or tenantSecrets (multi-tenant community workers).
+ *
+ * This restores Edge Self-Sufficiency by removing the BACKEND_URL dependency.
  */
 async function executeDataRequest(
     node: WorkflowNode,
-    inputs: Record<string, any>
+    inputs: Record<string, any>,
+    context?: ExecutionContext
 ): Promise<Record<string, any>> {
-    const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
-
     // Get node configuration - check multiple sources
     const nodeData = node.data || {};
     const nodeInputs = nodeData.inputs || node.inputs || [];
@@ -270,73 +276,99 @@ async function executeDataRequest(
         return inputs[name];
     };
 
-    const dataSource = getInputValue('dataSource');
+    // Extract table name (required for legacy data_request nodes)
     const table = getInputValue('table');
-    const operation = getInputValue('operation') || 'select';
-    const selectFields = getInputValue('selectFields') || [];
-    const whereConditions = getInputValue('whereConditions') || [];
-    const limit = getInputValue('limit') || 100;
-    const returnData = getInputValue('returnData') !== false;
 
-    console.log(`[Data Request] table=${table}, operation=${operation}`);
+    // Check if this is a legacy data_request node (has table) or new DataRequest node
+    if (table) {
+        // Legacy data_request node - convert to DataRequest format
+        return await executeLegacyDataRequest(table, getInputValue, inputs);
+    }
 
-    if (!table) {
+    // New DataRequest node - use the DataRequest from node data
+    const dataRequest = nodeData.dataRequest as any;
+    if (!dataRequest) {
         return {
             success: false,
-            error: 'Table is required',
+            error: 'DataRequest configuration not found',
             data: [],
             rowCount: 0,
         };
     }
 
     try {
-        // Build select fields
-        let selectParam = '*';
-        if (Array.isArray(selectFields) && selectFields.length > 0) {
-            selectParam = selectFields
-                .map((f: any) => f.key || f.name || f)
-                .filter(Boolean)
-                .join(',') || '*';
-        }
+        // Import the edge-local executeDataRequest from routes/data.ts
+        const { executeDataRequest: edgeExecuteDataRequest } = await import('../routes/data.js');
 
-        // Build query URL using existing FastAPI endpoint
-        const queryUrl = new URL(`${BACKEND_URL}/api/database/table-data/${table}/`);
-        queryUrl.searchParams.set('limit', String(limit));
-        queryUrl.searchParams.set('select', selectParam);
-        queryUrl.searchParams.set('mode', 'builder'); // Use service key for Actions
+        // Resolve tenantSlug from context for multi-tenant credential resolution
+        const tenantSlug = context?.tenantSlug;
 
-        // Add WHERE conditions as filters
-        if (Array.isArray(whereConditions) && whereConditions.length > 0) {
-            whereConditions.forEach((condition: any) => {
-                if (condition.key && condition.value !== undefined) {
-                    queryUrl.searchParams.set(`filter_${condition.key}`, String(condition.value));
-                }
-            });
-        }
+        console.log(`[Data Request Node] Executing with tenantSlug=${tenantSlug || 'single-tenant'}`);
 
-        console.log(`[Data Request] Fetching: ${queryUrl.toString()}`);
+        // Execute the data request using edge-local credential resolution
+        const result = await edgeExecuteDataRequest(dataRequest, tenantSlug);
 
-        const response = await fetch(queryUrl.toString(), {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-        });
+        return {
+            success: true,
+            data: result.data,
+            rowCount: result.data.length,
+            total: result.total,
+        };
+    } catch (error: any) {
+        console.error(`[Data Request Node] Error:`, error);
+        return {
+            success: false,
+            error: error.message || 'Data request execution failed',
+            data: [],
+            rowCount: 0,
+        };
+    }
+}
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[Data Request] Error: ${response.status} - ${errorText}`);
-            return {
-                success: false,
-                error: `Query failed: ${response.status} - ${errorText}`,
-                data: [],
-                rowCount: 0,
-            };
-        }
+/**
+ * Execute legacy data_request node (table-based) using edge-local handlers.
+ *
+ * Legacy nodes use table names directly. We convert them to use the
+ * structured query dispatch system which properly resolves credentials.
+ */
+async function executeLegacyDataRequest(
+    table: string,
+    getInputValue: (name: string) => any,
+    inputs: Record<string, any>,
+    context?: ExecutionContext
+): Promise<Record<string, any>> {
+    const operation = getInputValue('operation') || 'select';
+    const selectFields = getInputValue('selectFields') || [];
+    const whereConditions = getInputValue('whereConditions') || [];
+    const limit = getInputValue('limit') || 100;
+    const returnData = getInputValue('returnData') !== false;
 
-        const result = await response.json();
-        const data = returnData ? (result.data || result.rows || []) : [];
+    console.log(`[Legacy Data Request] table=${table}, operation=${operation}`);
+
+    try {
+        // Import the query dispatch system for edge-local execution
+        const { dispatchByMode } = await import('../engine/queryDispatch.js');
+        const tenantSlug = context?.tenantSlug;
+
+        // Build a dispatchable request in the format expected by proxy modes
+        const dispatchRequest = {
+            mode: 'proxy-sql',
+            datasourceId: null, // Will use default datasource
+            queryConfig: {
+                sql: buildLegacyQuery(table, operation, selectFields, whereConditions, limit),
+            },
+            body: null,
+        };
+
+        console.log(`[Legacy Data Request] Dispatching with tenantSlug=${tenantSlug || 'single-tenant'}`);
+
+        // Execute using the edge-local credential resolution
+        const result = await dispatchByMode(dispatchRequest, tenantSlug);
+
+        const data = returnData ? (result.data || []) : [];
         const total = result.total || data.length;
 
-        console.log(`[Data Request] Success: ${data.length} rows (total: ${total})`);
+        console.log(`[Legacy Data Request] Success: ${data.length} rows (total: ${total})`);
 
         return {
             success: true,
@@ -345,14 +377,48 @@ async function executeDataRequest(
             total,
         };
     } catch (error: any) {
-        console.error(`[Data Request] Error:`, error);
+        console.error(`[Legacy Data Request] Error:`, error);
         return {
             success: false,
-            error: error.message || 'Query execution failed',
+            error: error.message || 'Legacy data request execution failed',
             data: [],
             rowCount: 0,
         };
     }
+}
+
+/**
+ * Build a SQL query from legacy data_request node parameters.
+ * This is a simplified builder for backward compatibility.
+ */
+function buildLegacyQuery(
+    table: string,
+    operation: string,
+    selectFields: any[],
+    whereConditions: any[],
+    limit: number
+): string {
+    const fields = Array.isArray(selectFields) && selectFields.length > 0
+        ? selectFields.map((f: any) => f.key || f.name || f).filter(Boolean).join(', ')
+        : '*';
+
+    let sql = `SELECT ${fields} FROM ${table}`;
+
+    if (Array.isArray(whereConditions) && whereConditions.length > 0) {
+        const conditions = whereConditions
+            .filter((c: any) => c.key && c.value !== undefined)
+            .map((c: any) => `${c.key} = '${c.value}'`)
+            .join(' AND ');
+        if (conditions) {
+            sql += ` WHERE ${conditions}`;
+        }
+    }
+
+    if (limit && limit > 0) {
+        sql += ` LIMIT ${limit}`;
+    }
+
+    return sql;
 }
 
 /**

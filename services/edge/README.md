@@ -22,7 +22,6 @@ npm start
 |----------|---------|-------------|
 | `PORT` | `3002` | Server port |
 | `DATABASE_URL` | `file:./data/actions.db` | Connection string for SQLite (local) or Turso (Edge) |
-| `BACKEND_URL` | `http://localhost:8000` | FastAPI backend URL |
 | `PUBLIC_URL` | - | Public URL for generating preview links |
 
 ## API Endpoints

@@ -25,7 +25,7 @@ services:
       - FRONTBASE_DEPLOYMENT_MODE=${FRONTBASE_DEPLOYMENT_MODE:-}
       
       # --- Self-Hosted Distributed Settings ---
-      - BACKEND_URL=${BACKEND_URL:-}
+      # (No backend URL required - Edge is 100% self-sufficient)
 
       # --- Universal Settings ---
       - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}

@@ -20,7 +20,7 @@ Frontbase's distributed architecture is composed of 4 main tiers. You can run th
 
 ### 3. Edge Tier (Machine C)
 - **Role:** Runs the Edge Engine SSR and Webhook worker nodes. You can horizontally scale this by deploying this tier on multiple physical machines behind a load balancer.
-- **Compose File:** `docker-compose.edge-tier.yml`
+- **Compose File:** `docker-compose.edge.yml` (Unified root file)
 - **Env File:** `.env.edge-tier`
 - **Dependencies:** Requires the API Tier.
 
@@ -79,7 +79,7 @@ docker-compose -f docker-compose.api-tier.yml --env-file .env.api-tier up -d
 
 **3. On Machine C (Edge Tier):**
 ```bash
-docker-compose -f docker-compose.edge-tier.yml --env-file .env.edge-tier up -d
+docker-compose -f docker-compose.edge.yml --env-file .env.edge-tier up -d
 ```
 
 **4. On Machine D (Static Tier):**

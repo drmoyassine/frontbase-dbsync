@@ -1,0 +1,55 @@
+# ==============================================================================
+# FRONTBASE EDGE NODE
+# ==============================================================================
+# This single compose file supports BOTH:
+# 
+# 1. Standalone Cloud Deployment (Connects to Frontbase SaaS)
+#    docker-compose -f docker-compose.edge.yml --env-file .env.standalone up -d
+#
+# 2. Distributed Self-Host Deployment (Connects to your local API Tier)
+#    docker-compose -f docker-compose.edge.yml --env-file docker-compose.distributed/.env.edge-tier up -d
+# ==============================================================================
+
+services:
+  edge:
+    build:
+      context: .
+      dockerfile: services/edge/Dockerfile
+    ports:
+      - "${EDGE_PORT:-3002}:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      
+      # --- Cloud Standalone Settings ---
+      - FRONTBASE_DEPLOYMENT_MODE=${FRONTBASE_DEPLOYMENT_MODE:-}
+      
+      # --- Self-Hosted Distributed Settings ---
+      - BACKEND_URL=${BACKEND_URL:-}
+
+      # --- Universal Settings ---
+      - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
+      
+      # Storage & Integrations
+      - FRONTBASE_STATE_DB=${FRONTBASE_STATE_DB:-{"provider":"sqlite"}}
+      - FRONTBASE_CACHE=${FRONTBASE_CACHE:-}
+      - FRONTBASE_QUEUE=${FRONTBASE_QUEUE:-}
+      - FRONTBASE_AUTH=${FRONTBASE_AUTH:-}
+      
+      # Local DBs
+      - SQLITE_PATH=/app/data/edge.db
+      - DATABASE_URL=file:/app/data/edge.db
+      - PAGES_DB_URL=${PAGES_DB_URL:-file:/app/data/pages.db}
+      
+      - PUBLIC_URL=${PUBLIC_URL:-${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}}
+    volumes:
+      - edge_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3002/api/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  edge_data:

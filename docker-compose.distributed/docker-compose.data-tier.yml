@@ -4,12 +4,14 @@
 # Machine B: Database server
 #
 # Usage:
-#   docker-compose -f docker-compose.data-tier.yml --env-file .env.distributed up -d
+#   docker-compose -f docker-compose.data-tier.yml --env-file .env.data-tier up -d
 # ==============================================================================
 
 services:
   postgres:
     image: postgres:16-alpine
+    env_file:
+      - .env.data-tier
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:

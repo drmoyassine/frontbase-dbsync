@@ -4,7 +4,7 @@
 # Machine D (or CDN): Serves the admin SPA and proxies to remote services
 #
 # Usage:
-#   docker-compose -f docker-compose.static-tier.yml --env-file .env.distributed up -d
+#   docker-compose -f docker-compose.static-tier.yml --env-file .env.static-tier up -d
 #
 # NOTE: Requires nginx.conf.template (envsubst at container start)
 # ==============================================================================
@@ -16,6 +16,8 @@ services:
       dockerfile: Dockerfile.frontend
       args:
         VITE_API_URL: ""
+    env_file:
+      - .env.static-tier
     ports:
       - "${FRONTEND_PORT:-80}:80"
     environment:

@@ -4,7 +4,7 @@
 # Machine C: One or more Edge Engine instances
 #
 # Usage:
-#   docker-compose -f docker-compose.edge-tier.yml --env-file .env.distributed up -d
+#   docker-compose -f docker-compose.edge-tier.yml --env-file .env.edge-tier up -d
 # ==============================================================================
 
 services:
@@ -12,6 +12,8 @@ services:
     build:
       context: ../services/edge
       dockerfile: Dockerfile
+    env_file:
+      - .env.edge-tier
     ports:
       - "${EDGE_PORT:-3002}:3002"
     environment:

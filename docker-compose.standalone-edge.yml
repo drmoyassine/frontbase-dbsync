@@ -16,7 +16,7 @@ services:
   edge:
     build:
       context: .
-      dockerfile: services/edge/Dockerfile.standalone
+      dockerfile: services/edge/Dockerfile
     # Or use a published image:
     # image: frontbase/edge-node:latest
     ports:

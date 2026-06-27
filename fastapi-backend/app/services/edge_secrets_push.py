@@ -360,7 +360,7 @@ async def delete_tenant_secret(
     When ``db`` is provided, the outcome is recorded in the tenant-secrets audit
     trail (best-effort). Omit it for legacy callers that don't have a session.
     """
-    def _audit(status: str, error: str | None = None) -> None:
+    def _audit(status: Literal['success', 'failure'], error: str | None = None) -> None:
         if db is None:
             return
         from .tenant_secrets_audit import log_tenant_secret_audit
@@ -411,12 +411,12 @@ def _tenants_bound_to_engine(engine: EdgeEngine, db: Session) -> list[tuple[str,
         return []
 
     projects = db.query(Project).filter(Project.id.in_(project_ids)).all()
-    tenant_ids = {p.tenant_id for p in projects if p.tenant_id}
+    tenant_ids = {str(p.tenant_id) for p in projects if p.tenant_id is not None}
     if not tenant_ids:
         return []
 
     tenants = db.query(Tenant).filter(Tenant.id.in_(tenant_ids)).all()
-    return [(str(t.id), str(t.slug)) for t in tenants if t.slug]
+    return [(str(t.id), str(t.slug)) for t in tenants if t.slug is not None]
 
 
 async def sync_shared_engine_tenant_secrets(engine: EdgeEngine, db: Session) -> dict:

@@ -129,9 +129,9 @@ def query_tenant_secret_audit(
 def serialize_audit_row(row: TenantSecretAudit) -> dict[str, Any]:
     """ORM row → JSON-safe dict for API responses."""
     metadata_obj: Any = None
-    if row.audit_metadata:
+    if row.audit_metadata is not None:
         try:
-            metadata_obj = json.loads(row.audit_metadata)
+            metadata_obj = json.loads(str(row.audit_metadata))
         except (json.JSONDecodeError, TypeError):
             metadata_obj = row.audit_metadata
     return {

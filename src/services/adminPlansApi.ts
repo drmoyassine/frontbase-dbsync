@@ -29,7 +29,7 @@ export interface LimitDef {
     key: string;
     label: string;
     kind: 'int' | 'bool';
-    category: 'capacity' | 'operational' | 'feature';
+    category: 'capacity' | 'operational' | 'agent' | 'feature';
     scope: 'project' | 'tenant';
     unit: string | null;
     default: number | boolean;

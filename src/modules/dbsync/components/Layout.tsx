@@ -12,7 +12,8 @@ import {
     Server,
     LogOut,
     Shield,
-    Layers
+    Layers,
+    Bot
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '@/stores/auth'
@@ -126,6 +127,20 @@ export function Layout() {
                             >
                                 <Layers className="w-5 h-5 text-amber-500" />
                                 <span className="font-medium">Subscription Plans</span>
+                            </NavLink>
+                            <NavLink
+                                to="/admin/agents"
+                                className={({ isActive }) => `
+                                    flex items-center gap-3 px-4 py-3 rounded-lg transition-colors
+                                    ${isActive
+                                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
+                                        : 'text-gray-650 hover:bg-gray-100 dark:text-gray-450 dark:hover:bg-gray-700 font-medium'
+                                    }
+                                `}
+                                onClick={() => setSidebarOpen(false)}
+                            >
+                                <Bot className="w-5 h-5 text-amber-500" />
+                                <span className="font-medium">Workspace Agent</span>
                             </NavLink>
                         </div>
                     )}

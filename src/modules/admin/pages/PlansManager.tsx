@@ -21,6 +21,7 @@ const emptyDraft = (): PlanWritePayload => ({
 const CATEGORY_LABELS: Record<string, string> = {
     capacity: 'Capacity',
     operational: 'Operational (optional — ∞ = disabled)',
+    agent: 'Workspace Agent credits',
     feature: 'Features',
 };
 
@@ -244,7 +245,7 @@ function PlanEditor({ draft, setDraft, registry, isEdit, saving, onClose, onSave
                     </div>
 
                     {/* Limits editor — generated from the registry, grouped by category */}
-                    {(['capacity', 'operational', 'feature'] as const).map(category => {
+                    {(['capacity', 'operational', 'agent', 'feature'] as const).map(category => {
                         const defs = registry.filter(d => d.category === category);
                         if (defs.length === 0) return null;
                         return (

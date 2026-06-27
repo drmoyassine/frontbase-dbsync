@@ -31,6 +31,14 @@ celery_app.conf.update(
             "task": "app.services.edge_secrets_push.check_and_rotate_shared_engine_secrets",
             "schedule": crontab(minute=0, hour=2),
         },
+        # Workspace Agent credit daily reset: refill every tenant's daily credit
+        # pool to its plan's agent_credits_daily limit (+ manual bonus). Daily at
+        # 00:05 UTC (just past the UTC-midnight boundary). Cloud mode only; the
+        # task no-ops when there are no tenants/balances.
+        "reset-agent-credits-daily": {
+            "task": "app.services.agent_quota.reset_all_daily",
+            "schedule": crontab(minute=5, hour=0),
+        },
     },
 )
 
@@ -57,4 +65,20 @@ def check_and_rotate_shared_engine_secrets_task() -> dict:
     import asyncio
     from app.services.edge_secrets_push import run_scheduled_rotation
     return asyncio.run(run_scheduled_rotation(max_age_days=90))
+
+
+@celery_app.task(name="app.services.agent_quota.reset_all_daily_credits")
+def reset_all_daily_credits_task() -> int:
+    """Refill every tenant's daily Workspace Agent credit pool (beat-driven).
+
+    Cloud-mode daily reset at 00:05 UTC. Also exposed as a manual master-admin
+    trigger at POST /api/admin/agents/quota/reset-daily. Returns the tenant count.
+    """
+    from app.database.config import SessionLocal
+    from app.services.agent_quota import reset_all_daily
+    db = SessionLocal()
+    try:
+        return reset_all_daily(db)
+    finally:
+        db.close()
 

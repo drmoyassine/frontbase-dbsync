@@ -18,6 +18,7 @@ from .auth import User, UserSession, UserSetting, Project, AppVariable, IPBlockl
 from .tenant import (  # noqa: F401
     Tenant, TenantMember, TenantInvite,
     ProjectMember, ProjectDatasource, ProjectStorage, ProjectConnectedAccount, TenantAddon,
+    AgentCreditBalance, AgentCreditUsageLog,
 )
 
 # Plans & subscriptions (cloud)

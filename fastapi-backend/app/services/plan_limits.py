@@ -32,7 +32,7 @@ class LimitDef(TypedDict):
     key: str
     label: str
     kind: Literal["int", "bool"]
-    category: Literal["capacity", "operational", "feature"]
+    category: Literal["capacity", "operational", "feature", "agent"]
     scope: Literal["project", "tenant"]   # how the cap is counted — see LIMIT_REGISTRY notes
     unit: Optional[str]
     default: Any
@@ -50,6 +50,10 @@ class LimitDef(TypedDict):
 #                 ship DORMANT (seeded -1) and their enforcement plumbing is wired
 #                 only when we decide to turn them on.
 #   feature     — boolean on/off entitlements.
+#   agent       — Workspace Agent credit quotas (cloud only). Per-tenant daily +
+#                 monthly credit pools consumed by backend PydanticAI agent turns.
+#                 UNLIMITED (-1) = unlimited credits; 0 = none for that window.
+#                 These are ACTIVE at launch (unlike dormant operational caps).
 #
 # Scope (how a cap is counted — from the multi-project binding model):
 #   project — counted within the active project (today: the tenant's single project).
@@ -76,6 +80,12 @@ LIMIT_REGISTRY: list[LimitDef] = [
     {"key": "deploys_monthly", "label": "Deploys / republishes per month", "kind": "int", "category": "operational", "scope": "tenant", "unit": "/mo", "default": UNLIMITED},
     {"key": "log_retention_hours", "label": "Log retention window (hours)", "kind": "int", "category": "operational", "scope": "tenant", "unit": "h", "default": UNLIMITED},
     {"key": "shared_worker_executions_monthly", "label": "Shared-worker executions per month (free/managed)", "kind": "int", "category": "operational", "scope": "tenant", "unit": "/mo", "default": UNLIMITED},
+    # -- Workspace Agent credits (cloud; active at launch) --
+    # Consumed by backend PydanticAI Workspace Agent turns (1 credit/turn). Daily
+    # pool refills at UTC midnight; monthly pool refills on the 1st of the month.
+    # See app/services/agent_quota.py + docs/plans/[FEATURE] Multi-Tenant Agent Credit Quota System.md.
+    {"key": "agent_credits_daily", "label": "Workspace Agent credits (daily)", "kind": "int", "category": "agent", "scope": "tenant", "unit": "/day", "default": 5},
+    {"key": "agent_credits_monthly", "label": "Workspace Agent credits (monthly)", "kind": "int", "category": "agent", "scope": "tenant", "unit": "/mo", "default": 0},
     # -- Feature flags (plan-level entitlements; gated instances are project resources) --
     {"key": "private_pages", "label": "Private / auth-gated pages", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
     {"key": "auth_providers", "label": "Connect auth provider", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
@@ -400,6 +410,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "pages": 10, "workflows": 5, "datasources": 1, "connected_accounts": 1,
             "edge_engines": 0, "team_members": 1,
             "deploys_monthly": 50, "log_retention_hours": 720, "shared_worker_executions_monthly": 1000,
+            "agent_credits_daily": 5, "agent_credits_monthly": 0,
             "private_pages": False, "auth_providers": False, "remove_branding": False, "api_access": False,
         },
         "features": ["10 pages, 5 workflows", "Community / shared workers", "Public pages only"],
@@ -413,6 +424,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "pages": 50, "workflows": 25, "datasources": 3, "connected_accounts": 3,
             "edge_engines": 1, "team_members": 3,
             "deploys_monthly": 500, "log_retention_hours": 2160, "shared_worker_executions_monthly": 10000,
+            "agent_credits_daily": 5, "agent_credits_monthly": 500,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
         },
         "features": ["Managed dedicated engine + state DB", "Private / auth-gated pages", "Connect auth providers", "No infra setup"],
@@ -426,6 +438,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "pages": 200, "workflows": 50, "datasources": 10, "connected_accounts": 10,
             "edge_engines": 3, "team_members": 10,
             "deploys_monthly": 5000, "log_retention_hours": 8760, "shared_worker_executions_monthly": _OFF,
+            "agent_credits_daily": 20, "agent_credits_monthly": 2000,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
         },
         "features": ["Bring your own edge", "200 pages, 50 workflows", "Private pages & auth"],
@@ -439,6 +452,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "pages": UNLIMITED, "workflows": UNLIMITED, "datasources": UNLIMITED, "connected_accounts": UNLIMITED,
             "edge_engines": UNLIMITED, "team_members": UNLIMITED,
             "deploys_monthly": _OFF, "log_retention_hours": _OFF, "shared_worker_executions_monthly": _OFF,
+            "agent_credits_daily": UNLIMITED, "agent_credits_monthly": UNLIMITED,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
         },
         "features": ["Unlimited everything", "Priority support", "Private pages & auth"],

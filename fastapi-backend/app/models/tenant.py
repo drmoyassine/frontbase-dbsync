@@ -132,3 +132,79 @@ class TenantAddon(Base):
     status = Column(String(20), default='pending')    # pending | active | revoked
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
+
+
+# ---------------------------------------------------------------------------
+# Workspace Agent — per-tenant credit quota (cloud mode only)
+#
+# These tables back the Workspace Agent credit quota system. Workspace Agent
+# turns (backend PydanticAI, cloud mode) draw from a per-tenant credit pool
+# driven by the plan's agent_credits_daily / agent_credits_monthly limits.
+# Edge Agents are NOT affected — they run on the tenant's own providers.
+# See docs/plans/[FEATURE] Multi-Tenant Agent Credit Quota System.md.
+# ---------------------------------------------------------------------------
+
+class AgentCreditBalance(Base):
+    """Per-tenant Workspace Agent credit balance.
+
+    One row per tenant. ``*_credits_remaining`` are refilled to the plan's limit
+    on the daily (UTC midnight) / monthly (1st-of-month UTC) reset by the quota
+    service. UNLIMITED (-1) is stored verbatim when the plan grants unlimited
+    credits so the check/consume paths can treat it specially without a sentinel.
+
+    ``bonus_*`` accumulate manual grants from the master admin (Usage tab) and
+    are added on top of the plan limit at each reset so a grant survives resets.
+    """
+    __tablename__ = 'agent_credit_balances'
+
+    id = Column(String, primary_key=True)
+    tenant_id = Column(String, ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False, unique=True, index=True)
+
+    # Daily pool (reset at UTC midnight)
+    daily_credits_remaining = Column(Integer, nullable=False, default=0)
+    daily_credits_last_reset_at = Column(String(50), nullable=True)
+
+    # Monthly pool (reset on the 1st of the month, UTC)
+    monthly_credits_remaining = Column(Integer, nullable=False, default=0)
+    monthly_credits_last_reset_at = Column(String(50), nullable=True)
+
+    # Manual bonus credits layered on top of the plan limit at reset time
+    bonus_daily = Column(Integer, nullable=False, default=0)
+    bonus_monthly = Column(Integer, nullable=False, default=0)
+
+    # Lifetime consumption (analytics)
+    total_consumed = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+
+class AgentCreditUsageLog(Base):
+    """Per-turn Workspace Agent usage record (analytics + auditing).
+
+    One row per agent turn. ``pool_type`` records which pool the credit was
+    drawn from; ``use_type`` records workspace (quota-consuming) vs support
+    (free). ``status`` distinguishes success / error / quota_exceeded.
+    """
+    __tablename__ = 'agent_credit_usage_log'
+
+    id = Column(String, primary_key=True)
+    tenant_id = Column(String, ForeignKey('tenants.id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = Column(String, nullable=False)
+
+    pool_type = Column(String(20), nullable=False)    # daily | monthly | unlimited | none
+    use_type = Column(String(20), nullable=False)     # workspace | support
+
+    agent_profile = Column(String(50), nullable=True)
+    provider_id = Column(String, nullable=True)
+    model_id = Column(String(100), nullable=True)
+
+    tokens_input = Column(Integer, nullable=True)
+    tokens_output = Column(Integer, nullable=True)
+    tool_calls_count = Column(Integer, nullable=False, default=0)
+    duration_ms = Column(Integer, nullable=True)
+
+    status = Column(String(20), nullable=False)       # success | error | quota_exceeded
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(String, nullable=False, index=True)

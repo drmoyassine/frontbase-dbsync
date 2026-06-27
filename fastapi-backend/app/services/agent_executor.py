@@ -187,6 +187,7 @@ async def execute_agent_turn(
     system_prompt: str | None = None,
     provider_id: str | None = None,
     model_id: str | None = None,
+    use_type: str = "workspace",
 ) -> AsyncGenerator[str, None]:
     """Execute a complete agent turn with PydanticAI.
 
@@ -195,6 +196,9 @@ async def execute_agent_turn(
       data: {"type":"tool_call","name":"fn","args":{}}
       data: {"type":"tool_result","name":"fn","result":"..."}
       data: {"type":"done"}
+
+    ``use_type`` ('workspace' | 'support') is informational here — quota
+    enforcement + consumption happen in the agent router which wraps this stream.
     """
     # Resolve credentials from the database
     def _get_creds() -> tuple[str, str, str]:
@@ -263,7 +267,7 @@ async def execute_agent_turn(
         yield _sse_event({"type": "done"})
         return
 
-    logger.info(f"[Agent] Streaming turn with {provider_type}/{resolved_model_id} | {len(history)} history msgs")
+    logger.info(f"[Agent] Streaming turn ({use_type}) with {provider_type}/{resolved_model_id} | {len(history)} history msgs")
 
     # Iterate the agent graph node-by-node so we can BOTH stream text deltas AND
     # surface tool calls/results as discrete SSE events (the contract the frontend

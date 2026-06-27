@@ -11,10 +11,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, ArrowUpCircle, ArrowDownCircle, Check, Clock, X } from 'lucide-react';
+import { Loader2, ArrowUpCircle, ArrowDownCircle, Check, Clock, X, Bot } from 'lucide-react';
 import { tenantPlanApi } from '@/services/tenantPlanApi';
 import { STALE } from '@/lib/queryCache';
 import type { Plan } from '@/services/adminPlansApi';
+import { isCloud } from '@/lib/edition';
+import { agentApi } from '@/services/agentApi';
 import { toast } from 'sonner';
 
 const UNLIMITED = -1;
@@ -138,6 +140,9 @@ export const PlanUsageSection: React.FC = () => {
                 </CardContent>
             </Card>
 
+            {/* Workspace Agent credits (cloud only) */}
+            {isCloud() && <AgentCreditsCard />}
+
             {/* Managed add-ons (managed tiers) */}
             {data?.plan?.infra_mode === 'managed' && (
                 <Card>
@@ -213,6 +218,82 @@ export const PlanUsageSection: React.FC = () => {
                 </Card>
             )}
         </div>
+    );
+};
+
+/**
+ * AgentCreditsCard — tenant-facing Workspace Agent credit balance.
+ *
+ * Cloud-only. Shows the daily + monthly credit pools with reset times. Support
+ * conversations are free, which is called out at the bottom. Hidden for
+ * self-host / master admin (the credits endpoint returns ``unlimited`` there).
+ */
+const AgentCreditsCard: React.FC = () => {
+    const { data: credits, isLoading } = useQuery({
+        queryKey: ['my-agent-credits'],
+        queryFn: agentApi.getMyCredits,
+        staleTime: STALE.DEFAULT,
+    });
+
+    if (isLoading) {
+        return (
+            <Card>
+                <CardContent className="py-6 flex justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </CardContent>
+            </Card>
+        );
+    }
+    if (!credits || credits.unlimited) return null;
+
+    const UNL = -1;
+    const dailyLeft = credits.daily_remaining ?? 0;
+    const monthlyLeft = credits.monthly_remaining ?? 0;
+    const dailyLimit = credits.daily_limit ?? 0;
+    const monthlyLimit = credits.monthly_limit ?? 0;
+    const dailyUnlimited = dailyLeft === UNL || dailyLimit === UNL;
+    const monthlyUnlimited = monthlyLeft === UNL || monthlyLimit === UNL;
+    const dailyPct = dailyUnlimited || dailyLimit <= 0 ? null : Math.min(100, (dailyLeft / dailyLimit) * 100);
+    const monthlyPct = monthlyUnlimited || monthlyLimit <= 0 ? null : Math.min(100, (monthlyLeft / monthlyLimit) * 100);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                    <Bot className="w-4 h-4 text-primary" /> Workspace Agent credits
+                </CardTitle>
+                <CardDescription>Each Workspace Agent turn uses 1 credit. Resets daily (UTC) and monthly.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Daily credits</span>
+                        <span className="font-medium">{dailyUnlimited ? 'Unlimited' : `${dailyLeft} / ${dailyLimit}`}</span>
+                    </div>
+                    {dailyPct != null && <Progress value={dailyPct} className="h-1.5" />}
+                    {credits.daily_resets_at && !dailyUnlimited && (
+                        <p className="text-xs text-muted-foreground">Resets at {new Date(credits.daily_resets_at).toLocaleTimeString()}</p>
+                    )}
+                </div>
+
+                {(monthlyLimit > 0 || monthlyUnlimited) && (
+                    <div className="space-y-1.5">
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Monthly credits</span>
+                            <span className="font-medium">{monthlyUnlimited ? 'Unlimited' : `${monthlyLeft} / ${monthlyLimit}`}</span>
+                        </div>
+                        {monthlyPct != null && <Progress value={monthlyPct} className="h-1.5" />}
+                        {credits.monthly_resets_at && !monthlyUnlimited && (
+                            <p className="text-xs text-muted-foreground">Resets on {new Date(credits.monthly_resets_at).toLocaleDateString()}</p>
+                        )}
+                    </div>
+                )}
+
+                <p className="text-xs text-muted-foreground border-t pt-3">
+                    Support &amp; onboarding conversations don&rsquo;t consume credits.
+                </p>
+            </CardContent>
+        </Card>
     );
 };
 

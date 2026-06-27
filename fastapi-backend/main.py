@@ -1147,6 +1147,11 @@ if is_cloud():
     except ImportError:
         pass  # Admin plans router not yet available
     try:
+        from app.routers import admin_agents
+        app.include_router(admin_agents.router, prefix="/api/admin/agents", tags=["Admin Agents"])
+    except ImportError:
+        pass  # Admin agents (Workspace Agent quota) router not yet available
+    try:
         from app.routers import plans_public
         app.include_router(plans_public.router, prefix="/api/plans", tags=["Plans"])
     except ImportError:

@@ -26,7 +26,7 @@ services:
       - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
       - API_KEYS=${API_KEYS:-}
       # System key for local backend-to-edge management traffic
-      - FRONTBASE_API_KEYS={"systemKey":"fb_sys_local_dev_key"}
+      - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
       - PUBLIC_URL=${PUBLIC_URL:-}
     volumes:
       - edge_data:/app/data

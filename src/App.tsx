@@ -46,7 +46,6 @@ import NotFound from "./pages/NotFound";
 import { AdminRoute } from "./routes/adminRoutes";
 import { TenantsDirectory } from "./modules/admin/pages/TenantsDirectory";
 import { PlansManager } from "./modules/admin/pages/PlansManager";
-import { AgentConfiguration } from "./modules/admin/pages/AgentConfiguration";
 
 
 // Create QueryClient with cacheTime for persistence
@@ -172,7 +171,6 @@ const App = () => {
                   <Route element={<AdminRoute />}>
                     <Route path="/admin/tenants" element={<TenantsDirectory />} />
                     <Route path="/admin/plans" element={<PlansManager />} />
-                    <Route path="/admin/agents" element={<AgentConfiguration />} />
                   </Route>
                 </Route>
 

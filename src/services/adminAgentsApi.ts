@@ -80,6 +80,10 @@ export const adminAgentsApi = {
         const res = await api.post(`/api/admin/agents/quota/${tenantId}/grant`, { daily, monthly });
         return res.data;
     },
+    resetTenantDaily: async (tenantId: string): Promise<{ balance: AgentBalanceRow }> => {
+        const res = await api.post(`/api/admin/agents/quota/${tenantId}/reset-daily`);
+        return res.data;
+    },
     resetAllDaily: async (): Promise<{ reset_count: number }> => {
         const res = await api.post('/api/admin/agents/quota/reset-daily');
         return res.data;

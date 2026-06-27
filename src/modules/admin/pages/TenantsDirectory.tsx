@@ -27,11 +27,19 @@ import {
     Server,
     Clock,
     X,
-    FolderGit2
+    FolderGit2,
+    Bot,
+    Zap,
+    ChevronDown,
+    ChevronUp,
+    Gift,
+    TrendingUp
 } from 'lucide-react';
 import { tenantAdminApi, TenantAdminResponse } from '@/services/tenantAdminApi';
 import { adminPlansApi } from '@/services/adminPlansApi';
+import { adminAgentsApi, type AgentAnalytics, type AgentBalanceRow } from '@/services/adminAgentsApi';
 import { useAuthStore } from '@/stores/auth';
+import { isCloud } from '@/lib/edition';
 import { STALE } from '@/lib/queryCache';
 import { toast } from 'sonner';
 
@@ -72,6 +80,9 @@ export function TenantsDirectory() {
     const [searchQuery, setSearchQuery] = useState('');
     const [planFilter, setPlanFilter] = useState('all');
     const [statusFilter, setStatusFilter] = useState('all');
+
+    // Expanded rows for credit management
+    const [expandedTenantId, setExpandedTenantId] = useState<string | null>(null);
 
     // Modal States
     const [isProvisionModalOpen, setIsProvisionModalOpen] = useState(false);
@@ -309,6 +320,9 @@ export function TenantsDirectory() {
                 </div>
             </div>
 
+            {/* Workspace Agent Analytics (cloud mode only) */}
+            {isCloud() && <WorkspaceAgentAnalytics />}
+
             {/* Filter and Search Bar */}
             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-850 flex flex-col md:flex-row gap-4 items-center">
                 <div className="relative flex-1 w-full">
@@ -382,6 +396,7 @@ export function TenantsDirectory() {
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
                                 {filteredTenants.map((tenant) => (
+                                    <>
                                     <tr key={tenant.id} className="hover:bg-slate-50 dark:hover:bg-slate-850/40 transition-colors">
                                         {/* Workspace Name & UUID */}
                                         <td className="px-6 py-4">
@@ -555,6 +570,17 @@ export function TenantsDirectory() {
                                                     <Sliders className="w-4 h-4" />
                                                 </button>
 
+                                                {/* Credits expand button (cloud only) */}
+                                                {isCloud() && (
+                                                    <button
+                                                        onClick={() => setExpandedTenantId(expandedTenantId === tenant.id ? null : tenant.id)}
+                                                        className="p-1.5 text-slate-400 hover:text-purple-500 hover:bg-purple-500/10 rounded-lg transition-all"
+                                                        title="Manage Agent Credits"
+                                                    >
+                                                        {expandedTenantId === tenant.id ? <ChevronUp className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                                                    </button>
+                                                )}
+
                                                 {/* Suspend or Unsuspend toggle */}
                                                 {tenant.status === 'active' ? (
                                                     <button
@@ -585,6 +611,16 @@ export function TenantsDirectory() {
                                             </div>
                                         </td>
                                     </tr>
+
+                                    {/* Expanded row: Agent Credits (cloud only) */}
+                                    {isCloud() && expandedTenantId === tenant.id && (
+                                        <tr className="bg-slate-50/50 dark:bg-slate-900/30">
+                                            <td colSpan={10} className="px-6 py-4">
+                                                <TenantCreditDrawer tenantId={tenant.id} tenantName={tenant.name} />
+                                            </td>
+                                        </tr>
+                                    )}
+                                    </>
                                 ))}
                             </tbody>
                         </table>
@@ -850,6 +886,271 @@ export function TenantsDirectory() {
 }
 
 export default TenantsDirectory;
+
+
+/* ============================================================================
+ * Tenant Credit Drawer — per-tenant credit management (cloud mode)
+ *============================================================================ */
+
+function TenantCreditDrawer({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+    const queryClient = useQueryClient();
+    const [grantDaily, setGrantDaily] = useState('');
+    const [grantMonthly, setGrantMonthly] = useState('');
+
+    const { data: balance, isLoading } = useQuery({
+        queryKey: ['admin-agent-balance', tenantId],
+        queryFn: () => adminAgentsApi.listBalances(),
+        enabled: !!tenantId,
+        select: (data) => data.balances.find((b: AgentBalanceRow) => b.tenant_id === tenantId),
+        staleTime: STALE.DEFAULT,
+    });
+
+    const grantMutation = useMutation({
+        mutationFn: () => adminAgentsApi.grantCredits(tenantId, parseInt(grantDaily) || 0, parseInt(grantMonthly) || 0),
+        onSuccess: () => {
+            toast.success('Credits granted');
+            setGrantDaily('');
+            setGrantMonthly('');
+            queryClient.invalidateQueries({ queryKey: ['admin-agent-balance', tenantId] });
+        },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to grant credits'),
+    });
+
+    const resetMutation = useMutation({
+        mutationFn: () => adminAgentsApi.resetTenantDaily(tenantId),
+        onSuccess: () => {
+            toast.success('Daily credits reset');
+            queryClient.invalidateQueries({ queryKey: ['admin-agent-balance', tenantId] });
+        },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to reset'),
+    });
+
+    const UNL = -1;
+    const bal = balance;
+    const dailyUnlimited = bal?.daily_remaining === UNL || bal?.daily_limit === UNL;
+    const monthlyUnlimited = bal?.monthly_remaining === UNL || bal?.monthly_limit === UNL;
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-purple-500" />
+                    <span className="font-semibold text-slate-900 dark:text-white">Workspace Agent Credits</span>
+                    <span className="text-xs text-slate-500">— {tenantName}</span>
+                </div>
+                {bal && (
+                    <span className="text-xs text-slate-500">
+                        Total consumed: <span className="font-bold text-slate-700">{bal.total_consumed.toLocaleString()}</span>
+                    </span>
+                )}
+            </div>
+
+            {isLoading ? (
+                <div className="py-4 flex justify-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                </div>
+            ) : !bal ? (
+                <p className="text-sm text-slate-500">No credit data available. The tenant may not have used the Workspace Agent yet.</p>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Daily pool */}
+                    <div className="bg-white dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-slate-500 uppercase">Daily</span>
+                            {bal.bonus_daily > 0 && <span className="text-xs text-purple-500">+{bal.bonus_daily} bonus</span>}
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-bold text-slate-900 dark:text-white">
+                                {dailyUnlimited ? '∞' : bal.daily_remaining.toLocaleString()}
+                            </span>
+                            <span className="text-sm text-slate-500">/ {dailyUnlimited ? '∞' : bal.daily_limit?.toLocaleString()}</span>
+                        </div>
+                        <button
+                            onClick={() => resetMutation.mutate()}
+                            disabled={resetMutation.isPending}
+                            className="mt-2 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 disabled:opacity-50 flex items-center gap-1"
+                        >
+                            {resetMutation.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+                            Reset now
+                        </button>
+                    </div>
+
+                    {/* Monthly pool */}
+                    <div className="bg-white dark:bg-slate-900 rounded-lg p-4 border border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-slate-500 uppercase">Monthly</span>
+                            {bal.bonus_monthly > 0 && <span className="text-xs text-purple-500">+{bal.bonus_monthly} bonus</span>}
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-bold text-slate-900 dark:text-white">
+                                {monthlyUnlimited ? '∞' : bal.monthly_remaining?.toLocaleString()}
+                            </span>
+                            <span className="text-sm text-slate-500">/ {monthlyUnlimited ? '∞' : bal.monthly_limit?.toLocaleString()}</span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2">Resets on the 1st of each month (UTC)</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Grant credits */}
+            <div className="bg-purple-50 dark:bg-purple-950/30 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
+                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Grant Bonus Credits</p>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="number"
+                        placeholder="Daily"
+                        value={grantDaily}
+                        onChange={(e) => setGrantDaily(e.target.value)}
+                        className="w-20 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1"
+                    />
+                    <span className="text-slate-500">+</span>
+                    <input
+                        type="number"
+                        placeholder="Monthly"
+                        value={grantMonthly}
+                        onChange={(e) => setGrantMonthly(e.target.value)}
+                        className="w-20 text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded px-2 py-1"
+                    />
+                    <button
+                        onClick={() => grantMutation.mutate()}
+                        disabled={grantMutation.isPending || (!grantDaily && !grantMonthly)}
+                        className="px-3 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-sm font-medium disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                        {grantMutation.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+                        Grant
+                    </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-2">Bonus credits persist across resets and stack on top of plan limits.</p>
+            </div>
+        </div>
+    );
+}
+
+
+/* ============================================================================
+ * Workspace Agent Analytics (cloud mode only)
+ *============================================================================ */
+
+function WorkspaceAgentAnalytics() {
+    const queryClient = useQueryClient();
+    const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
+
+    const { data: config, isLoading: cfgLoading } = useQuery({
+        queryKey: ['admin-agent-config'],
+        queryFn: adminAgentsApi.getConfig,
+        staleTime: STALE.DEFAULT,
+    });
+    const { data: analytics, isLoading: analyticsLoading } = useQuery({
+        queryKey: ['admin-agent-analytics', period],
+        queryFn: () => adminAgentsApi.getAnalytics(period),
+        staleTime: 60_000, // 1 minute
+    });
+
+    const resetAllMutation = useMutation({
+        mutationFn: () => adminAgentsApi.resetAllDaily(),
+        onSuccess: (data) => {
+            toast.success(`Reset ${data.reset_count} tenant daily pools`);
+            queryClient.invalidateQueries({ queryKey: ['admin-agent-analytics'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
+        },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to reset'),
+    });
+
+    const cfg = config;
+    const stats = analytics;
+
+    return (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-purple-500/10 rounded-lg">
+                        <Bot className="w-5 h-5 text-purple-500" />
+                    </div>
+                    <div>
+                        <h3 className="font-bold text-slate-900 dark:text-white">Workspace Agent Analytics</h3>
+                        <p className="text-xs text-slate-500">Credit usage across all tenants</p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5">
+                        {(['7d', '30d', '90d'] as const).map((p) => (
+                            <button
+                                key={p}
+                                onClick={() => setPeriod(p)}
+                                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                                    period === p
+                                        ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+                                        : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                }`}
+                            >
+                                {p}
+                            </button>
+                        ))}
+                    </div>
+                    {cfg && (
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className={`px-2 py-1 rounded-full ${cfg.enabled ? 'bg-green-500/10 text-green-600 dark:text-green-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                                {cfg.enabled ? 'Enabled' : 'Disabled'}
+                            </span>
+                            <button
+                                onClick={() => resetAllMutation.mutate()}
+                                disabled={resetAllMutation.isPending}
+                                className="px-3 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 text-xs font-medium disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                                {resetAllMutation.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+                                Reset Daily
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {analyticsLoading ? (
+                <div className="p-12 flex justify-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                </div>
+            ) : !stats ? (
+                <div className="p-12 text-center text-slate-400 text-sm">No analytics data available</div>
+            ) : (
+                <div className="p-5">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <div className="bg-slate-50 dark:bg-slate-950 rounded-lg p-4 border border-slate-200 dark:border-slate-800">
+                            <p className="text-xs text-slate-500 mb-1">Total Credits Consumed</p>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.total_consumed.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-950 rounded-lg p-4 border border-slate-200 dark:border-slate-800">
+                            <p className="text-xs text-slate-500 mb-1">Quota Exhausted</p>
+                            <p className="text-2xl font-bold text-amber-500">{stats.quota_exhausted.toLocaleString()}</p>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-950 rounded-lg p-4 border border-slate-200 dark:border-slate-800">
+                            <p className="text-xs text-slate-500 mb-1">Active Tenants</p>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.active_tenants}</p>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-950 rounded-lg p-4 border border-slate-200 dark:border-slate-800">
+                            <p className="text-xs text-slate-500 mb-1">Avg Credits/Tenant</p>
+                            <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.avg_credits_per_tenant}</p>
+                        </div>
+                    </div>
+
+                    {/* Top tenants */}
+                    {stats.top_tenants && stats.top_tenants.length > 0 && (
+                        <div>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Top Consumers</p>
+                            <div className="space-y-2">
+                                {stats.top_tenants.slice(0, 5).map((t) => (
+                                    <div key={t.tenant_id} className="flex items-center justify-between text-sm p-2 bg-slate-50 dark:bg-slate-950 rounded-lg">
+                                        <span className="font-medium text-slate-700 dark:text-slate-300">{t.tenant_name}</span>
+                                        <span className="text-slate-500">{t.consumed} credits</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
 
 
 /** Managed add-ons grant/revoke for a tenant (admin, inside the edit modal). */

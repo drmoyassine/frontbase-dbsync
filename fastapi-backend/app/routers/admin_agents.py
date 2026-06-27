@@ -10,8 +10,8 @@ require master admin (``require_master_admin``). Covers:
   * Usage analytics aggregated from ``agent_credit_usage_log``
   * Manual daily-reset trigger (also runs on the Celery beat at 00:05 UTC)
 
-This drives the master-admin "Workspace Agent" configuration page
-(src/modules/admin/pages/AgentConfiguration.tsx). It does NOT touch Edge Agents.
+NOTE: These endpoints are consumed by the enhanced Tenants Directory page, not
+a separate Workspace Agent configuration page. It does NOT touch Edge Agents.
 """
 
 import json
@@ -117,10 +117,16 @@ async def list_agent_providers(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
 ):
-    """List all LLM-capable providers with their workspace-default flag."""
+    """List all LLM-capable providers with their workspace-default flag.
+
+    Uses the same scoping as edge_providers: master admin sees unassigned
+    accounts (project_id == None) that can be marked as the shared default.
+    """
     providers = (
         db.query(EdgeProviderAccount)
         .filter(EdgeProviderAccount.provider.in_(LLM_PROVIDER_TYPES))
+        .filter(EdgeProviderAccount.is_active == True)  # noqa: E712
+        .filter(EdgeProviderAccount.project_id.is_(None))  # Only unassigned (master admin scope)
         .order_by(EdgeProviderAccount.created_at.desc())
         .all()
     )

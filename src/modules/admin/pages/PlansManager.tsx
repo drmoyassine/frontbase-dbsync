@@ -168,12 +168,6 @@ export function PlansManager() {
                 )
             ) : tab === 'llm' ? (
                 <div className="space-y-8">
-                        providers={providersData?.providers ?? []}
-                        onRefresh={() => {
-                            queryClient.invalidateQueries({ queryKey: ['admin-llm-config'] });
-                            queryClient.invalidateQueries({ queryKey: ['admin-llm-providers'] });
-                        }}
-                    />
                     <WorkspaceProfileEditor providers={providersData?.providers ?? []} />
                 </div>
             ) : (

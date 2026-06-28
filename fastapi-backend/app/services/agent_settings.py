@@ -119,6 +119,10 @@ def load_effective_settings(
     Returns ``(settings, inherited_from)`` where ``inherited_from`` is the most
     specific layer that contributed: ``user`` | ``tenant`` | ``profile`` |
     ``default``.
+
+    Note: System prompts are now master-admin-only and are not included in
+    the effective settings returned here. Only general params and exclusion
+    lists are merged.
     """
     # Layer 1 — profile (master admin tuning). General params only.
     general = AgentSettingsGeneral()
@@ -150,19 +154,20 @@ def load_effective_settings(
     tenant = get_tenant_settings(db, tenant_id)
     if tenant is not None:
         _overlay_general(general, tenant.general)
-        if tenant.system.enabled:
-            system = AgentSettingsSystem(enabled=True, custom_prompt=tenant.system.custom_prompt)
+        # Merge exclusion lists
+        system.disabled_mcp_servers.extend(tenant.system.disabled_mcp_servers)
+        system.disabled_skills.extend(tenant.system.disabled_skills)
+        system.disabled_tools.extend(tenant.system.disabled_tools)
         inherited = "tenant"
 
-    # Layer 3 — user override (authoritative for system when a record exists)
+    # Layer 3 — user override (exclusions are additive)
     user = get_user_settings(db, tenant_id, user_id)
     if user is not None:
         _overlay_general(general, user.general)
-        # Most-specific record wins for system, even if disabled (explicit opt-out).
-        system = AgentSettingsSystem(
-            enabled=user.system.enabled,
-            custom_prompt=user.system.custom_prompt if user.system.enabled else None,
-        )
+        # User exclusions override/extend tenant exclusions
+        system.disabled_mcp_servers = list(set(system.disabled_mcp_servers + list(user.system.disabled_mcp_servers)))
+        system.disabled_skills = list(set(system.disabled_skills + list(user.system.disabled_skills)))
+        system.disabled_tools = list(set(system.disabled_tools + list(user.system.disabled_tools)))
         inherited = "user"
 
     return AgentSettings(general=general, system=system), inherited
@@ -176,9 +181,9 @@ def apply_overrides_to_profile_cfg(
 ) -> None:
     """Mutate ``profile_cfg`` in place, layering tenant/user overrides on top.
 
-    Called from ``agent_executor._resolve`` so the merged generation params +
-    system prompt take effect for the turn. Only non-None / enabled values
-    override the profile config.
+    Called from ``agent_executor._resolve`` so the merged generation params
+    take effect for the turn. System prompt is NOT overridden (master-admin
+    only).
     """
     tenant = get_tenant_settings(db, tenant_id)
     user = get_user_settings(db, tenant_id, user_id)
@@ -208,15 +213,41 @@ def apply_overrides_to_profile_cfg(
     if max_tokens is not None:
         profile_cfg["max_tokens"] = max_tokens
 
-    # --- System prompt (most-specific enabled record wins) ---------------
-    winner_system: Optional[AgentSettingsSystem] = None
-    if user is not None:
-        winner_system = user.system
-    elif tenant is not None:
-        winner_system = tenant.system
+    # --- System prompt is NOT overridden ---------------------------------
+    # System prompt is master-admin-only. Tenant/user custom_prompt is ignored.
+    # The profile_cfg["system_prompt"] remains as set by the master admin.
 
-    if winner_system is not None and winner_system.enabled and (winner_system.custom_prompt or "").strip():
-        profile_cfg["system_prompt"] = winner_system.custom_prompt.strip()
+def get_disabled_lists(
+    db: Session, tenant_id: Optional[str], user_id: Optional[str]
+) -> tuple[set[str], set[str], set[str]]:
+    """Return (disabled_mcp_ids, disabled_skill_slugs, disabled_tool_names).
+
+    Merges tenant default and user override lists (user exclusions take
+    precedence and are de-duplicated).
+
+    Returns:
+        Tuple of three sets containing the disabled item IDs/names.
+    """
+    tenant = get_tenant_settings(db, tenant_id)
+    user = get_user_settings(db, tenant_id, user_id)
+
+    disabled_mcps = set()
+    disabled_skills = set()
+    disabled_tools = set()
+
+    # Layer in tenant defaults
+    if tenant is not None:
+        disabled_mcps.update(tenant.system.disabled_mcp_servers)
+        disabled_skills.update(tenant.system.disabled_skills)
+        disabled_tools.update(tenant.system.disabled_tools)
+
+    # Layer in user overrides (additive)
+    if user is not None:
+        disabled_mcps.update(user.system.disabled_mcp_servers)
+        disabled_skills.update(user.system.disabled_skills)
+        disabled_tools.update(user.system.disabled_tools)
+
+    return disabled_mcps, disabled_skills, disabled_tools
 
 
 # =============================================================================

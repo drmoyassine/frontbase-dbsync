@@ -150,8 +150,19 @@ def _build_tool_context(
     user_id: Optional[str],
     is_master: bool,
     profile_slug: str,
+    db: Session,
 ) -> ToolContext:
     """Build the ToolContext that scopes every tool to tenant + project + perms."""
+    from .agent_settings import get_disabled_lists
+
+    # Start with profile-level excluded tools
+    excluded_tools = set(profile_config.get("excluded_tools") or [])
+
+    # Add tenant/user-level disabled tools (unless master admin)
+    if not is_master and tenant_id:
+        _, _, disabled_tools = get_disabled_lists(db, tenant_id, user_id)
+        excluded_tools.update(disabled_tools)
+
     return ToolContext(
         user_id=user_id,
         tenant_id=tenant_id,
@@ -159,7 +170,7 @@ def _build_tool_context(
         is_master=is_master,
         profile_slug=profile_slug,
         permissions=profile_config.get("permissions") or {},
-        excluded_tools=set(profile_config.get("excluded_tools") or []),
+        excluded_tools=excluded_tools,
     )
 
 
@@ -286,6 +297,7 @@ async def execute_agent_turn(
                 user_id=user_id,
                 is_master=is_master,
                 profile_slug=profile_slug,
+                db=db,
             )
             return api_key, resolved_model_id, provider_type, profile_cfg, ctx
         finally:

@@ -17,8 +17,12 @@ export interface AgentSettingsGeneral {
 }
 
 export interface AgentSettingsSystem {
-  enabled: boolean;
-  custom_prompt: string | null;
+  /** List of MCP server IDs to disable (global catalogue IDs). */
+  disabled_mcp_servers: string[];
+  /** List of skill slugs to disable (global catalogue slugs). */
+  disabled_skills: string[];
+  /** List of tool names to disable (e.g., 'pages_update', 'queryDatasource'). */
+  disabled_tools: string[];
 }
 
 export interface AgentSettings {
@@ -43,4 +47,38 @@ export interface SettingsUpdateRequest {
   general: AgentSettingsGeneral;
   system: AgentSettingsSystem;
   scope: 'user' | 'tenant';
+}
+
+/** Global catalogue item for the settings modal. */
+export interface CatalogueMcpServer {
+  id: string;
+  name: string;
+  slug: string;
+  category: string | null;
+  disabled: boolean;
+}
+
+/** Global catalogue skill for the settings modal. */
+export interface CatalogueSkill {
+  id: string;
+  slug: string;
+  name: string;
+  category: string | null;
+  isBuiltin: boolean;
+  disabled: boolean;
+}
+
+/** Core tool for the settings modal. */
+export interface CatalogueCoreTool {
+  name: string;
+  label: string;
+  category: string;
+  disabled: boolean;
+}
+
+/** Response from GET /api/agent-catalogue. */
+export interface CatalogueResponse {
+  mcpServers: CatalogueMcpServer[];
+  skills: CatalogueSkill[];
+  coreTools: CatalogueCoreTool[];
 }

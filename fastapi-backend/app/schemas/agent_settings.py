@@ -38,22 +38,29 @@ class AgentSettingsGeneral(BaseModel):
 
 
 class AgentSettingsSystem(BaseModel):
-    """Optional custom system-prompt override.
+    """Tool and integration exclusion controls for tenants.
 
-    ``enabled=False`` (default) means "use the profile's system prompt". When
-    ``enabled=True`` a non-empty ``custom_prompt`` is required.
+    System prompts are now master-admin-only. Tenants can only disable
+    specific tools, MCP servers, and skills from the global catalogue.
+
+    Exclusion lists are merged from tenant default and user override
+    (user exclusions take precedence).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    enabled: bool = Field(default=False)
-    custom_prompt: Optional[str] = Field(default=None, max_length=10000)
-
-    @model_validator(mode="after")
-    def _require_prompt_when_enabled(self) -> "AgentSettingsSystem":
-        if self.enabled and not (self.custom_prompt and self.custom_prompt.strip()):
-            raise ValueError("custom_prompt is required when enabled is true")
-        return self
+    disabled_mcp_servers: list[str] = Field(
+        default_factory=list,
+        description="List of MCP server IDs to disable (global catalogue IDs).",
+    )
+    disabled_skills: list[str] = Field(
+        default_factory=list,
+        description="List of skill slugs to disable (global catalogue slugs).",
+    )
+    disabled_tools: list[str] = Field(
+        default_factory=list,
+        description="List of tool names to disable (e.g., 'pages_update', 'queryDatasource').",
+    )
 
 
 class AgentSettings(BaseModel):

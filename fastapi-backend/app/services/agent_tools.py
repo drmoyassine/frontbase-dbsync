@@ -703,9 +703,23 @@ def _workflows_create_impl(name: str, db: Session, ctx: ToolContext, description
 # =============================================================================
 
 def _mcp_servers_list_impl(db: Session, ctx: ToolContext) -> dict[str, Any]:
-    q = db.query(McpServer).filter(McpServer.is_active == True)  # noqa: E712
-    q = project_filter(q, McpServer, ctx)
-    rows = q.all()
+    """List global MCP servers catalogue, excluding tenant-disabled items.
+
+    Returns only global (tenant_id IS NULL) MCP servers for all tenants.
+    Master admins see all servers including disabled ones.
+    """
+    # Query ONLY global catalogue (tenant_id IS NULL)
+    q = db.query(McpServer).filter(
+        McpServer.is_active == True,  # noqa: E712
+        McpServer.tenant_id.is_(None)
+    )
+    rows = q.order_by(McpServer.name.asc()).all()
+
+    # Apply tenant exclusions (unless master admin)
+    if not (ctx.isolated is False):  # Not master admin
+        from .agent_settings import get_disabled_lists
+        disabled_mcps, _, _ = get_disabled_lists(db, ctx.tenant_id, ctx.user_id)
+        rows = [m for m in rows if str(m.id) not in disabled_mcps]
     return {
         "count": len(rows),
         "mcpServers": [
@@ -723,7 +737,11 @@ def _mcp_servers_list_impl(db: Session, ctx: ToolContext) -> dict[str, Any]:
 
 
 def _mcp_servers_add_impl(name: str, slug: str, url: str, db: Session, ctx: ToolContext, transport: str = "streamable-http", auth_type: str | None = None, token: str | None = None, category: str | None = None) -> dict[str, Any]:
+    """Add an MCP server to the global catalogue (master admin only)."""
     require_permission(ctx, "mcp_servers.all", "write")
+    # Enforce master admin for MCP server creation
+    if ctx.isolated is not False:  # Not master admin
+        return _err("Only master admin can add MCP servers")
     project_id = assert_project_owned(db, ctx)
     now = _now()
     auth_config = None
@@ -791,6 +809,19 @@ def _tools_list_impl(db: Session, ctx: ToolContext) -> dict[str, Any]:
 # PydanticAI Tool Registration (permission-gated, isolation-aware)
 # =============================================================================
 
+def _tool_disabled(db: Session, ctx: ToolContext, tool_name: str) -> bool:
+    """Check if a tool is disabled by tenant/user settings.
+
+    Returns True if the tool is in the disabled_tools list.
+    Master admins are not affected by exclusions.
+    """
+    if ctx.isolated is False:  # Master admin
+        return False
+    from .agent_settings import get_disabled_lists
+    _, _, disabled_tools = get_disabled_lists(db, ctx.tenant_id, ctx.user_id)
+    return tool_name in disabled_tools
+
+
 def register_workspace_tools(agent: Any, ctx: ToolContext | None = None) -> None:
     """Register all permitted workspace tools on a PydanticAI agent.
 
@@ -801,6 +832,8 @@ def register_workspace_tools(agent: Any, ctx: ToolContext | None = None) -> None
     """
     if ctx is None:
         ctx = ToolContext()  # unrestricted default — back-compat for any direct caller
+
+    db = SessionLocal()
 
     # ---- Content: Pages ----------------------------------------------------
     if tool_allowed(ctx, "pages_list"):

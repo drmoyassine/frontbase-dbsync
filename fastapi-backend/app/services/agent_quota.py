@@ -43,6 +43,17 @@ UseType = Literal["workspace", "support"]
 AGENT_GLOBAL_CONFIG_NAME = "workspace_agent_config"
 DEFAULT_QUOTA_EXCEEDED_ACTION = "block"  # block | warn
 
+# The two Workspace Agent profiles. ``workspace`` consumes credits and has broad
+# full-project-management permissions; ``support`` is free + read-only.
+PROFILE_NAMES = ("workspace", "support")
+
+# Validation bounds for the surfaced generation parameters.
+PARAM_BOUNDS = {
+    "temperature": (0.0, 2.0),
+    "max_tokens": (1, 128000),
+    "top_p": (0.0, 1.0),
+}
+
 
 # ---------------------------------------------------------------------------
 # Time helpers (all UTC; daily resets at 00:00 UTC, monthly on the 1st)
@@ -118,10 +129,116 @@ def resolve_plan_limits(db: Session, tenant_id: str) -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 def _default_global_config() -> dict[str, Any]:
+    from .agent_permissions import default_workspace_permissions, default_support_permissions
     return {
         "enabled": True,
         "quota_exceeded_action": DEFAULT_QUOTA_EXCEEDED_ACTION,
+        "profiles": {
+            "workspace": {
+                "system_prompt": None,  # None → executor uses the built-in default
+                "temperature": 0.7,
+                "max_tokens": 4096,
+                "top_p": 0.9,
+                "model_id": None,
+                "provider_id": None,
+                "permissions": default_workspace_permissions(),
+                "excluded_tools": [],
+            },
+            "support": {
+                "system_prompt": None,
+                "temperature": 0.5,
+                "max_tokens": 2048,
+                "top_p": 0.95,
+                "model_id": None,
+                "provider_id": None,
+                "permissions": default_support_permissions(),
+                "excluded_tools": [],
+            },
+        },
     }
+
+
+def _clamp_param(name: str, value: Any) -> Any:
+    """Coerce + range-clamp a generation parameter to its valid type/range."""
+    if value is None:
+        return None
+    lo, hi = PARAM_BOUNDS[name]
+    try:
+        if name == "max_tokens":
+            v = int(value)
+        else:
+            v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return max(lo, min(hi, v))
+
+
+def get_profile_config(db: Session, use_type: str) -> dict[str, Any]:
+    """Resolve the merged config for one profile ('workspace' | 'support').
+
+    Returns the master-admin profile settings (defaults if unset). Cloud tenant
+    turns resolve these; self-host / master admin also use them as the source of
+    truth for parameters + permissions.
+    """
+    if use_type not in PROFILE_NAMES:
+        use_type = "workspace"
+    cfg = get_agent_global_config(db)
+    return cfg.get("profiles", {}).get(use_type) or _default_global_config()["profiles"][use_type]
+
+
+def set_profile_config(db: Session, use_type: str, updates: dict[str, Any]) -> dict[str, Any]:
+    """Merge validated ``updates`` into one profile's config. Caller commits.
+
+    Allowed keys: system_prompt, temperature, max_tokens, top_p, model_id,
+    provider_id, permissions, excluded_tools.
+    """
+    if use_type not in PROFILE_NAMES:
+        raise ValueError(f"Unknown profile '{use_type}'")
+    cfg = get_agent_global_config(db)
+    cfg.setdefault("profiles", {})
+    profile = dict(cfg["profiles"].get(use_type) or _default_global_config()["profiles"][use_type])
+
+    if "system_prompt" in updates:
+        profile["system_prompt"] = updates["system_prompt"] or None
+    for p in ("temperature", "max_tokens", "top_p"):
+        if p in updates:
+            profile[p] = _clamp_param(p, updates[p])
+    if "model_id" in updates:
+        profile["model_id"] = updates["model_id"] or None
+    if "provider_id" in updates:
+        profile["provider_id"] = updates["provider_id"] or None
+    if "permissions" in updates and isinstance(updates["permissions"], dict):
+        profile["permissions"] = updates["permissions"]
+    if "excluded_tools" in updates and isinstance(updates["excluded_tools"], list):
+        profile["excluded_tools"] = [str(t) for t in updates["excluded_tools"]]
+
+    cfg["profiles"][use_type] = profile
+    # Persist the full merged config.
+    _write_global_config_row(db, cfg)
+    return profile
+
+
+def _write_global_config_row(db: Session, cfg: dict[str, Any]) -> None:
+    """Upsert the global config AppVariable row. Caller commits."""
+    now = _utcnow().isoformat()
+    row = (
+        db.query(AppVariable)
+        .filter(AppVariable.name == AGENT_GLOBAL_CONFIG_NAME, AppVariable.project_id.is_(None))
+        .first()
+    )
+    if row is None:
+        db.add(AppVariable(
+            id=str(uuid.uuid4()),
+            name=AGENT_GLOBAL_CONFIG_NAME,
+            type="variable",
+            value=json.dumps(cfg),
+            description="Master-admin Workspace Agent configuration",
+            project_id=None,
+            created_at=now,
+        ))
+    else:
+        row.value = json.dumps(cfg)  # type: ignore[assignment]
+    db.commit()
 
 
 def get_agent_global_config(db: Session) -> dict[str, Any]:
@@ -151,26 +268,7 @@ def set_agent_global_config(db: Session, updates: dict[str, Any]) -> dict[str, A
             if k == "enabled":
                 val = bool(val)
             cfg[k] = val
-    now = _utcnow().isoformat()
-    row = (
-        db.query(AppVariable)
-        .filter(AppVariable.name == AGENT_GLOBAL_CONFIG_NAME, AppVariable.project_id.is_(None))
-        .first()
-    )
-    if row is None:
-        row = AppVariable(
-            id=str(uuid.uuid4()),
-            name=AGENT_GLOBAL_CONFIG_NAME,
-            type="variable",
-            value=json.dumps(cfg),
-            description="Master-admin Workspace Agent configuration",
-            project_id=None,
-            created_at=now,
-        )
-        db.add(row)
-    else:
-        row.value = json.dumps(cfg)  # type: ignore[assignment]
-    db.commit()
+    _write_global_config_row(db, cfg)
     return cfg
 
 

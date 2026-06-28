@@ -194,12 +194,27 @@ class EdgeAgentProfileCreate(BaseModel):
     slug: str = Field(..., min_length=1, max_length=50)
     system_prompt: Optional[str] = None
     permissions: Optional[dict] = None
+    # Feature-parity generation parameters + tool controls
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(None, ge=1, le=128000)
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0)
+    excluded_tools: Optional[list[str]] = None
+    max_auto_tools: Optional[int] = Field(None, ge=0, le=500)
+    mcp_enabled: Optional[bool] = None
+    skills_enabled: Optional[bool] = None
 
 class EdgeAgentProfileUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     slug: Optional[str] = Field(None, min_length=1, max_length=50)
     system_prompt: Optional[str] = None
     permissions: Optional[dict] = None
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(None, ge=1, le=128000)
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0)
+    excluded_tools: Optional[list[str]] = None
+    max_auto_tools: Optional[int] = Field(None, ge=0, le=500)
+    mcp_enabled: Optional[bool] = None
+    skills_enabled: Optional[bool] = None
 
 class EdgeAgentProfileResponse(BaseModel):
     id: str
@@ -208,6 +223,13 @@ class EdgeAgentProfileResponse(BaseModel):
     slug: str
     system_prompt: Optional[str] = None
     permissions: Optional[dict] = None
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    top_p: Optional[float] = None
+    excluded_tools: Optional[list[str]] = None
+    max_auto_tools: Optional[int] = None
+    mcp_enabled: Optional[bool] = None
+    skills_enabled: Optional[bool] = None
     created_at: str
     updated_at: str
 

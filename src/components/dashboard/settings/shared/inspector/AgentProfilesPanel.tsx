@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bot, Plus, Trash2, Save, Loader2, Database, Zap, LayoutDashboard, Wrench, MessageSquare, Shield, Puzzle, ChevronDown, ChevronRight, Globe, Check, X } from 'lucide-react';
+import { McpServersManager } from '@/modules/admin/components/McpServersManager';
+import { SkillsManager } from '@/modules/admin/components/SkillsManager';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import { API_BASE } from './types';
 
 interface AgentProfile {
@@ -18,6 +21,10 @@ interface AgentProfile {
     system_prompt: string;
     permissions: Record<string, string[]>;
     excluded_endpoints?: string[];
+    // Feature-parity generation parameters (NULL = provider default)
+    temperature?: number | null;
+    max_tokens?: number | null;
+    top_p?: number | null;
     created_at?: string;
 }
 
@@ -91,7 +98,7 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
 
     const handleNew = () => {
         setSelectedProfileId('new');
-        setEditForm({ name: '', slug: '', system_prompt: '', permissions: {}, excluded_endpoints: [] });
+        setEditForm({ name: '', slug: '', system_prompt: '', permissions: {}, excluded_endpoints: [], temperature: null, max_tokens: null, top_p: null });
     };
 
     const togglePermission = (resource: string, perm: string) => {
@@ -237,12 +244,59 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                             
                             <div className="space-y-1.5">
                                 <label className="text-xs font-semibold text-muted-foreground">System Prompt (The Agent's Persona & Rules)</label>
-                                <Textarea 
+                                <Textarea
                                     value={editForm.system_prompt || ''}
                                     onChange={e => setEditForm(f => ({ ...f, system_prompt: e.target.value }))}
                                     placeholder="You are a helpful assistant..."
                                     className="min-h-[150px] font-mono text-[13px]"
                                 />
+                            </div>
+
+                            {/* Generation parameters — feature parity with the Workspace Agent */}
+                            <div className="space-y-4 rounded-md border border-border p-4 bg-muted/10">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-semibold text-muted-foreground">Generation Parameters</label>
+                                    <button
+                                        type="button"
+                                        className="text-[11px] text-muted-foreground hover:text-foreground"
+                                        onClick={() => setEditForm(f => ({ ...f, temperature: null, max_tokens: null, top_p: null }))}
+                                    >
+                                        Use provider defaults
+                                    </button>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Temperature</span>
+                                        <span className="font-mono">{(editForm.temperature ?? 0.7).toFixed(2)}</span>
+                                    </div>
+                                    <Slider
+                                        value={[editForm.temperature ?? 0.7]}
+                                        min={0} max={2} step={0.05}
+                                        onValueChange={(v) => setEditForm(f => ({ ...f, temperature: v[0] }))}
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <div className="flex justify-between text-[11px]">
+                                        <span className="text-muted-foreground">Top P</span>
+                                        <span className="font-mono">{(editForm.top_p ?? 0.9).toFixed(2)}</span>
+                                    </div>
+                                    <Slider
+                                        value={[editForm.top_p ?? 0.9]}
+                                        min={0} max={1} step={0.05}
+                                        onValueChange={(v) => setEditForm(f => ({ ...f, top_p: v[0] }))}
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] text-muted-foreground">Max Tokens</label>
+                                    <Input
+                                        type="number" min={1} max={128000}
+                                        value={editForm.max_tokens ?? 4096}
+                                        onChange={e => setEditForm(f => ({ ...f, max_tokens: Math.max(1, Math.min(128000, Number(e.target.value) || 1)) }))}
+                                    />
+                                </div>
                             </div>
                             </TabsContent>
 
@@ -256,14 +310,8 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                                         Connect external tool servers using the Model Context Protocol (MCP). The agent will be able to discover and invoke tools provided by these servers.
                                     </p>
                                     
-                                    <div className="mt-4 border border-dashed border-border rounded-md p-8 flex flex-col items-center justify-center text-center bg-muted/10">
-                                        <Wrench className="h-8 w-8 mb-3 text-muted-foreground/40" />
-                                        <p className="text-sm text-muted-foreground font-medium">No MCP servers connected</p>
-                                        <p className="text-xs text-muted-foreground mt-1">Connect an MCP server to extend this agent's capabilities with external tools.</p>
-                                        <Button variant="outline" size="sm" className="mt-4" disabled>
-                                            <Plus className="h-3.5 w-3.5 mr-1.5" /> Add MCP Server
-                                        </Button>
-                                        <Badge variant="secondary" className="text-[10px] mt-3">Coming Soon</Badge>
+                                    <div className="mt-4">
+                                        <McpServersManager profileId={selectedProfileId === 'new' ? undefined : selectedProfileId} />
                                     </div>
                                 </div>
 
@@ -275,14 +323,8 @@ export const AgentProfilesPanel: React.FC<{ engineId: string, engineName: string
                                         Install pre-built skill packages that give your agent specialized abilities (e.g. web scraping, code execution, document parsing).
                                     </p>
                                     
-                                    <div className="mt-4 border border-dashed border-border rounded-md p-8 flex flex-col items-center justify-center text-center bg-muted/10">
-                                        <Puzzle className="h-8 w-8 mb-3 text-muted-foreground/40" />
-                                        <p className="text-sm text-muted-foreground font-medium">No skills installed</p>
-                                        <p className="text-xs text-muted-foreground mt-1">Browse and install skills from the marketplace to enhance this agent.</p>
-                                        <Button variant="outline" size="sm" className="mt-4" disabled>
-                                            <Plus className="h-3.5 w-3.5 mr-1.5" /> Browse Skills
-                                        </Button>
-                                        <Badge variant="secondary" className="text-[10px] mt-3">Coming Soon</Badge>
+                                    <div className="mt-4">
+                                        <SkillsManager profileId={selectedProfileId === 'new' ? undefined : selectedProfileId} />
                                     </div>
                                 </div>
                             </TabsContent>

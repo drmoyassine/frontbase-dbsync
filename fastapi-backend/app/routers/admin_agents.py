@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database.config import get_db
@@ -70,6 +70,24 @@ class AgentConfigUpdate(BaseModel):
     quota_exceeded_action: Optional[str] = None  # block | warn
 
 
+class AgentProfileConfigUpdate(BaseModel):
+    """Per-profile (workspace | support) Workspace Agent settings.
+
+    Master admin tunes the system prompt, generation parameters, model, tool
+    permissions, and excluded tools for each profile independently.
+
+    Field validators enforce parameter bounds to prevent invalid LLM configs.
+    """
+    system_prompt: Optional[str] = None
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0, description="Sampling temperature (0.0-2.0)")
+    max_tokens: Optional[int] = Field(None, ge=1, le=128000, description="Max output tokens (1-128000)")
+    top_p: Optional[float] = Field(None, ge=0.0, le=1.0, description="Nucleus sampling threshold (0.0-1.0)")
+    model_id: Optional[str] = None
+    provider_id: Optional[str] = None
+    permissions: Optional[dict] = None
+    excluded_tools: Optional[list[str]] = None
+
+
 @router.get("/config")
 async def get_agent_config(
     db: Session = Depends(get_db),
@@ -106,6 +124,38 @@ async def update_agent_config(
         {"enabled": body.enabled, "quota_exceeded_action": body.quota_exceeded_action},
     )
     return {"config": cfg}
+
+
+# ---------------------------------------------------------------------------
+# Per-profile configuration (workspace | support)
+# ---------------------------------------------------------------------------
+
+@router.get("/profiles")
+async def get_profile_configs(
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_master_admin),
+):
+    """Return both Workspace Agent profile configs (master-admin editable)."""
+    return {
+        "profiles": {
+            "workspace": agent_quota.get_profile_config(db, "workspace"),
+            "support": agent_quota.get_profile_config(db, "support"),
+        }
+    }
+
+
+@router.put("/profiles/{use_type}")
+async def update_profile_config(
+    use_type: str,
+    body: AgentProfileConfigUpdate,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_master_admin),
+):
+    """Update one profile's config (system prompt, params, permissions, tools)."""
+    if use_type not in agent_quota.PROFILE_NAMES:
+        raise HTTPException(status_code=400, detail=f"Unknown profile '{use_type}'")
+    profile = agent_quota.set_profile_config(db, use_type, body.model_dump(exclude_unset=True))
+    return {"profile": profile, "use_type": use_type}
 
 
 # ---------------------------------------------------------------------------

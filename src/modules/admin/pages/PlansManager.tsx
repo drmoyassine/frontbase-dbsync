@@ -8,6 +8,7 @@ import {
     adminPlansApi, Plan, LimitDef, PlanWritePayload, PlanChangeRequestAdmin,
 } from '@/services/adminPlansApi';
 import { adminAgentsApi, AgentProvider, AgentGlobalConfig } from '@/services/adminAgentsApi';
+import { WorkspaceProfileEditor } from '@/modules/admin/components/WorkspaceProfileEditor';
 import { STALE } from '@/lib/queryCache';
 import { toast } from 'sonner';
 
@@ -166,16 +167,19 @@ export function PlansManager() {
                     </div>
                 )
             ) : tab === 'llm' ? (
-                <LLMConfigurationPanel
-                    config={llmConfigData}
-                    providers={providersData?.providers ?? []}
-                    loading={llmLoading}
-                    onSetDefault={(providerId) => setDefaultProviderMutation.mutate(providerId)}
-                    onRefresh={() => {
-                        queryClient.invalidateQueries({ queryKey: ['admin-llm-config'] });
-                        queryClient.invalidateQueries({ queryKey: ['admin-llm-providers'] });
-                    }}
-                />
+                <div className="space-y-8">
+                    <LLMConfigurationPanel
+                        config={llmConfigData}
+                        providers={providersData?.providers ?? []}
+                        loading={llmLoading}
+                        onSetDefault={(providerId) => setDefaultProviderMutation.mutate(providerId)}
+                        onRefresh={() => {
+                            queryClient.invalidateQueries({ queryKey: ['admin-llm-config'] });
+                            queryClient.invalidateQueries({ queryKey: ['admin-llm-providers'] });
+                        }}
+                    />
+                    <WorkspaceProfileEditor />
+                </div>
             ) : (
                 <RequestsQueue requests={requests} loading={requestsLoading}
                     onReview={(id, action, note) => reviewMutation.mutate({ id, action, note })}

@@ -31,6 +31,31 @@ export interface AgentGlobalConfig {
     default_provider?: AgentProvider | null;
 }
 
+/** Per-profile Workspace Agent config — system prompt, generation params, permissions, tools. */
+export interface AgentProfileConfig {
+    system_prompt: string | null;
+    temperature: number | null;
+    max_tokens: number | null;
+    top_p: number | null;
+    model_id: string | null;
+    provider_id: string | null;
+    permissions: Record<string, string[]>;
+    excluded_tools: string[];
+}
+
+export type WorkspaceProfileName = 'workspace' | 'support';
+
+export interface AgentProfileConfigUpdate {
+    system_prompt?: string | null;
+    temperature?: number | null;
+    max_tokens?: number | null;
+    top_p?: number | null;
+    model_id?: string | null;
+    provider_id?: string | null;
+    permissions?: Record<string, string[]>;
+    excluded_tools?: string[];
+}
+
 export interface AgentBalanceRow extends AgentCreditBalance {
     tenant_id: string;
     tenant_name: string;
@@ -58,6 +83,17 @@ export const adminAgentsApi = {
     },
     updateConfig: async (payload: Partial<Pick<AgentGlobalConfig, 'enabled' | 'quota_exceeded_action'>>): Promise<{ config: AgentGlobalConfig }> => {
         const res = await api.put('/api/admin/agents/config', payload);
+        return res.data;
+    },
+    getProfileConfigs: async (): Promise<{ profiles: Record<WorkspaceProfileName, AgentProfileConfig> }> => {
+        const res = await api.get('/api/admin/agents/profiles');
+        return res.data;
+    },
+    updateProfileConfig: async (
+        useType: WorkspaceProfileName,
+        payload: AgentProfileConfigUpdate,
+    ): Promise<{ profile: AgentProfileConfig; use_type: WorkspaceProfileName }> => {
+        const res = await api.put(`/api/admin/agents/profiles/${useType}`, payload);
         return res.data;
     },
     listProviders: async (): Promise<{ providers: AgentProvider[] }> => {

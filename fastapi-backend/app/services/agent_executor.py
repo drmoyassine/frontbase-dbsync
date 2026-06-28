@@ -15,12 +15,13 @@ Streams plain SSE events to the frontend:
 
 import json
 import logging
-from typing import AsyncGenerator, Any
+from typing import AsyncGenerator, Any, Optional
 
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from .agent_tools import register_workspace_tools
+from .agent_permissions import ToolContext
 from ..core.security import get_provider_creds
 from ..models.models import EdgeProviderAccount
 from ..database.config import SessionLocal
@@ -37,8 +38,8 @@ WORKSPACE_SYSTEM_PROMPT = """You are the Master Admin's Workspace Agent for Fron
 
 You have full, unrestricted access to the Frontbase project. You can:
 - List and inspect all pages, their component trees, and SEO metadata
-- Update component properties (text, styles, bindings)
-- View Edge Engine deployment status and provider accounts
+- Update component properties (text, styles, bindings), create and delete pages
+- View and manage Edge Engines, datasources, workflows, providers, styles, and SEO
 
 When the user asks you to modify a page, always:
 1. First use pages_get to inspect the current structure
@@ -46,6 +47,7 @@ When the user asks you to modify a page, always:
 3. Use pages_update_component or pages_update_text to make changes
 4. Confirm what you changed
 
+For destructive operations (delete, deploy, trigger), confirm the target first.
 Be concise but helpful. You are an expert Frontbase developer."""
 
 
@@ -111,6 +113,54 @@ def _resolve_llm_credentials(
         model_id = model_defaults.get(provider_type, "gpt-4o")
 
     return api_key, model_id, provider_type
+
+
+def _resolve_profile_config(
+    db: Session,
+    use_type: str,
+    provider_id: str | None,
+    model_id: str | None,
+) -> dict[str, Any]:
+    """Resolve the profile config (system prompt, params, permissions) for a turn.
+
+    Pulls master-admin per-profile settings from the global config and lets the
+    request-level provider_id/model_id (self-host) override them. Returns a dict
+    with keys: system_prompt, temperature, max_tokens, top_p, provider_id,
+    model_id, permissions, excluded_tools.
+    """
+    from . import agent_quota
+    profile = agent_quota.get_profile_config(db, use_type)
+    return {
+        "system_prompt": profile.get("system_prompt"),
+        "temperature": profile.get("temperature"),
+        "max_tokens": profile.get("max_tokens"),
+        "top_p": profile.get("top_p"),
+        "provider_id": provider_id or profile.get("provider_id"),
+        "model_id": model_id or profile.get("model_id"),
+        "permissions": profile.get("permissions") or {},
+        "excluded_tools": profile.get("excluded_tools") or [],
+    }
+
+
+def _build_tool_context(
+    profile_config: dict[str, Any],
+    *,
+    tenant_id: Optional[str],
+    project_id: Optional[str],
+    user_id: Optional[str],
+    is_master: bool,
+    profile_slug: str,
+) -> ToolContext:
+    """Build the ToolContext that scopes every tool to tenant + project + perms."""
+    return ToolContext(
+        user_id=user_id,
+        tenant_id=tenant_id,
+        project_id=project_id,
+        is_master=is_master,
+        profile_slug=profile_slug,
+        permissions=profile_config.get("permissions") or {},
+        excluded_tools=set(profile_config.get("excluded_tools") or []),
+    )
 
 
 def _build_model(api_key: str, model_id: str, provider_type: str) -> Any:
@@ -188,6 +238,13 @@ async def execute_agent_turn(
     provider_id: str | None = None,
     model_id: str | None = None,
     use_type: str = "workspace",
+    *,
+    app: Any = None,
+    tenant_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    is_master: bool = False,
+    profile_slug: str = "workspace-agent",
 ) -> AsyncGenerator[str, None]:
     """Execute a complete agent turn with PydanticAI.
 
@@ -197,19 +254,38 @@ async def execute_agent_turn(
       data: {"type":"tool_result","name":"fn","result":"..."}
       data: {"type":"done"}
 
-    ``use_type`` ('workspace' | 'support') is informational here — quota
-    enforcement + consumption happen in the agent router which wraps this stream.
+    ``use_type`` ('workspace' | 'support') selects the profile config (system
+    prompt + generation params + permissions). Quota enforcement + consumption
+    happen in the agent router which wraps this stream.
+
+    The tenant + project + identity triple scopes every tool via ToolContext
+    (two-level isolation). Pass ``is_master=True`` for the unrestricted master
+    admin / self-host path.
     """
-    # Resolve credentials from the database
-    def _get_creds() -> tuple[str, str, str]:
+    # Resolve the profile config (system prompt, params, permissions) + credentials
+    def _resolve() -> tuple[str, str, str, dict[str, Any], ToolContext]:
         db = SessionLocal()
         try:
-            return _resolve_llm_credentials(db, target_provider_id=provider_id, target_model_id=model_id)
+            profile_cfg = _resolve_profile_config(db, use_type, provider_id, model_id)
+            api_key, resolved_model_id, provider_type = _resolve_llm_credentials(
+                db,
+                target_provider_id=profile_cfg["provider_id"],
+                target_model_id=profile_cfg["model_id"],
+            )
+            ctx = _build_tool_context(
+                profile_cfg,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                user_id=user_id,
+                is_master=is_master,
+                profile_slug=profile_slug,
+            )
+            return api_key, resolved_model_id, provider_type, profile_cfg, ctx
         finally:
             db.close()
 
     try:
-        api_key, resolved_model_id, provider_type = await run_in_threadpool(_get_creds)
+        api_key, resolved_model_id, provider_type, profile_cfg, tool_ctx = await run_in_threadpool(_resolve)
     except ValueError as e:
         yield _sse_event({"type": "text", "content": str(e)})
         yield _sse_event({"type": "done"})
@@ -224,16 +300,41 @@ async def execute_agent_turn(
         yield _sse_event({"type": "done"})
         return
 
+    # Resolve the effective system prompt: explicit arg → profile config → built-in default.
+    effective_prompt = system_prompt or profile_cfg.get("system_prompt") or WORKSPACE_SYSTEM_PROMPT
+
     # Create agent with tools
     from pydantic_ai import Agent
 
     agent = Agent(
         model,
-        system_prompt=system_prompt or WORKSPACE_SYSTEM_PROMPT,
+        system_prompt=effective_prompt,
     )
 
-    # Register workspace tools
-    register_workspace_tools(agent)
+    # Register workspace tools, scoped to the resolved ToolContext
+    register_workspace_tools(agent, tool_ctx)
+
+    # Auto-register internal API endpoints as tools (permission-gated, capped,
+    # de-duplicated against the curated set above). Mirrors the Edge Agent.
+    if app is not None and not tool_ctx.is_tool_excluded("__auto_register__"):
+        try:
+            from .agent_permissions import TOOL_PERMISSION_MAP, tool_allowed
+            from .agent_auto_register import register_auto_tools
+            curated = {name for name in TOOL_PERMISSION_MAP if tool_allowed(tool_ctx, name)}
+            curated.add("engine_info")  # legacy alias
+            register_auto_tools(agent, app, tool_ctx, curated)
+        except Exception as e:  # pragma: no cover — auto-registration must never break a turn
+            logger.warning("[Agent] auto-registration skipped: %s", e)
+
+    # Generation parameters — applied per-request via model_settings so the master
+    # admin's per-profile tuning (temperature / max_tokens / top_p) takes effect.
+    model_settings: dict[str, Any] = {}
+    if profile_cfg.get("temperature") is not None:
+        model_settings["temperature"] = float(profile_cfg["temperature"])
+    if profile_cfg.get("max_tokens") is not None:
+        model_settings["max_tokens"] = int(profile_cfg["max_tokens"])
+    if profile_cfg.get("top_p") is not None:
+        model_settings["top_p"] = float(profile_cfg["top_p"])
 
     # Convert message history: extract user prompt and history
     # PydanticAI expects the prompt as a separate arg, with message_history for context
@@ -267,7 +368,11 @@ async def execute_agent_turn(
         yield _sse_event({"type": "done"})
         return
 
-    logger.info(f"[Agent] Streaming turn ({use_type}) with {provider_type}/{resolved_model_id} | {len(history)} history msgs")
+    logger.info(
+        f"[Agent] Streaming turn ({use_type}) with {provider_type}/{resolved_model_id} | "
+        f"{len(history)} history msgs | params={model_settings or 'default'} | "
+        f"isolated={tool_ctx.isolated} project={tool_ctx.project_id}"
+    )
 
     # Iterate the agent graph node-by-node so we can BOTH stream text deltas AND
     # surface tool calls/results as discrete SSE events (the contract the frontend
@@ -278,6 +383,7 @@ async def execute_agent_turn(
         async with agent.iter(
             prompt,
             message_history=history if history else None,
+            model_settings=model_settings or None,
         ) as agent_run:
             async for node in agent_run:
                 if Agent.is_model_request_node(node):

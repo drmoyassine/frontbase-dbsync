@@ -144,6 +144,19 @@ async def _agent_chat_impl(request: Request, ctx: Optional[TenantContext], profi
     # --- Tracked execution stream ------------------------------------------
     tenant_id = ctx.tenant_id if ctx else None
     user_id = ctx.user_id if ctx else None
+    is_master = bool(ctx and getattr(ctx, "is_master", False))
+
+    # Resolve the active project so every tool is scoped to it (two-level isolation).
+    # Master admin / self-host (no tenant) → project_id None → agent sees the single project.
+    project_id = None
+    if ctx is not None and tenant_id:
+        from ..database.utils import get_project
+        db_proj = SessionLocal()
+        try:
+            project = get_project(db_proj, ctx)
+            project_id = str(project.id) if project else None
+        finally:
+            db_proj.close()
 
     async def tracked_stream():
         metrics: dict[str, Any] = {"tokens_input": 0, "tokens_output": 0, "tool_calls": 0, "duration_ms": 0}
@@ -161,6 +174,12 @@ async def _agent_chat_impl(request: Request, ctx: Optional[TenantContext], profi
                 provider_id=effective_provider_id,
                 model_id=model_id,
                 use_type=use_type,
+                app=request.app,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                user_id=user_id,
+                is_master=is_master,
+                profile_slug=profile_slug,
             ):
                 parsed = _maybe_parse_sse(chunk)
                 if parsed:

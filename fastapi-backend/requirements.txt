@@ -26,6 +26,11 @@ fastapi>=0.135.0
 # tree). We only use OpenAI/Anthropic/Google; Ollama & workers_ai ride the OpenAI-
 # compatible API, so the openai extra covers them.
 pydantic-ai-slim[openai,anthropic,google]==1.107.0
+# MCP client support for the Workspace Agent (connect to external MCP servers as tool
+# sources). The slim pydantic-ai package already includes the `pydantic_ai.mcp`
+# wrapper; this standalone SDK provides the transport/client it drives. Imported
+# lazily (see app/services/mcp_client.py) so the app degrades gracefully if absent.
+mcp>=1.2.0
 greenlet==3.3.0
 h11==0.16.0
 httpcore==1.0.9

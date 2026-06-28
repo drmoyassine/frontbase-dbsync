@@ -33,6 +33,11 @@ from .edge import (  # noqa: F401
 # Pages
 from .page import Page, PageDeployment, PageVersion  # noqa: F401
 
+# Workspace Agent — feature-parity layer (MCP servers, skills, agent tools, audit)
+from .agent import (  # noqa: F401
+    McpServer, AgentSkill, AgentProfileSkill, AgentTool, AgentToolAudit,
+)
+
 # Actions (registered with Base via side-effect import)
 from app.models.actions import AutomationDraft, AutomationExecution, AutomationVersion  # noqa: F401
 

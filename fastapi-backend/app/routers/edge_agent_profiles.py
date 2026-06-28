@@ -61,6 +61,13 @@ def _serialize(profile: EdgeAgentProfile) -> dict:
         "slug": str(profile.slug),
         "system_prompt": str(profile.system_prompt) if str(profile.system_prompt) else None,
         "permissions": json.loads(str(profile.permissions)) if str(profile.permissions) else None,
+        "temperature": float(profile.temperature) if profile.temperature not in (None, "") else None,
+        "max_tokens": int(profile.max_tokens) if profile.max_tokens is not None else None,
+        "top_p": float(profile.top_p) if profile.top_p not in (None, "") else None,
+        "excluded_tools": json.loads(str(profile.excluded_tools)) if str(profile.excluded_tools) else None,
+        "max_auto_tools": int(profile.max_auto_tools) if profile.max_auto_tools is not None else None,
+        "mcp_enabled": bool(profile.mcp_enabled) if profile.mcp_enabled is not None else True,
+        "skills_enabled": bool(profile.skills_enabled) if profile.skills_enabled is not None else True,
         "created_at": str(profile.created_at),
         "updated_at": str(profile.updated_at),
     }
@@ -132,6 +139,13 @@ def create_profile(
         slug=payload.slug,  # type: ignore[assignment]
         system_prompt=payload.system_prompt,  # type: ignore[assignment]
         permissions=json.dumps(payload.permissions) if payload.permissions is not None else None,  # type: ignore[assignment]
+        temperature=str(payload.temperature) if payload.temperature is not None else None,  # type: ignore[assignment]
+        max_tokens=payload.max_tokens,  # type: ignore[assignment]
+        top_p=str(payload.top_p) if payload.top_p is not None else None,  # type: ignore[assignment]
+        excluded_tools=json.dumps(payload.excluded_tools) if payload.excluded_tools is not None else None,  # type: ignore[assignment]
+        max_auto_tools=payload.max_auto_tools,  # type: ignore[assignment]
+        mcp_enabled=payload.mcp_enabled if payload.mcp_enabled is not None else True,  # type: ignore[assignment]
+        skills_enabled=payload.skills_enabled if payload.skills_enabled is not None else True,  # type: ignore[assignment]
         created_at=now,  # type: ignore[assignment]
         updated_at=now,  # type: ignore[assignment]
     )
@@ -199,6 +213,22 @@ def update_profile(
 
     if "permissions" in update_data:
         profile.permissions = json.dumps(update_data["permissions"]) if update_data["permissions"] is not None else None  # type: ignore[assignment]
+
+    # Feature-parity generation parameters + tool controls
+    if "temperature" in update_data:
+        profile.temperature = str(update_data["temperature"]) if update_data["temperature"] is not None else None  # type: ignore[assignment]
+    if "max_tokens" in update_data:
+        profile.max_tokens = update_data["max_tokens"]  # type: ignore[assignment]
+    if "top_p" in update_data:
+        profile.top_p = str(update_data["top_p"]) if update_data["top_p"] is not None else None  # type: ignore[assignment]
+    if "excluded_tools" in update_data:
+        profile.excluded_tools = json.dumps(update_data["excluded_tools"]) if update_data["excluded_tools"] is not None else None  # type: ignore[assignment]
+    if "max_auto_tools" in update_data:
+        profile.max_auto_tools = update_data["max_auto_tools"]  # type: ignore[assignment]
+    if "mcp_enabled" in update_data and update_data["mcp_enabled"] is not None:
+        profile.mcp_enabled = update_data["mcp_enabled"]  # type: ignore[assignment]
+    if "skills_enabled" in update_data and update_data["skills_enabled"] is not None:
+        profile.skills_enabled = update_data["skills_enabled"]  # type: ignore[assignment]
 
     profile.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
     db.commit()

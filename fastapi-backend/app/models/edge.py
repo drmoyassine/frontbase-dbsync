@@ -1,6 +1,6 @@
 """Edge infrastructure domain models — EdgeDatabase, EdgeCache, EdgeQueue, EdgeProviderAccount, EdgeEngine, EdgeGPUModel, EdgeAPIKey."""
 
-from sqlalchemy import Table, Column, String, Text, Boolean, ForeignKey
+from sqlalchemy import Table, Column, String, Text, Boolean, Integer, ForeignKey
 from sqlalchemy.orm import relationship
 
 from ..database.config import Base
@@ -274,9 +274,20 @@ class EdgeAgentProfile(Base):
     name = Column(String(100), nullable=False)            # "Admin Agent"
     slug = Column(String(50), nullable=False)             # "admin-agent"
     system_prompt = Column(Text, nullable=True)           # "You are a database admin..."
-    permissions = Column(Text, nullable=True)             # JSON — { stateDb: [...], datasources: {...} }
+    permissions = Column(Text, nullable=True)             # JSON — { resource: [actions] } (deny-by-default)
     created_at = Column(String, nullable=False)
     updated_at = Column(String, nullable=False)
+
+    # --- Feature-parity controls (added for workspace/edge agent parity) ---
+    # Generation parameters surfaced to master admin / self-host. NULL = provider default.
+    temperature = Column(String, nullable=True)           # "0.7" (stored as text for SQLite portability)
+    max_tokens = Column(Integer, nullable=True)
+    top_p = Column(String, nullable=True)                 # "0.9"
+    # Auto-registration of internal API endpoints as agent tools.
+    excluded_tools = Column(Text, nullable=True)          # JSON array of tool names to exclude
+    max_auto_tools = Column(Integer, nullable=True)       # cap on auto-registered API tools (default 50)
+    mcp_enabled = Column(Boolean, default=True)
+    skills_enabled = Column(Boolean, default=True)
 
     # Relationship
     edge_engine = relationship("EdgeEngine", back_populates="agent_profiles")

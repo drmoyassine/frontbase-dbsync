@@ -36,6 +36,7 @@ from .page import Page, PageDeployment, PageVersion  # noqa: F401
 # Workspace Agent — feature-parity layer (MCP servers, skills, agent tools, audit)
 from .agent import (  # noqa: F401
     McpServer, AgentSkill, AgentProfileSkill, AgentTool, AgentToolAudit,
+    TenantAgentSettings,
 )
 
 # Actions (registered with Base via side-effect import)

@@ -267,6 +267,13 @@ async def execute_agent_turn(
         db = SessionLocal()
         try:
             profile_cfg = _resolve_profile_config(db, use_type, provider_id, model_id)
+            # Layer tenant/user overrides (gear-icon modal) on top of the master
+            # admin profile config. No-op for unauthenticated / no-record turns.
+            try:
+                from .agent_settings import apply_overrides_to_profile_cfg
+                apply_overrides_to_profile_cfg(profile_cfg, db, tenant_id, user_id)
+            except Exception:  # pragma: no cover — settings must never break a turn
+                logger.warning("[Agent] tenant/user settings overlay skipped", exc_info=True)
             api_key, resolved_model_id, provider_type = _resolve_llm_credentials(
                 db,
                 target_provider_id=profile_cfg["provider_id"],

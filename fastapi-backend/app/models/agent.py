@@ -7,6 +7,7 @@ Tables backing the Workspace Agent's feature-parity layer with the Edge Agent:
   * ``agent_profile_skills``— which skills are installed on which EdgeAgentProfile
   * ``agent_tools``         — per-profile configured tools (workflow-as-tool, MCP client, skill)
   * ``agent_tool_audit``    — append-only audit trail of destructive/tool calls
+  * ``tenant_agent_settings``— tenant/user-side overrides exposed via the gear-icon modal
 
 These mirror the Edge Engine's ``agent_tools`` SQLite table
 (``services/edge/src/storage/schema.ts``) and extend the model with tenant +
@@ -140,3 +141,35 @@ class AgentToolAudit(Base):
     error_message = Column(Text, nullable=True)
     duration_ms = Column(Integer, nullable=True)
     created_at = Column(String, nullable=False, index=True)
+
+
+class TenantAgentSettings(Base):
+    """Tenant / user-side Workspace Agent overrides (gear-icon modal).
+
+    One row per (tenant, user) pair. ``user_id IS NULL`` is the tenant-wide
+    default; a populated ``user_id`` is that user's personal override (which
+    wins over the tenant default at apply time).
+
+    ``tenant_id`` and ``user_id`` are plain nullable strings (no FK) — matching
+    ``AgentToolAudit`` — so the table works across cloud (SuperTokens user ids)
+    and self-host (master admin) without cross-edition FK drift. ``settings``
+    stores the JSON-serialized ``AgentSettings`` envelope.
+
+    Cloud: ``tenant_id`` is the tenant; a user row is keyed on the SuperTokens
+    user id. Self-host: ``tenant_id`` is NULL and ``user_id`` is the admin id,
+    so self-host users get the same per-user override behaviour.
+    """
+    __tablename__ = "tenant_agent_settings"
+    __table_args__ = (
+        # Composite uniqueness for the user-specific case. SQLite treats NULL
+        # user_id as distinct, so the single tenant-default row is additionally
+        # enforced by the upsert in app.routers.agent_settings.
+        UniqueConstraint('tenant_id', 'user_id', name='uq_tenant_user_agent_settings'),
+    )
+
+    id = Column(String, primary_key=True)
+    tenant_id = Column(String, nullable=True, index=True)
+    user_id = Column(String, nullable=True, index=True)
+    settings = Column(Text, nullable=False)        # JSON — AgentSettings envelope
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)

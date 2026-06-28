@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { Bot, X, Maximize2, Minimize2, Send, AlertTriangle, Loader2, Zap, MessageCircle } from 'lucide-react';
+import { Bot, X, Maximize2, Minimize2, Send, AlertTriangle, Loader2, Zap, MessageCircle, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { isCloud } from '@/lib/edition';
 import { agentApi, type MyAgentCredits } from '@/services/agentApi';
+import { WorkspaceAgentSettingsModal } from './WorkspaceAgentSettingsModal';
 
 // =============================================================================
 // SSE Chat Hook — parses plain SSE events from the PydanticAI backend
@@ -207,6 +208,7 @@ export const WorkspaceAgentChat: React.FC<{
 }> = ({ isOpen, onClose, profileSlug = 'workspace-agent' }) => {
     const cloud = isCloud();
     const [isExpanded, setIsExpanded] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
     const [localInput, setLocalInput] = useState('');
     const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -419,6 +421,16 @@ export const WorkspaceAgentChat: React.FC<{
                 )}
 
                 <div className="flex items-center gap-1">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                        onClick={() => setSettingsOpen(true)}
+                        title="Agent settings"
+                        aria-label="Agent settings"
+                    >
+                        <Settings className="h-3.5 w-3.5" />
+                    </Button>
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsExpanded(!isExpanded)}>
                         {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
                     </Button>
@@ -536,6 +548,8 @@ export const WorkspaceAgentChat: React.FC<{
                     </Button>
                 </form>
             </div>
+
+            <WorkspaceAgentSettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
         </div>
     );
 };

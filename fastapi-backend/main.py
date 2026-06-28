@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent, agent_mcp, users, workflows, edge_vectors, security_events
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent, agent_mcp, agent_settings, users, workflows, edge_vectors, security_events
 from app.middleware.test_mode import TestModeMiddleware
 from app.config.edition import is_cloud, DEPLOYMENT_MODE
 
@@ -1191,6 +1191,7 @@ app.include_router(edge_agent_profiles.router)  # CRUD for Agent Personas & Perm
 app.include_router(themes.router, prefix="/api/themes", tags=["Themes"])
 app.include_router(agent.router)  # Master Admin Workspace Agent chat
 app.include_router(agent_mcp.router)  # Workspace Agent MCP server exposure (/api/agent/mcp/*)
+app.include_router(agent_settings.router)  # Tenant/user Workspace Agent settings (gear-icon modal)
 
 # Workspace Agent feature-parity integrations: MCP servers + Skills management.
 try:

@@ -168,17 +168,13 @@ export function PlansManager() {
                 )
             ) : tab === 'llm' ? (
                 <div className="space-y-8">
-                    <LLMConfigurationPanel
-                        config={llmConfigData}
                         providers={providersData?.providers ?? []}
-                        loading={llmLoading}
-                        onSetDefault={(providerId) => setDefaultProviderMutation.mutate(providerId)}
                         onRefresh={() => {
                             queryClient.invalidateQueries({ queryKey: ['admin-llm-config'] });
                             queryClient.invalidateQueries({ queryKey: ['admin-llm-providers'] });
                         }}
                     />
-                    <WorkspaceProfileEditor />
+                    <WorkspaceProfileEditor providers={providersData?.providers ?? []} />
                 </div>
             ) : (
                 <RequestsQueue requests={requests} loading={requestsLoading}
@@ -415,156 +411,6 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
     );
 }
 
-function LLMConfigurationPanel({
-    config,
-    providers,
-    loading,
-    onSetDefault,
-    onRefresh,
-}: {
-    config?: AgentGlobalConfig;
-    providers: AgentProvider[];
-    loading: boolean;
-    onSetDefault: (providerId: string) => void;
-    onRefresh: () => void;
-}) {
-    if (loading) {
-        return <Centered><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></Centered>;
-    }
-
-    const defaultProvider = config?.default_provider;
-    const isGloballyEnabled = config?.enabled ?? true;
-
-    return (
-        <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Cpu className="w-5 h-5 text-purple-500" />
-                        Workspace Agent LLM Configuration
-                    </h2>
-                    <p className="text-sm text-slate-500 mt-1">
-                        Select the default LLM provider for all tenants. Master admin's API costs scale with total usage.
-                    </p>
-                </div>
-                <button onClick={onRefresh} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                    <RefreshCw className="w-4 h-4" />
-                </button>
-            </div>
-
-            {/* Global Status */}
-            <div className="bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h3 className="font-semibold text-slate-900 dark:text-white">Global Status</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                            {isGloballyEnabled ? (
-                                <span className="text-emerald-600 dark:text-emerald-400">Workspace Agent is enabled for all tenants</span>
-                            ) : (
-                                <span className="text-amber-600 dark:text-amber-400">Workspace Agent is disabled globally</span>
-                            )}
-                        </p>
-                    </div>
-                    <div className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${
-                        isGloballyEnabled
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                    }`}>
-                        {isGloballyEnabled ? 'Enabled' : 'Disabled'}
-                    </div>
-                </div>
-            </div>
-
-            {/* Current Default Provider */}
-            {defaultProvider ? (
-                <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/30 dark:to-blue-950/30 rounded-xl border border-purple-200 dark:border-purple-800 p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Zap className="w-4 h-4 text-purple-500" />
-                        <h3 className="font-semibold text-slate-900 dark:text-white">Current Default Provider</h3>
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 flex items-center justify-center">
-                                <Bot className="w-5 h-5 text-purple-500" />
-                            </div>
-                            <div>
-                                <p className="font-semibold text-slate-900 dark:text-white">{defaultProvider.name}</p>
-                                <p className="text-xs text-slate-500 uppercase tracking-wider">{defaultProvider.provider}</p>
-                            </div>
-                        </div>
-                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                            Active
-                        </span>
-                    </div>
-                </div>
-            ) : (
-                <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-800 p-5">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Zap className="w-4 h-4 text-amber-500" />
-                        <h3 className="font-semibold text-amber-900 dark:text-amber-100">No Default Provider Set</h3>
-                    </div>
-                    <p className="text-sm text-amber-700 dark:text-amber-300">
-                        Select a provider below to enable Workspace Agent for all tenants.
-                    </p>
-                </div>
-            )}
-
-            {/* Available Providers */}
-            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-                <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
-                    <h3 className="font-semibold text-slate-900 dark:text-white">Available LLM Providers</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Providers from Connected Accounts that support Workspace Agent</p>
-                </div>
-                {providers.length === 0 ? (
-                    <div className="p-8 text-center text-slate-500 text-sm">
-                        <Bot className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
-                        <p>No LLM providers available. Add one in Connected Accounts.</p>
-                    </div>
-                ) : (
-                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                        {providers.map((provider) => (
-                            <div key={provider.id} className="px-5 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-850/40 transition-colors">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
-                                        <Bot className="w-5 h-5 text-slate-500" />
-                                    </div>
-                                    <div>
-                                        <p className="font-semibold text-slate-900 dark:text-white">{provider.name}</p>
-                                        <p className="text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                                            {provider.provider}
-                                            {!provider.is_active && <span className="text-amber-500">(Inactive)</span>}
-                                            {!provider.has_credentials && <span className="text-red-500">(No credentials)</span>}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {provider.is_workspace_default && (
-                                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                                            Default
-                                        </span>
-                                    )}
-                                    {!provider.is_workspace_default && (
-                                        <button
-                                            onClick={() => {
-                                                if (confirm(`Set '${provider.name}' as the default Workspace Agent provider?`)) {
-                                                    onSetDefault(provider.id);
-                                                }
-                                            }}
-                                            disabled={!provider.is_active || !provider.has_credentials}
-                                            className="px-3 py-1.5 text-sm font-medium text-purple-600 hover:text-purple-500 disabled:text-slate-400 disabled:cursor-not-allowed bg-purple-50 hover:bg-purple-100 disabled:bg-transparent dark:bg-purple-950/30 dark:hover:bg-purple-950/50 rounded-lg transition-colors"
-                                        >
-                                            Set as Default
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
+// LLMConfigurationPanel was removed because providers are now mapped per-profile.
 
 export default PlansManager;

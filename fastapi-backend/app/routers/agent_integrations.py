@@ -18,7 +18,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 from sqlalchemy.orm import Session
 
 from ..database.config import get_db, SessionLocal
@@ -87,6 +87,7 @@ class McpServerCreate(BaseModel):
     tool_filter: Optional[list[str]] = None
     category: Optional[str] = None
     is_active: bool = True
+    profile_slug: Optional[str] = None
 
 
 class McpServerUpdate(BaseModel):
@@ -99,6 +100,7 @@ class McpServerUpdate(BaseModel):
     tool_filter: Optional[list[str]] = None
     category: Optional[str] = None
     is_active: Optional[bool] = None
+    profile_slug: Optional[str] = None
 
 
 def _mcp_view(m: McpServer) -> dict[str, Any]:
@@ -117,6 +119,7 @@ def _mcp_view(m: McpServer) -> dict[str, Any]:
         "isPublic": bool(m.is_public),
         "tenantId": m.tenant_id,
         "projectId": m.project_id,
+        "profileSlug": m.profile_slug,
         "createdAt": str(m.created_at),
         "updatedAt": str(m.updated_at),
     }
@@ -124,13 +127,14 @@ def _mcp_view(m: McpServer) -> dict[str, Any]:
 
 @router.get("/mcp-servers")
 def list_mcp_servers(
+    profile_slug: Optional[str] = None,
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """List global MCP servers catalogue, excluding tenant-disabled items.
 
-    Returns only global (tenant_id IS NULL) MCP servers for all tenants.
-    Master admins see all servers including disabled ones.
+    Returns only global (tenant_id IS NULL) MCP servers for all tenants, filtered
+    by profile_slug if provided. Master admins see all servers including disabled ones.
     """
     tenant_id = ctx.tenant_id if ctx else None
     user_id = ctx.user_id if ctx else None
@@ -141,6 +145,11 @@ def list_mcp_servers(
         McpServer.is_active == True,
         McpServer.tenant_id.is_(None)  # Global only
     )
+    if profile_slug is not None:
+        q = q.filter(McpServer.profile_slug == profile_slug)
+    else:
+        q = q.filter(McpServer.profile_slug.is_(None))
+
     rows = q.order_by(McpServer.created_at.desc()).all()
 
     # Apply tenant exclusions (unless master admin)
@@ -173,6 +182,7 @@ def create_mcp_server(
         tool_filter=json.dumps(body.tool_filter) if body.tool_filter else None,
         category=body.category,
         is_active=body.is_active,
+        profile_slug=body.profile_slug,
         tenant_id=tenant_id,
         project_id=project_id,
         created_at=now,
@@ -212,6 +222,8 @@ def update_mcp_server(
         m.tool_filter = json.dumps(data["tool_filter"]) if data["tool_filter"] else None  # type: ignore[assignment]
     if "is_active" in data and data["is_active"] is not None:
         m.is_active = bool(data["is_active"])  # type: ignore[assignment]
+    if "profile_slug" in data:
+        m.profile_slug = data["profile_slug"]  # type: ignore[assignment]
     m.updated_at = _now()  # type: ignore[assignment]
     db.commit()
     db.refresh(m)
@@ -294,6 +306,7 @@ class SkillCreate(BaseModel):
     category: Optional[str] = None
     tool_definitions: list[dict[str, Any]]
     version: str = "1.0.0"
+    profile_slug: Optional[str] = None
 
 
 class SkillUpdate(BaseModel):
@@ -302,6 +315,7 @@ class SkillUpdate(BaseModel):
     category: Optional[str] = None
     tool_definitions: Optional[list[dict[str, Any]]] = None
     is_active: Optional[bool] = None
+    profile_slug: Optional[str] = None
 
 
 def _skill_view(s: AgentSkill) -> dict[str, Any]:
@@ -317,6 +331,7 @@ def _skill_view(s: AgentSkill) -> dict[str, Any]:
         "isActive": bool(s.is_active),
         "tenantId": s.tenant_id,
         "projectId": s.project_id,
+        "profileSlug": s.profile_slug,
         "createdAt": str(s.created_at),
         "updatedAt": str(s.updated_at),
     }
@@ -324,13 +339,14 @@ def _skill_view(s: AgentSkill) -> dict[str, Any]:
 
 @router.get("/agent-skills")
 def list_skills(
+    profile_slug: Optional[str] = None,
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
     """List global skills catalogue, excluding tenant-disabled items.
 
-    Returns only built-in and global (tenant_id IS NULL) skills for all tenants.
-    Master admins see all skills including disabled ones.
+    Returns only built-in and global (tenant_id IS NULL) skills for all tenants,
+    filtered by profile_slug. Master admins see all skills including disabled ones.
     """
     seed_builtin_skills(db)  # idempotent — ensures catalogue exists
 
@@ -346,6 +362,11 @@ def list_skills(
             AgentSkill.tenant_id.is_(None)
         )
     )
+    if profile_slug is not None:
+        q = q.filter(AgentSkill.profile_slug == profile_slug)
+    else:
+        q = q.filter(or_(AgentSkill.profile_slug.is_(None), AgentSkill.is_builtin == True))
+        
     rows = q.order_by(AgentSkill.is_builtin.desc(), AgentSkill.name.asc()).all()
 
     # Apply tenant exclusions (unless master admin)
@@ -375,6 +396,7 @@ def create_skill(
         version=body.version,
         is_builtin=False,
         is_active=True,
+        profile_slug=body.profile_slug,
         tenant_id=tenant_id,
         project_id=project_id,
         created_at=now,
@@ -402,6 +424,8 @@ def update_skill(
             setattr(s, k, data[k])
     if "tool_definitions" in data and data["tool_definitions"] is not None:
         s.tool_definitions = json.dumps(data["tool_definitions"])  # type: ignore[assignment]
+    if "profile_slug" in data:
+        s.profile_slug = data["profile_slug"]  # type: ignore[assignment]
     s.updated_at = _now()  # type: ignore[assignment]
     db.commit()
     db.refresh(s)
@@ -525,6 +549,7 @@ def uninstall_skill(
 
 @router.get("/agent-catalogue")
 def get_agent_catalogue(
+    profile_slug: str = "workspace",
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
@@ -546,7 +571,7 @@ def get_agent_catalogue(
     # 1. Fetch master admin profile permissions (workspace agent config)
     from ..services.agent_quota import get_profile_config
     from ..services.agent_permissions import TOOL_PERMISSION_MAP, has_permission
-    profile_cfg = get_profile_config(db, "workspace")
+    profile_cfg = get_profile_config(db, profile_slug)
     permissions = profile_cfg.get("permissions") or {}
 
     # Check global category permissions
@@ -558,7 +583,8 @@ def get_agent_catalogue(
     if can_read_mcps:
         mcp_rows = db.query(McpServer).filter(
             McpServer.is_active == True,
-            McpServer.tenant_id.is_(None)
+            McpServer.tenant_id.is_(None),
+            McpServer.profile_slug == profile_slug
         ).order_by(McpServer.name.asc()).all()
 
     # Get global skills
@@ -568,7 +594,7 @@ def get_agent_catalogue(
             AgentSkill.is_active == True,
             or_(
                 AgentSkill.is_builtin == True,
-                AgentSkill.tenant_id.is_(None)
+                and_(AgentSkill.tenant_id.is_(None), AgentSkill.profile_slug == profile_slug)
             )
         ).order_by(AgentSkill.is_builtin.desc(), AgentSkill.name.asc()).all()
 

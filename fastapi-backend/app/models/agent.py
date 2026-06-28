@@ -46,6 +46,7 @@ class McpServer(Base):
     category = Column(String(40), nullable=True)         # database | web | utility | integration
     is_public = Column(Boolean, default=False)           # Global catalogue entry (master admin only)
     is_active = Column(Boolean, default=True)
+    profile_slug = Column(String(80), nullable=True)     # 'workspace' or 'support' (tenant_id IS NULL only)
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)
     project_id = Column(String, ForeignKey("project.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(String, nullable=False)
@@ -73,6 +74,7 @@ class AgentSkill(Base):
     version = Column(String(20), nullable=False, default="1.0.0")
     is_builtin = Column(Boolean, default=True)
     is_active = Column(Boolean, default=True)
+    profile_slug = Column(String(80), nullable=True)     # 'workspace' or 'support' (tenant_id IS NULL only)
     tenant_id = Column(String, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True)
     project_id = Column(String, ForeignKey("project.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(String, nullable=False)

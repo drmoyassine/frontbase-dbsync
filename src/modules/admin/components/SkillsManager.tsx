@@ -206,16 +206,17 @@ function BuiltinSkillCard({ skill, onInstall, isInstalled }: BuiltinSkillCardPro
 
 interface Props {
     profileId?: string;
+    profileSlug?: string;
 }
 
-export function SkillsManager({ profileId }: Props) {
+export function SkillsManager({ profileId, profileSlug }: Props) {
     const queryClient = useQueryClient();
     const [showForm, setShowForm] = useState(false);
     const [editingSkill, setEditingSkill] = useState<AgentSkill | null>(null);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['agent-skills'],
-        queryFn: agentIntegrationsApi.listSkills,
+        queryKey: ['agent-skills', profileSlug],
+        queryFn: () => agentIntegrationsApi.listSkills(profileSlug),
     });
 
     // Get installed skills for this profile
@@ -228,11 +229,11 @@ export function SkillsManager({ profileId }: Props) {
     const installedSkillIds = new Set(installedData?.skills.map((s) => s.id) || []);
 
     const createMutation = useMutation({
-        mutationFn: (data: SkillCreate) => agentIntegrationsApi.createSkill(data),
+        mutationFn: (data: SkillCreate) => agentIntegrationsApi.createSkill({ ...data, profileSlug }),
         onSuccess: () => {
             toast.success('Custom skill created');
             setShowForm(false);
-            queryClient.invalidateQueries({ queryKey: ['agent-skills'] });
+            queryClient.invalidateQueries({ queryKey: ['agent-skills', profileSlug] });
         },
         onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to create skill'),
     });
@@ -243,7 +244,7 @@ export function SkillsManager({ profileId }: Props) {
         onSuccess: () => {
             toast.success('Skill updated');
             setEditingSkill(null);
-            queryClient.invalidateQueries({ queryKey: ['agent-skills'] });
+            queryClient.invalidateQueries({ queryKey: ['agent-skills', profileSlug] });
         },
         onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to update skill'),
     });
@@ -252,7 +253,7 @@ export function SkillsManager({ profileId }: Props) {
         mutationFn: (id: string) => agentIntegrationsApi.deleteSkill(id),
         onSuccess: () => {
             toast.success('Skill deleted');
-            queryClient.invalidateQueries({ queryKey: ['agent-skills'] });
+            queryClient.invalidateQueries({ queryKey: ['agent-skills', profileSlug] });
         },
         onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to delete skill'),
     });

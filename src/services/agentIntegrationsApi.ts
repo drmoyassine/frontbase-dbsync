@@ -19,6 +19,7 @@ export interface McpServer {
     isActive: boolean;
     tenantId: string | null;
     projectId: string | null;
+    profileSlug: string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -34,6 +35,7 @@ export interface McpServerCreate {
     toolFilter?: string[];
     category?: string;
     isActive?: boolean;
+    profileSlug?: string;
 }
 
 export interface McpServerUpdate {
@@ -46,6 +48,7 @@ export interface McpServerUpdate {
     toolFilter?: string[];
     category?: string;
     isActive?: boolean;
+    profileSlug?: string;
 }
 
 export interface McpTool {
@@ -85,6 +88,7 @@ export interface AgentSkill {
     isActive: boolean;
     tenantId: string | null;
     projectId: string | null;
+    profileSlug: string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -96,6 +100,7 @@ export interface SkillCreate {
     category?: string;
     toolDefinitions: unknown[];
     version?: string;
+    profileSlug?: string;
 }
 
 export interface SkillUpdate {
@@ -104,6 +109,7 @@ export interface SkillUpdate {
     category?: string;
     toolDefinitions?: unknown[];
     isActive?: boolean;
+    profileSlug?: string;
 }
 
 export interface SkillsListResult {
@@ -145,8 +151,8 @@ export const agentIntegrationsApi = {
     // MCP Servers
     // -------------------------------------------------------------------------
 
-    listMcpServers: async (): Promise<McpServersListResult> => {
-        const res = await api.get('/api/mcp-servers');
+    listMcpServers: async (profileSlug?: string): Promise<McpServersListResult> => {
+        const res = await api.get('/api/mcp-servers', { params: { profile_slug: profileSlug } });
         return res.data;
     },
 
@@ -183,8 +189,8 @@ export const agentIntegrationsApi = {
     // Skills
     // -------------------------------------------------------------------------
 
-    listSkills: async (): Promise<SkillsListResult> => {
-        const res = await api.get('/api/agent-skills');
+    listSkills: async (profileSlug?: string): Promise<SkillsListResult> => {
+        const res = await api.get('/api/agent-skills', { params: { profile_slug: profileSlug } });
         return res.data;
     },
 
@@ -203,8 +209,13 @@ export const agentIntegrationsApi = {
     },
 
     // -------------------------------------------------------------------------
-    // Profile → Skill Installation
+    // Profile → Skill
     // -------------------------------------------------------------------------
+
+    getAgentCatalogue: async (profileSlug?: string): Promise<AgentCatalogueResult> => {
+        const res = await api.get('/api/agent-catalogue', { params: { profile_slug: profileSlug } });
+        return res.data;
+    },
 
     listProfileSkills: async (profileId: string): Promise<ProfileSkillsResult> => {
         const res = await api.get(`/api/agent-profiles/${profileId}/skills`);

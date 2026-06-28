@@ -260,25 +260,26 @@ function ToolsDialog({ server, open, onClose }: ToolsDialogProps) {
 
 interface Props {
     profileId?: string;
+    profileSlug?: string;
 }
 
-export function McpServersManager({ profileId }: Props) {
+export function McpServersManager({ profileId, profileSlug }: Props) {
     const queryClient = useQueryClient();
     const [showForm, setShowForm] = useState(false);
     const [editingServer, setEditingServer] = useState<McpServer | null>(null);
     const [toolsServer, setToolsServer] = useState<McpServer | null>(null);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['mcp-servers'],
-        queryFn: agentIntegrationsApi.listMcpServers,
+        queryKey: ['mcp-servers', profileSlug],
+        queryFn: () => agentIntegrationsApi.listMcpServers(profileSlug),
     });
 
     const createMutation = useMutation({
-        mutationFn: (data: McpServerCreate) => agentIntegrationsApi.createMcpServer(data),
+        mutationFn: (data: McpServerCreate) => agentIntegrationsApi.createMcpServer({ ...data, profileSlug }),
         onSuccess: () => {
             toast.success('MCP server created');
             setShowForm(false);
-            queryClient.invalidateQueries({ queryKey: ['mcp-servers'] });
+            queryClient.invalidateQueries({ queryKey: ['mcp-servers', profileSlug] });
         },
         onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to create server'),
     });
@@ -289,7 +290,7 @@ export function McpServersManager({ profileId }: Props) {
         onSuccess: () => {
             toast.success('MCP server updated');
             setEditingServer(null);
-            queryClient.invalidateQueries({ queryKey: ['mcp-servers'] });
+            queryClient.invalidateQueries({ queryKey: ['mcp-servers', profileSlug] });
         },
         onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to update server'),
     });
@@ -298,7 +299,7 @@ export function McpServersManager({ profileId }: Props) {
         mutationFn: (id: string) => agentIntegrationsApi.deleteMcpServer(id),
         onSuccess: () => {
             toast.success('MCP server deleted');
-            queryClient.invalidateQueries({ queryKey: ['mcp-servers'] });
+            queryClient.invalidateQueries({ queryKey: ['mcp-servers', profileSlug] });
         },
         onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to delete server'),
     });

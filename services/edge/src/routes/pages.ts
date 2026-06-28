@@ -523,45 +523,47 @@ pagesRoute.get('/', async (c) => {
                 }
 
                 // Pull-publish: Fetch homepage from FastAPI and store locally (self-host only)
-                const apiBase = getSafeApiBase();
-                if (!apiBase) {
-                    // Fail fast in production
-                    return c.json({ homepage: false, message: 'Waiting for Homepage to be published.' }, 200);
-                }
-
-                console.log('[SSR] No local homepage found, pulling from FastAPI...');
-                try {
-                    const response = await fetch(`${apiBase}/api/pages/homepage/`);
-
-                    if (response.ok) {
-                        const result = await response.json();
-                        const pageData = result.data;
-
-                        // Convert to publish format and store
-                        const publishData = {
-                            id: pageData.id,
-                            slug: pageData.slug,
-                            name: pageData.name,
-                            title: pageData.title || undefined,
-                            description: pageData.description || undefined,
-                            layoutData: pageData.layoutData,
-                            seoData: pageData.seoData || undefined,
-                            datasources: pageData.datasources || undefined,
-                            version: 1,
-                            publishedAt: new Date().toISOString(),
-                            isPublic: pageData.isPublic ?? true,
-                            isHomepage: true,
-                            tenantSlug: '_default',
-                        };
-
-                        await stateProvider.upsertPage(publishData);
-                        console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
-                        homepage = publishData;
-                    } else {
-                        console.warn(`[SSR] FastAPI homepage fetch failed: ${response.status}`);
+                if (!isCloudEnv()) {
+                    const apiBase = getSafeApiBase();
+                    if (!apiBase) {
+                        // Fail fast in production
+                        return c.json({ homepage: false, message: 'Waiting for Homepage to be published.' }, 200);
                     }
-                } catch (fetchError) {
-                    console.error('[SSR] Pull-publish failed:', fetchError);
+
+                    console.log('[SSR] No local homepage found, pulling from FastAPI...');
+                    try {
+                        const response = await fetch(`${apiBase}/api/pages/homepage/`);
+
+                        if (response.ok) {
+                            const result = await response.json();
+                            const pageData = result.data;
+
+                            // Convert to publish format and store
+                            const publishData = {
+                                id: pageData.id,
+                                slug: pageData.slug,
+                                name: pageData.name,
+                                title: pageData.title || undefined,
+                                description: pageData.description || undefined,
+                                layoutData: pageData.layoutData,
+                                seoData: pageData.seoData || undefined,
+                                datasources: pageData.datasources || undefined,
+                                version: 1,
+                                publishedAt: new Date().toISOString(),
+                                isPublic: pageData.isPublic ?? true,
+                                isHomepage: true,
+                                tenantSlug: '_default',
+                            };
+
+                            await stateProvider.upsertPage(publishData);
+                            console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
+                            homepage = publishData;
+                        } else {
+                            console.warn(`[SSR] FastAPI homepage fetch failed: ${response.status}`);
+                        }
+                    } catch (fetchError) {
+                        console.error('[SSR] Pull-publish failed:', fetchError);
+                    }
                 }
             }
 

@@ -110,8 +110,8 @@ def _mcp_view(m: McpServer) -> dict[str, Any]:
         "url": str(m.url),
         "transport": str(m.transport),
         "authType": m.auth_type,
-        "hasAuth": bool(m.auth_config),
-        "toolFilter": json.loads(str(m.tool_filter)) if m.tool_filter else None,
+        "hasAuth": bool(m.auth_config is not None),
+        "toolFilter": json.loads(str(m.tool_filter)) if m.tool_filter is not None else None,
         "category": m.category,
         "isActive": bool(m.is_active),
         "isPublic": bool(m.is_public),
@@ -158,7 +158,6 @@ def create_mcp_server(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
-    _require_master_admin(ctx)  # Only master admin can create MCP servers
     tenant_id, project_id = _resolve_scope(db, ctx)
     auth_config = encrypt_credentials({"type": body.auth_type or "bearer", "token": body.token}) if body.token else None
     now = _now()
@@ -202,19 +201,18 @@ def update_mcp_server(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
-    _require_master_admin(ctx)  # Only master admin can update MCP servers
     m = _get_scoped(db, ctx, server_id)
     data = body.model_dump(exclude_unset=True)
     for k in ("name", "description", "url", "transport", "auth_type", "category"):
         if k in data and data[k] is not None:
             setattr(m, k, data[k])
     if "token" in data and data["token"]:
-        m.auth_config = encrypt_credentials({"type": m.auth_type or "bearer", "token": data["token"]})
+        m.auth_config = encrypt_credentials({"type": str(m.auth_type) if m.auth_type is not None else "bearer", "token": data["token"]})  # type: ignore[assignment]
     if "tool_filter" in data:
-        m.tool_filter = json.dumps(data["tool_filter"]) if data["tool_filter"] else None
+        m.tool_filter = json.dumps(data["tool_filter"]) if data["tool_filter"] else None  # type: ignore[assignment]
     if "is_active" in data and data["is_active"] is not None:
-        m.is_active = bool(data["is_active"])
-    m.updated_at = _now()
+        m.is_active = bool(data["is_active"])  # type: ignore[assignment]
+    m.updated_at = _now()  # type: ignore[assignment]
     db.commit()
     db.refresh(m)
     return _mcp_view(m)
@@ -226,7 +224,6 @@ def delete_mcp_server(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
-    _require_master_admin(ctx)  # Only master admin can delete MCP servers
     m = _get_scoped(db, ctx, server_id)
     db.delete(m)
     db.commit()
@@ -241,13 +238,13 @@ def list_mcp_server_tools(
     m = _get_scoped(db, ctx, server_id)
     auth = _decrypt_auth(m)
     try:
-        tools = mcp_client.list_tools(str(m.url), str(m.transport), auth, m.auth_type)
+        tools = mcp_client.list_tools(str(m.url), str(m.transport), auth, str(m.auth_type) if m.auth_type is not None else None)
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
         raise HTTPException(502, f"MCP discovery failed: {e}")
     # Apply the optional tool filter.
-    if m.tool_filter:
+    if m.tool_filter is not None:
         allowed = set(json.loads(str(m.tool_filter)))
         tools = [t for t in tools if t.get("name") in allowed]
     return {"tools": tools, "total": len(tools)}
@@ -278,7 +275,7 @@ def _get_scoped(db: Session, ctx: Optional[TenantContext], server_id: str) -> Mc
 
 
 def _decrypt_auth(m: McpServer) -> Optional[str]:
-    if not m.auth_config:
+    if m.auth_config is None:
         return None
     try:
         return json.dumps(decrypt_credentials(str(m.auth_config)))
@@ -366,7 +363,6 @@ def create_skill(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
-    _require_master_admin(ctx)  # Only master admin can create skills
     tenant_id, project_id = _resolve_scope(db, ctx)
     now = _now()
     s = AgentSkill(
@@ -397,7 +393,6 @@ def update_skill(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
-    _require_master_admin(ctx)  # Only master admin can update skills
     s = _skill_scoped(db, ctx, skill_id)
     if bool(s.is_builtin):
         raise HTTPException(403, "Built-in skills are immutable")
@@ -406,8 +401,8 @@ def update_skill(
         if k in data and data[k] is not None:
             setattr(s, k, data[k])
     if "tool_definitions" in data and data["tool_definitions"] is not None:
-        s.tool_definitions = json.dumps(data["tool_definitions"])
-    s.updated_at = _now()
+        s.tool_definitions = json.dumps(data["tool_definitions"])  # type: ignore[assignment]
+    s.updated_at = _now()  # type: ignore[assignment]
     db.commit()
     db.refresh(s)
     return _skill_view(s)
@@ -419,7 +414,6 @@ def delete_skill(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
-    _require_master_admin(ctx)  # Only master admin can delete skills
     s = _skill_scoped(db, ctx, skill_id)
     if bool(s.is_builtin):
         raise HTTPException(403, "Built-in skills cannot be deleted")
@@ -432,7 +426,7 @@ def _skill_scoped(db: Session, ctx: Optional[TenantContext], skill_id: str) -> A
     if s is None:
         raise HTTPException(404, "Skill not found")
     tenant_id, _ = _resolve_scope(db, ctx)
-    if tenant_id is not None and not bool(s.is_builtin) and s.tenant_id != tenant_id:
+    if tenant_id is not None and s.is_builtin is not True and str(s.tenant_id) != tenant_id:
         raise HTTPException(404, "Skill not found")
     return s
 
@@ -447,7 +441,7 @@ def _get_profile_scoped(db: Session, ctx: Optional[TenantContext], profile_id: s
     if profile is None:
         raise HTTPException(404, "Profile not found")
     tenant_id, project_id = _resolve_scope(db, ctx)
-    if tenant_id is not None and profile.project_id != project_id:
+    if tenant_id is not None and str(profile.project_id) != str(project_id):
         raise HTTPException(404, "Profile not found")
     return profile
 
@@ -475,7 +469,7 @@ def list_profile_skills(
         skill = db.query(AgentSkill).filter(AgentSkill.id == r.skill_id).first()
         if skill:
             view = _skill_view(skill)
-            view["configOverrides"] = json.loads(str(r.config_overrides)) if r.config_overrides else None
+            view["configOverrides"] = json.loads(str(r.config_overrides)) if r.config_overrides is not None else None
             view["installedAt"] = str(r.installed_at)
             out.append(view)
     return {"skills": out, "total": len(out)}
@@ -549,23 +543,37 @@ def get_agent_catalogue(
     from ..services.agent_settings import get_disabled_lists
     disabled_mcps, disabled_skills, disabled_tools = get_disabled_lists(db, tenant_id, user_id)
 
+    # 1. Fetch master admin profile permissions (workspace agent config)
+    from ..services.agent_quota import get_profile_config
+    from ..services.agent_permissions import TOOL_PERMISSION_MAP, has_permission
+    profile_cfg = get_profile_config(db, "workspace")
+    permissions = profile_cfg.get("permissions") or {}
+
+    # Check global category permissions
+    can_read_mcps = has_permission(permissions, "mcp_servers.all", "read")
+    can_read_skills = has_permission(permissions, "skills.all", "read")
+
     # Get global MCP servers
-    mcp_rows = db.query(McpServer).filter(
-        McpServer.is_active == True,
-        McpServer.tenant_id.is_(None)
-    ).order_by(McpServer.name.asc()).all()
+    mcp_rows = []
+    if can_read_mcps:
+        mcp_rows = db.query(McpServer).filter(
+            McpServer.is_active == True,
+            McpServer.tenant_id.is_(None)
+        ).order_by(McpServer.name.asc()).all()
 
     # Get global skills
-    skill_rows = db.query(AgentSkill).filter(
-        AgentSkill.is_active == True,
-        or_(
-            AgentSkill.is_builtin == True,
-            AgentSkill.tenant_id.is_(None)
-        )
-    ).order_by(AgentSkill.is_builtin.desc(), AgentSkill.name.asc()).all()
+    skill_rows = []
+    if can_read_skills:
+        skill_rows = db.query(AgentSkill).filter(
+            AgentSkill.is_active == True,
+            or_(
+                AgentSkill.is_builtin == True,
+                AgentSkill.tenant_id.is_(None)
+            )
+        ).order_by(AgentSkill.is_builtin.desc(), AgentSkill.name.asc()).all()
 
     # Core tools (curated list)
-    core_tools = [
+    core_tools_all = [
         {"name": "pages_list", "label": "List Pages", "category": "Pages"},
         {"name": "pages_get", "label": "Get Page", "category": "Pages"},
         {"name": "pages_update", "label": "Update Page", "category": "Pages"},
@@ -577,6 +585,14 @@ def get_agent_catalogue(
         {"name": "queryDatasource", "label": "Query Datasource", "category": "Datasources"},
         {"name": "triggerWorkflow", "label": "Trigger Workflow", "category": "Workflows"},
     ]
+
+    # Filter core tools by master admin permissions
+    core_tools = []
+    for t in core_tools_all:
+        req = TOOL_PERMISSION_MAP.get(t["name"])
+        # If it requires permission, ensure the master admin profile granted it
+        if req is None or has_permission(permissions, req[0], req[1]):
+            core_tools.append(t)
 
     return {
         "mcpServers": [

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, RotateCcw, Save, Bot, Wrench } from 'lucide-react';
+import { Loader2, RotateCcw, Save, Bot, Wrench, Puzzle, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,6 +14,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PERMISSION_CATALOG } from './permissionCatalog';
+import { McpServersManager } from './McpServersManager';
+import { SkillsManager } from './SkillsManager';
 
 /** Default parameter values for the "Reset to defaults" action. */
 const PARAM_DEFAULTS: Record<WorkspaceProfileName, { temperature: number; max_tokens: number; top_p: number }> = {
@@ -185,7 +187,7 @@ function ProfileForm({
 
 export function WorkspaceProfileEditor() {
     const queryClient = useQueryClient();
-    const [active, setActive] = useState<WorkspaceProfileName>('workspace');
+    const [active, setActive] = useState<WorkspaceProfileName | 'global-tools'>('workspace');
 
     const { data, isLoading } = useQuery({
         queryKey: ['admin-agent-profiles'],
@@ -219,10 +221,11 @@ export function WorkspaceProfileEditor() {
                     Workspace turns consume credits; Support turns are free.
                 </p>
             </div>
-            <Tabs value={active} onValueChange={(v) => setActive(v as WorkspaceProfileName)}>
+            <Tabs value={active} onValueChange={(v) => setActive(v as WorkspaceProfileName | 'global-tools')}>
                 <TabsList>
                     <TabsTrigger value="workspace">Workspace (credit)</TabsTrigger>
                     <TabsTrigger value="support">Support (free)</TabsTrigger>
+                    <TabsTrigger value="global-tools">Global Tools & Skills</TabsTrigger>
                 </TabsList>
                 <TabsContent value="workspace" className="mt-4">
                     <ProfileForm
@@ -239,6 +242,31 @@ export function WorkspaceProfileEditor() {
                         saving={saveMutation.isPending && saveMutation.variables?.useType === 'support'}
                         onSave={(payload) => saveMutation.mutate({ useType: 'support', payload })}
                     />
+                </TabsContent>
+                <TabsContent value="global-tools" className="mt-4 space-y-6">
+                    <div className="space-y-1.5 border border-slate-200 dark:border-slate-800 rounded-xl p-5 bg-white dark:bg-slate-900">
+                        <h3 className="text-sm font-semibold flex items-center gap-2">
+                            <Puzzle className="h-4 w-4" /> Global MCP Servers
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                            Connect external tool servers using the Model Context Protocol (MCP). The Workspace Agent will be able to discover and invoke tools provided by these servers.
+                        </p>
+                        <div className="mt-4">
+                            <McpServersManager profileId={undefined} />
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5 border border-slate-200 dark:border-slate-800 rounded-xl p-5 bg-white dark:bg-slate-900">
+                        <h3 className="text-sm font-semibold flex items-center gap-2">
+                            <Zap className="h-4 w-4" /> Global Agent Skills
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                            Install pre-built skill packages that give your agent specialized abilities.
+                        </p>
+                        <div className="mt-4">
+                            <SkillsManager profileId={undefined} />
+                        </div>
+                    </div>
                 </TabsContent>
             </Tabs>
         </div>

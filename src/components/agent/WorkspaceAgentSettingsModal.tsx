@@ -1,17 +1,18 @@
 /**
  * WorkspaceAgentSettingsModal — tenant/user-side agent overrides.
  *
- * Opened from the gear icon in the Workspace Agent widget header. MVP scope:
+ * Opened from the gear icon in the Workspace Agent widget header. Scope:
  *   • General tab  — temperature, max_tokens, top_p, timeout
- *   • Prompt tab   — optional custom system-prompt override
+ *   • Tools tab    — enable/disable MCP servers, skills, and core tools
  *
- * Settings persist via /api/agent/settings and apply on the next agent turn
- * (the executor merges profile → tenant → user). Admins (can_modify_tenant)
- * additionally get a scope toggle to write tenant-wide defaults.
+ * System prompts are now master-admin-only. Tenants can only disable
+ * specific tools and integrations from the global catalogue.
+ *
+ * Settings persist via /api/agent/settings and apply on the next agent turn.
  */
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Settings, RotateCcw, Info } from 'lucide-react';
+import { X, Settings, RotateCcw, Info, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -20,16 +21,20 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
 import { agentSettingsApi } from '@/services/agentSettingsApi';
+import { agentCatalogueApi } from '@/services/agentCatalogueApi';
 import type {
   AgentSettings,
   AgentSettingsGeneral,
   AgentSettingsSystem,
   SettingsSource,
+  CatalogueResponse,
+  CatalogueMcpServer,
+  CatalogueSkill,
+  CatalogueCoreTool,
 } from '@/types/agentSettings';
 
 interface Props {
@@ -61,19 +66,28 @@ export const WorkspaceAgentSettingsModal: React.FC<Props> = ({ open, onClose, on
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
 
-  // Load effective settings whenever the modal opens.
+  // Catalogue data for the Tools tab
+  const [catalogue, setCatalogue] = useState<CatalogueResponse | null>(null);
+  const [catalogueLoading, setCatalogueLoading] = useState(false);
+
+  // Load effective settings and catalogue whenever the modal opens.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setLoading(true);
-    agentSettingsApi
-      .get()
-      .then((res) => {
+    setCatalogueLoading(true);
+
+    Promise.all([
+      agentSettingsApi.get().then((res) => res),
+      agentCatalogueApi.get().then((res) => res),
+    ])
+      .then(([settingsRes, catalogueRes]) => {
         if (cancelled) return;
-        setSettings(res.settings);
-        setBaseline(res.settings);
-        setInheritedFrom(res.inherited_from);
-        setCanModifyTenant(res.can_modify_tenant);
+        setSettings(settingsRes.settings);
+        setBaseline(settingsRes.settings);
+        setInheritedFrom(settingsRes.inherited_from);
+        setCanModifyTenant(settingsRes.can_modify_tenant);
+        setCatalogue(catalogueRes);
         setScope('user');
       })
       .catch((err) => {
@@ -81,8 +95,12 @@ export const WorkspaceAgentSettingsModal: React.FC<Props> = ({ open, onClose, on
         toast.error('Failed to load settings');
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setCatalogueLoading(false);
+        }
       });
+
     return () => {
       cancelled = true;
     };
@@ -106,18 +124,38 @@ export const WorkspaceAgentSettingsModal: React.FC<Props> = ({ open, onClose, on
     setSettings((prev) => (prev ? { ...prev, general: { ...prev.general, [key]: value } } : prev));
   };
 
-  const updateSystem = <K extends keyof AgentSettingsSystem>(key: K, value: AgentSettingsSystem[K]) => {
-    setSettings((prev) => (prev ? { ...prev, system: { ...prev.system, [key]: value } } : prev));
+  const toggleMcpServer = (serverId: string, disabled: boolean) => {
+    setSettings((prev) => {
+      if (!prev) return prev;
+      const disabledList = disabled
+        ? [...prev.system.disabled_mcp_servers, serverId]
+        : prev.system.disabled_mcp_servers.filter((id) => id !== serverId);
+      return { ...prev, system: { ...prev.system, disabled_mcp_servers: disabledList } };
+    });
+  };
+
+  const toggleSkill = (skillSlug: string, disabled: boolean) => {
+    setSettings((prev) => {
+      if (!prev) return prev;
+      const disabledList = disabled
+        ? [...prev.system.disabled_skills, skillSlug]
+        : prev.system.disabled_skills.filter((slug) => slug !== skillSlug);
+      return { ...prev, system: { ...prev.system, disabled_skills: disabledList } };
+    });
+  };
+
+  const toggleCoreTool = (toolName: string, disabled: boolean) => {
+    setSettings((prev) => {
+      if (!prev) return prev;
+      const disabledList = disabled
+        ? [...prev.system.disabled_tools, toolName]
+        : prev.system.disabled_tools.filter((name) => name !== toolName);
+      return { ...prev, system: { ...prev.system, disabled_tools: disabledList } };
+    });
   };
 
   const handleSave = async () => {
     if (!settings) return;
-    // Client-side guard mirrors the server rule: enabled ⇒ non-empty prompt.
-    if (settings.system.enabled && !(settings.system.custom_prompt || '').trim()) {
-      toast.error('A custom prompt is required when the system prompt is enabled.');
-      setActiveTab('system');
-      return;
-    }
     setSaving(true);
     try {
       await agentSettingsApi.update({ ...settings, scope });
@@ -210,7 +248,7 @@ export const WorkspaceAgentSettingsModal: React.FC<Props> = ({ open, onClose, on
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
             <TabsList className="m-4 grid w-auto grid-cols-2">
               <TabsTrigger value="general">General</TabsTrigger>
-              <TabsTrigger value="system">System Prompt</TabsTrigger>
+              <TabsTrigger value="tools">Tools & Integrations</TabsTrigger>
             </TabsList>
 
             <ScrollArea className="min-h-0 flex-1">
@@ -290,41 +328,91 @@ export const WorkspaceAgentSettingsModal: React.FC<Props> = ({ open, onClose, on
                   </div>
                 </TabsContent>
 
-                {/* System Prompt */}
-                <TabsContent value="system" className="mt-0 space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="sys-enabled">Custom system prompt</Label>
-                      <p className="text-muted-foreground text-xs">
-                        Override the default agent instructions for this scope.
-                      </p>
-                    </div>
-                    <Switch
-                      id="sys-enabled"
-                      checked={settings.system.enabled}
-                      onCheckedChange={(v) => updateSystem('enabled', v)}
-                    />
-                  </div>
-
-                  {settings.system.enabled ? (
-                    <div className="space-y-2">
-                      <Textarea
-                        value={settings.system.custom_prompt ?? ''}
-                        onChange={(e) => updateSystem('custom_prompt', e.target.value)}
-                        placeholder="You are a helpful assistant specializing in…"
-                        rows={10}
-                        maxLength={10000}
-                        className="font-mono text-sm"
-                      />
-                      <div className="text-muted-foreground flex justify-between text-xs">
-                        <span>{(settings.system.custom_prompt ?? '').length.toLocaleString()} / 10,000</span>
-                        <span>Markdown supported</span>
-                      </div>
+                {/* Tools & Integrations */}
+                <TabsContent value="tools" className="mt-0 space-y-6">
+                  {catalogueLoading || !catalogue ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : (
-                    <div className="bg-muted/50 text-muted-foreground rounded-lg p-4 text-sm">
-                      Custom prompt disabled — the agent uses the profile’s default instructions.
-                    </div>
+                    <>
+                      {/* MCP Servers */}
+                      {catalogue.mcpServers.length > 0 && (
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-semibold">MCP Servers</h3>
+                          <p className="text-muted-foreground text-xs">
+                            External servers that provide additional tools. Disable to prevent the agent from using them.
+                          </p>
+                          {catalogue.mcpServers.map((server) => (
+                            <div key={server.id} className="flex items-center justify-between rounded-md border border-border p-3">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm">{server.name}</div>
+                                <div className="text-muted-foreground text-xs">{server.slug}</div>
+                              </div>
+                              <Switch
+                                checked={!settings.system.disabled_mcp_servers.includes(server.id)}
+                                onCheckedChange={(checked) => toggleMcpServer(server.id, !checked)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Skills */}
+                      {catalogue.skills.length > 0 && (
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-semibold">Skills</h3>
+                          <p className="text-muted-foreground text-xs">
+                            Pre-built skill bundles. Disable to prevent the agent from using them.
+                          </p>
+                          {catalogue.skills.map((skill) => (
+                            <div key={skill.id} className="flex items-center justify-between rounded-md border border-border p-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm">{skill.name}</span>
+                                  {skill.isBuiltin && (
+                                    <span className="text-muted-foreground text-xs rounded bg-muted px-1.5 py-0.5">Built-in</span>
+                                  )}
+                                </div>
+                                <div className="text-muted-foreground text-xs">{skill.slug}</div>
+                              </div>
+                              <Switch
+                                checked={!settings.system.disabled_skills.includes(skill.slug)}
+                                onCheckedChange={(checked) => toggleSkill(skill.slug, !checked)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Core Tools */}
+                      {catalogue.coreTools.length > 0 && (
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-semibold">Core Tools</h3>
+                          <p className="text-muted-foreground text-xs">
+                            Built-in tools for pages, styles, datasources, and more. Disable to prevent the agent from using them.
+                          </p>
+                          {catalogue.coreTools.map((tool) => (
+                            <div key={tool.name} className="flex items-center justify-between rounded-md border border-border p-3">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm">{tool.label}</div>
+                                <div className="text-muted-foreground text-xs">{tool.category}</div>
+                              </div>
+                              <Switch
+                                checked={!settings.system.disabled_tools.includes(tool.name)}
+                                onCheckedChange={(checked) => toggleCoreTool(tool.name, !checked)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {catalogue.mcpServers.length === 0 && catalogue.skills.length === 0 && catalogue.coreTools.length === 0 && (
+                        <div className="bg-muted/50 text-muted-foreground rounded-lg p-4 text-sm text-center">
+                          No tools or integrations available.
+                        </div>
+                      )}
+                    </>
                   )}
                 </TabsContent>
               </div>

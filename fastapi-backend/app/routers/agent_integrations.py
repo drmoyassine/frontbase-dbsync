@@ -47,6 +47,21 @@ def _resolve_scope(db: Session, ctx: Optional[TenantContext]) -> tuple[Optional[
     return ctx.tenant_id, (str(project.id) if project else None)
 
 
+def _require_master_admin(ctx: Optional[TenantContext]) -> None:
+    """Raise 403 if the caller is not a master admin.
+
+    Used to lock down MCP server and skill CRUD operations.
+    Self-host users (ctx is None) are considered master admins.
+    """
+    if ctx is None:
+        return  # Self-host = master admin
+    if not getattr(ctx, "is_master", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Only master admin can create, update, or delete MCP servers and skills"
+        )
+
+
 def _scope_query(q, model, tenant_id: Optional[str], project_id: Optional[str]):
     """Apply tenant + project filters (or public catalogue rows) to a query."""
     if tenant_id is None:
@@ -112,10 +127,28 @@ def list_mcp_servers(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
-    tenant_id, project_id = _resolve_scope(db, ctx)
-    q = db.query(McpServer)
-    q = _scope_query(q, McpServer, tenant_id, project_id)
+    """List global MCP servers catalogue, excluding tenant-disabled items.
+
+    Returns only global (tenant_id IS NULL) MCP servers for all tenants.
+    Master admins see all servers including disabled ones.
+    """
+    tenant_id = ctx.tenant_id if ctx else None
+    user_id = ctx.user_id if ctx else None
+    is_master = getattr(ctx, "is_master", False) if ctx else True
+
+    # Query ONLY global catalogue (tenant_id IS NULL)
+    q = db.query(McpServer).filter(
+        McpServer.is_active == True,
+        McpServer.tenant_id.is_(None)  # Global only
+    )
     rows = q.order_by(McpServer.created_at.desc()).all()
+
+    # Apply tenant exclusions (unless master admin)
+    if not is_master and tenant_id:
+        from ..services.agent_settings import get_disabled_lists
+        disabled_mcps, _, _ = get_disabled_lists(db, tenant_id, user_id)
+        rows = [m for m in rows if str(m.id) not in disabled_mcps]
+
     return {"mcpServers": [_mcp_view(m) for m in rows], "total": len(rows)}
 
 
@@ -125,6 +158,7 @@ def create_mcp_server(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
+    _require_master_admin(ctx)  # Only master admin can create MCP servers
     tenant_id, project_id = _resolve_scope(db, ctx)
     auth_config = encrypt_credentials({"type": body.auth_type or "bearer", "token": body.token}) if body.token else None
     now = _now()
@@ -168,6 +202,7 @@ def update_mcp_server(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
+    _require_master_admin(ctx)  # Only master admin can update MCP servers
     m = _get_scoped(db, ctx, server_id)
     data = body.model_dump(exclude_unset=True)
     for k in ("name", "description", "url", "transport", "auth_type", "category"):
@@ -191,9 +226,8 @@ def delete_mcp_server(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
+    _require_master_admin(ctx)  # Only master admin can delete MCP servers
     m = _get_scoped(db, ctx, server_id)
-    if bool(m.is_public) and (ctx is None or not getattr(ctx, "is_master", False)):
-        raise HTTPException(403, "Public catalogue entries can only be removed by an administrator")
     db.delete(m)
     db.commit()
 
@@ -296,13 +330,33 @@ def list_skills(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
+    """List global skills catalogue, excluding tenant-disabled items.
+
+    Returns only built-in and global (tenant_id IS NULL) skills for all tenants.
+    Master admins see all skills including disabled ones.
+    """
     seed_builtin_skills(db)  # idempotent — ensures catalogue exists
-    q = db.query(AgentSkill).filter(AgentSkill.is_active == True)  # noqa: E712
-    tenant_id, project_id = _resolve_scope(db, ctx)
-    if tenant_id is not None:
-        # Built-ins (tenant_id NULL) are visible to everyone; custom scoped to tenant.
-        q = q.filter(or_(AgentSkill.is_builtin == True, AgentSkill.tenant_id == tenant_id))  # noqa: E712
+
+    tenant_id = ctx.tenant_id if ctx else None
+    user_id = ctx.user_id if ctx else None
+    is_master = getattr(ctx, "is_master", False) if ctx else True
+
+    # Query ONLY global skills (built-in + tenant_id IS NULL)
+    q = db.query(AgentSkill).filter(
+        AgentSkill.is_active == True,  # noqa: E712
+        or_(
+            AgentSkill.is_builtin == True,  # noqa: E712
+            AgentSkill.tenant_id.is_(None)
+        )
+    )
     rows = q.order_by(AgentSkill.is_builtin.desc(), AgentSkill.name.asc()).all()
+
+    # Apply tenant exclusions (unless master admin)
+    if not is_master and tenant_id:
+        from ..services.agent_settings import get_disabled_lists
+        _, disabled_skills, _ = get_disabled_lists(db, tenant_id, user_id)
+        rows = [s for s in rows if str(s.slug) not in disabled_skills]
+
     return {"skills": [_skill_view(s) for s in rows], "total": len(rows)}
 
 
@@ -312,6 +366,7 @@ def create_skill(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
+    _require_master_admin(ctx)  # Only master admin can create skills
     tenant_id, project_id = _resolve_scope(db, ctx)
     now = _now()
     s = AgentSkill(
@@ -342,6 +397,7 @@ def update_skill(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
+    _require_master_admin(ctx)  # Only master admin can update skills
     s = _skill_scoped(db, ctx, skill_id)
     if bool(s.is_builtin):
         raise HTTPException(403, "Built-in skills are immutable")
@@ -363,6 +419,7 @@ def delete_skill(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),
 ):
+    _require_master_admin(ctx)  # Only master admin can delete skills
     s = _skill_scoped(db, ctx, skill_id)
     if bool(s.is_builtin):
         raise HTTPException(403, "Built-in skills cannot be deleted")
@@ -466,3 +523,90 @@ def uninstall_skill(
         raise HTTPException(404, "Installed skill not found")
     db.delete(row)
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Agent Catalogue (for Settings Modal)
+# ---------------------------------------------------------------------------
+
+@router.get("/agent-catalogue")
+def get_agent_catalogue(
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Return global catalogue of MCP servers, skills, and core tools.
+
+    Used by the frontend settings modal to populate the exclusion toggles.
+    Returns all available items regardless of tenant exclusions (so the
+    frontend can show the full list with on/off toggles).
+    """
+    seed_builtin_skills(db)  # Ensure catalogue exists
+
+    tenant_id = ctx.tenant_id if ctx else None
+    user_id = ctx.user_id if ctx else None
+
+    # Get current exclusions for this tenant/user
+    from ..services.agent_settings import get_disabled_lists
+    disabled_mcps, disabled_skills, disabled_tools = get_disabled_lists(db, tenant_id, user_id)
+
+    # Get global MCP servers
+    mcp_rows = db.query(McpServer).filter(
+        McpServer.is_active == True,
+        McpServer.tenant_id.is_(None)
+    ).order_by(McpServer.name.asc()).all()
+
+    # Get global skills
+    skill_rows = db.query(AgentSkill).filter(
+        AgentSkill.is_active == True,
+        or_(
+            AgentSkill.is_builtin == True,
+            AgentSkill.tenant_id.is_(None)
+        )
+    ).order_by(AgentSkill.is_builtin.desc(), AgentSkill.name.asc()).all()
+
+    # Core tools (curated list)
+    core_tools = [
+        {"name": "pages_list", "label": "List Pages", "category": "Pages"},
+        {"name": "pages_get", "label": "Get Page", "category": "Pages"},
+        {"name": "pages_update", "label": "Update Page", "category": "Pages"},
+        {"name": "styles_list", "label": "List Styles", "category": "Styles"},
+        {"name": "styles_get", "label": "Get Style", "category": "Styles"},
+        {"name": "styles_update", "label": "Update Style", "category": "Styles"},
+        {"name": "engine_info", "label": "Engine Info", "category": "Engine"},
+        {"name": "engine_status", "label": "Engine Status", "category": "Engine"},
+        {"name": "queryDatasource", "label": "Query Datasource", "category": "Datasources"},
+        {"name": "triggerWorkflow", "label": "Trigger Workflow", "category": "Workflows"},
+    ]
+
+    return {
+        "mcpServers": [
+            {
+                "id": str(m.id),
+                "name": str(m.name),
+                "slug": str(m.slug),
+                "category": m.category,
+                "disabled": str(m.id) in disabled_mcps,
+            }
+            for m in mcp_rows
+        ],
+        "skills": [
+            {
+                "id": str(s.id),
+                "slug": str(s.slug),
+                "name": str(s.name),
+                "category": s.category,
+                "isBuiltin": bool(s.is_builtin),
+                "disabled": str(s.slug) in disabled_skills,
+            }
+            for s in skill_rows
+        ],
+        "coreTools": [
+            {
+                "name": t["name"],
+                "label": t["label"],
+                "category": t["category"],
+                "disabled": t["name"] in disabled_tools,
+            }
+            for t in core_tools
+        ],
+    }

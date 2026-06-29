@@ -86,6 +86,25 @@ export interface VectorConfig {
     cfAccountId?: string;
 }
 
+export interface StorageConfig {
+    /** Provider: 'supabase' | 'cloudflare_r2' | 's3' */
+    provider: string;
+    /** Supabase project URL */
+    url?: string;
+    /** Supabase anon key */
+    anonKey?: string;
+    /** Supabase project ID (for path construction) */
+    projectId?: string;
+    /** Cloudflare account ID (for R2) */
+    accountId?: string;
+    /** Cloudflare API token (for R2) */
+    apiToken?: string;
+    /** Default bucket name (for R2) */
+    bucket?: string;
+    /** Public URL base (for R2) */
+    publicUrl?: string;
+}
+
 export interface GpuModel {
     slug: string;
     modelId: string;
@@ -104,6 +123,21 @@ export interface AgentProfile {
     maxAutoTools?: number;  // Cap on Tier 1 auto-registered tools (default: 50)
     slug?: string;
     tenantSlug?: string;
+}
+
+export interface OcrConfig {
+    /** Engine selection: 'ocrspace' (default HTTP), 'tesseract' (Docker local), 'gnu_ocrad' (Docker local), 'workers_ai' (Cloudflare) */
+    engine: string;
+    /** API key for OCR.space or Workers AI (not needed for local engines) */
+    apiKey?: string;
+    /** Custom HTTP endpoint for blanket HTTP-request based OCR (UI override) */
+    endpoint?: string;
+    /** Base URL for OCR.space (default: https://api.ocr.space/parse/image) */
+    ocrspaceBaseUrl?: string;
+    /** Cloudflare Account ID for Workers AI Vision */
+    cfAccountId?: string;
+    /** Cloudflare API Token for Workers AI Vision */
+    cfApiToken?: string;
 }
 
 export type AgentProfilesConfig = Record<string, AgentProfile>;
@@ -134,6 +168,8 @@ let _apiKeys: ApiKeysConfig | null = null;
 let _cache: CacheConfig | null = null;
 let _queue: QueueConfig | null = null;
 let _vector: VectorConfig | null = null;
+let _storage: StorageConfig | null = null;
+let _ocr: OcrConfig | null = null;
 let _gpu: GpuModel[] | null = null;
 let _agentProfiles: AgentProfilesConfig | null = null;
 
@@ -215,6 +251,22 @@ export function getGpuModels(): GpuModel[] {
     return (_gpu ??= parseEnv<GpuModel[]>('FRONTBASE_GPU', []));
 }
 
+/** OCR config (ocrspace | tesseract | gnu_ocrad | workers_ai | custom) */
+export function getOcrConfig(): OcrConfig {
+    // Check for Docker env var override first (highest priority for local deployments)
+    const dockerEngine = process.env.OCR_ENGINE?.toLowerCase();
+    if (dockerEngine === 'tesseract' || dockerEngine === 'gnu_ocrad') {
+        return (_ocr ??= { engine: dockerEngine });
+    }
+    // Fall back to JSON config
+    return (_ocr ??= parseEnv<OcrConfig>('FRONTBASE_OCR', { engine: 'ocrspace' }));
+}
+
+/** Storage config (supabase | cloudflare_r2 | s3) */
+export function getStorageConfig(): StorageConfig {
+    return (_storage ??= parseEnv<StorageConfig>('FRONTBASE_STORAGE', { provider: 'supabase' }));
+}
+
 /** Agent Profiles mapping */
 export function getAgentProfilesConfig(): AgentProfilesConfig {
     return (_agentProfiles ??= parseEnv<AgentProfilesConfig>('FRONTBASE_AGENT_PROFILES', {}));
@@ -225,7 +277,7 @@ export function getAgentProfilesConfig(): AgentProfilesConfig {
 // =============================================================================
 
 /** Reset a specific config singleton (forces re-parse on next access) */
-export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'queue' | 'vector' | 'gpu' | 'agentProfiles' | 'all'): void {
+export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'queue' | 'vector' | 'storage' | 'ocr' | 'gpu' | 'agentProfiles' | 'all'): void {
     if (key === 'stateDb' || key === 'all') _stateDb = null;
     if (key === 'auth' || key === 'all') {
         _authSingle = null;
@@ -235,6 +287,8 @@ export function resetConfig(key: 'stateDb' | 'auth' | 'apiKeys' | 'cache' | 'que
     if (key === 'cache' || key === 'all') _cache = null;
     if (key === 'queue' || key === 'all') _queue = null;
     if (key === 'vector' || key === 'all') _vector = null;
+    if (key === 'storage' || key === 'all') _storage = null;
+    if (key === 'ocr' || key === 'all') _ocr = null;
     if (key === 'gpu' || key === 'all') _gpu = null;
     if (key === 'agentProfiles' || key === 'all') _agentProfiles = null;
 }
@@ -254,6 +308,14 @@ export function overrideVectorConfig(config: VectorConfig): void {
 
 export function overrideApiKeysConfig(config: ApiKeysConfig): void {
     _apiKeys = config;
+}
+
+export function overrideOcrConfig(config: OcrConfig): void {
+    _ocr = config;
+}
+
+export function overrideStorageConfig(config: StorageConfig): void {
+    _storage = config;
 }
 
 // =============================================================================
@@ -291,6 +353,7 @@ export const TIER_2_SECRETS = new Set<string>([
     'FRONTBASE_AGENT_PROFILES',
     'FRONTBASE_VECTOR',
     'FRONTBASE_GPU',
+    'FRONTBASE_OCR',
 ]);
 
 /** Tier 3 — bootstrap / non-sensitive; never loaded from the vault. */
@@ -429,6 +492,20 @@ export async function getAgentProfilesConfigAsync(): Promise<AgentProfilesConfig
     await materializeSecret('FRONTBASE_AGENT_PROFILES');
     _agentProfiles = null;
     return getAgentProfilesConfig();
+}
+
+/** OCR config — vault-aware async accessor (also refreshes the singleton). */
+export async function getOcrConfigAsync(): Promise<OcrConfig> {
+    await materializeSecret('FRONTBASE_OCR');
+    _ocr = null;
+    return getOcrConfig();
+}
+
+/** Storage config — vault-aware async accessor (also refreshes the singleton). */
+export async function getStorageConfigAsync(): Promise<StorageConfig> {
+    await materializeSecret('FRONTBASE_STORAGE');
+    _storage = null;
+    return getStorageConfig();
 }
 
 /**

@@ -21,6 +21,7 @@ import { buildAutoTools } from './auto-register.js';
 import { buildPageTools } from './tools/pages.js';
 import { buildStyleTools } from './tools/styles.js';
 import { buildEngineTools } from './tools/engine.js';
+import { buildRagTools } from './tools/rag.js';
 import { buildUserTools } from './tools/user-tools.js';
 import { liteApp } from '../lite.js';
 
@@ -47,6 +48,9 @@ export const buildAgentTools = async (
 
     // Engine introspection (status, config, workflows, logs)
     Object.assign(tools, buildEngineTools(profile));
+
+    // RAG search (semantic document search with multi-tenant isolation)
+    Object.assign(tools, buildRagTools(profile));
 
     // ── Tier 3: Generic Data + Workflow Tools ───────────────────────
 

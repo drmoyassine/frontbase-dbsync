@@ -1454,8 +1454,9 @@ async def get_blocklist(
     db: Session = Depends(get_db),
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
+    # Support both master admin and tenant users
     user = get_current_user(request)
-    if not user:
+    if not user and not ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     tenant_id = ctx.tenant_id if ctx else None
@@ -1475,9 +1476,13 @@ async def add_ip_ban(
     db: Session = Depends(get_db),
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
+    # Support both master admin and tenant users
     user = get_current_user(request)
-    if not user:
+    if not user and not ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Use tenant-scoped user_id if available, otherwise use master admin user_id
+    user_id = ctx.user_id if ctx and ctx.user_id else (user["id"] if "id" in user else user.get("user_id", "admin"))
         
     ip_str = body.ip_or_range.strip()
     try:
@@ -1511,7 +1516,7 @@ async def add_ip_ban(
     # Audit log
     audit_log = AuditLog(
         id=str(uuid.uuid4()),
-        user_id=user["id"] if "id" in user else user.get("user_id", "admin"),
+        user_id=user_id,
         action="IP_BANNED",
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
@@ -1542,9 +1547,13 @@ async def delete_ip_ban(
     db: Session = Depends(get_db),
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
+    # Support both master admin and tenant users
     user = get_current_user(request)
-    if not user:
+    if not user and not ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Use tenant-scoped user_id if available, otherwise use master admin user_id
+    user_id = ctx.user_id if ctx and ctx.user_id else (user["id"] if "id" in user else user.get("user_id", "admin"))
         
     tenant_id = ctx.tenant_id if ctx else None
     tenant_slug = ctx.tenant_slug if ctx else None
@@ -1563,7 +1572,7 @@ async def delete_ip_ban(
     # Audit log
     audit_log = AuditLog(
         id=str(uuid.uuid4()),
-        user_id=user["id"] if "id" in user else user.get("user_id", "admin"),
+        user_id=user_id,
         action="IP_UNBANNED",
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
@@ -1591,8 +1600,9 @@ async def get_bot_protection_settings(
     request: Request,
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
+    # Support both master admin and tenant users
     user = get_current_user(request)
-    if not user:
+    if not user and not ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     from app.routers.settings import load_settings
@@ -1634,9 +1644,13 @@ async def update_bot_protection_settings(
     db: Session = Depends(get_db),
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
+    # Support both master admin and tenant users
     user = get_current_user(request)
-    if not user:
+    if not user and not ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Use tenant-scoped user_id if available, otherwise use master admin user_id
+    user_id = ctx.user_id if ctx and ctx.user_id else (user["id"] if "id" in user else user.get("user_id", "admin"))
         
     from app.routers.settings import load_settings, save_settings
     tenant_slug = ctx.tenant_slug if ctx else None
@@ -1671,7 +1685,7 @@ async def update_bot_protection_settings(
     # Log audit entry
     audit_log = AuditLog(
         id=str(uuid.uuid4()),
-        user_id=user["id"] if "id" in user else user.get("user_id", "admin"),
+        user_id=user_id,
         action="BOT_PROTECTION_UPDATED",
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
@@ -1693,8 +1707,9 @@ async def get_bot_protection_metrics(
     db: Session = Depends(get_db),
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
+    # Support both master admin and tenant users
     user = get_current_user(request)
-    if not user:
+    if not user and not ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     # Aggregate counts from AuditLog
@@ -1727,9 +1742,13 @@ async def get_bot_protection_metrics(
 
 
 @router.get("/security/waf")
-async def get_waf_settings(request: Request):
+async def get_waf_settings(
+    request: Request,
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
+    # Support both master admin (via get_current_user) and tenant users (via ctx)
     user = get_current_user(request)
-    if not user:
+    if not user and not ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     from app.routers.settings import load_settings
@@ -1742,11 +1761,16 @@ async def get_waf_settings(request: Request):
 async def update_waf_settings(
     body: WafUpdateRequest,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
+    # Support both master admin and tenant users
     user = get_current_user(request)
-    if not user:
+    if not user and not ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Use tenant-scoped user_id if available, otherwise use master admin user_id
+    user_id = ctx.user_id if ctx and ctx.user_id else (user["id"] if "id" in user else user.get("user_id", "admin"))
         
     from app.routers.settings import load_settings, save_settings
     settings_dict = load_settings()
@@ -1758,7 +1782,7 @@ async def update_waf_settings(
     # Audit log
     audit_log = AuditLog(
         id=str(uuid.uuid4()),
-        user_id=user["id"] if "id" in user else user.get("user_id", "admin"),
+        user_id=user_id,
         action="WAF_TOGGLED",
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
@@ -1775,10 +1799,12 @@ async def update_waf_settings(
 async def get_audit_logs(
     request: Request,
     db: Session = Depends(get_db),
-    limit: int = 50
+    limit: int = 50,
+    ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
+    # Support both master admin and tenant users
     user = get_current_user(request)
-    if not user:
+    if not user and not ctx:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit).all()

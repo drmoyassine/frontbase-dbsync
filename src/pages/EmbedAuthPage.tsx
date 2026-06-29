@@ -24,7 +24,7 @@ export default function EmbedAuthPage() {
     useEffect(() => {
         async function fetchForm() {
             try {
-                const res = await fetch(`/api/auth-forms/${formId}`);
+                const res = await fetch(`/api/auth-forms/${formId}/`);
                 const json = await res.json();
                 if (json.success) {
                     const loadedForm = json.data;

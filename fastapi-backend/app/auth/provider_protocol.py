@@ -33,7 +33,12 @@ class SignupCredentials(BaseModel):
 
 
 class SessionInfo(BaseModel):
-    """Standard session information returned by all providers."""
+    """Standard session information returned by all providers.
+
+    Supports both attribute access (session.user_id) and dictionary-style
+    access (session["user_id"], session.get("user_id")) for backward
+    compatibility with code that treats this as a dict.
+    """
     user_id: str
     email: str
     tenant_id: Optional[str] = None
@@ -41,6 +46,17 @@ class SessionInfo(BaseModel):
     role: str = "owner"
     is_master: bool = False
     access_token_payload: Dict[str, Any] = {}
+
+    def __getitem__(self, key: str) -> Any:
+        """Allow dictionary-style access: session['user_id']."""
+        try:
+            return getattr(self, key)
+        except AttributeError:
+            raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Allow dictionary-style .get() access: session.get('user_id')."""
+        return getattr(self, key, default)
 
 
 class UserMetadata(BaseModel):

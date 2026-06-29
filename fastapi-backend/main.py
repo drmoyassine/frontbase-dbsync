@@ -185,11 +185,11 @@ def _ensure_local_edge():
                 logger.info("[Startup] ✅ Local libSQL vector store seeded (default)")
             else:
                 # Update existing system record if provider was different (e.g., from LanceDB)
-                if sys_vector.provider != "libsql_vector":
-                    sys_vector.provider = "libsql_vector"
-                    sys_vector.name = "Local Vector (libSQL)"
-                    sys_vector.vector_url = "libsql://local-edge"
-                    sys_vector.updated_at = now
+                if str(sys_vector.provider) != "libsql_vector":
+                    sys_vector.provider = "libsql_vector"  # type: ignore[assignment]
+                    sys_vector.name = "Local Vector (libSQL)"  # type: ignore[assignment]
+                    sys_vector.vector_url = "libsql://local-edge"  # type: ignore[assignment]
+                    sys_vector.updated_at = now  # type: ignore[assignment]
                     logger.info("[Startup] Migrated system vector store to libsql_vector")
                 if bool(sys_vector.is_default):
                     sys_vector.is_default = False  # type: ignore[assignment]
@@ -223,7 +223,7 @@ def _ensure_local_edge():
                 
             # Ensure engine_config has a system_key
             # The local edge container expects this specific key (set in docker-compose.yml)
-            new_config = inject_system_key(sys_engine.engine_config, force_key="fb_sys_local_dev_key")
+            new_config = inject_system_key(str(sys_engine.engine_config) if str(sys_engine.engine_config) != "None" and str(sys_engine.engine_config) else None, force_key="fb_sys_local_dev_key")
             if str(new_config) != str(sys_engine.engine_config):
                 sys_engine.engine_config = new_config  # type: ignore[assignment]
                 changed = True
@@ -291,6 +291,7 @@ def _backfill_engine_bindings():
                         )
                     ).all()
                     
+                    from sqlalchemy.exc import IntegrityError
                     bound_count = 0
                     for ds in datasources:
                         try:
@@ -298,7 +299,7 @@ def _backfill_engine_bindings():
                             with db.begin_nested():
                                 db.execute(engine_datasources.insert().values(engine_id=engine.id, datasource_id=ds.id))
                             bound_count += 1
-                        except sa.exc.IntegrityError:
+                        except IntegrityError:
                             pass
                     if bound_count > 0:
                         logger.info(f"[Startup] Bound {bound_count} existing datasources to engine '{engine.name}' ({engine.id})")
@@ -316,13 +317,14 @@ def _backfill_engine_bindings():
                         )
                     ).all()
                     
+                    from sqlalchemy.exc import IntegrityError
                     bound_count = 0
                     for sp in storages:
                         try:
                             with db.begin_nested():
                                 db.execute(engine_storages.insert().values(engine_id=engine.id, storage_id=sp.id))
                             bound_count += 1
-                        except sa.exc.IntegrityError:
+                        except IntegrityError:
                             pass
                     if bound_count > 0:
                         logger.info(f"[Startup] Bound {bound_count} existing storage providers to engine '{engine.name}' ({engine.id})")
@@ -650,6 +652,7 @@ async def check_tenant_blocklist(tenant_id: str, client_ip: str) -> bool:
     # Try Redis first (L2 cache)
     redis_key = f"security:ip_blocklist:{tenant_id}"
     ip_strings = None
+    redis_url = None
 
     try:
         from app.services.sync.redis_client import cache_get, get_configured_redis_settings
@@ -1236,7 +1239,10 @@ class TrailingSlashMiddleware:
     async def __call__(self, scope: Scope, receive: Receive, send: Send):
         if scope["type"] == "http":
             path = scope["path"]
-            should_skip = any(path.startswith(prefix) for prefix in self.EXCLUDE_PREFIXES)
+            should_skip = any(
+                path == prefix or path.startswith(f"{prefix}/") 
+                for prefix in self.EXCLUDE_PREFIXES
+            )
             if not should_skip and not path.endswith("/") and "." not in path.split("/")[-1]:
                 scope["path"] = path + "/"
         await self.app(scope, receive, send)
@@ -1288,12 +1294,7 @@ if is_cloud():
     except ImportError:
         pass  # Projects router not yet available
 app.include_router(auth.router)  # Auth (login, logout, /me) — works for both modes
-# Supabase tenant provisioning (conditional - only loaded when provider is configured)
-try:
-    from app.auth.supabase_provision import router as supabase_provision_router
-    app.include_router(supabase_provision_router)  # /api/auth/provision-tenant
-except ImportError:
-    pass  # Supabase provision router not available
+# Supabase tenant provisioning (logic consolidated to /api/auth/signup)
 app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"])  # Email send endpoint (A3) — works for both modes
 app.include_router(pages.router)
 app.include_router(project.router)

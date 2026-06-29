@@ -41,20 +41,25 @@ interface DashboardState {
   setTableDataModalOpen: (open: boolean) => void;
   fetchConnections: () => Promise<void>;
   notifyConnectionChange: () => void;
+  reset: () => void;
 }
+
+const initialState = {
+  activeSection: 'pages' as const,
+  searchQuery: '',
+  filterStatus: 'all' as const,
+  connections: {
+    supabase: { connected: false }
+  },
+  supabaseModalOpen: false,
+  tableSchemaModalOpen: false,
+  tableDataModalOpen: false,
+};
 
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set, get) => ({
-      activeSection: 'pages',
-      searchQuery: '',
-      filterStatus: 'all',
-      connections: {
-        supabase: { connected: false }
-      },
-      supabaseModalOpen: false,
-      tableSchemaModalOpen: false,
-      tableDataModalOpen: false,
+      ...initialState,
 
       setActiveSection: (section) => set({ activeSection: section }),
       setSearchQuery: (query) => set({ searchQuery: query }),
@@ -67,6 +72,7 @@ export const useDashboardStore = create<DashboardState>()(
       setSupabaseModalOpen: (open) => set({ supabaseModalOpen: open }),
       setTableSchemaModalOpen: (open) => set({ tableSchemaModalOpen: open }),
       setTableDataModalOpen: (open) => set({ tableDataModalOpen: open }),
+      reset: () => set(initialState),
 
       fetchConnections: async () => {
         const requestKey = generateRequestKey('/api/database/connections');

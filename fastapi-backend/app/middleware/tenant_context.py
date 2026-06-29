@@ -95,6 +95,8 @@ async def get_tenant_context(request: Request) -> Optional[TenantContext]:
                     is_master=bool(session_data.get("is_master", False)),
                     active_project_id=request.headers.get("x-project-id"),
                 )
+    except HTTPException:
+        raise
     except Exception:
         pass  # No provider session — try master admin cookie
 

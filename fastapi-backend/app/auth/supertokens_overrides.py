@@ -86,11 +86,11 @@ def provision_tenant(
     member_id = str(uuid.uuid4())
 
     # Idempotency check: if tenant already exists (race condition or retry), return early
-    existing_tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    existing_tenant = db.query(Tenant).filter(Tenant.slug == slug).first()
     if existing_tenant:
-        logger.info(f"[Signup] Tenant '{slug}' (id={tenant_id}) already exists, skipping provision")
+        logger.info(f"[Signup] Tenant '{slug}' (id={existing_tenant.id}) already exists, skipping provision")
         return {
-            "tenant_id": tenant_id,
+            "tenant_id": existing_tenant.id,
             "slug": slug,
             "role": "owner",
         }

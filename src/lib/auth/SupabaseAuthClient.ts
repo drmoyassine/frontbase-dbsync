@@ -423,45 +423,57 @@ export class SupabaseAuthClient implements AuthClient {
   // Session Validation
   // ---------------------------------------------------------
 
+let _verifyPromise: Promise<boolean> | null = null;
+
   async verifySession(): Promise<boolean> {
     await this.ensureInitialized();
 
-    try {
-      const { data } = await supabaseClient.auth.getSession();
+    if (_verifyPromise) {
+      return _verifyPromise;
+    }
 
-      if (!data.session) {
+    _verifyPromise = (async () => {
+      try {
+        const { data } = await supabaseClient.auth.getSession();
+
+        if (!data.session) {
+          this.sessionCache = null;
+          return false;
+        }
+
+        // Verify with backend
+        const response = await fetch(`${this.config.apiBaseUrl}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${data.session.access_token}`,
+          },
+          credentials: 'include',
+        });
+
+        if (response.ok) {
+          const responseData = await response.json();
+          this.sessionCache = {
+            user: responseData.user,
+            tenant: responseData.tenant || null,
+            token: data.session.access_token,
+            isAuthenticated: true,
+          };
+          return true;
+        }
+
         this.sessionCache = null;
         return false;
+      } catch (error) {
+        if (this.config.debug) {
+          console.error('[SupabaseAuthClient] Verify session error:', error);
+        }
+        this.sessionCache = null;
+        return false;
+      } finally {
+        _verifyPromise = null;
       }
+    })();
 
-      // Verify with backend
-      const response = await fetch(`${this.config.apiBaseUrl}/api/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${data.session.access_token}`,
-        },
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const responseData = await response.json();
-        this.sessionCache = {
-          user: responseData.user,
-          tenant: responseData.tenant || null,
-          token: data.session.access_token,
-          isAuthenticated: true,
-        };
-        return true;
-      }
-
-      this.sessionCache = null;
-      return false;
-    } catch (error) {
-      if (this.config.debug) {
-        console.error('[SupabaseAuthClient] Verify session error:', error);
-      }
-      this.sessionCache = null;
-      return false;
-    }
+    return _verifyPromise;
   }
 
   async getCurrentUser(): Promise<AuthUser | null> {

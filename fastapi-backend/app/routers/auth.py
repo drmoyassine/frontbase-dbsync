@@ -584,7 +584,7 @@ def purge_expired_security_ips(db: Session) -> int:
         AuditLog.ip_address.isnot(None),
     ).all()
     for row in rows:
-        row.ip_address = None
+        row.ip_address = None # type: ignore[assignment]
     if rows:
         db.commit()
     return len(rows)
@@ -786,7 +786,7 @@ async def login(request: Request, body: LoginRequest, response: Response):
     db = SessionLocal()
     try:
         user_record = db.query(DBUser).filter(DBUser.id == st_user_id).first()
-        if user_record:
+        if user_record is not None:
             user_record.last_login_at = now  # type: ignore[assignment]
 
         await log_security_event(
@@ -862,15 +862,14 @@ async def signup(request: Request, body: SignupRequest, response: Response):
         from app.database.config import SessionLocal
         from app.models.auth import SupabaseUserMetadata
         from app.models.tenant import Tenant
-        from app.models.models import Project, TenantMember
-
+        
         db = SessionLocal()
         try:
             existing_meta = db.query(SupabaseUserMetadata).filter(
                 SupabaseUserMetadata.user_id == user_id
             ).first()
 
-            if existing_meta and existing_meta.tenant_id:
+            if existing_meta and bool(existing_meta.tenant_id):
                 # User already has a tenant, return existing data
                 tenant = db.query(Tenant).filter(Tenant.id == existing_meta.tenant_id).first()
                 now = datetime.now(UTC).isoformat()
@@ -893,76 +892,21 @@ async def signup(request: Request, body: SignupRequest, response: Response):
                     "message": "Already registered",
                 }
 
-            # New user - provision tenant
+            # New user - provision tenant using the unified service
+            from app.auth.tenant_provisioning import TenantProvisioningService
+            
             slug = body.slug.lower().strip()
-
-            # Validate slug
-            from app.auth.supertokens_overrides import validate_slug
-            slug_error = validate_slug(slug)
-            if slug_error:
-                raise HTTPException(status_code=400, detail=slug_error)
-
-            # Check slug availability
-            from app.auth.supertokens_overrides import check_slug_available
-            if not check_slug_available(db, slug):
-                raise HTTPException(status_code=409, detail=f"Slug '{slug}' is already taken")
-
-            # Create tenant
-            tenant_id = str(uuid.uuid4())
-            tenant = Tenant(
-                id=tenant_id,
-                slug=slug,
-                name=body.workspace_name,
-                plan="free",
-                status="active",
-                created_at=datetime.now(UTC).isoformat() + "Z",
-                updated_at=datetime.now(UTC).isoformat() + "Z",
-            )
-            db.add(tenant)
-            db.flush()
-
-            # Create project
-            project_id = str(uuid.uuid4())
-            project = Project(
-                id=project_id,
-                tenant_id=tenant_id,
-                name="Default",
-                description=f"Default project for {body.workspace_name}",
-                schema_name="default",
-                is_default=True,
-                created_at=datetime.now(UTC).isoformat() + "Z",
-                updated_at=datetime.now(UTC).isoformat() + "Z",
-            )
-            db.add(project)
-            db.flush()
-
-            # Create tenant member (owner)
-            member_id = str(uuid.uuid4())
-            member = TenantMember(
-                id=member_id,
-                tenant_id=tenant_id,
-                project_id=project_id,
+            
+            provision_result = await TenantProvisioningService.provision_tenant(
+                db=db,
                 user_id=user_id,
                 email=email,
-                role="owner",
-                created_at=datetime.now(UTC).isoformat() + "Z",
-                updated_at=datetime.now(UTC).isoformat() + "Z",
+                workspace_name=body.workspace_name,
+                slug=slug,
             )
-            db.add(member)
-
-            # Store in SupabaseUserMetadata
-            now_iso = datetime.now(UTC).isoformat()
-            user_meta = SupabaseUserMetadata(
-                user_id=user_id,
-                tenant_id=tenant_id,
-                tenant_slug=slug,
-                role="owner",
-                created_at=now_iso,
-                updated_at=now_iso,
-            )
-            db.add(user_meta)
-
-            db.commit()
+            
+            if not provision_result.success:
+                raise HTTPException(status_code=400, detail=provision_result.message)
 
             logger.info(f"[Signup] New tenant provisioned for Supabase user: {slug} ({email})")
 
@@ -971,28 +915,27 @@ async def signup(request: Request, body: SignupRequest, response: Response):
                 "user": {
                     "id": user_id,
                     "email": email,
-                    "tenant_id": tenant_id,
-                    "tenant_slug": slug,
+                    "tenant_id": provision_result.tenant_id,
+                    "tenant_slug": provision_result.tenant_slug,
                     "role": "owner",
                     "is_master": False,
                     "created_at": now,
                     "updated_at": now,
                 },
                 "tenant": {
-                    "id": tenant_id,
-                    "slug": slug,
+                    "id": provision_result.tenant_id,
+                    "slug": provision_result.tenant_slug,
                     "name": body.workspace_name,
-                    "project_id": project_id,
+                    "project_id": provision_result.project_id,
                 },
-                "message": "Workspace created successfully",
+                "message": provision_result.message,
             }
 
         except HTTPException:
             raise
         except Exception as e:
-            db.rollback()
-            logger.error(f"[Signup] Tenant provisioning failed for Supabase user {user_id}: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to create workspace: {str(e)}")
+            logger.error(f"[Signup] Registration failed: {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
         finally:
             db.close()
 
@@ -1647,7 +1590,7 @@ async def add_ip_ban(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     # Use tenant-scoped user_id if available, otherwise use master admin user_id
-    user_id = ctx.user_id if ctx and ctx.user_id else (user["id"] if "id" in user else user.get("user_id", "admin"))
+    user_id = ctx.user_id if ctx and ctx.user_id else (user.get("id", user.get("user_id", "admin")) if user else "admin")
         
     ip_str = body.ip_or_range.strip()
     try:
@@ -1718,7 +1661,7 @@ async def delete_ip_ban(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     # Use tenant-scoped user_id if available, otherwise use master admin user_id
-    user_id = ctx.user_id if ctx and ctx.user_id else (user["id"] if "id" in user else user.get("user_id", "admin"))
+    user_id = ctx.user_id if ctx and ctx.user_id else (user.get("id", user.get("user_id", "admin")) if user else "admin")
         
     tenant_id = ctx.tenant_id if ctx else None
     tenant_slug = ctx.tenant_slug if ctx else None
@@ -1815,7 +1758,7 @@ async def update_bot_protection_settings(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     # Use tenant-scoped user_id if available, otherwise use master admin user_id
-    user_id = ctx.user_id if ctx and ctx.user_id else (user["id"] if "id" in user else user.get("user_id", "admin"))
+    user_id = ctx.user_id if ctx and ctx.user_id else (user.get("id", user.get("user_id", "admin")) if user else "admin")
         
     from app.routers.settings import load_settings, save_settings
     tenant_slug = ctx.tenant_slug if ctx else None

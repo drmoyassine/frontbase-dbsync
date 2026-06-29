@@ -4,7 +4,7 @@ import { AppVariable } from '@/types/builder';
 // Variables API
 export const getVariables = async (): Promise<AppVariable[]> => {
   try {
-    const response = await api.get('/api/variables');
+    const response = await api.get('/api/variables/');
     return response.data;
   } catch (error) {
     console.error('Error getting variables:', error);
@@ -14,7 +14,7 @@ export const getVariables = async (): Promise<AppVariable[]> => {
 
 export const createVariable = async (variableData: Omit<AppVariable, 'id' | 'createdAt'>): Promise<AppVariable> => {
   try {
-    const response = await api.post('/api/variables', variableData);
+    const response = await api.post('/api/variables/', variableData);
     return response.data;
   } catch (error) {
     console.error('Error creating variable:', error);
@@ -24,7 +24,7 @@ export const createVariable = async (variableData: Omit<AppVariable, 'id' | 'cre
 
 export const updateVariable = async (variableId: string, variableData: Partial<AppVariable>): Promise<AppVariable> => {
   try {
-    const response = await api.put(`/api/variables/${variableId}`, variableData);
+    const response = await api.put(`/api/variables/${variableId}/`, variableData);
     return response.data;
   } catch (error) {
     console.error('Error updating variable:', error);
@@ -34,7 +34,7 @@ export const updateVariable = async (variableId: string, variableData: Partial<A
 
 export const deleteVariable = async (variableId: string): Promise<void> => {
   try {
-    await api.delete(`/api/variables/${variableId}`);
+    await api.delete(`/api/variables/${variableId}/`);
   } catch (error) {
     console.error('Error deleting variable:', error);
     throw error;

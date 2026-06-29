@@ -21,9 +21,11 @@ def generate_uuid():
     """Generate a UUID string"""
     return str(uuid.uuid4())
 
+from datetime import datetime, timezone
+
 def get_current_timestamp():
     """Get current timestamp as ISO string"""
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 def create_user(db: Session, username: str, email: str, password_hash: str):
     """Create a new user"""

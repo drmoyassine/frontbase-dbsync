@@ -4,7 +4,7 @@ import { ProjectConfig as Project } from '@/types/builder';
 // Project API
 export const getProject = async (): Promise<Project> => {
   try {
-    const response = await api.get('/api/project');
+    const response = await api.get('/api/project/');
     return response.data;
   } catch (error) {
     console.error('Error getting project:', error);
@@ -14,7 +14,7 @@ export const getProject = async (): Promise<Project> => {
 
 export const updateProject = async (projectData: Partial<Project>): Promise<Project> => {
   try {
-    const response = await api.put('/api/project', projectData);
+    const response = await api.put('/api/project/', projectData);
     return response.data;
   } catch (error) {
     console.error('Error updating project:', error);

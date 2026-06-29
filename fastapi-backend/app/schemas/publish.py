@@ -15,14 +15,7 @@ from enum import Enum
 # Datasource Types
 # =============================================================================
 
-class DatasourceType(str, Enum):
-    SUPABASE = "supabase"
-    NEON = "neon"
-    PLANETSCALE = "planetscale"
-    TURSO = "turso"
-    POSTGRES = "postgres"
-    MYSQL = "mysql"
-    SQLITE = "sqlite"
+from app.services.sync.models.datasource import DatasourceType
 
 
 class DatasourceConfig(BaseModel):

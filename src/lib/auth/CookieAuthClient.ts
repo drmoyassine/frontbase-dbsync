@@ -37,6 +37,18 @@ export class CookieAuthClient implements AuthClient {
       mode: 'cookie',
     };
     this.initialized = true;
+
+    // Sync with global Zustand store logouts
+    useAuthStore.subscribe((state, prevState) => {
+      if (prevState.isAuthenticated && !state.isAuthenticated) {
+        this.notifyStateChange({
+          user: null,
+          tenant: null,
+          token: null,
+          isAuthenticated: false
+        });
+      }
+    });
   }
 
   // ---------------------------------------------------------

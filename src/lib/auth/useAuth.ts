@@ -98,6 +98,14 @@ export function useAuth(autoCheck = true): UseAuthReturn {
 
   // Subscribe to auth state changes
   useEffect(() => {
+    // Reset session synchronously on client change to prevent state leaks (Bug 11)
+    setSession({
+      user: null,
+      tenant: null,
+      token: null,
+      isAuthenticated: false,
+    });
+
     const unsubscribe = authClient.onAuthStateChange((newSession) => {
       setSession(newSession);
     });
@@ -269,6 +277,14 @@ export function useAuthState(): Omit<UseAuthReturn, 'login' | 'signup' | 'logout
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Reset session synchronously on client change to prevent state leaks (Bug 11)
+    setSession({
+      user: null,
+      tenant: null,
+      token: null,
+      isAuthenticated: false,
+    });
+
     const unsubscribe = authClient.onAuthStateChange((newSession) => {
       setSession(newSession);
     });
@@ -279,15 +295,18 @@ export function useAuthState(): Omit<UseAuthReturn, 'login' | 'signup' | 'logout
   useEffect(() => {
     let cancelled = false;
 
-    authClient.verifySession().then((isValid) => {
+    const verifyAndGetSession = async () => {
+      await authClient.verifySession();
       if (cancelled) return;
 
-      authClient.getSession().then((currentSession) => {
-        if (cancelled) return;
-        setSession(currentSession);
-        setIsLoading(false);
-      });
-    });
+      const currentSession = await authClient.getSession();
+      if (cancelled) return;
+
+      setSession(currentSession);
+      setIsLoading(false);
+    };
+
+    verifyAndGetSession();
 
     return () => {
       cancelled = true;

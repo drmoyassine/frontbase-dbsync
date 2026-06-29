@@ -95,15 +95,24 @@ const App = () => {
 
   // Initialize app data only when authenticated
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) {
+      useDashboardStore.getState().reset();
+      useBuilderStore.getState().reset();
+      queryClient.clear();
+      return;
+    }
 
     const initializeApp = async () => {
-      await Promise.all([
-        fetchConnections().catch(console.error),
-        loadProjectFromDatabase().catch(console.error),
-        loadPagesFromDatabase().catch(console.error),
-        loadVariablesFromDatabase().catch(console.error)
-      ]);
+      try {
+        await Promise.all([
+          fetchConnections(),
+          loadProjectFromDatabase(),
+          loadPagesFromDatabase(),
+          loadVariablesFromDatabase()
+        ]);
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+      }
     };
 
     // Fix for React #310 - Push fetchers out of the concurrent mount phase

@@ -9,16 +9,27 @@ import { BuilderSlice, createBuilderSlice } from './slices/createBuilderSlice';
 // Re-export types for backward compatibility
 export * from '@/types/builder';
 
-export type BuilderState = ProjectSlice & PageSlice & UISlice & VariablesSlice & BuilderSlice;
+export type BuilderState = ProjectSlice & PageSlice & UISlice & VariablesSlice & BuilderSlice & { reset: () => void };
 
 export const useBuilderStore = create<BuilderState>()(
   persist(
-    (...a) => ({
-      ...createProjectSlice(...a),
-      ...createPageSlice(...a),
-      ...createUISlice(...a),
-      ...createVariablesSlice(...a),
-      ...createBuilderSlice(...a),
+    (set, get, api) => ({
+      ...createProjectSlice(set, get, api),
+      ...createPageSlice(set, get, api),
+      ...createUISlice(set, get, api),
+      ...createVariablesSlice(set, get, api),
+      ...createBuilderSlice(set, get, api),
+      reset: () => {
+        // Reset state by re-initializing all slices
+        set({
+          project: null,
+          pages: [],
+          activePageId: null,
+          variables: [],
+          selectedComponentId: null,
+          hoveredComponentId: null,
+        });
+      },
     }),
     {
       name: 'frontbase-builder-storage',

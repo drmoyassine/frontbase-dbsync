@@ -88,23 +88,7 @@ class SupabaseProviderImpl(AuthProvider):
             self._cached_jwt_secret = self._jwt_secret
             return self._jwt_secret
 
-        # Try to fetch from Supabase (not recommended for production)
-        import httpx
-
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self._supabase_url}/auth/v1/settings",
-                    headers={"apikey": self._supabase_anon_key},
-                    timeout=5.0,
-                )
-                if response.status_code == 200:
-                    data = response.json()
-                    # JWT secret should be in env var for production
-                    logger.warning("[Supabase] JWT secret not configured in env")
-        except Exception as e:
-            logger.warning(f"[Supabase] Failed to fetch JWT secret: {e}")
-
+        logger.error("[Supabase] SUPABASE_JWT_SECRET environment variable is missing")
         raise ValueError("SUPABASE_JWT_SECRET environment variable required")
 
     async def _verify_jwt(self, token: str) -> Optional[Dict[str, Any]]:
@@ -155,66 +139,10 @@ class SupabaseProviderImpl(AuthProvider):
     ) -> SessionInfo:
         """
         Login is handled client-side with Supabase JS SDK.
-
-        This method validates the credentials via Supabase Admin API.
+        
+        This method is not supported server-side for Supabase.
         """
-        import httpx
-
-        # Use Supabase Admin API to sign in
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self._supabase_url}/auth/v1/token?grant_type=password",
-                    json={
-                        "email": credentials.email,
-                        "password": credentials.password,
-                    },
-                    headers={"apikey": self._supabase_anon_key},
-                    timeout=10.0,
-                )
-
-                if response.status_code != 200:
-                    raise HTTPException(status_code=401, detail="Invalid email or password")
-
-                data = response.json()
-                access_token = data.get("access_token")
-                user = data.get("user", {})
-
-                if not access_token or not user:
-                    raise HTTPException(status_code=500, detail="Invalid response from Supabase")
-
-                # Get tenant claims from our metadata table
-                user_id = user.get("id")
-                tenant_claims = await self._get_tenant_claims_from_db(user_id)
-
-                # Set cookie with access token
-                response.set_cookie(
-                    key="sb-access-token",
-                    value=access_token,
-                    max_age=3600 * 24 * 7,  # 7 days
-                    path="/",
-                    httponly=True,
-                    samesite="lax",
-                )
-
-                return SessionInfo(
-                    user_id=user_id,
-                    email=user.get("email", credentials.email),
-                    tenant_id=tenant_claims.get("tenant_id"),
-                    tenant_slug=tenant_claims.get("tenant_slug"),
-                    role=tenant_claims.get("role", "owner"),
-                    is_master=False,
-                    access_token_payload={
-                        "email": credentials.email,
-                        "tenant_id": tenant_claims.get("tenant_id"),
-                        "tenant_slug": tenant_claims.get("tenant_slug"),
-                        "role": tenant_claims.get("role", "owner"),
-                        "is_master": False,
-                    },
-                )
-        except httpx.RequestError as e:
-            logger.error(f"[Supabase] Login request failed: {e}")
-            raise HTTPException(status_code=500, detail="Authentication service unavailable")
+        raise NotImplementedError("Supabase login is handled client-side via SDK.")
 
     async def signup(
         self,
@@ -225,103 +153,10 @@ class SupabaseProviderImpl(AuthProvider):
     ) -> SessionInfo:
         """
         Signup is handled client-side with Supabase JS SDK.
-
-        This method creates the user via Supabase Admin API and provisions tenant.
+        
+        This method is not supported server-side for Supabase.
         """
-        import httpx
-
-        # Create user in Supabase
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    f"{self._supabase_url}/auth/v1/signup",
-                    json={
-                        "email": credentials.email,
-                        "password": credentials.password,
-                    },
-                    headers={"apikey": self._supabase_anon_key},
-                    timeout=10.0,
-                )
-
-                if response.status_code != 200:
-                    if response.status_code == 400:
-                        raise HTTPException(status_code=409, detail="An account with this email already exists")
-                    raise HTTPException(status_code=500, detail="Signup failed")
-
-                data = response.json()
-                access_token = data.get("access_token")
-                user = data.get("user", {})
-
-                if not access_token or not user:
-                    raise HTTPException(status_code=500, detail="Invalid response from Supabase")
-
-                user_id = user.get("id")
-
-                # Provision tenant if metadata provided
-                tenant_slug = metadata.tenant_slug if metadata else None
-                workspace_name = metadata.extra.get("workspace_name") if metadata and metadata.extra else None
-
-                if tenant_slug and workspace_name:
-                    from app.database.config import SessionLocal
-                    from app.auth.tenant_provisioning import TenantProvisioningService
-
-                    db = SessionLocal()
-                    try:
-                        provision_result = await TenantProvisioningService.provision_tenant(
-                            db,
-                            user_id=user_id,
-                            email=credentials.email,
-                            workspace_name=workspace_name,
-                            slug=tenant_slug,
-                        )
-                        if not provision_result.success:
-                            # Rollback: delete Supabase user
-                            await self._delete_user_from_supabase(user_id)
-                            raise HTTPException(status_code=400, detail=provision_result.message)
-
-                        tenant_id = provision_result.tenant_id
-                    except HTTPException:
-                        raise
-                    except Exception as e:
-                        db.rollback()
-                        await self._delete_user_from_supabase(user_id)
-                        logger.error(f"[Supabase] Tenant provisioning failed: {e}")
-                        raise HTTPException(status_code=500, detail=str(e))
-                    finally:
-                        db.close()
-
-                    logger.info(f"[Supabase] New tenant: {tenant_slug} ({credentials.email})")
-                else:
-                    tenant_id = None
-
-                # Set cookie
-                response.set_cookie(
-                    key="sb-access-token",
-                    value=access_token,
-                    max_age=3600 * 24 * 7,
-                    path="/",
-                    httponly=True,
-                    samesite="lax",
-                )
-
-                return SessionInfo(
-                    user_id=user_id,
-                    email=credentials.email,
-                    tenant_id=tenant_id,
-                    tenant_slug=tenant_slug,
-                    role="owner",
-                    is_master=False,
-                    access_token_payload={
-                        "email": credentials.email,
-                        "tenant_id": tenant_id,
-                        "tenant_slug": tenant_slug,
-                        "role": "owner",
-                        "is_master": False,
-                    },
-                )
-        except httpx.RequestError as e:
-            logger.error(f"[Supabase] Signup request failed: {e}")
-            raise HTTPException(status_code=500, detail="Authentication service unavailable")
+        raise NotImplementedError("Supabase signup is handled client-side via SDK.")
 
     # -------------------------------------------------------------------------
     # Session Management

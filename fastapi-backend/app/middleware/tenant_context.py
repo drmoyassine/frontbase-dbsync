@@ -82,6 +82,19 @@ async def get_tenant_context(request: Request) -> Optional[TenantContext]:
                 role=payload.get("role", "owner"),
             )
 
+            # 🔒 TENANT IP BLOCKLIST CHECK: Enforce tenant-specific blocks after JWT resolution
+            # This prevents cross-tenant blocking while maintaining per-tenant security
+            tenant_id = payload.get("tenant_id")
+            if tenant_id:
+                client_ip = request.client.host if request.client else None
+                if client_ip:
+                    from main import check_tenant_blocklist
+                    if await check_tenant_blocklist(tenant_id, client_ip):
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Forbidden: Your IP address has been blocked for this tenant."
+                        )
+
             return TenantContext(
                 user_id=user_id,
                 email=email,

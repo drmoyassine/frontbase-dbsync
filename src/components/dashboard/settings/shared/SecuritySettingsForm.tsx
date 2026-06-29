@@ -25,24 +25,25 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { 
-    Shield, 
-    Lock, 
-    Bot, 
-    Key, 
-    AlertTriangle, 
-    CheckCircle2, 
-    HelpCircle, 
-    Info, 
-    Trash2, 
-    Plus, 
-    RefreshCw, 
-    Sliders, 
-    FileText, 
-    Globe 
+import {
+    Shield,
+    Lock,
+    Bot,
+    Key,
+    AlertTriangle,
+    CheckCircle2,
+    HelpCircle,
+    Info,
+    Trash2,
+    Plus,
+    RefreshCw,
+    Sliders,
+    FileText,
+    Globe
 } from 'lucide-react';
 import { isCloud } from '@/lib/edition';
 import { IpRetentionCard } from './IpRetentionCard';
+import { SecurityEventsPanel } from './SecurityEventsPanel';
 
 interface SecuritySettingsFormProps {
     withCard?: boolean;
@@ -331,7 +332,7 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
     const content = (
         <div className="space-y-6">
             <Tabs defaultValue={isMaster ? "firewall" : "bot"} className="w-full space-y-6">
-                <TabsList className={`grid w-full max-w-[600px] ${isMaster ? 'grid-cols-4' : 'grid-cols-2'}`}>
+                <TabsList className={`grid w-full max-w-[600px] ${isMaster ? 'grid-cols-5' : 'grid-cols-3'}`}>
                     {isMaster && (
                         <TabsTrigger value="firewall" className="gap-1.5">
                             <Shield className="h-4 w-4" />
@@ -352,6 +353,10 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                             Audit Trail
                         </TabsTrigger>
                     )}
+                    <TabsTrigger value="events" className="gap-1.5">
+                        <AlertTriangle className="h-4 w-4" />
+                        Security Events
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* Tab 1: Firewall & Security Headers */}
@@ -906,6 +911,11 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                             </div>
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                {/* Tab 4: Security Events */}
+                <TabsContent value="events" className="space-y-6 outline-none">
+                    <SecurityEventsPanel withCard />
                 </TabsContent>
             </Tabs>
 

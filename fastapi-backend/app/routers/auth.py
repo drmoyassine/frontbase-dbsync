@@ -1529,7 +1529,7 @@ async def add_ip_ban(
     # Invalidate cache
     try:
         from main import invalidate_blocklist_cache
-        invalidate_blocklist_cache()
+        invalidate_blocklist_cache(tenant_id=tenant_id)
     except Exception:
         pass
         
@@ -1585,7 +1585,7 @@ async def delete_ip_ban(
     # Invalidate cache
     try:
         from main import invalidate_blocklist_cache
-        invalidate_blocklist_cache()
+        invalidate_blocklist_cache(tenant_id=tenant_id)
     except Exception:
         pass
         

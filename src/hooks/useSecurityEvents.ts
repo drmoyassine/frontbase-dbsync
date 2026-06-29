@@ -8,6 +8,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { STALE } from '@/lib/queryCache';
 
+// Use relative URL to avoid mixed content errors (http on https)
+// The reverse proxy handles routing to the correct backend service
 const API_BASE = '';
 
 // ============================================================================

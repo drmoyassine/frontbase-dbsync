@@ -527,7 +527,9 @@ async def load_blocklist_async() -> List[str]:
             bot_settings = settings_dict.get("security", {}).get("bot_protection", {})
             lockout_hours = int(bot_settings.get("auto_ban_lockout_hours", 24))
             
-            items = db.query(IPBlocklist).all()
+            # 🔒 PLATFORM-ONLY BLOCKS: Load only tenant_id IS NULL for global middleware
+            # Tenant-specific blocks are enforced after tenant context is resolved
+            items = db.query(IPBlocklist).filter(IPBlocklist.tenant_id.is_(None)).all()
             ip_strings = []
             now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
             dirty = False
@@ -601,8 +603,13 @@ async def load_blocklist_async() -> List[str]:
     _L1_LAST_LOADED = time.time()
     return ip_strings
 
-def invalidate_blocklist_cache():
-    """Force local cache reload and invalidate Redis L2 cache."""
+def invalidate_blocklist_cache(tenant_id: str | None = None):
+    """Force local cache reload and invalidate Redis L2 cache.
+
+    Args:
+        tenant_id: Optional tenant ID to invalidate tenant-specific cache.
+                  If None, only the global platform cache is invalidated.
+    """
     global _L1_LAST_LOADED
     _L1_LAST_LOADED = 0.0
     try:
@@ -612,10 +619,127 @@ def invalidate_blocklist_cache():
             redis_settings = await get_configured_redis_settings()
             redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
             if redis_url:
+                # Invalidate platform cache
                 await cache_set(redis_url, "security:ip_blocklist", None, ttl=1)
+
+                # Invalidate tenant-specific cache if tenant_id provided
+                if tenant_id:
+                    await cache_set(redis_url, f"security:ip_blocklist:{tenant_id}", None, ttl=1)
         asyncio.create_task(invalidate())
     except Exception:
         pass
+
+async def check_tenant_blocklist(tenant_id: str, client_ip: str) -> bool:
+    """Check if a client IP is blocked for a specific tenant.
+
+    Args:
+        tenant_id: The tenant ID to check blocks for
+        client_ip: The client IP address to validate
+
+    Returns:
+        True if the IP is blocked for this tenant, False otherwise
+    """
+    if not tenant_id or not client_ip:
+        return False
+
+    try:
+        ip_obj = ipaddress.ip_address(client_ip)
+    except Exception:
+        return False
+
+    # Try Redis first (L2 cache)
+    redis_key = f"security:ip_blocklist:{tenant_id}"
+    ip_strings = None
+
+    try:
+        from app.services.sync.redis_client import cache_get, get_configured_redis_settings
+        redis_settings = await get_configured_redis_settings()
+        redis_url = redis_settings.get("url") if redis_settings and redis_settings.get("enabled") else None
+
+        if redis_url:
+            ip_strings = await cache_get(redis_url, redis_key)
+    except Exception:
+        pass
+
+    # Fallback to DB
+    if ip_strings is None:
+        from app.database.config import SessionLocal
+        from app.models.models import IPBlocklist
+        from datetime import datetime, timezone
+        from app.routers.settings import load_settings
+
+        db = SessionLocal()
+        try:
+            settings_dict = load_settings()
+            bot_settings = settings_dict.get("security", {}).get("bot_protection", {})
+            lockout_hours = int(bot_settings.get("auto_ban_lockout_hours", 24))
+
+            items = db.query(IPBlocklist).filter(IPBlocklist.tenant_id == tenant_id).all()
+            ip_strings = []
+            now_dt = datetime.now(timezone.utc).replace(tzinfo=None)
+
+            for item in items:
+                is_temp_ban = False
+                hours_limit = 24
+                reason_str = str(item.reason) if item.reason is not None else ""
+                ip_str = str(item.ip_or_range).strip()
+
+                if reason_str == "Bot Protection Auto-Ban (Repeated Failures)":
+                    is_temp_ban = True
+                    hours_limit = lockout_hours
+                elif reason_str == "WAF Auto-Ban (3 strikes)":
+                    is_temp_ban = True
+                    hours_limit = 24
+
+                if is_temp_ban:
+                    try:
+                        ts_str = str(item.created_at)
+                        if ts_str.endswith("Z"):
+                            ts_str = ts_str[:-1]
+                        if "." in ts_str:
+                            created_dt = datetime.fromisoformat(ts_str)
+                        else:
+                            created_dt = datetime.strptime(ts_str, "%Y-%m-%dT%H:%M:%S")
+
+                        elapsed = now_dt - created_dt
+                        if elapsed.total_seconds() > (hours_limit * 3600):
+                            logger.warning(f"[Security] Temporary tenant IP ban on {ip_str} expired ({elapsed.total_seconds() / 3600:.1f}h elapsed). Pruning from DB.")
+                            db.delete(item)
+                            continue
+                    except Exception as pe:
+                        logger.error(f"[Security] Failed to parse created_at for tenant IP {ip_str}: {pe}")
+
+                ip_strings.append(ip_str)
+
+            if db.dirty:
+                db.commit()
+
+            # Cache back to Redis
+            if redis_url and ip_strings:
+                try:
+                    from app.services.sync.redis_client import cache_set
+                    await cache_set(redis_url, redis_key, ip_strings, ttl=300)
+                except Exception:
+                    pass
+        finally:
+            db.close()
+
+    # Check if client IP is in the tenant blocklist
+    if ip_strings:
+        for ip_str in ip_strings:
+            try:
+                if '/' not in ip_str:
+                    network = ipaddress.ip_network(ip_str)
+                else:
+                    network = ipaddress.ip_network(ip_str, strict=False)
+
+                if ip_obj in network:
+                    logger.warning(f"[Security] Blocked client IP {client_ip} for tenant {tenant_id} (tenant-specific block)")
+                    return True
+            except Exception as e:
+                logger.warning(f"[Security] Failed to parse tenant IP range '{ip_str}': {e}")
+
+    return False
 
 # --- WAF Config Checker ---
 def is_waf_enabled() -> bool:

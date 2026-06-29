@@ -1,8 +1,8 @@
 """add supabase auth support
 
-Revision ID: 0058
-Revises: 0057
-Create Date: 2024-06-29 00:00:00.000000
+Revision ID: 0061
+Revises: 0060
+Create Date: 2026-06-29 00:00:00.000000
 
 """
 from alembic import op
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '0058'
-down_revision = '0057'
+revision = '0061'
+down_revision = '0060'
 branch_labels = None
 depends_on = None
 

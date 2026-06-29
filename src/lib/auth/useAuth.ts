@@ -132,22 +132,6 @@ export function useAuth(autoCheck = true): UseAuthReturn {
     }
   }, [autoCheck, checkAuth]);
 
-    try {
-      const isValid = await authClient.verifySession();
-      const currentSession = await authClient.getSession();
-
-      setSession(currentSession);
-      setIsLoading(false);
-
-      return isValid;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Authentication check failed';
-      setError(errorMessage);
-      setIsLoading(false);
-      return false;
-    }
-  }, [authClient]);
-
   const login = useCallback(async (credentials: LoginCredentials): Promise<AuthResult> => {
     setIsLoading(true);
     setError(null);

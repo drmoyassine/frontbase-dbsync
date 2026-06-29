@@ -26,7 +26,7 @@ import type {
   OAuthProvider,
 } from './AuthClient.interface';
 import { AuthError, AuthErrorType } from './AuthClient.interface';
-import { supabase } from '@/lib/supabase';
+import { supabase as supabaseClient, isSupabaseConfigured } from '@/lib/supabase';
 
 export class SupabaseAuthClient implements AuthClient {
   private config: AuthClientConfig;
@@ -34,6 +34,7 @@ export class SupabaseAuthClient implements AuthClient {
   private stateChangeListeners: Array<(session: AuthSession) => void> = [];
   private sessionCache: AuthSession | null = null;
   private authStateUnsubscribe: (() => void) | null = null;
+  private isSupabaseAvailable: boolean;
 
   constructor(config: AuthClientConfig) {
     this.config = {
@@ -42,6 +43,8 @@ export class SupabaseAuthClient implements AuthClient {
       autoRefresh: config.autoRefresh ?? true,
       refreshInterval: config.refreshInterval ?? 300000, // 5 minutes
     };
+    // Check if Supabase client is properly configured
+    this.isSupabaseAvailable = this.checkSupabaseAvailable();
   }
 
   // ---------------------------------------------------------
@@ -53,7 +56,7 @@ export class SupabaseAuthClient implements AuthClient {
 
     try {
       // Authenticate with Supabase
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabaseClient.auth.signInWithPassword({
         email: credentials.email,
         password: credentials.password,
       });
@@ -118,7 +121,7 @@ export class SupabaseAuthClient implements AuthClient {
 
     try {
       // Create user in Supabase
-      const { data, error } = await supabase.auth.signUp({
+      const { data, error } = await supabaseClient.auth.signUp({
         email: credentials.email,
         password: credentials.password,
         options: {
@@ -257,7 +260,7 @@ export class SupabaseAuthClient implements AuthClient {
 
     try {
       // Sign out from Supabase
-      await supabase.auth.signOut();
+      await supabaseClient.auth.signOut();
     } catch (error) {
       if (this.config.debug) {
         console.error('[SupabaseAuthClient] Logout error:', error);
@@ -292,7 +295,7 @@ export class SupabaseAuthClient implements AuthClient {
 
     try {
       // Get current session from Supabase
-      const { data } = await supabase.auth.getSession();
+      const { data } = await supabaseClient.auth.getSession();
 
       if (data.session?.access_token) {
         return data.session.access_token;
@@ -312,7 +315,7 @@ export class SupabaseAuthClient implements AuthClient {
 
     // Try to get current session from Supabase
     try {
-      const { data } = await supabase.auth.getSession();
+      const { data } = await supabaseClient.auth.getSession();
 
       if (data.session?.access_token && data.user) {
         const tenantData = await this.getTenantData(data.user.id);
@@ -366,7 +369,7 @@ export class SupabaseAuthClient implements AuthClient {
     try {
       // Supabase handles refresh automatically
       // Just verify the session is still valid
-      const { data, error } = await supabase.auth.refreshSession();
+      const { data, error } = await supabaseClient.auth.refreshSession();
 
       if (error || !data.session) {
         this.sessionCache = null;
@@ -424,7 +427,7 @@ export class SupabaseAuthClient implements AuthClient {
     await this.ensureInitialized();
 
     try {
-      const { data } = await supabase.auth.getSession();
+      const { data } = await supabaseClient.auth.getSession();
 
       if (!data.session) {
         this.sessionCache = null;
@@ -473,7 +476,7 @@ export class SupabaseAuthClient implements AuthClient {
   async loginWithOAuth(providerId: string, redirectUrl?: string): Promise<void> {
     await this.ensureInitialized();
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabaseClient.auth.signInWithOAuth({
       provider: providerId as any,
       options: {
         redirectTo: redirectUrl || window.location.origin + '/admin/auth/callback',
@@ -497,7 +500,7 @@ export class SupabaseAuthClient implements AuthClient {
     try {
       // Supabase handles OAuth callback automatically
       // Just get the current session
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await supabaseClient.auth.getSession();
 
       if (error || !data.session || !data.user) {
         return {
@@ -549,7 +552,7 @@ export class SupabaseAuthClient implements AuthClient {
     await this.ensureInitialized();
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabaseClient.auth.signInWithOtp({
         email: request.email,
         options: {
           emailRedirectTo: request.redirectUrl,
@@ -579,7 +582,7 @@ export class SupabaseAuthClient implements AuthClient {
     try {
       // Supabase handles magic link verification automatically
       // Just get the current session
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await supabaseClient.auth.getSession();
 
       if (error || !data.session || !data.user) {
         return {
@@ -635,7 +638,7 @@ export class SupabaseAuthClient implements AuthClient {
     await this.ensureInitialized();
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
         redirectTo: window.location.origin + '/admin/auth/reset-password',
       });
 
@@ -661,7 +664,7 @@ export class SupabaseAuthClient implements AuthClient {
 
     try {
       // Update user password with Supabase
-      const { error } = await supabase.auth.updateUser({
+      const { error } = await supabaseClient.auth.updateUser({
         password: newPassword,
       });
 
@@ -687,7 +690,7 @@ export class SupabaseAuthClient implements AuthClient {
 
     try {
       // Verify current password first by attempting login
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData } = await supabaseClient.auth.getUser();
       if (!userData.user?.email) {
         return {
           success: false,
@@ -696,7 +699,7 @@ export class SupabaseAuthClient implements AuthClient {
       }
 
       // Try to sign in with current password to verify
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await supabaseClient.auth.signInWithPassword({
         email: userData.user.email,
         password: currentPassword,
       });
@@ -709,7 +712,7 @@ export class SupabaseAuthClient implements AuthClient {
       }
 
       // Update password
-      const { error } = await supabase.auth.updateUser({
+      const { error } = await supabaseClient.auth.updateUser({
         password: newPassword,
       });
 
@@ -738,7 +741,7 @@ export class SupabaseAuthClient implements AuthClient {
     await this.ensureInitialized();
 
     try {
-      const { error } = await supabase.auth.updateUser({
+      const { error } = await supabaseClient.auth.updateUser({
         data: updates,
       });
 
@@ -876,69 +879,84 @@ export class SupabaseAuthClient implements AuthClient {
   onAuthStateChange(callback: (session: AuthSession) => void): () => void {
     this.stateChangeListeners.push(callback);
 
-    // Subscribe to Supabase auth state changes
-    if (!this.authStateUnsubscribe) {
-      const { data } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          if (event === 'SIGNED_IN' && session) {
-            const tenantData = await this.getTenantData(session.user.id);
-            this.sessionCache = {
-              user: {
-                id: session.user.id,
-                email: session.user.email || '',
-                username: session.user.user_metadata?.username,
-                tenant_id: tenantData?.tenant_id,
-                tenant_slug: tenantData?.tenant_slug,
-                role: tenantData?.role || 'owner',
-                is_master: tenantData?.is_master || false,
-                created_at: session.user.created_at,
-                updated_at: session.user.updated_at,
-              },
-              tenant: tenantData?.tenant,
-              token: session.access_token,
-              expiresAt: session.expires_at
-                ? session.expires_at * 1000
-                : undefined,
-              isAuthenticated: true,
-            };
-            this.notifyStateChange(this.sessionCache);
-          } else if (event === 'SIGNED_OUT') {
-            this.sessionCache = null;
-            this.notifyStateChange({
-              user: null,
-              tenant: null,
-              token: null,
-              isAuthenticated: false,
-            });
-          } else if (event === 'TOKEN_REFRESHED' && session) {
-            const tenantData = await this.getTenantData(session.user.id);
-            this.sessionCache = {
-              user: {
-                id: session.user.id,
-                email: session.user.email || '',
-                username: session.user.user_metadata?.username,
-                tenant_id: tenantData?.tenant_id,
-                tenant_slug: tenantData?.tenant_slug,
-                role: tenantData?.role || 'owner',
-                is_master: tenantData?.is_master || false,
-                created_at: session.user.created_at,
-                updated_at: session.user.updated_at,
-              },
-              tenant: tenantData?.tenant,
-              token: session.access_token,
-              expiresAt: session.expires_at
-                ? session.expires_at * 1000
-                : undefined,
-              isAuthenticated: true,
-            };
-            this.notifyStateChange(this.sessionCache);
+    // Subscribe to Supabase auth state changes only if Supabase is available
+    if (!this.authStateUnsubscribe && this.isSupabaseAvailable) {
+      try {
+        const { data } = supabaseClient.auth.onAuthStateChange(
+          async (event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+              const tenantData = await this.getTenantData(session.user.id);
+              this.sessionCache = {
+                user: {
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  username: session.user.user_metadata?.username,
+                  tenant_id: tenantData?.tenant_id,
+                  tenant_slug: tenantData?.tenant_slug,
+                  role: tenantData?.role || 'owner',
+                  is_master: tenantData?.is_master || false,
+                  created_at: session.user.created_at,
+                  updated_at: session.user.updated_at,
+                },
+                tenant: tenantData?.tenant,
+                token: session.access_token,
+                expiresAt: session.expires_at
+                  ? session.expires_at * 1000
+                  : undefined,
+                isAuthenticated: true,
+              };
+              this.notifyStateChange(this.sessionCache);
+            } else if (event === 'SIGNED_OUT') {
+              this.sessionCache = null;
+              this.notifyStateChange({
+                user: null,
+                tenant: null,
+                token: null,
+                isAuthenticated: false,
+              });
+            } else if (event === 'TOKEN_REFRESHED' && session) {
+              const tenantData = await this.getTenantData(session.user.id);
+              this.sessionCache = {
+                user: {
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  username: session.user.user_metadata?.username,
+                  tenant_id: tenantData?.tenant_id,
+                  tenant_slug: tenantData?.tenant_slug,
+                  role: tenantData?.role || 'owner',
+                  is_master: tenantData?.is_master || false,
+                  created_at: session.user.created_at,
+                  updated_at: session.user.updated_at,
+                },
+                tenant: tenantData?.tenant,
+                token: session.access_token,
+                expiresAt: session.expires_at
+                  ? session.expires_at * 1000
+                  : undefined,
+                isAuthenticated: true,
+              };
+              this.notifyStateChange(this.sessionCache);
+            }
           }
-        }
-      );
+        );
 
-      this.authStateUnsubscribe = () => {
-        data.subscription.unsubscribe();
-      };
+        // Store unsubscribe function safely
+        if (data?.subscription?.unsubscribe) {
+          this.authStateUnsubscribe = () => {
+            try {
+              data.subscription.unsubscribe();
+            } catch (error) {
+              if (this.config.debug) {
+                console.error('[SupabaseAuthClient] Unsubscribe error:', error);
+              }
+            }
+          };
+        }
+      } catch (error) {
+        if (this.config.debug) {
+          console.error('[SupabaseAuthClient] Failed to subscribe to auth state changes:', error);
+        }
+      }
     }
 
     // Return unsubscribe function
@@ -990,9 +1008,36 @@ export class SupabaseAuthClient implements AuthClient {
   // Private Helpers
   // ---------------------------------------------------------
 
+  private checkSupabaseAvailable(): boolean {
+    try {
+      // Check if Supabase client is available and properly configured
+      return !!(
+        supabaseClient &&
+        supabaseClient.auth &&
+        typeof supabaseClient.auth.onAuthStateChange === 'function'
+      );
+    } catch {
+      return false;
+    }
+  }
+
   private async ensureInitialized(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
+
+    // Warn if Supabase is not available
+    if (!this.isSupabaseAvailable && this.config.debug) {
+      console.warn('[SupabaseAuthClient] Supabase client not properly configured. Auth operations may fail.');
+    }
+  }
+
+  private ensureSupabaseAvailable(): void {
+    if (!this.isSupabaseAvailable || !supabaseClient) {
+      throw new AuthError(
+        AuthErrorType.UNKNOWN,
+        'Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.'
+      );
+    }
   }
 
   private notifyStateChange(session: AuthSession): void {

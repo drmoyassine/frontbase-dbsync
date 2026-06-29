@@ -5,8 +5,11 @@ const runtimeEnv = (window as any).__FRONTBASE_ENV__ || {};
 const supabaseUrl = runtimeEnv.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = runtimeEnv.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Prevent crash if env vars are missing (common in build/dev environments without .env)
-const url = supabaseUrl || 'https://placeholder.supabase.co';
-const key = supabaseAnonKey || 'placeholder';
+// Only create Supabase client if both URL and key are provided
+// This prevents using placeholder values which would cause runtime errors
+export const supabase = (supabaseUrl && supabaseAnonKey && supabaseUrl !== 'https://placeholder.supabase.co')
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
-export const supabase = createClient(url, key);
+// Export whether Supabase is configured for use in the app
+export const isSupabaseConfigured = !!supabase;

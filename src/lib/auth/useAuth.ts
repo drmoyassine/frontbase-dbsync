@@ -105,16 +105,32 @@ export function useAuth(autoCheck = true): UseAuthReturn {
     return unsubscribe;
   }, [authClient]);
 
+  const checkAuth = useCallback(async (): Promise<boolean> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const isValid = await authClient.verifySession();
+      const currentSession = await authClient.getSession();
+
+      setSession(currentSession);
+      setIsLoading(false);
+
+      return isValid;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Authentication check failed';
+      setError(errorMessage);
+      setIsLoading(false);
+      return false;
+    }
+  }, [authClient]);
+
   // Check authentication on mount
   useEffect(() => {
     if (autoCheck) {
       checkAuth();
     }
-  }, [autoCheck]);
-
-  const checkAuth = useCallback(async (): Promise<boolean> => {
-    setIsLoading(true);
-    setError(null);
+  }, [autoCheck, checkAuth]);
 
     try {
       const isValid = await authClient.verifySession();

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuthStore } from '@/stores/auth'
+import { useAuth } from '@/lib/auth/useAuth'
 import { isCloud } from '@/lib/edition'
 
 const navItems = [
@@ -33,6 +34,7 @@ const navItems = [
 export function Layout() {
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const { user, _realUser } = useAuthStore()
+    const { logout } = useAuth()
     
     const isMaster = user?.is_master || _realUser?.is_master
     const showAdminTools = isCloud() && isMaster
@@ -135,11 +137,7 @@ export function Layout() {
                 {/* Bottom Actions */}
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto">
                     <button
-                        onClick={async () => {
-                            const { useAuth } = await import('@/lib/auth/useAuth');
-                            const { logout } = useAuth();
-                            await logout();
-                        }}
+                        onClick={async () => await logout()}
                         className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 font-medium"
                     >
                         <LogOut className="w-5 h-5" />

@@ -260,14 +260,13 @@ export class JWTAuthClient implements AuthClient {
 
     try {
       if (this.config.enableSuperTokens) {
-        const isValid = await Session.doesSessionExist({
+        // We do NOT return false immediately if there is no SuperTokens session.
+        // A master admin logging into cloud mode will not have a SuperTokens session,
+        // but will have a master admin cookie. We must fall through and check
+        // the backend /api/auth/me to verify if ANY valid session exists.
+        await Session.doesSessionExist({
           overrideGlobalClaimValidators: () => undefined,
         });
-
-        if (!isValid) {
-          this.sessionCache = null;
-          return false;
-        }
       }
 
       // Verify with backend

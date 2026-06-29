@@ -28,6 +28,8 @@ import type {
 import { AuthError, AuthErrorType } from './AuthClient.interface';
 import { supabase as supabaseClient, isSupabaseConfigured } from '@/lib/supabase';
 
+let _verifyPromise: Promise<boolean> | null = null;
+
 export class SupabaseAuthClient implements AuthClient {
   private config: AuthClientConfig;
   private initialized = false;
@@ -422,8 +424,6 @@ export class SupabaseAuthClient implements AuthClient {
   // ---------------------------------------------------------
   // Session Validation
   // ---------------------------------------------------------
-
-let _verifyPromise: Promise<boolean> | null = null;
 
   async verifySession(): Promise<boolean> {
     await this.ensureInitialized();

@@ -292,7 +292,7 @@ export class LanceDbAdapter implements VectorAdapter {
     }
 
     async upsert(tableName: string, vectors: VectorDocument[]): Promise<void> {
-        const lancedb = await import('lancedb');
+        const lancedb = await import('@lancedb/lancedb');
         const conn = await lancedb.connect({ uri: this.uri });
         const table = await conn.openTable(tableName).catch(() => null);
 
@@ -319,7 +319,7 @@ export class LanceDbAdapter implements VectorAdapter {
         limit: number,
         filters?: VectorMetadata
     ): Promise<VectorSearchResult[]> {
-        const lancedb = await import('lancedb');
+        const lancedb = await import('@lancedb/lancedb');
         const conn = await lancedb.connect({ uri: this.uri });
         const table = await conn.openTable(tableName);
 
@@ -340,7 +340,7 @@ export class LanceDbAdapter implements VectorAdapter {
     }
 
     async delete(tableName: string, ids: string[]): Promise<void> {
-        const lancedb = await import('lancedb');
+        const lancedb = await import('@lancedb/lancedb');
         const conn = await lancedb.connect({ uri: this.uri });
         const table = await conn.openTable(tableName);
 
@@ -348,7 +348,7 @@ export class LanceDbAdapter implements VectorAdapter {
     }
 
     async ensureTable(tableName: string): Promise<void> {
-        const lancedb = await import('lancedb');
+        const lancedb = await import('@lancedb/lancedb');
         const conn = await lancedb.connect({ uri: this.uri });
 
         await conn.createTable({

@@ -1743,12 +1743,11 @@ async def get_bot_protection_metrics(
 
 @router.get("/security/waf")
 async def get_waf_settings(
-    request: Request,
-    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+    request: Request
 ):
-    # Support both master admin (via get_current_user) and tenant users (via ctx)
+    # Strictly master admin only (global settings)
     user = get_current_user(request)
-    if not user and not ctx:
+    if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     from app.routers.settings import load_settings
@@ -1761,16 +1760,14 @@ async def get_waf_settings(
 async def update_waf_settings(
     body: WafUpdateRequest,
     request: Request,
-    db: Session = Depends(get_db),
-    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+    db: Session = Depends(get_db)
 ):
-    # Support both master admin and tenant users
+    # Strictly master admin only (global settings)
     user = get_current_user(request)
-    if not user and not ctx:
+    if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # Use tenant-scoped user_id if available, otherwise use master admin user_id
-    user_id = ctx.user_id if ctx and ctx.user_id else (user["id"] if "id" in user else user.get("user_id", "admin"))
+    user_id = user["id"] if "id" in user else user.get("user_id", "admin")
         
     from app.routers.settings import load_settings, save_settings
     settings_dict = load_settings()
@@ -1799,12 +1796,11 @@ async def update_waf_settings(
 async def get_audit_logs(
     request: Request,
     db: Session = Depends(get_db),
-    limit: int = 50,
-    ctx: Optional[TenantContext] = Depends(get_tenant_context)
+    limit: int = 50
 ):
-    # Support both master admin and tenant users
+    # Strictly master admin only (global audit logs)
     user = get_current_user(request)
-    if not user and not ctx:
+    if not user:
         raise HTTPException(status_code=401, detail="Unauthorized")
         
     logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit).all()

@@ -14,6 +14,7 @@ COPY packages /packages
 COPY services/edge/src ./src
 COPY services/edge/public ./public
 COPY services/edge/tsconfig.json ./
+COPY services/edge/tsup.config.ts ./
 COPY services/edge/drizzle.config.ts ./
 COPY services/edge/vite.config.ts ./
 

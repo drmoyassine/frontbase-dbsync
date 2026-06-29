@@ -49,7 +49,8 @@ interface SecuritySettingsFormProps {
 }
 
 export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormProps) {
-    const { user } = useAuthStore();
+    const { user, _realUser } = useAuthStore();
+    const isMaster = user?.is_master || _realUser?.is_master;
     const { toast } = useToast();
     
     // States
@@ -98,17 +99,33 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
         else setIsRefreshing(true);
         
         try {
-            const [wafRes, blockRes, auditRes, botSettingsRes, botMetricsRes] = await Promise.all([
-                api.get('/api/auth/security/waf'),
+            // Conditionally fetch global data (WAF and Audit Logs) only for master admin
+            const endpoints = [
                 api.get('/api/auth/security/blocklist'),
-                api.get('/api/auth/security/audit-logs'),
                 api.get('/api/auth/security/bot-protection'),
                 api.get('/api/auth/security/bot-protection/metrics')
-            ]);
+            ];
             
-            setWafEnabled(wafRes.data.enabled);
+            let wafRes, auditRes;
+            if (isMaster) {
+                endpoints.push(api.get('/api/auth/security/waf'));
+                endpoints.push(api.get('/api/auth/security/audit-logs'));
+            }
+
+            const results = await Promise.all(endpoints);
+            
+            const blockRes = results[0];
+            const botSettingsRes = results[1];
+            const botMetricsRes = results[2];
+
+            if (isMaster) {
+                wafRes = results[3];
+                auditRes = results[4];
+                setWafEnabled(wafRes.data.enabled);
+                setAuditLogs(auditRes.data);
+            }
+
             setBlocklist(blockRes.data);
-            setAuditLogs(auditRes.data);
             
             // Bot settings
             setBotEnabled(botSettingsRes.data.enabled);
@@ -313,12 +330,14 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
 
     const content = (
         <div className="space-y-6">
-            <Tabs defaultValue="firewall" className="w-full space-y-6">
-                <TabsList className="grid grid-cols-4 w-full max-w-[600px]">
-                    <TabsTrigger value="firewall" className="gap-1.5">
-                        <Shield className="h-4 w-4" />
-                        Firewall & Headers
-                    </TabsTrigger>
+            <Tabs defaultValue={isMaster ? "firewall" : "bot"} className="w-full space-y-6">
+                <TabsList className={`grid w-full max-w-[600px] ${isMaster ? 'grid-cols-4' : 'grid-cols-2'}`}>
+                    {isMaster && (
+                        <TabsTrigger value="firewall" className="gap-1.5">
+                            <Shield className="h-4 w-4" />
+                            Firewall & Headers
+                        </TabsTrigger>
+                    )}
                     <TabsTrigger value="bot" className="gap-1.5">
                         <Bot className="h-4 w-4" />
                         Bot Protection
@@ -327,10 +346,12 @@ export function SecuritySettingsForm({ withCard = false }: SecuritySettingsFormP
                         <Globe className="h-4 w-4" />
                         Access Control
                     </TabsTrigger>
-                    <TabsTrigger value="audit" className="gap-1.5">
-                        <FileText className="h-4 w-4" />
-                        Audit Trail
-                    </TabsTrigger>
+                    {isMaster && (
+                        <TabsTrigger value="audit" className="gap-1.5">
+                            <FileText className="h-4 w-4" />
+                            Audit Trail
+                        </TabsTrigger>
+                    )}
                 </TabsList>
 
                 {/* Tab 1: Firewall & Security Headers */}

@@ -163,7 +163,7 @@ const DENO_ALIASES: Record<string, string> = {
 const stubNodeOnly = {
     name: 'stub-node-only',
     setup(build: any) {
-        build.onResolve({ filter: /^(ioredis|bullmq)$/ }, () => ({
+        build.onResolve({ filter: /^(ioredis|bullmq|@lancedb\/lancedb)$/ }, () => ({
             path: shim('empty'),
         }));
     },

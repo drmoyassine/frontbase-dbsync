@@ -156,7 +156,7 @@ export class JWTAuthClient implements AuthClient {
     try {
       // Let SuperTokens handle logout
       if (this.config.enableSuperTokens) {
-        await Session.revokesSession();
+        await Session.signOut();
       }
 
       // Also call backend logout
@@ -164,8 +164,9 @@ export class JWTAuthClient implements AuthClient {
         method: 'POST',
         credentials: 'include',
       });
-    } catch {
-      // Ignore logout errors
+    } catch (error) {
+      console.error('[JWTAuthClient] Logout error:', error);
+      // Ignore logout errors to ensure local state is still cleared
     }
 
     this.sessionCache = null;

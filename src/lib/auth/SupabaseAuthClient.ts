@@ -461,12 +461,24 @@ export class SupabaseAuthClient implements AuthClient {
         }
 
         this.sessionCache = null;
+        this.notifyStateChange({
+          user: null,
+          tenant: null,
+          token: null,
+          isAuthenticated: false,
+        });
         return false;
       } catch (error) {
         if (this.config.debug) {
           console.error('[SupabaseAuthClient] Verify session error:', error);
         }
         this.sessionCache = null;
+        this.notifyStateChange({
+          user: null,
+          tenant: null,
+          token: null,
+          isAuthenticated: false,
+        });
         return false;
       } finally {
         _verifyPromise = null;

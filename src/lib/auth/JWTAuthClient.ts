@@ -287,9 +287,21 @@ export class JWTAuthClient implements AuthClient {
       }
 
       this.sessionCache = null;
+      this.notifyStateChange({
+        user: null,
+        tenant: null,
+        token: null,
+        isAuthenticated: false,
+      });
       return false;
     } catch {
       this.sessionCache = null;
+      this.notifyStateChange({
+        user: null,
+        tenant: null,
+        token: null,
+        isAuthenticated: false,
+      });
       return false;
     }
   }

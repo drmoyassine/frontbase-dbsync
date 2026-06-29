@@ -10,7 +10,7 @@
  */
 
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuthState } from '@/lib/auth/useAuth';
+import { useAuth } from '@/lib/auth/useAuth';
 import { useEffect } from 'react';
 
 interface ProtectedRouteProps {

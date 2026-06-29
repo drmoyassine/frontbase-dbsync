@@ -37,8 +37,15 @@ export default function SignupPage() {
   const [slugError, setSlugError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  const { signup, isLoading, error, clearError } = useAuth();
+  const { signup, isLoading, error, clearError, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+
+  // Auto-redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   // Auto-generate slug from workspace name (unless manually edited)
   useEffect(() => {

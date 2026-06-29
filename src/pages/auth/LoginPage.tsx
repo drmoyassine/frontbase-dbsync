@@ -21,7 +21,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [website, setWebsite] = useState('');
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-    const { login, isLoading, error, clearError } = useAuth();
+    const { login, isLoading, error, clearError, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -29,6 +29,14 @@ export default function LoginPage() {
 
     // Get redirect destination (default to dashboard, not landing page)
     const from = (location.state as { from?: Location })?.from?.pathname || '/dashboard';
+
+    // Auto-redirect if already authenticated
+    useEffect(() => {
+        if (isAuthenticated) {
+            const redirectPath = from === '/login' || from === '/signup' ? '/dashboard' : from;
+            navigate(redirectPath, { replace: true });
+        }
+    }, [isAuthenticated, navigate, from]);
 
     useEffect(() => {
         if (!siteKey) return;

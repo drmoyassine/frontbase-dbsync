@@ -6,6 +6,22 @@ from sqlalchemy.orm import relationship
 from ..database.config import Base
 
 
+class SupabaseUserMetadata(Base):
+    """User metadata for Supabase authentication.
+
+    Stores tenant claims for Supabase-authenticated users.
+    Supabase's built-in user_metadata is limited, so we use this table.
+    """
+    __tablename__ = 'supabase_user_metadata'
+
+    user_id = Column(String, primary_key=True)  # Supabase user ID (sub from JWT)
+    tenant_id = Column(String, nullable=True)
+    tenant_slug = Column(String, nullable=True)
+    role = Column(String(20), default='owner')  # owner | admin | editor | viewer
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+
 class User(Base):
     __tablename__ = 'users'
     

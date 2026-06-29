@@ -1288,6 +1288,12 @@ if is_cloud():
     except ImportError:
         pass  # Projects router not yet available
 app.include_router(auth.router)  # Auth (login, logout, /me) — works for both modes
+# Supabase tenant provisioning (conditional - only loaded when provider is configured)
+try:
+    from app.auth.supabase_provision import router as supabase_provision_router
+    app.include_router(supabase_provision_router)  # /api/auth/provision-tenant
+except ImportError:
+    pass  # Supabase provision router not available
 app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"])  # Email send endpoint (A3) — works for both modes
 app.include_router(pages.router)
 app.include_router(project.router)

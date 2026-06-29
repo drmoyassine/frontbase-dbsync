@@ -81,9 +81,10 @@ export default defineConfig(({ mode }) => {
     },
     // Expose server-side env vars to client
     define: {
-      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.SUPABASE_PROJECT_URL),
+      'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(env.SUPABASE_PROJECT_URL || env.SUPABASE_URL),
       'import.meta.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.SUPABASE_ANON_KEY),
       'import.meta.env.VITE_DEPLOYMENT_MODE': JSON.stringify(deploymentMode),
+      'import.meta.env.VITE_AUTH_PROVIDER': JSON.stringify(env.AUTH_PROVIDER),
     },
   };
 });

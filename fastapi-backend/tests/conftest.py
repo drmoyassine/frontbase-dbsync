@@ -155,3 +155,102 @@ def sample_draft_data():
         "edges": [],
         "settings": {"rate_limit_max": 60, "cooldown_ms": 0},
     }
+
+
+# ── Supabase Auth Test Fixtures ──────────────────────────────────────────────
+
+@pytest.fixture(scope="session")
+def supabase_env():
+    """Configure test environment for Supabase auth tests."""
+    original_provider = os.environ.get("AUTH_PROVIDER")
+    os.environ["AUTH_PROVIDER"] = "supabase"
+    os.environ["SUPABASE_URL"] = "https://test.supabase.co"
+    os.environ["SUPABASE_ANON_KEY"] = "test-anon-key"
+    os.environ["SUPABASE_JWT_SECRET"] = "test-jwt-secret-for-testing-only"
+    yield
+    # Restore original value
+    if original_provider is None:
+        os.environ.pop("AUTH_PROVIDER", None)
+    else:
+        os.environ["AUTH_PROVIDER"] = original_provider
+
+
+@pytest.fixture
+def mock_supabase_user():
+    """Mock Supabase user data for testing."""
+    return {
+        "id": "test-user-123",
+        "email": "test@example.com",
+        "user_metadata": {},
+        "app_metadata": {},
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-01T00:00:00Z",
+    }
+
+
+@pytest.fixture
+def mock_supabase_session(mock_supabase_user):
+    """Mock Supabase session data for testing."""
+    return {
+        "access_token": "test-access-token",
+        "refresh_token": "test-refresh-token",
+        "expires_at": 9999999999,
+        "expires_in": 3600,
+        "user": mock_supabase_user,
+    }
+
+
+@pytest.fixture
+def auth_headers():
+    """Mock authentication headers with Supabase token."""
+    return {
+        "Authorization": "Bearer test-valid-supabase-token",
+    }
+
+
+@pytest.fixture
+def sample_tenant_data():
+    """Sample tenant data for testing."""
+    return {
+        "id": "test-tenant-123",
+        "slug": "test-tenant",
+        "name": "Test Workspace",
+        "plan": "free",
+        "status": "active",
+    }
+
+
+@pytest.fixture
+def sample_tenant_with_member(sample_tenant_data, mock_supabase_user):
+    """Sample tenant with member for testing."""
+    return {
+        **sample_tenant_data,
+        "member": {
+            "id": "test-member-123",
+            "user_id": mock_supabase_user["id"],
+            "email": mock_supabase_user["email"],
+            "role": "owner",
+        },
+        "project": {
+            "id": "test-project-123",
+            "name": "Default",
+            "description": "Default project",
+            "is_default": True,
+        },
+    }
+
+
+def pytest_configure(config):
+    """Add custom pytest markers."""
+    config.addinivalue_line(
+        "markers",
+        "supabase: marks tests for Supabase authentication (deselect with '-m \"not supabase\"')"
+    )
+    config.addinivalue_line(
+        "markers",
+        "auth: marks authentication tests (deselect with '-m \"not auth\"')"
+    )
+    config.addinivalue_line(
+        "markers",
+        "integration: marks integration tests"
+    )

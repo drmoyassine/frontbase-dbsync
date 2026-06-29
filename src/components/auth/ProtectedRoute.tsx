@@ -1,12 +1,16 @@
 /**
  * ProtectedRoute - Auth Guard Component
- * 
+ *
  * Wraps routes that require authentication.
  * Redirects to login page if not authenticated.
+ *
+ * Uses the auth abstraction layer which supports:
+ * - Cookie-based auth (self-host mode)
+ * - JWT-based auth via SuperTokens/Supabase (cloud mode)
  */
 
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthState } from '@/lib/auth/useAuth';
 import { useEffect } from 'react';
 
 interface ProtectedRouteProps {
@@ -14,7 +18,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-    const { isAuthenticated, isLoading, checkAuth } = useAuthStore();
+    const { isAuthenticated, isLoading, checkAuth } = useAuthState();
     const location = useLocation();
 
     // Check auth on mount

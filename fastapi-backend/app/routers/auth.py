@@ -69,6 +69,8 @@ class SignupRequest(BaseModel):
     password: str
     workspace_name: str
     slug: str
+    user_id: Optional[str] = None  # For Supabase: user ID from Supabase auth
+    invite_code: Optional[str] = None
 
 
 class AcceptInviteRequest(BaseModel):
@@ -718,11 +720,25 @@ async def login(request: Request, body: LoginRequest, response: Response):
             message="Login successful",
         )
 
-    # ── Path 2: SuperTokens (cloud mode) ────────────────────────────────
+    # ── Path 2: Provider-based login (cloud mode) ────────────────────────────────
     if not is_cloud():
         await record_failed_attempt(request, body.email)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
+    # Check if using Supabase provider
+    from app.auth.provider import get_auth_provider
+    provider = get_auth_provider()
+
+    if provider and provider.provider_type == "supabase":
+        # For Supabase, login is handled by the Supabase client on the frontend
+        # The frontend will have already authenticated and will call /api/auth/me
+        # This endpoint is not used for Supabase login flow
+        raise HTTPException(
+            status_code=501,
+            detail="Supabase login is handled client-side. Please use the Supabase client SDK."
+        )
+
+    # Default: SuperTokens flow
     from supertokens_python.recipe.emailpassword.asyncio import sign_in as st_sign_in
     from supertokens_python.recipe.emailpassword.interfaces import SignInOkResult
     from supertokens_python.recipe.session.asyncio import create_new_session
@@ -772,7 +788,7 @@ async def login(request: Request, body: LoginRequest, response: Response):
         user_record = db.query(DBUser).filter(DBUser.id == st_user_id).first()
         if user_record:
             user_record.last_login_at = now  # type: ignore[assignment]
-        
+
         await log_security_event(
             db=db,
             user_id=st_user_id,
@@ -813,12 +829,174 @@ async def login(request: Request, body: LoginRequest, response: Response):
 async def signup(request: Request, body: SignupRequest, response: Response):
     """Register a new tenant user with workspace.
 
-    Creates: SuperTokens user → Tenant → TenantMember → Project → Session.
+    Creates: SuperTokens/Supabase user → Tenant → TenantMember → Project → Session.
     Cloud mode only.
     """
     if not is_cloud():
         raise HTTPException(status_code=400, detail="Signup only available in cloud mode")
 
+    # Check if using Supabase provider
+    from app.auth.provider import get_auth_provider
+    provider = get_auth_provider()
+
+    if provider and provider.provider_type == "supabase":
+        # For Supabase, tenant provisioning happens here
+        # Frontend creates user in Supabase, then calls this endpoint to provision the tenant
+
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Supabase access token required")
+
+        # Validate session and get user info
+        session_data = await provider.validate_session(request)
+        if not session_data:
+            raise HTTPException(status_code=401, detail="Invalid Supabase session")
+
+        user_id = session_data.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid session data")
+
+        email = session_data.get("email", body.email)
+
+        # Check if tenant already exists for this user
+        from app.database.config import SessionLocal
+        from app.models.auth import SupabaseUserMetadata
+        from app.models.tenant import Tenant
+        from app.models.models import Project, TenantMember
+
+        db = SessionLocal()
+        try:
+            existing_meta = db.query(SupabaseUserMetadata).filter(
+                SupabaseUserMetadata.user_id == user_id
+            ).first()
+
+            if existing_meta and existing_meta.tenant_id:
+                # User already has a tenant, return existing data
+                tenant = db.query(Tenant).filter(Tenant.id == existing_meta.tenant_id).first()
+                now = datetime.now(UTC).isoformat()
+                return {
+                    "user": {
+                        "id": user_id,
+                        "email": email,
+                        "tenant_id": existing_meta.tenant_id,
+                        "tenant_slug": existing_meta.tenant_slug,
+                        "role": existing_meta.role,
+                        "is_master": False,
+                        "created_at": now,
+                        "updated_at": now,
+                    },
+                    "tenant": {
+                        "id": existing_meta.tenant_id,
+                        "slug": existing_meta.tenant_slug,
+                        "name": tenant.name if tenant else body.workspace_name,
+                    },
+                    "message": "Already registered",
+                }
+
+            # New user - provision tenant
+            slug = body.slug.lower().strip()
+
+            # Validate slug
+            from app.auth.supertokens_overrides import validate_slug
+            slug_error = validate_slug(slug)
+            if slug_error:
+                raise HTTPException(status_code=400, detail=slug_error)
+
+            # Check slug availability
+            from app.auth.supertokens_overrides import check_slug_available
+            if not check_slug_available(db, slug):
+                raise HTTPException(status_code=409, detail=f"Slug '{slug}' is already taken")
+
+            # Create tenant
+            tenant_id = str(uuid.uuid4())
+            tenant = Tenant(
+                id=tenant_id,
+                slug=slug,
+                name=body.workspace_name,
+                plan="free",
+                status="active",
+                created_at=datetime.now(UTC).isoformat() + "Z",
+                updated_at=datetime.now(UTC).isoformat() + "Z",
+            )
+            db.add(tenant)
+            db.flush()
+
+            # Create project
+            project_id = str(uuid.uuid4())
+            project = Project(
+                id=project_id,
+                tenant_id=tenant_id,
+                name="Default",
+                description=f"Default project for {body.workspace_name}",
+                schema_name="default",
+                is_default=True,
+                created_at=datetime.now(UTC).isoformat() + "Z",
+                updated_at=datetime.now(UTC).isoformat() + "Z",
+            )
+            db.add(project)
+            db.flush()
+
+            # Create tenant member (owner)
+            member_id = str(uuid.uuid4())
+            member = TenantMember(
+                id=member_id,
+                tenant_id=tenant_id,
+                project_id=project_id,
+                user_id=user_id,
+                email=email,
+                role="owner",
+                created_at=datetime.now(UTC).isoformat() + "Z",
+                updated_at=datetime.now(UTC).isoformat() + "Z",
+            )
+            db.add(member)
+
+            # Store in SupabaseUserMetadata
+            now_iso = datetime.now(UTC).isoformat()
+            user_meta = SupabaseUserMetadata(
+                user_id=user_id,
+                tenant_id=tenant_id,
+                tenant_slug=slug,
+                role="owner",
+                created_at=now_iso,
+                updated_at=now_iso,
+            )
+            db.add(user_meta)
+
+            db.commit()
+
+            logger.info(f"[Signup] New tenant provisioned for Supabase user: {slug} ({email})")
+
+            now = datetime.now(UTC).isoformat()
+            return {
+                "user": {
+                    "id": user_id,
+                    "email": email,
+                    "tenant_id": tenant_id,
+                    "tenant_slug": slug,
+                    "role": "owner",
+                    "is_master": False,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+                "tenant": {
+                    "id": tenant_id,
+                    "slug": slug,
+                    "name": body.workspace_name,
+                    "project_id": project_id,
+                },
+                "message": "Workspace created successfully",
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            db.rollback()
+            logger.error(f"[Signup] Tenant provisioning failed for Supabase user {user_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to create workspace: {str(e)}")
+        finally:
+            db.close()
+
+    # Default: SuperTokens flow
     from supertokens_python.recipe.emailpassword.asyncio import sign_up as st_sign_up
     from supertokens_python.recipe.emailpassword.interfaces import SignUpOkResult
     from supertokens_python.recipe.emailpassword.interfaces import EmailAlreadyExistsError
@@ -1119,44 +1297,31 @@ async def check_slug(slug: str):
 async def get_me(request: Request):
     """Get current authenticated user with tenant context.
 
-    Checks SuperTokens session first (cloud mode), then master admin cookie.
+    Checks configured auth provider session (cloud mode), then master admin cookie.
     """
-    # ── Try SuperTokens session first (cloud mode) ──────────────────────
+    # ── Try provider session first (cloud mode) ──────────────────────
     if is_cloud():
         try:
-            from supertokens_python.recipe.session.asyncio import get_session as st_get_session
-
-            session = await st_get_session(request, session_required=False)
-            if session:
-                payload = session.get_access_token_payload()
-                user_id = session.get_user_id()
-
-                # Email may be in access token or need fetching from ST
-                email = payload.get("email", "")
-                if not email:
-                    try:
-                        from supertokens_python.asyncio import get_user
-                        st_user = await get_user(user_id)
-                        if st_user and st_user.emails:
-                            email = st_user.emails[0]
-                    except Exception:
-                        pass
-
-                return {
-                    "user": {
-                        "id": user_id,
-                        "email": email,
-                        "username": None,
-                        "created_at": "",
-                        "updated_at": "",
-                        "tenant_id": payload.get("tenant_id"),
-                        "tenant_slug": payload.get("tenant_slug"),
-                        "role": payload.get("role", "owner"),
-                        "is_master": False,
+            from app.auth.provider import get_auth_provider
+            provider = get_auth_provider()
+            if provider:
+                session_data = await provider.validate_session(request)
+                if session_data:
+                    return {
+                        "user": {
+                            "id": session_data["user_id"],
+                            "email": session_data["email"],
+                            "username": None,
+                            "created_at": "",
+                            "updated_at": "",
+                            "tenant_id": session_data.get("tenant_id"),
+                            "tenant_slug": session_data.get("tenant_slug"),
+                            "role": session_data.get("role", "owner"),
+                            "is_master": session_data.get("is_master", False),
+                        }
                     }
-                }
         except Exception:
-            pass  # No SuperTokens session — try master admin
+            pass  # No provider session — try master admin
 
     # ── Try master admin session ────────────────────────────────────────
     user = get_current_user(request)
@@ -1184,17 +1349,17 @@ async def get_me(request: Request):
 
 @router.post("/logout")
 async def logout(request: Request, response: Response):
-    """Logout — revokes SuperTokens session and/or master admin cookie."""
-    # ── Revoke SuperTokens session if present ───────────────────────────
+    """Logout — revokes provider session and/or master admin cookie."""
+    # ── Revoke provider session if present ───────────────────────────
     if is_cloud():
         try:
-            from supertokens_python.recipe.session.asyncio import get_session as st_get_session
-            session = await st_get_session(request, session_required=False)
-            if session:
-                await session.revoke_session()
-                logger.info(f"[Auth] SuperTokens session revoked for user {session.get_user_id()}")
+            from app.auth.provider import get_auth_provider
+            provider = get_auth_provider()
+            if provider:
+                await provider.revoke_session(request)
+                logger.info(f"[Auth] {provider.provider_name} session revoked")
         except Exception as e:
-            logger.warning(f"[Auth] SuperTokens logout error: {e}")
+            logger.warning(f"[Auth] Provider logout error: {e}")
 
     # ── Clear master admin session cookie ───────────────────────────────
     token = request.cookies.get(SESSION_COOKIE_NAME)

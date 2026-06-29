@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAuthStore } from '@/stores/auth';
+import { useAuth } from '@/lib/auth/useAuth';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import {
@@ -21,7 +21,7 @@ import {
 import { toast } from 'sonner';
 
 export const DashboardHeader: React.FC = () => {
-    const { user, logout } = useAuthStore() as any;
+    const { user, logout } = useAuth();
     const handleLogout = async () => { await logout(); };
 
     return (

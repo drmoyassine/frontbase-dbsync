@@ -54,15 +54,31 @@ export const updateApiInstance = () => {
 
 import { useAuthStore } from '../stores/auth';
 import { isCloud } from '@/lib/edition';
+import { getAuthClient, isSupabaseAuth } from '@/lib/auth/AuthClientFactory';
 
 // Request interceptor - automatically bundle Bearer token for Cloud SaaS mode
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
     // In cloud mode, the backend relies on JWT Bearer tokens instead of Cookies
     if (isCloud()) {
-      const state = useAuthStore.getState();
-      if (state.token) {
-        config.headers['Authorization'] = `Bearer ${state.token}`;
+      let token: string | null = null;
+
+      // For Supabase auth, get token from AuthClient (managed by Supabase SDK)
+      if (isSupabaseAuth()) {
+        try {
+          const authClient = getAuthClient();
+          token = await authClient.getToken();
+        } catch (error) {
+          console.warn('[API Service] Failed to get token from AuthClient:', error);
+        }
+      } else {
+        // For SuperTokens, get token from auth store (managed by backend)
+        const state = useAuthStore.getState();
+        token = state.token;
+      }
+
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
       }
       // Multi-project: target the active project. Read from localStorage to avoid a
       // circular import with the project store; the store keeps this value in sync.

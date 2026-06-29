@@ -3,11 +3,15 @@
  *
  * Creates a new user + tenant + default project.
  * Only available in cloud mode (DEPLOYMENT_MODE=cloud).
+ *
+ * Uses the AuthClient abstraction layer which supports:
+ * - SuperTokens (default cloud mode)
+ * - Supabase (when AUTH_PROVIDER=supabase)
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuthStore } from '@/stores/auth';
+import { useAuth } from '@/lib/auth/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,7 +37,7 @@ export default function SignupPage() {
   const [slugError, setSlugError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
-  const { signup, isLoading, error, clearError } = useAuthStore();
+  const { signup, isLoading, error, clearError } = useAuth();
   const navigate = useNavigate();
 
   // Auto-generate slug from workspace name (unless manually edited)
@@ -88,7 +92,12 @@ export default function SignupPage() {
       return;
     }
 
-    const result = await signup(email, password, workspaceName, slug);
+    const result = await signup({
+      email,
+      password,
+      workspaceName,
+      slug,
+    });
     if (result.success) {
       navigate('/dashboard', { replace: true });
     }

@@ -8,7 +8,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useDashboardStore } from "@/stores/dashboard";
 import { useBuilderStore } from "@/stores/builder";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthState } from "@/lib/auth/useAuth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { GlobalAgentChat } from "@/components/agent/GlobalAgentChat";
@@ -89,7 +89,7 @@ const persister = createSyncStoragePersister({
 const App = () => {
   const { fetchConnections } = useDashboardStore();
   const { loadPagesFromDatabase, loadVariablesFromDatabase, loadProjectFromDatabase } = useBuilderStore();
-  const { isAuthenticated, checkAuth } = useAuthStore();
+  const { isAuthenticated, checkAuth } = useAuthState();
 
   // Check auth on mount
   useEffect(() => {

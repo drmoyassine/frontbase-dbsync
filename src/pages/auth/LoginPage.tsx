@@ -1,13 +1,14 @@
 /**
  * LoginPage - Admin Authentication
- * 
+ *
  * Simple login page for Frontbase admin/designers.
- * Uses session-based auth via FastAPI backend.
+ * Uses session-based auth via FastAPI backend (self-host) or
+ * JWT-based auth via SuperTokens/Supabase (cloud).
  */
 
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { useAuthStore } from '@/stores/auth';
+import { useAuth } from '@/lib/auth/useAuth';
 import { isCloud } from '@/lib/edition';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +21,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [website, setWebsite] = useState('');
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-    const { login, isLoading, error, clearError } = useAuthStore();
+    const { login, isLoading, error, clearError } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -71,7 +72,12 @@ export default function LoginPage() {
         e.preventDefault();
         clearError();
 
-        const result = await login(email, password, website, turnstileToken || undefined);
+        const result = await login({
+            email,
+            password,
+            website,
+            turnstileToken: turnstileToken || undefined,
+        });
         if (result.success) {
             navigate(from, { replace: true });
         }

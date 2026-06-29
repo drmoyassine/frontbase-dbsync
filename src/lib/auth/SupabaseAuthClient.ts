@@ -1,0 +1,1045 @@
+/**
+ * SupabaseAuthClient - Supabase Authentication Implementation
+ *
+ * Implementation for cloud mode using Supabase Auth.
+ * Integrates with Supabase JS SDK for authentication operations
+ * and backend API for tenant provisioning.
+ *
+ * Characteristics:
+ * - Uses Supabase Auth for user authentication
+ * - Uses Supabase JWT tokens for API authentication
+ * - Tokens stored in memory/secure storage
+ * - Automatic token refresh via Supabase SDK
+ * - Supports multi-tenancy via backend API
+ */
+
+import type {
+  AuthClient,
+  AuthClientConfig,
+  AuthResult,
+  AuthSession,
+  AuthUser,
+  AuthTenant,
+  LoginCredentials,
+  SignupCredentials,
+  MagicLinkRequest,
+  OAuthProvider,
+} from './AuthClient.interface';
+import { AuthError, AuthErrorType } from './AuthClient.interface';
+import { supabase } from '@/lib/supabase';
+
+export class SupabaseAuthClient implements AuthClient {
+  private config: AuthClientConfig;
+  private initialized = false;
+  private stateChangeListeners: Array<(session: AuthSession) => void> = [];
+  private sessionCache: AuthSession | null = null;
+  private authStateUnsubscribe: (() => void) | null = null;
+
+  constructor(config: AuthClientConfig) {
+    this.config = {
+      ...config,
+      mode: 'jwt',
+      autoRefresh: config.autoRefresh ?? true,
+      refreshInterval: config.refreshInterval ?? 300000, // 5 minutes
+    };
+  }
+
+  // ---------------------------------------------------------
+  // Core Authentication Methods
+  // ---------------------------------------------------------
+
+  async login(credentials: LoginCredentials): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      // Authenticate with Supabase
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password,
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message || 'Login failed',
+        };
+      }
+
+      if (!data.user || !data.session) {
+        return {
+          success: false,
+          error: 'Invalid response from Supabase',
+        };
+      }
+
+      // Get tenant claims from backend
+      const tenantData = await this.getTenantData(data.user.id);
+
+      // Update session cache
+      this.sessionCache = {
+        user: {
+          id: data.user.id,
+          email: data.user.email || credentials.email,
+          username: data.user.user_metadata?.username,
+          tenant_id: tenantData?.tenant_id,
+          tenant_slug: tenantData?.tenant_slug,
+          role: tenantData?.role || 'owner',
+          is_master: tenantData?.is_master || false,
+          created_at: data.user.created_at,
+          updated_at: data.user.updated_at,
+        },
+        tenant: tenantData?.tenant,
+        token: data.session.access_token,
+        expiresAt: data.session.expires_at
+          ? data.session.expires_at * 1000
+          : undefined,
+        isAuthenticated: true,
+      };
+
+      this.notifyStateChange(this.sessionCache);
+
+      return {
+        success: true,
+        user: this.sessionCache.user,
+        tenant: this.sessionCache.tenant,
+        token: this.sessionCache.token,
+      };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during login',
+        error
+      );
+    }
+  }
+
+  async signup(credentials: SignupCredentials): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      // Create user in Supabase
+      const { data, error } = await supabase.auth.signUp({
+        email: credentials.email,
+        password: credentials.password,
+        options: {
+          data: {
+            workspace_name: credentials.workspaceName,
+            slug: credentials.slug,
+          },
+        },
+      });
+
+      if (error) {
+        if (error.message.includes('already registered') || error.message.includes('User already registered')) {
+          return {
+            success: false,
+            error: 'An account with this email already exists',
+          };
+        }
+        return {
+          success: false,
+          error: error.message || 'Signup failed',
+        };
+      }
+
+      if (!data.user || !data.session) {
+        return {
+          success: false,
+          error: 'Invalid response from Supabase',
+        };
+      }
+
+      // Store access token for subsequent calls
+      const accessToken = data.session.access_token;
+      const userId = data.user.id;
+
+      // Provision tenant via backend API with retry logic
+      let tenantData: {
+        tenant_id?: string;
+        tenant_slug?: string;
+        role?: string;
+        tenant?: AuthTenant;
+      } | null = null;
+      let lastError: Error | null = null;
+
+      try {
+        const response = await fetch(`${this.config.apiBaseUrl}/api/auth/signup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            user_id: userId,
+            email: credentials.email,
+            workspace_name: credentials.workspaceName,
+            slug: credentials.slug,
+            invite_code: credentials.inviteCode,
+          }),
+        });
+
+        const responseData = await response.json();
+
+        if (response.ok) {
+          tenantData = {
+            tenant_id: responseData.user?.tenant_id || responseData.tenant?.id,
+            tenant_slug: responseData.user?.tenant_slug || responseData.tenant?.slug,
+            role: responseData.user?.role || 'owner',
+            tenant: responseData.tenant || undefined,
+          };
+        } else {
+          lastError = new Error(responseData.detail || 'Tenant provisioning failed');
+          console.error('[SupabaseAuthClient] Tenant provisioning failed:', responseData);
+        }
+      } catch (error) {
+        lastError = error as Error;
+        console.error('[SupabaseAuthClient] Tenant provisioning error:', error);
+      }
+
+      // If tenant provisioning failed, rollback Supabase user
+      if (!tenantData && lastError) {
+        console.error('[SupabaseAuthClient] Rolling back Supabase user due to tenant provisioning failure');
+        try {
+          // Attempt to delete the user from Supabase
+          // Note: This requires admin privileges, so we might not be able to do this client-side
+          // The backend should handle cleanup in this case
+        } catch (deleteError) {
+          console.error('[SupabaseAuthClient] Failed to rollback Supabase user:', deleteError);
+        }
+
+        return {
+          success: false,
+          error: `Workspace creation failed: ${lastError.message}. Please try again.`,
+        };
+      }
+
+      // Update session cache
+      this.sessionCache = {
+        user: {
+          id: userId,
+          email: data.user.email || credentials.email,
+          username: data.user.user_metadata?.username,
+          tenant_id: tenantData?.tenant_id,
+          tenant_slug: tenantData?.tenant_slug,
+          role: tenantData?.role || 'owner',
+          is_master: false,
+          created_at: data.user.created_at,
+          updated_at: data.user.updated_at,
+        },
+        tenant: tenantData?.tenant,
+        token: accessToken,
+        expiresAt: data.session.expires_at
+          ? data.session.expires_at * 1000
+          : undefined,
+        isAuthenticated: true,
+      };
+
+      this.notifyStateChange(this.sessionCache);
+
+      return {
+        success: true,
+        user: this.sessionCache.user,
+        tenant: this.sessionCache.tenant,
+        token: this.sessionCache.token,
+      };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during signup',
+        error
+      );
+    }
+  }
+
+  async logout(): Promise<void> {
+    await this.ensureInitialized();
+
+    try {
+      // Sign out from Supabase
+      await supabase.auth.signOut();
+    } catch (error) {
+      if (this.config.debug) {
+        console.error('[SupabaseAuthClient] Logout error:', error);
+      }
+    }
+
+    // Also call backend logout
+    try {
+      await fetch(`${this.config.apiBaseUrl}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // Ignore logout errors
+    }
+
+    this.sessionCache = null;
+    this.notifyStateChange({
+      user: null,
+      tenant: null,
+      token: null,
+      isAuthenticated: false,
+    });
+  }
+
+  // ---------------------------------------------------------
+  // Token Management
+  // ---------------------------------------------------------
+
+  async getToken(): Promise<string | null> {
+    await this.ensureInitialized();
+
+    try {
+      // Get current session from Supabase
+      const { data } = await supabase.auth.getSession();
+
+      if (data.session?.access_token) {
+        return data.session.access_token;
+      }
+    } catch (error) {
+      if (this.config.debug) {
+        console.error('[SupabaseAuthClient] Get token error:', error);
+      }
+    }
+
+    // Fallback to cached token
+    return this.sessionCache?.token || null;
+  }
+
+  async getSession(): Promise<AuthSession> {
+    await this.ensureInitialized();
+
+    // Try to get current session from Supabase
+    try {
+      const { data } = await supabase.auth.getSession();
+
+      if (data.session?.access_token && data.user) {
+        const tenantData = await this.getTenantData(data.user.id);
+
+        const session: AuthSession = {
+          user: {
+            id: data.user.id,
+            email: data.user.email || '',
+            username: data.user.user_metadata?.username,
+            tenant_id: tenantData?.tenant_id,
+            tenant_slug: tenantData?.tenant_slug,
+            role: tenantData?.role || 'owner',
+            is_master: tenantData?.is_master || false,
+            created_at: data.user.created_at,
+            updated_at: data.user.updated_at,
+          },
+          tenant: tenantData?.tenant,
+          token: data.session.access_token,
+          expiresAt: data.session.expires_at
+            ? data.session.expires_at * 1000
+            : undefined,
+          isAuthenticated: true,
+        };
+
+        // Update cache
+        this.sessionCache = session;
+        return session;
+      }
+    } catch (error) {
+      if (this.config.debug) {
+        console.error('[SupabaseAuthClient] Get session error:', error);
+      }
+    }
+
+    // Return cached session if available
+    if (this.sessionCache) {
+      return this.sessionCache;
+    }
+
+    return {
+      user: null,
+      tenant: null,
+      token: null,
+      isAuthenticated: false,
+    };
+  }
+
+  async refreshToken(): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      // Supabase handles refresh automatically
+      // Just verify the session is still valid
+      const { data, error } = await supabase.auth.refreshSession();
+
+      if (error || !data.session) {
+        this.sessionCache = null;
+        return {
+          success: false,
+          error: error?.message || 'Token refresh failed',
+        };
+      }
+
+      const tenantData = await this.getTenantData(data.user?.id);
+
+      this.sessionCache = {
+        user: data.user
+          ? {
+              id: data.user.id,
+              email: data.user.email || '',
+              username: data.user.user_metadata?.username,
+              tenant_id: tenantData?.tenant_id,
+              tenant_slug: tenantData?.tenant_slug,
+              role: tenantData?.role || 'owner',
+              is_master: tenantData?.is_master || false,
+              created_at: data.user.created_at,
+              updated_at: data.user.updated_at,
+            }
+          : null,
+        tenant: tenantData?.tenant,
+        token: data.session.access_token,
+        expiresAt: data.session.expires_at
+          ? data.session.expires_at * 1000
+          : undefined,
+        isAuthenticated: true,
+      };
+
+      this.notifyStateChange(this.sessionCache);
+
+      return {
+        success: true,
+        token: this.sessionCache.token,
+        user: this.sessionCache.user,
+      };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during token refresh',
+        error
+      );
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Session Validation
+  // ---------------------------------------------------------
+
+  async verifySession(): Promise<boolean> {
+    await this.ensureInitialized();
+
+    try {
+      const { data } = await supabase.auth.getSession();
+
+      if (!data.session) {
+        this.sessionCache = null;
+        return false;
+      }
+
+      // Verify with backend
+      const response = await fetch(`${this.config.apiBaseUrl}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${data.session.access_token}`,
+        },
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const responseData = await response.json();
+        this.sessionCache = {
+          user: responseData.user,
+          tenant: responseData.tenant || null,
+          token: data.session.access_token,
+          isAuthenticated: true,
+        };
+        return true;
+      }
+
+      this.sessionCache = null;
+      return false;
+    } catch (error) {
+      if (this.config.debug) {
+        console.error('[SupabaseAuthClient] Verify session error:', error);
+      }
+      this.sessionCache = null;
+      return false;
+    }
+  }
+
+  async getCurrentUser(): Promise<AuthUser | null> {
+    const session = await this.getSession();
+    return session.user;
+  }
+
+  // ---------------------------------------------------------
+  // Alternative Authentication Methods
+  // ---------------------------------------------------------
+
+  async loginWithOAuth(providerId: string, redirectUrl?: string): Promise<void> {
+    await this.ensureInitialized();
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: providerId as any,
+      options: {
+        redirectTo: redirectUrl || window.location.origin + '/admin/auth/callback',
+      },
+    });
+
+    if (error) {
+      throw new AuthError(
+        AuthErrorType.UNKNOWN,
+        `OAuth login failed: ${error.message}`,
+        error
+      );
+    }
+
+    // Supabase will redirect automatically
+  }
+
+  async handleOAuthCallback(code: string, state?: string): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      // Supabase handles OAuth callback automatically
+      // Just get the current session
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error || !data.session || !data.user) {
+        return {
+          success: false,
+          error: error?.message || 'OAuth callback failed',
+        };
+      }
+
+      const tenantData = await this.getTenantData(data.user.id);
+
+      this.sessionCache = {
+        user: {
+          id: data.user.id,
+          email: data.user.email || '',
+          username: data.user.user_metadata?.username,
+          tenant_id: tenantData?.tenant_id,
+          tenant_slug: tenantData?.tenant_slug,
+          role: tenantData?.role || 'owner',
+          is_master: tenantData?.is_master || false,
+          created_at: data.user.created_at,
+          updated_at: data.user.updated_at,
+        },
+        tenant: tenantData?.tenant,
+        token: data.session.access_token,
+        expiresAt: data.session.expires_at
+          ? data.session.expires_at * 1000
+          : undefined,
+        isAuthenticated: true,
+      };
+
+      this.notifyStateChange(this.sessionCache);
+
+      return {
+        success: true,
+        user: this.sessionCache.user,
+        tenant: this.sessionCache.tenant,
+        token: this.sessionCache.token,
+      };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during OAuth callback',
+        error
+      );
+    }
+  }
+
+  async requestMagicLink(request: MagicLinkRequest): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: request.email,
+        options: {
+          emailRedirectTo: request.redirectUrl,
+        },
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message || 'Magic link request failed',
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during magic link request',
+        error
+      );
+    }
+  }
+
+  async verifyMagicLink(token: string): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      // Supabase handles magic link verification automatically
+      // Just get the current session
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error || !data.session || !data.user) {
+        return {
+          success: false,
+          error: error?.message || 'Magic link verification failed',
+        };
+      }
+
+      const tenantData = await this.getTenantData(data.user.id);
+
+      this.sessionCache = {
+        user: {
+          id: data.user.id,
+          email: data.user.email || '',
+          username: data.user.user_metadata?.username,
+          tenant_id: tenantData?.tenant_id,
+          tenant_slug: tenantData?.tenant_slug,
+          role: tenantData?.role || 'owner',
+          is_master: tenantData?.is_master || false,
+          created_at: data.user.created_at,
+          updated_at: data.user.updated_at,
+        },
+        tenant: tenantData?.tenant,
+        token: data.session.access_token,
+        expiresAt: data.session.expires_at
+          ? data.session.expires_at * 1000
+          : undefined,
+        isAuthenticated: true,
+      };
+
+      this.notifyStateChange(this.sessionCache);
+
+      return {
+        success: true,
+        user: this.sessionCache.user,
+        tenant: this.sessionCache.tenant,
+        token: this.sessionCache.token,
+      };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during magic link verification',
+        error
+      );
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Password Management
+  // ---------------------------------------------------------
+
+  async requestPasswordReset(email: string): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/admin/auth/reset-password',
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message || 'Reset request failed',
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during password reset request',
+        error
+      );
+    }
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      // Update user password with Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message || 'Password reset failed',
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during password reset',
+        error
+      );
+    }
+  }
+
+  async updatePassword(currentPassword: string, newPassword: string): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      // Verify current password first by attempting login
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user?.email) {
+        return {
+          success: false,
+          error: 'User not found',
+        };
+      }
+
+      // Try to sign in with current password to verify
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: userData.user.email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        return {
+          success: false,
+          error: 'Current password is incorrect',
+        };
+      }
+
+      // Update password
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message || 'Password update failed',
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during password update',
+        error
+      );
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Account Management
+  // ---------------------------------------------------------
+
+  async updateProfile(updates: Partial<AuthUser>): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: updates,
+      });
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message || 'Profile update failed',
+        };
+      }
+
+      if (this.sessionCache?.user) {
+        this.sessionCache.user = { ...this.sessionCache.user, ...updates };
+        this.notifyStateChange(this.sessionCache);
+      }
+
+      return {
+        success: true,
+        user: this.sessionCache?.user,
+      };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during profile update',
+        error
+      );
+    }
+  }
+
+  async deleteAccount(password: string): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      // Delete account via backend (which will also delete from Supabase)
+      const response = await fetch(`${this.config.apiBaseUrl}/api/auth/account`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ password }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        return {
+          success: false,
+          error: data.detail || 'Account deletion failed',
+        };
+      }
+
+      await this.logout();
+      return { success: true };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during account deletion',
+        error
+      );
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Multi-tenancy Support
+  // ---------------------------------------------------------
+
+  async switchTenant(tenantSlug: string): Promise<AuthResult> {
+    await this.ensureInitialized();
+
+    try {
+      const token = await this.getToken();
+      const response = await fetch(`${this.config.apiBaseUrl}/api/auth/switch-tenant`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ tenant_slug: tenantSlug }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        return {
+          success: false,
+          error: data.detail || 'Tenant switch failed',
+        };
+      }
+
+      const data = await response.json();
+
+      if (this.sessionCache) {
+        this.sessionCache.tenant = data.tenant;
+        this.sessionCache.user = data.user || this.sessionCache.user;
+        this.notifyStateChange(this.sessionCache);
+      }
+
+      return {
+        success: true,
+        tenant: data.tenant,
+      };
+    } catch (error) {
+      throw new AuthError(
+        AuthErrorType.NETWORK_ERROR,
+        'Network error during tenant switch',
+        error
+      );
+    }
+  }
+
+  async getAvailableTenants(): Promise<AuthTenant[]> {
+    await this.ensureInitialized();
+
+    try {
+      const token = await this.getToken();
+      const response = await fetch(`${this.config.apiBaseUrl}/api/auth/tenants`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      return data.tenants || [];
+    } catch {
+      return [];
+    }
+  }
+
+  // ---------------------------------------------------------
+  // State & Events
+  // ---------------------------------------------------------
+
+  onAuthStateChange(callback: (session: AuthSession) => void): () => void {
+    this.stateChangeListeners.push(callback);
+
+    // Subscribe to Supabase auth state changes
+    if (!this.authStateUnsubscribe) {
+      const { data } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (event === 'SIGNED_IN' && session) {
+            const tenantData = await this.getTenantData(session.user.id);
+            this.sessionCache = {
+              user: {
+                id: session.user.id,
+                email: session.user.email || '',
+                username: session.user.user_metadata?.username,
+                tenant_id: tenantData?.tenant_id,
+                tenant_slug: tenantData?.tenant_slug,
+                role: tenantData?.role || 'owner',
+                is_master: tenantData?.is_master || false,
+                created_at: session.user.created_at,
+                updated_at: session.user.updated_at,
+              },
+              tenant: tenantData?.tenant,
+              token: session.access_token,
+              expiresAt: session.expires_at
+                ? session.expires_at * 1000
+                : undefined,
+              isAuthenticated: true,
+            };
+            this.notifyStateChange(this.sessionCache);
+          } else if (event === 'SIGNED_OUT') {
+            this.sessionCache = null;
+            this.notifyStateChange({
+              user: null,
+              tenant: null,
+              token: null,
+              isAuthenticated: false,
+            });
+          } else if (event === 'TOKEN_REFRESHED' && session) {
+            const tenantData = await this.getTenantData(session.user.id);
+            this.sessionCache = {
+              user: {
+                id: session.user.id,
+                email: session.user.email || '',
+                username: session.user.user_metadata?.username,
+                tenant_id: tenantData?.tenant_id,
+                tenant_slug: tenantData?.tenant_slug,
+                role: tenantData?.role || 'owner',
+                is_master: tenantData?.is_master || false,
+                created_at: session.user.created_at,
+                updated_at: session.user.updated_at,
+              },
+              tenant: tenantData?.tenant,
+              token: session.access_token,
+              expiresAt: session.expires_at
+                ? session.expires_at * 1000
+                : undefined,
+              isAuthenticated: true,
+            };
+            this.notifyStateChange(this.sessionCache);
+          }
+        }
+      );
+
+      this.authStateUnsubscribe = () => {
+        data.subscription.unsubscribe();
+      };
+    }
+
+    // Return unsubscribe function
+    return () => {
+      this.stateChangeListeners = this.stateChangeListeners.filter(
+        listener => listener !== callback
+      );
+    };
+  }
+
+  isInitialized(): boolean {
+    return this.initialized;
+  }
+
+  async getSupportedProviders(): Promise<OAuthProvider[]> {
+    await this.ensureInitialized();
+
+    try {
+      const response = await fetch(`${this.config.apiBaseUrl}/api/auth/oauth/providers`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      return data.providers || [];
+    } catch {
+      return [];
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Cleanup
+  // ---------------------------------------------------------
+
+  async cleanup(): Promise<void> {
+    if (this.authStateUnsubscribe) {
+      this.authStateUnsubscribe();
+      this.authStateUnsubscribe = null;
+    }
+    this.stateChangeListeners = [];
+    this.sessionCache = null;
+    await this.logout();
+  }
+
+  // ---------------------------------------------------------
+  // Private Helpers
+  // ---------------------------------------------------------
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+    this.initialized = true;
+  }
+
+  private notifyStateChange(session: AuthSession): void {
+    this.stateChangeListeners.forEach(callback => {
+      try {
+        callback(session);
+      } catch (error) {
+        if (this.config.debug) {
+          console.error('[SupabaseAuthClient] State change listener error:', error);
+        }
+      }
+    });
+  }
+
+  private async getTenantData(userId: string): Promise<{
+    tenant_id?: string;
+    tenant_slug?: string;
+    role?: string;
+    is_master?: boolean;
+    tenant?: AuthTenant;
+  } | null> {
+    try {
+      const token = await this.getToken();
+      if (!token) return null;
+
+      const response = await fetch(`${this.config.apiBaseUrl}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      return {
+        tenant_id: data.user?.tenant_id,
+        tenant_slug: data.user?.tenant_slug,
+        role: data.user?.role,
+        is_master: data.user?.is_master,
+        tenant: data.tenant || undefined,
+      };
+    } catch (error) {
+      if (this.config.debug) {
+        console.error('[SupabaseAuthClient] Get tenant data error:', error);
+      }
+      return null;
+    }
+  }
+}

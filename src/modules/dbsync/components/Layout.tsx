@@ -136,8 +136,9 @@ export function Layout() {
                 <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto">
                     <button
                         onClick={async () => {
-                            const { useAuthStore } = await import('@/stores/auth');
-                            useAuthStore.getState().logout();
+                            const { useAuth } = await import('@/lib/auth/useAuth');
+                            const { logout } = useAuth();
+                            await logout();
                         }}
                         className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30 font-medium"
                     >

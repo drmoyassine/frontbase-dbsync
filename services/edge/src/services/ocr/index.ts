@@ -388,29 +388,27 @@ export class OcrService {
     }
 
     private createEngine(): OcrEngine {
-        // Priority 1: Check for Docker env var override (OCR_ENGINE)
-        const dockerEngine = process.env.OCR_ENGINE?.toLowerCase();
-        if (dockerEngine === 'tesseract') {
-            return new TesseractEngine();
-        }
-        if (dockerEngine === 'gnu_ocrad') {
-            return new GnuOcradEngine();
-        }
-
-        // Priority 2: Load from FRONTBASE_OCR config
         const config = this.getConfig();
 
-        // Priority 3: UI custom endpoint override
+        // Priority 1: UI custom endpoint override
         if (config.endpoint) {
             return new CustomHttpEngine(config.endpoint, config.apiKey);
         }
 
-        // Priority 4: Workers AI
+        // Priority 2: Docker env var override OR JSON config engine
+        if (config.engine === 'tesseract') {
+            return new TesseractEngine();
+        }
+        if (config.engine === 'gnu_ocrad') {
+            return new GnuOcradEngine();
+        }
+
+        // Priority 3: Workers AI
         if (config.engine === 'workers_ai') {
             return new WorkersAiEngine(config.cfAccountId, config.cfApiToken);
         }
 
-        // Priority 5: Default to OCR.space
+        // Priority 4: Default to OCR.space
         if (config.engine === 'ocrspace' || !config.engine) {
             return new OcrSpaceEngine(config.apiKey, config.ocrspaceBaseUrl);
         }

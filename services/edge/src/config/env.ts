@@ -253,13 +253,23 @@ export function getGpuModels(): GpuModel[] {
 
 /** OCR config (ocrspace | tesseract | gnu_ocrad | workers_ai | custom) */
 export function getOcrConfig(): OcrConfig {
-    // Check for Docker env var override first (highest priority for local deployments)
+    if (_ocr) return _ocr;
+    
+    const config = parseEnv<OcrConfig>('FRONTBASE_OCR', { engine: 'ocrspace' });
+    
+    // Priority 1: UI HTTP override (Custom endpoint from settings UI)
+    if (config.endpoint) {
+        return (_ocr = config);
+    }
+    
+    // Priority 2: Docker local env var override (OCR_ENGINE)
     const dockerEngine = process.env.OCR_ENGINE?.toLowerCase();
     if (dockerEngine === 'tesseract' || dockerEngine === 'gnu_ocrad') {
-        return (_ocr ??= { engine: dockerEngine });
+        return (_ocr = { ...config, engine: dockerEngine });
     }
-    // Fall back to JSON config
-    return (_ocr ??= parseEnv<OcrConfig>('FRONTBASE_OCR', { engine: 'ocrspace' }));
+    
+    // Priority 3: Default (JSON config or OCR.space)
+    return (_ocr = config);
 }
 
 /** Storage config (supabase | cloudflare_r2 | s3) */

@@ -3,6 +3,9 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
+// Cache busting timestamp - update this to force browser cache invalidation
+const BUILD_TIMESTAMP = new Date().getTime();
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
@@ -15,6 +18,18 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: basePath,
+    build: {
+      // Add cache busting to asset filenames
+      sourcemap: false,
+      rollupOptions: {
+        output: {
+          // Use content-based hash + timestamp for aggressive cache busting
+          assetFileNames: `assets/[name]-[hash]-${BUILD_TIMESTAMP}[extname]`,
+          chunkFileNames: `assets/[name]-[hash]-${BUILD_TIMESTAMP}.js`,
+          entryFileNames: `assets/[name]-[hash]-${BUILD_TIMESTAMP}.js`,
+        },
+      },
+    },
     server: {
       host: "::",
       port: 5173,

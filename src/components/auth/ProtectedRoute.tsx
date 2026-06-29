@@ -18,13 +18,10 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-    const { isAuthenticated, isLoading, checkAuth } = useAuth();
+    const { isAuthenticated, isLoading } = useAuth();
     const location = useLocation();
 
-    // Check auth on mount
-    useEffect(() => {
-        checkAuth();
-    }, [checkAuth]);
+    // authCheck is handled automatically by useAuth(autoCheck = true) on mount
 
     // Show loading state while checking auth, but only if we don't know the state yet!
     // This prevents React Error #310 caused by unmounting <Outlet /> during transitions.

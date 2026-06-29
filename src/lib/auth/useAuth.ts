@@ -93,7 +93,7 @@ export function useAuth(autoCheck = true): UseAuthReturn {
     isAuthenticated: false,
   });
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(autoCheck);
   const [error, setError] = useState<string | null>(null);
 
   // Subscribe to auth state changes

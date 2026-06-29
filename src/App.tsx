@@ -89,12 +89,9 @@ const persister = createSyncStoragePersister({
 const App = () => {
   const { fetchConnections } = useDashboardStore();
   const { loadPagesFromDatabase, loadVariablesFromDatabase, loadProjectFromDatabase } = useBuilderStore();
-  const { isAuthenticated, checkAuth } = useAuth();
+  const { isAuthenticated } = useAuth();
 
-  // Check auth on mount
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    // authCheck is handled automatically by useAuth(autoCheck = true) on mount
 
   // Initialize app data only when authenticated
   useEffect(() => {

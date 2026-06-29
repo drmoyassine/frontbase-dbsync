@@ -89,7 +89,7 @@ const persister = createSyncStoragePersister({
 const App = () => {
   const { fetchConnections } = useDashboardStore();
   const { loadPagesFromDatabase, loadVariablesFromDatabase, loadProjectFromDatabase } = useBuilderStore();
-  const { isAuthenticated, checkAuth } = useAuthState();
+  const { isAuthenticated, checkAuth } = useAuth();
 
   // Check auth on mount
   useEffect(() => {

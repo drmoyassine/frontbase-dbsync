@@ -18,7 +18,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-    const { isAuthenticated, isLoading, checkAuth } = useAuthState();
+    const { isAuthenticated, isLoading, checkAuth } = useAuth();
     const location = useLocation();
 
     // Check auth on mount

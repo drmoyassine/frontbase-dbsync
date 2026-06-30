@@ -437,7 +437,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                     };
                 }) as Page[];
 
-                console.log('📥 [Store] Loaded pages:', { count: pages.length, names: pages.map(p => p.name) });
+
 
                 set({
                     pages: pages || [],

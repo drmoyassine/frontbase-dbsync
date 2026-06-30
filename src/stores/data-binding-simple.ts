@@ -121,7 +121,7 @@ export const useDataBindingStore = create<DataBindingState>()(
           const current = get();
           if (current.connected !== connected || current.connectionError !== connectionError) {
             set({ connected, connectionError });
-            debug.critical('DATA_BINDING', 'Synced connection status:', { connected });
+            debug.info('DATA_BINDING', 'Synced connection status:', { connected });
           }
         } catch (error) {
           // API unreachable — mark as disconnected to prevent stale requests

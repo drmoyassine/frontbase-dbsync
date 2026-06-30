@@ -518,7 +518,7 @@ export function RLSPoliciesPanel() {
                                                                     RLS {tableStatus.rls_enabled ? 'enabled' : 'disabled'}
                                                                 </span>
                                                                 <Switch
-                                                                    checked={tableStatus.rls_enabled}
+                                                                    checked={!!tableStatus.rls_enabled}
                                                                     onCheckedChange={(checked) => handleToggleTableRLS(tableName, checked)}
                                                                     disabled={isLoadingTables}
                                                                 />

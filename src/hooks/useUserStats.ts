@@ -35,12 +35,12 @@ export function useUserStats() {
           });
         } else {
           const errorMsg = result.message || result.error || 'Unknown error';
-          console.warn('[useUserStats] Stats unavailable:', errorMsg);
+          // Silently fail if stats are unavailable
           setStats(prev => ({ ...prev, loading: false, error: errorMsg }));
         }
       } catch (err) {
         // Don't spam console — this is expected when RPC function doesn't exist
-        console.warn('[useUserStats] Stats unavailable (RPC not configured)');
+        // Silently fail if RPC is not configured
         setStats(prev => ({
           ...prev,
           loading: false,

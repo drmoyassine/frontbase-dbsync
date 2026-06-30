@@ -142,6 +142,10 @@ def _from_connected_accounts(db: Session, mode: str, project_id: Optional[str] =
     """Try to get Supabase creds from EdgeProviderAccount."""
     from ..models.models import EdgeProviderAccount
     from .security import decrypt_credentials
+    from app.config.edition import is_cloud
+
+    if is_cloud() and not project_id:
+        return None
 
     query = db.query(EdgeProviderAccount).filter(
         EdgeProviderAccount.provider == "supabase",

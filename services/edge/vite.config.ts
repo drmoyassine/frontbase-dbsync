@@ -16,7 +16,18 @@ export default defineConfig({
             '@frontbase/grid': path.resolve(__dirname, '../../packages/grid/src/index.ts'),
             '@frontbase/liquid-core': path.resolve(__dirname, '../../packages/liquid-core/src/index.ts'),
         },
-        dedupe: ['react', 'react-dom', '@tanstack/react-query'],
+        dedupe: [
+            'react',
+            'react-dom',
+            '@tanstack/react-query',
+            'clsx',
+            'tailwind-merge',
+            'lucide-react',
+            'recharts',
+            '@tanstack/react-table',
+            '@radix-ui/react-icons',
+            'liquidjs'
+        ],
     },
     build: {
         outDir: 'public/react',

@@ -54,6 +54,7 @@
         "postgres": "^3.4.0",
         "react": "^19.2.3",
         "react-dom": "^19.2.3",
+        "recharts": "^2.15.4",
         "tailwind-merge": "^3.4.0",
         "tailwindcss": "^4.1.18",
         "toucan-js": "^4.1.1",

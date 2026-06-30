@@ -44,6 +44,9 @@ class VerifyRLSRequest(BaseModel):
     currentUsing: Optional[str] = None
 
 
+from app.middleware.tenant_context import TenantContext, get_tenant_context
+
+
 # Batch policy creation models
 class TableRulePolicyData(BaseModel):
     tableName: str
@@ -59,10 +62,10 @@ class CreateBatchPolicyRequest(BaseModel):
     permissive: bool = True
 
 
-async def get_rls_context(db: Session):
+async def get_rls_context(db: Session, project_id: Optional[str] = None):
     """Get project context for RLS operations (requires service key)"""
     from ..core.credential_resolver import get_supabase_context
-    return get_supabase_context(db, mode="builder")
+    return get_supabase_context(db, mode="builder", project_id=project_id)
 
 
 async def call_rls_function(function_name: str, params: dict, ctx: dict):
@@ -96,10 +99,15 @@ async def call_rls_function(function_name: str, params: dict, ctx: dict):
 # ============================================================
 
 @router.get("/policies/")
-async def list_policies(schema: str = Query("public"), db: Session = Depends(get_db)):
+async def list_policies(
+    schema: str = Query("public"), 
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """List all RLS policies in the schema"""
     try:
-        ctx = await get_rls_context(db)
+        project_id = tenant_ctx.active_project_id if tenant_ctx else None
+        ctx = await get_rls_context(db, project_id)
         
         policies = await call_rls_function('frontbase_list_rls_policies', {
             'p_schema_name': schema
@@ -117,10 +125,15 @@ async def list_policies(schema: str = Query("public"), db: Session = Depends(get
 
 
 @router.get("/tables/")
-async def get_tables_rls_status(schema: str = Query("public"), db: Session = Depends(get_db)):
+async def get_tables_rls_status(
+    schema: str = Query("public"), 
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Get RLS status for all tables"""
     try:
-        ctx = await get_rls_context(db)
+        project_id = tenant_ctx.active_project_id if tenant_ctx else None
+        ctx = await get_rls_context(db, project_id)
         
         tables = await call_rls_function('frontbase_get_rls_status', {
             'p_schema_name': schema
@@ -141,11 +154,13 @@ async def get_tables_rls_status(schema: str = Query("public"), db: Session = Dep
 async def get_table_policies(
     table_name: str, 
     schema: str = Query("public"), 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     """Get policies for a specific table"""
     try:
-        ctx = await get_rls_context(db)
+        project_id = tenant_ctx.active_project_id if tenant_ctx else None
+        ctx = await get_rls_context(db, project_id)
         
         all_policies = await call_rls_function('frontbase_list_rls_policies', {
             'p_schema_name': schema
@@ -165,10 +180,13 @@ async def get_table_policies(
 
 
 @router.post("/policies/")
-async def create_policy(request: CreatePolicyRequest, db: Session = Depends(get_db)):
+async def create_policy(request: CreatePolicyRequest, db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Create a new RLS policy"""
     try:
-        ctx = await get_rls_context(db)
+        project_id = tenant_ctx.active_project_id if tenant_ctx else None
+        ctx = await get_rls_context(db, project_id)
         
         result = await call_rls_function('frontbase_create_rls_policy', {
             'p_table_name': request.tableName,
@@ -234,11 +252,13 @@ async def update_policy(
     table_name: str,
     policy_name: str,
     request: UpdatePolicyRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     """Update an existing RLS policy"""
     try:
-        ctx = await get_rls_context(db)
+        project_id = tenant_ctx.active_project_id if tenant_ctx else None
+        ctx = await get_rls_context(db, project_id)
         
         result = await call_rls_function('frontbase_update_rls_policy', {
             'p_table_name': table_name,
@@ -269,11 +289,13 @@ async def update_policy(
 async def delete_policy(
     table_name: str,
     policy_name: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     """Delete an RLS policy"""
     try:
-        ctx = await get_rls_context(db)
+        project_id = tenant_ctx.active_project_id if tenant_ctx else None
+        ctx = await get_rls_context(db, project_id)
         
         result = await call_rls_function('frontbase_drop_rls_policy', {
             'p_table_name': table_name,
@@ -298,11 +320,13 @@ async def delete_policy(
 async def toggle_table_rls(
     table_name: str,
     request: ToggleRLSRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     """Enable or disable RLS on a table"""
     try:
-        ctx = await get_rls_context(db)
+        project_id = tenant_ctx.active_project_id if tenant_ctx else None
+        ctx = await get_rls_context(db, project_id)
         
         result = await call_rls_function('frontbase_toggle_table_rls', {
             'p_table_name': table_name,
@@ -328,10 +352,13 @@ async def toggle_table_rls(
 # ============================================================
 
 @router.post("/batch/")
-async def create_batch_policies(request: CreateBatchPolicyRequest, db: Session = Depends(get_db)):
+async def create_batch_policies(request: CreateBatchPolicyRequest, db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Create multiple RLS policies in a single HTTP request using batch RPC function"""
     try:
-        ctx = await get_rls_context(db)
+        project_id = tenant_ctx.active_project_id if tenant_ctx else None
+        ctx = await get_rls_context(db, project_id)
         
         # Build the policies array for the batch RPC call
         policies_array = []
@@ -387,10 +414,13 @@ class BulkDeleteRequest(BaseModel):
 
 
 @router.post("/bulk-delete/")
-async def bulk_delete_policies(request: BulkDeleteRequest, db: Session = Depends(get_db)):
+async def bulk_delete_policies(request: BulkDeleteRequest, db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Delete multiple RLS policies from Supabase in bulk"""
     try:
-        ctx = await get_rls_context(db)
+        project_id = tenant_ctx.active_project_id if tenant_ctx else None
+        ctx = await get_rls_context(db, project_id)
         ensure_rls_metadata_table(db)
         
         results = []
@@ -501,7 +531,9 @@ def ensure_rls_metadata_table(db: Session):
 
 
 @router.get("/metadata/")
-async def get_all_rls_metadata(db: Session = Depends(get_db)):
+async def get_all_rls_metadata(db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Get all stored RLS metadata for categorization by contact_type"""
     try:
         ensure_rls_metadata_table(db)
@@ -535,7 +567,8 @@ async def get_all_rls_metadata(db: Session = Depends(get_db)):
 async def get_rls_metadata(
     table_name: str,
     policy_name: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     """Get stored metadata for a policy"""
     try:
@@ -572,7 +605,9 @@ async def get_rls_metadata(
 
 
 @router.post("/metadata/")
-async def save_rls_metadata(request: RLSMetadataRequest, db: Session = Depends(get_db)):
+async def save_rls_metadata(request: RLSMetadataRequest, db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Save metadata when creating a policy"""
     try:
         sql_hash = generate_sql_hash(request.generatedUsing)
@@ -626,7 +661,8 @@ async def save_rls_metadata(request: RLSMetadataRequest, db: Session = Depends(g
 async def delete_rls_metadata(
     table_name: str,
     policy_name: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     """Delete metadata"""
     try:
@@ -647,7 +683,9 @@ async def delete_rls_metadata(
 
 
 @router.post("/metadata/verify/")
-async def verify_rls_metadata(request: VerifyRLSRequest, db: Session = Depends(get_db)):
+async def verify_rls_metadata(request: VerifyRLSRequest, db: Session = Depends(get_db),
+    tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
+):
     """Verify if a policy's current USING expression matches the stored hash"""
     try:
         result = db.execute(

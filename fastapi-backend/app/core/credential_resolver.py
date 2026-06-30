@@ -113,7 +113,7 @@ def get_provider_context_by_id(db: Session, provider_id: str) -> dict:
     }
 
 
-def get_supabase_context(db: Session, mode: str = "builder") -> dict:
+def get_supabase_context(db: Session, mode: str = "builder", project_id: Optional[str] = None) -> dict:
     """Get Supabase connection context (url, anon_key, auth_key).
 
     Priority:
@@ -124,12 +124,13 @@ def get_supabase_context(db: Session, mode: str = "builder") -> dict:
     Args:
         db: SQLAlchemy session
         mode: 'builder' uses service_role_key, 'public' uses anon_key
+        project_id: Required in cloud mode to prevent cross-tenant leakage.
 
     Returns:
         dict with keys: url, anon_key, auth_key, auth_method, source
     """
     # ── Try Connected Accounts first ──────────────────────────────────
-    ctx = _from_connected_accounts(db, mode)
+    ctx = _from_connected_accounts(db, mode, project_id)
     if ctx:
         return ctx
 
@@ -137,19 +138,20 @@ def get_supabase_context(db: Session, mode: str = "builder") -> dict:
     return _from_legacy_project_settings(db, mode)
 
 
-def _from_connected_accounts(db: Session, mode: str) -> Optional[dict]:
+def _from_connected_accounts(db: Session, mode: str, project_id: Optional[str] = None) -> Optional[dict]:
     """Try to get Supabase creds from EdgeProviderAccount."""
     from ..models.models import EdgeProviderAccount
     from .security import decrypt_credentials
 
-    provider = (
-        db.query(EdgeProviderAccount)
-        .filter(
-            EdgeProviderAccount.provider == "supabase",
-            EdgeProviderAccount.is_active == True,
-        )
-        .first()
+    query = db.query(EdgeProviderAccount).filter(
+        EdgeProviderAccount.provider == "supabase",
+        EdgeProviderAccount.is_active == True,
     )
+
+    if project_id:
+        query = query.filter(EdgeProviderAccount.project_id == project_id)
+
+    provider = query.first()
 
     if not provider:
         return None

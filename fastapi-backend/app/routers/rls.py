@@ -118,6 +118,11 @@ async def list_policies(
             "data": policies or []
         }
     except HTTPException as e:
+        if e.status_code == 404:
+            return {
+                "success": True,
+                "data": []
+            }
         raise e
     except Exception as e:
         print(f"List RLS policies error: {e}")
@@ -144,6 +149,11 @@ async def get_tables_rls_status(
             "data": tables or []
         }
     except HTTPException as e:
+        if e.status_code == 404:
+            return {
+                "success": True,
+                "data": []
+            }
         raise e
     except Exception as e:
         print(f"Get RLS table status error: {e}")
@@ -173,6 +183,11 @@ async def get_table_policies(
             "data": table_policies
         }
     except HTTPException as e:
+        if e.status_code == 404:
+            return {
+                "success": True,
+                "data": []
+            }
         raise e
     except Exception as e:
         print(f"Get table RLS policies error: {e}")

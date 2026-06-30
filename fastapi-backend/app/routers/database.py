@@ -141,9 +141,17 @@ async def get_table_data(
     db = SessionLocal()
     try:
         ctx = get_project_context_sync(db, mode)
-    except HTTPException:
+    except HTTPException as e:
         db.close()
-        raise
+        if e.status_code == 404:
+            return {
+                "success": True,
+                "message": "Data retrieved successfully",
+                "data": [],
+                "total": 0,
+                "authMethod": "anon"
+            }
+        raise e
     except Exception as e:
         db.close()
         print(f"Error getting project settings: {e}")
@@ -255,6 +263,10 @@ async def get_distinct_values(request: dict):
         ctx = get_project_context_sync(db, "builder")
         table_name = request.get("tableName")
         column = request.get("column")
+    except HTTPException as e:
+        if e.status_code == 404:
+            return {"success": True, "data": []}
+        raise e
     finally:
         db.close()  # RELEASE CONNECTION
 
@@ -425,6 +437,10 @@ async def get_supabase_tables():
     db = SessionLocal()
     try:
         ctx = get_project_context_sync(db, "builder")
+    except HTTPException as e:
+        if e.status_code == 404:
+            return {"success": True, "data": {"tables": []}}
+        raise e
     finally:
         db.close()  # RELEASE CONNECTION
 

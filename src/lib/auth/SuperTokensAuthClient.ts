@@ -1,5 +1,5 @@
 /**
- * JWTAuthClient - JWT Token Authentication
+ * SuperTokensAuthClient - JWT Token Authentication
  *
  * Implementation for cloud mode using JWT tokens with refresh token support.
  * Integrates with SuperTokens for automatic token refresh.
@@ -28,7 +28,7 @@ import { AuthError, AuthErrorType } from './AuthClient.interface';
 import { initSuperTokens } from '@/lib/supertokens';
 import Session from 'supertokens-web-js/recipe/session';
 
-export class JWTAuthClient implements AuthClient {
+export class SuperTokensAuthClient implements AuthClient {
   private config: AuthClientConfig;
   private initialized = false;
   private stateChangeListeners: Array<(session: AuthSession) => void> = [];
@@ -165,7 +165,7 @@ export class JWTAuthClient implements AuthClient {
         credentials: 'include',
       });
     } catch (error) {
-      console.error('[JWTAuthClient] Logout error:', error);
+      console.error('[SuperTokensAuthClient] Logout error:', error);
       // Ignore logout errors to ensure local state is still cleared
     }
 
@@ -746,7 +746,7 @@ export class JWTAuthClient implements AuthClient {
         callback(session);
       } catch (error) {
         if (this.config.debug) {
-          console.error('[JWTAuthClient] State change listener error:', error);
+          console.error('[SuperTokensAuthClient] State change listener error:', error);
         }
       }
     });

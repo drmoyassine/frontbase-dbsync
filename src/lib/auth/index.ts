@@ -31,7 +31,7 @@ export {
 
 // Implementations
 export { CookieAuthClient } from './CookieAuthClient';
-export { JWTAuthClient } from './JWTAuthClient';
+export { SuperTokensAuthClient } from './SuperTokensAuthClient';
 
 // Factory and utilities
 export {

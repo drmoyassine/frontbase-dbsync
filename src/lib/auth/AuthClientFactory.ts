@@ -15,7 +15,7 @@
 
 import type { AuthClient, AuthClientConfig } from './AuthClient.interface';
 import { CookieAuthClient } from './CookieAuthClient';
-import { JWTAuthClient } from './JWTAuthClient';
+import { SuperTokensAuthClient } from './SuperTokensAuthClient';
 import { SupabaseAuthClient } from './SupabaseAuthClient';
 import { isCloud } from '@/lib/edition';
 
@@ -65,8 +65,8 @@ export function createAuthClient(config?: Partial<AuthClientConfig>): AuthClient
     return new SupabaseAuthClient(finalConfig);
   }
 
-  // Default to SuperTokens (JWTAuthClient) for cloud mode
-  return new JWTAuthClient(finalConfig);
+  // Default to SuperTokens (SuperTokensAuthClient) for cloud mode
+  return new SuperTokensAuthClient(finalConfig);
 }
 
 /**

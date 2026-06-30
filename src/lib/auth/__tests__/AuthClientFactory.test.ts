@@ -54,28 +54,28 @@ describe('AuthClientFactory', () => {
       expect(client).toBeInstanceOf(SupabaseAuthClient);
     });
 
-    it('should return JWTAuthClient in cloud mode with SuperTokens provider', async () => {
+    it('should return SuperTokensAuthClient in cloud mode with SuperTokens provider', async () => {
       (import.meta as any).env.VITE_AUTH_PROVIDER = 'supertokens';
       mockIsCloud.mockReturnValue(true);
 
       const { createAuthClient } = await import('../AuthClientFactory');
-      const { JWTAuthClient } = await import('../JWTAuthClient');
+      const { SuperTokensAuthClient } = await import('../SuperTokensAuthClient');
 
       const client = createAuthClient();
 
-      expect(client).toBeInstanceOf(JWTAuthClient);
+      expect(client).toBeInstanceOf(SuperTokensAuthClient);
     });
 
-    it('should return JWTAuthClient as default in cloud mode when provider not set', async () => {
+    it('should return SuperTokensAuthClient as default in cloud mode when provider not set', async () => {
       mockIsCloud.mockReturnValue(true);
-      // Don't set AUTH_PROVIDER - should default to SuperTokens (JWTAuthClient)
+      // Don't set AUTH_PROVIDER - should default to SuperTokens (SuperTokensAuthClient)
 
       const { createAuthClient } = await import('../AuthClientFactory');
-      const { JWTAuthClient } = await import('../JWTAuthClient');
+      const { SuperTokensAuthClient } = await import('../SuperTokensAuthClient');
 
       const client = createAuthClient();
 
-      expect(client).toBeInstanceOf(JWTAuthClient);
+      expect(client).toBeInstanceOf(SuperTokensAuthClient);
     });
 
     it('should merge custom config with defaults', async () => {

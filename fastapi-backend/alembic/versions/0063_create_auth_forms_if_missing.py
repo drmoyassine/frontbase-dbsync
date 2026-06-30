@@ -1,7 +1,7 @@
 """Create auth_forms if missing
 
-Revision ID: 0040_create_auth_forms_if_missing
-Revises: 0039_add_component_themes_table
+Revision ID: 0063
+Revises: 0062
 Create Date: 2026-06-30
 
 """
@@ -12,8 +12,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '0040_create_auth_forms_if_missing'
-down_revision: Union[str, Sequence[str], None] = '0039_add_component_themes_table'
+revision: str = '0063'
+down_revision: Union[str, Sequence[str], None] = '0062'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

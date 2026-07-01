@@ -1,43 +1,80 @@
 import {
+  SupabaseAuthProvider
+} from "./chunk-OSAFID7E.js";
+import {
+  dataRoute,
+  executeDataRequest,
+  ipRateLimiter,
+  verifyCaptchaToken
+} from "./chunk-5XPU6Q4A.js";
+import "./chunk-EG74I4RR.js";
+import {
   getBlockedIpsAsync,
-  getBotProtection,
-  getBotProtectionAsync
-} from "./chunk-7VSIW6QK.js";
+  getBotProtection
+} from "./chunk-FBOPRGHB.js";
+import {
+  dispatchByMode
+} from "./chunk-PXC6Y5ZC.js";
+import {
+  QStashProvider,
+  executeSingleNode,
+  executeWorkflow,
+  getExecutionEventHub,
+  queueServiceReady,
+  registerQueueConsumers
+} from "./chunk-AN3PGA4B.js";
+import "./chunk-X3V6XZOJ.js";
+import {
+  vectorRoute
+} from "./chunk-YNGLDCNX.js";
 import {
   tenantMiddleware
 } from "./chunk-N3IK2FTA.js";
 import {
-  SupabaseAuthProvider
-} from "./chunk-G2JKDDT6.js";
-import {
   edgeLogsTable,
   ensureInitialized,
   getStateProvider,
-  init_IStateProvider,
-  isMultiTenantSlug,
+  init_schema,
+  init_storage,
   stateProvider
-} from "./chunk-XT6D4PKS.js";
+} from "./chunk-LMYJ5MDS.js";
+import "./chunk-HX3ZZUXN.js";
+import {
+  decryptSecret,
+  encryptSecret,
+  getVaultSystemKey,
+  init_edgeSecrets
+} from "./chunk-TBNZI2LZ.js";
 import {
   shouldDebounce
-} from "./chunk-5OO2Q5JL.js";
+} from "./chunk-UFHGU2A5.js";
 import {
   cacheProvider
-} from "./chunk-WSTEQZPX.js";
+} from "./chunk-TIUQQ77S.js";
 import {
+  getResilienceState,
+  init_resilience
+} from "./chunk-JFJ6MVIJ.js";
+import {
+  clearLazySecretCache,
   getAgentProfilesConfig,
   getApiKeysConfig,
+  getApiKeysConfigAsync,
+  getApiKeysConfigSync,
   getAuthConfig,
   getCacheConfig,
   getGpuModels,
   getQueueConfig,
+  getSecretTier,
   getStateDbConfig,
+  getVectorConfig,
   init_env,
   overrideApiKeysConfig,
   overrideCacheConfig,
-  overrideQueueConfig
-} from "./chunk-5Y7X2AYA.js";
+  overrideQueueConfig,
+  resetConfig
+} from "./chunk-5YJ43IHE.js";
 import {
-  cached,
   getRedis,
   initRedis,
   init_redis,
@@ -47,9 +84,6 @@ import {
   testConnection
 } from "./chunk-TRXWF3US.js";
 import {
-  handleDataQuery
-} from "./chunk-Z42UIXOU.js";
-import {
   __require
 } from "./chunk-KFQGP6VL.js";
 
@@ -57,11 +91,11 @@ import {
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { compress } from "hono/compress";
-import path from "path";
+import path2 from "path";
 import { fileURLToPath } from "url";
 
 // src/engine/lite.ts
-import { OpenAPIHono as OpenAPIHono16 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono19 } from "@hono/zod-openapi";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
@@ -82,6 +116,7 @@ function getPlatform() {
 }
 
 // src/routes/health.ts
+init_resilience();
 var startedAt = Date.now();
 var healthRoute = new OpenAPIHono();
 var PING_TIMEOUT_MS = 2e4;
@@ -91,8 +126,60 @@ function withTimeout(promise, ms) {
     new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))
   ]);
 }
+async function checkVault() {
+  const disabled = {
+    enabled: false,
+    status: "disabled",
+    secretCount: 0,
+    lastWriteAt: null,
+    keyValid: false
+  };
+  try {
+    const { getVaultSystemKey: getVaultSystemKey2, decryptSecret: decryptSecret2 } = await import("./edgeSecrets-OXDV32FC.js");
+    const { stateProvider: stateProvider2 } = await import("./storage-XY65Z4YO.js");
+    const systemKey = getVaultSystemKey2();
+    if (!systemKey || typeof stateProvider2.listEdgeSecrets !== "function") {
+      return disabled;
+    }
+    const metas = await stateProvider2.listEdgeSecrets();
+    if (metas.length === 0) {
+      return { ...disabled, enabled: true, status: "empty", keyValid: !!systemKey };
+    }
+    const sortedByRecent = [...metas].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const sampleSize = Math.min(3, sortedByRecent.length);
+    const samples = sortedByRecent.slice(0, sampleSize);
+    let keyValid = true;
+    let corruptCount = 0;
+    for (const sample of samples) {
+      try {
+        const row = await stateProvider2.getEdgeSecret?.(sample.name);
+        if (row) await decryptSecret2(row.value, systemKey);
+        else {
+          corruptCount++;
+          keyValid = false;
+        }
+      } catch {
+        corruptCount++;
+        keyValid = false;
+      }
+    }
+    const isHealthy = corruptCount === 0;
+    const isDegraded = corruptCount > 0 && corruptCount < sampleSize;
+    const status = isHealthy ? "healthy" : corruptCount >= sampleSize ? "unhealthy" : "degraded";
+    const latest = sortedByRecent[0];
+    return {
+      enabled: true,
+      status,
+      secretCount: metas.length,
+      lastWriteAt: latest.updatedAt,
+      keyValid: isHealthy
+    };
+  } catch {
+    return { ...disabled, enabled: true, status: "unhealthy" };
+  }
+}
 async function checkStateDb() {
-  const { getStateDbConfig: getStateDbConfig2 } = await import("./env-YBQ7MHV3.js");
+  const { getStateDbConfig: getStateDbConfig2 } = await import("./env-UIMF3Y6O.js");
   const cfg = getStateDbConfig2();
   if (cfg.provider === "local" && !cfg.url) {
     return { provider: "none", status: "not_configured" };
@@ -103,7 +190,7 @@ async function checkStateDb() {
   };
   if (cfg.schema) result.schema = cfg.schema;
   try {
-    const { stateProvider: stateProvider2 } = await import("./storage-6KFPNL4N.js");
+    const { stateProvider: stateProvider2 } = await import("./storage-XY65Z4YO.js");
     await withTimeout(stateProvider2.listPages(), PING_TIMEOUT_MS);
     result.status = "ok";
   } catch (e) {
@@ -113,13 +200,13 @@ async function checkStateDb() {
   return result;
 }
 async function checkCache() {
-  const { getCacheConfig: getCacheConfig2 } = await import("./env-YBQ7MHV3.js");
+  const { getCacheConfig: getCacheConfig2 } = await import("./env-UIMF3Y6O.js");
   const cfg = getCacheConfig2();
   if (cfg.provider === "none" && !cfg.url) {
     return { provider: "none", status: "not_configured" };
   }
   try {
-    const { cacheProvider: cacheProvider2 } = await import("./cache-O2IECQQT.js");
+    const { cacheProvider: cacheProvider2 } = await import("./cache-IW7Y3WEC.js");
     await withTimeout(cacheProvider2.get("__health_check__"), PING_TIMEOUT_MS);
     return { provider: cfg.provider || "redis", status: "ok" };
   } catch (e) {
@@ -131,7 +218,7 @@ async function checkCache() {
   }
 }
 async function checkQueue() {
-  const { getQueueConfig: getQueueConfig3 } = await import("./env-YBQ7MHV3.js");
+  const { getQueueConfig: getQueueConfig3 } = await import("./env-UIMF3Y6O.js");
   const cfg = getQueueConfig3();
   if (cfg.provider === "none" && !cfg.token && !cfg.url) {
     return { provider: "none", status: "not_configured" };
@@ -166,7 +253,23 @@ var route = createRoute({
               stateDb: bindingSchema,
               cache: bindingSchema,
               queue: bindingSchema
-            })
+            }),
+            resilience: z.object({
+              stateDb: z.any().optional(),
+              cache: z.any().optional(),
+              ttlMultiplier: z.number().optional(),
+              cacheStats: z.object({
+                hits: z.number(),
+                misses: z.number()
+              }).optional()
+            }).optional(),
+            vault: z.object({
+              enabled: z.boolean(),
+              status: z.enum(["healthy", "unhealthy", "degraded", "empty", "disabled"]),
+              secretCount: z.number(),
+              lastWriteAt: z.string().nullable(),
+              keyValid: z.boolean()
+            }).optional()
           })
         }
       }
@@ -193,19 +296,23 @@ healthRoute.openapi(route, async (c) => {
   }
   const platform = getPlatform();
   const isServerless = platform !== "docker";
-  const [stateDb, cache, queue] = await Promise.all([
+  const [stateDb, cache, queue, vault] = await Promise.all([
     checkStateDb(),
     checkCache(),
-    checkQueue()
+    checkQueue(),
+    checkVault()
   ]);
+  const overall = vault.status === "unhealthy" || vault.status === "degraded" ? "degraded" : "ok";
   return c.json({
-    status: "ok",
+    status: overall,
     service: "frontbase-edge",
     version: "0.1.0",
     provider: platform,
     ...isServerless ? {} : { uptime_seconds: Math.floor((Date.now() - startedAt) / 1e3) },
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-    bindings: { stateDb, cache, queue }
+    bindings: { stateDb, cache, queue },
+    resilience: getResilienceState(),
+    vault
   });
 });
 
@@ -301,6 +408,7 @@ manifestRoute.get("/", (c) => {
 });
 
 // src/routes/deploy.ts
+init_storage();
 import { OpenAPIHono as OpenAPIHono3, createRoute as createRoute2, z as z3 } from "@hono/zod-openapi";
 
 // src/schemas/workflow.ts
@@ -309,7 +417,8 @@ var TriggerTypeSchema = z2.enum([
   "manual",
   "http_webhook",
   "scheduled",
-  "data_change"
+  "data_change",
+  "ui_event"
 ]).openapi("TriggerType");
 var ExecutionStatusSchema = z2.enum([
   "started",
@@ -434,10 +543,196 @@ var ErrorResponseSchema = z2.object({
   message: z2.string(),
   details: z2.any().optional()
 }).openapi("ErrorResponse");
+var ConnectionValidationResultSchema = z2.object({
+  isValid: z2.boolean(),
+  edgeId: z2.string().optional(),
+  error: z2.string().optional(),
+  sourceNodeId: z2.string(),
+  targetNodeId: z2.string(),
+  sourceOutput: z2.string().optional(),
+  targetInput: z2.string().optional(),
+  sourceType: z2.string(),
+  targetType: z2.string()
+}).openapi("ConnectionValidationResult");
+var WorkflowValidationErrorSchema = z2.object({
+  type: z2.enum(["invalid_connection", "missing_trigger", "orphan_node", "circular_dependency"]),
+  message: z2.string(),
+  edgeId: z2.string().optional(),
+  nodeId: z2.string().optional()
+}).openapi("WorkflowValidationError");
+var WorkflowValidationWarningSchema = z2.object({
+  type: z2.enum(["type_coercion", "unused_output", "missing_input"]),
+  message: z2.string()
+}).openapi("WorkflowValidationWarning");
+var WorkflowValidationResultSchema = z2.object({
+  isValid: z2.boolean(),
+  errors: z2.array(WorkflowValidationErrorSchema),
+  warnings: z2.array(WorkflowValidationWarningSchema)
+}).openapi("WorkflowValidationResult");
 var SuccessResponseSchema = z2.object({
   success: z2.boolean(),
   message: z2.string()
 }).openapi("SuccessResponse");
+
+// src/engine/executionGuards.ts
+init_redis();
+
+// src/engine/concurrency.ts
+async function acquireConcurrency(workflowId, limit) {
+  if (limit <= 0) return true;
+  try {
+    const key = `wf:${workflowId}:concurrency`;
+    const current = await cacheProvider.incr(key);
+    if (current === 1) {
+      await cacheProvider.expire(key, 300);
+    }
+    if (current > limit) {
+      await cacheProvider.decr(key);
+      return false;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+async function releaseConcurrency(workflowId) {
+  try {
+    const key = `wf:${workflowId}:concurrency`;
+    await cacheProvider.decr(key);
+  } catch {
+  }
+}
+
+// src/engine/executionGuards.ts
+async function acquireExecutionGuards(workflowId, settings, opts = {}) {
+  const noop = () => {
+  };
+  const blocked = (error, message) => ({
+    allowed: false,
+    status: 429,
+    body: { error, message },
+    release: noop
+  });
+  const rateLimitMax = settings.rate_limit_max || 60;
+  const cooldownMs = settings.cooldown_ms || 0;
+  const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1e3);
+  const concurrencyLimit = settings.concurrency_limit || 0;
+  const timeoutMs = settings.execution_timeout_ms || 3e4;
+  if (cooldownMs > 0) {
+    try {
+      const existing = await cacheProvider.get(`wf:${workflowId}:cooldown`);
+      if (existing) {
+        return blocked("CoolDown", `Workflow ${workflowId} is cooling down. Try again later.`);
+      }
+      const timeoutSec = Math.ceil(timeoutMs / 1e3);
+      await cacheProvider.setex(`wf:${workflowId}:cooldown`, timeoutSec, "running");
+    } catch {
+    }
+  }
+  if (debounceSec > 0) {
+    try {
+      const { shouldDebounce: shouldDebounce2 } = await import("./debounce-U67KC546.js");
+      if (await shouldDebounce2(workflowId, debounceSec)) {
+        return blocked("Debounced", `Workflow ${workflowId} was triggered too recently.`);
+      }
+    } catch {
+    }
+  }
+  if (opts.rateLimitAlwaysOn || settings.rate_limit_enabled !== false) {
+    try {
+      const { allowed, remaining } = await rateLimit(
+        `wf:${workflowId}:rate:${Math.floor(Date.now() / 6e4)}`,
+        rateLimitMax,
+        60
+      );
+      if (!allowed) {
+        return blocked("RateLimited", `Workflow ${workflowId} rate limit exceeded (${rateLimitMax}/min).`);
+      }
+      void remaining;
+    } catch {
+    }
+  }
+  if (concurrencyLimit > 0) {
+    try {
+      const acquired = await acquireConcurrency(workflowId, concurrencyLimit);
+      if (!acquired) {
+        return blocked("ConcurrencyLimitExceeded", `Workflow ${workflowId} reached its concurrency limit.`);
+      }
+      return { allowed: true, release: () => releaseConcurrency(workflowId) };
+    } catch {
+    }
+  }
+  return { allowed: true, release: noop };
+}
+function isSchedulerConfigured() {
+  return !!(process.env.QSTASH_TOKEN || process.env.BULLMQ_REDIS_URL);
+}
+
+// src/engine/scheduler.ts
+var DC_JOB = (workflowId) => `dc:${workflowId}`;
+var SCHEDULED_JOB = (workflowId) => `sched:${workflowId}`;
+function pollingIntervalToCron(seconds) {
+  const minutes = Math.max(1, Math.ceil((seconds || 60) / 60));
+  return `*/${minutes} * * * *`;
+}
+function parseTriggerConfig(workflow) {
+  try {
+    return workflow.triggerConfig ? JSON.parse(workflow.triggerConfig) : {};
+  } catch {
+    return {};
+  }
+}
+function needsSchedule(triggerType) {
+  const types = (triggerType || "").split(",").map((t) => t.trim().toLowerCase());
+  return {
+    dataChange: types.includes("data_change"),
+    scheduled: types.includes("scheduled")
+  };
+}
+async function scheduleWorkflowTriggers(workflow) {
+  const queue = await queueServiceReady;
+  if (!queue.schedule) throw new Error("Scheduler not available (provider has no schedule())");
+  const cfg = parseTriggerConfig(workflow);
+  const { dataChange, scheduled } = needsSchedule(workflow.triggerType);
+  const handles = [];
+  if (dataChange) {
+    const intervalSec = Number(cfg.pollingInterval ?? 30);
+    handles.push(await queue.schedule(DC_JOB(workflow.id), { workflowId: workflow.id }, { cron: pollingIntervalToCron(intervalSec) }));
+  }
+  if (scheduled) {
+    const cron = cfg.cronExpression || cfg.cron || "* * * * *";
+    handles.push(await queue.schedule(SCHEDULED_JOB(workflow.id), { workflowId: workflow.id }, { cron }));
+  }
+  return handles;
+}
+async function unscheduleWorkflowTriggers(handles) {
+  const queue = await queueServiceReady;
+  if (!queue.unschedule) return;
+  for (const h of handles) {
+    try {
+      await queue.unschedule(h.scheduleId);
+    } catch {
+    }
+  }
+}
+function withScheduleMeta(settings, handles) {
+  let parsed = {};
+  try {
+    parsed = settings ? JSON.parse(settings) : {};
+  } catch {
+    parsed = {};
+  }
+  parsed.schedules = handles;
+  return JSON.stringify(parsed);
+}
+function readScheduleMeta(settings) {
+  try {
+    const parsed = settings ? JSON.parse(settings) : {};
+    return Array.isArray(parsed.schedules) ? parsed.schedules : [];
+  } catch {
+    return [];
+  }
+}
 
 // src/routes/deploy.ts
 var deployRoute = new OpenAPIHono3();
@@ -481,6 +776,38 @@ var route2 = createRoute2({
 deployRoute.openapi(route2, async (c) => {
   try {
     const body = c.req.valid("json");
+    const tenantSlug = body.tenantSlug || "_default";
+    if (needsSchedule(body.triggerType).dataChange || needsSchedule(body.triggerType).scheduled) {
+      if (!isSchedulerConfigured()) {
+        return c.json({
+          error: "SchedulerNotConfigured",
+          message: "This workflow uses a scheduled/data_change trigger, but no scheduler is configured (set QSTASH_TOKEN or BULLMQ_REDIS_URL)."
+        }, 400);
+      }
+    }
+    const existing = await stateProvider.getWorkflowById(body.id, tenantSlug);
+    if (existing) {
+      const oldHandles = readScheduleMeta(existing.settings);
+      if (oldHandles.length) await unscheduleWorkflowTriggers(oldHandles);
+    }
+    let settingsRaw = body.settings ? JSON.stringify(body.settings) : null;
+    if (needsSchedule(body.triggerType).dataChange || needsSchedule(body.triggerType).scheduled) {
+      const preWorkflow = {
+        id: body.id,
+        name: body.name,
+        triggerType: body.triggerType,
+        triggerConfig: JSON.stringify(body.triggerConfig || {})
+      };
+      try {
+        const handles = await scheduleWorkflowTriggers(preWorkflow);
+        settingsRaw = withScheduleMeta(settingsRaw, handles);
+      } catch (err) {
+        return c.json({
+          error: "ScheduleRegistrationFailed",
+          message: err.message || "Failed to register trigger schedule."
+        }, 400);
+      }
+    }
     const workflow = {
       id: body.id,
       name: body.name,
@@ -489,9 +816,9 @@ deployRoute.openapi(route2, async (c) => {
       triggerConfig: JSON.stringify(body.triggerConfig || {}),
       nodes: JSON.stringify(body.nodes),
       edges: JSON.stringify(body.edges),
-      settings: body.settings ? JSON.stringify(body.settings) : null,
+      settings: settingsRaw,
       publishedBy: body.publishedBy || null,
-      tenantSlug: body.tenantSlug || "_default",
+      tenantSlug,
       version: 1,
       isActive: body.isActive ?? true,
       createdAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -514,594 +841,9 @@ deployRoute.openapi(route2, async (c) => {
 });
 
 // src/routes/execute.ts
+init_storage();
 import { OpenAPIHono as OpenAPIHono4, createRoute as createRoute3, z as z4 } from "@hono/zod-openapi";
 import { v4 as uuidv4 } from "uuid";
-
-// src/engine/checkpoint.ts
-var CHECKPOINT_TTL = 3600;
-function checkpointKey(executionId) {
-  return `exec:${executionId}:checkpoint`;
-}
-async function saveCheckpoint(cp) {
-  try {
-    await cacheProvider.setex(
-      checkpointKey(cp.executionId),
-      CHECKPOINT_TTL,
-      JSON.stringify(cp)
-    );
-  } catch {
-  }
-}
-async function loadCheckpoint(executionId) {
-  try {
-    const data = await cacheProvider.get(checkpointKey(executionId));
-    if (!data) return null;
-    if (typeof data === "string") return JSON.parse(data);
-    return data;
-  } catch {
-    return null;
-  }
-}
-async function clearCheckpoint(executionId) {
-  try {
-    await cacheProvider.del(checkpointKey(executionId));
-  } catch {
-  }
-}
-
-// src/engine/logger.ts
-function createWorkflowLogger(level = "all", prefix = "[Workflow]") {
-  return {
-    info: (msg, ...args) => {
-      if (level === "all") console.log(prefix, msg, ...args);
-    },
-    error: (msg, ...args) => {
-      if (level !== "none") console.error(prefix, msg, ...args);
-    },
-    warn: (msg, ...args) => {
-      if (level !== "none") console.warn(prefix, msg, ...args);
-    }
-  };
-}
-
-// src/engine/node-executors.ts
-async function executeNode(node, inputs, context) {
-  switch (node.type) {
-    case "trigger":
-    case "manual_trigger":
-      return { ...inputs };
-    case "data_request":
-      return await executeDataRequest(node, inputs);
-    case "http_request":
-      return await executeHttpRequest(node, inputs);
-    case "transform":
-    case "json_transform":
-      return executeTransform(node, inputs);
-    case "condition":
-    case "if":
-      return executeCondition(node, inputs);
-    case "log":
-    case "console":
-      console.log(`[Node ${node.id}]:`, inputs);
-      return { logged: true, data: inputs };
-    case "set_variable":
-    case "setVariable": {
-      const nodeInputs = node.inputs || [];
-      const getVal = (name) => {
-        const inp = nodeInputs.find((i) => i.name === name);
-        return inp?.value !== void 0 ? inp.value : inputs[name];
-      };
-      const scope = getVal("scope") || "local";
-      const key = getVal("key");
-      const rawValue = getVal("value");
-      let evaluatedValue = rawValue;
-      if (typeof rawValue === "string") {
-        try {
-          evaluatedValue = safeEval(rawValue, inputs);
-        } catch (e) {
-          evaluatedValue = rawValue;
-        }
-      }
-      if (context.variableMutations) {
-        context.variableMutations.push({
-          scope,
-          key,
-          value: evaluatedValue
-        });
-      }
-      console.log(`[Set Variable Node] scope=${scope}, key=${key}, value=`, evaluatedValue);
-      return { scope, key, value: evaluatedValue };
-    }
-    case "http_response": {
-      const nodeInputs = node.inputs || [];
-      const getVal = (name) => {
-        const inp = nodeInputs.find((i) => i.name === name);
-        return inp?.value !== void 0 ? inp.value : inputs[name];
-      };
-      return {
-        statusCode: getVal("statusCode") || 200,
-        body: getVal("body") ?? inputs,
-        headers: getVal("headers"),
-        contentType: getVal("contentType") || "application/json"
-      };
-    }
-    default:
-      console.warn(`Unknown node type: ${node.type}`);
-      return { ...inputs };
-  }
-}
-async function executeDataRequest(node, inputs) {
-  const BACKEND_URL2 = process.env.BACKEND_URL || "http://localhost:8000";
-  const nodeData = node.data || {};
-  const nodeInputs = nodeData.inputs || node.inputs || [];
-  const getInputValue = (name) => {
-    if (Array.isArray(nodeInputs)) {
-      const input = nodeInputs.find((i) => i.name === name);
-      if (input?.value !== void 0) return input.value;
-    }
-    if (nodeData[name] !== void 0) return nodeData[name];
-    return inputs[name];
-  };
-  const dataSource = getInputValue("dataSource");
-  const table = getInputValue("table");
-  const operation = getInputValue("operation") || "select";
-  const selectFields = getInputValue("selectFields") || [];
-  const whereConditions = getInputValue("whereConditions") || [];
-  const limit = getInputValue("limit") || 100;
-  const returnData = getInputValue("returnData") !== false;
-  console.log(`[Data Request] table=${table}, operation=${operation}`);
-  if (!table) {
-    return {
-      success: false,
-      error: "Table is required",
-      data: [],
-      rowCount: 0
-    };
-  }
-  try {
-    let selectParam = "*";
-    if (Array.isArray(selectFields) && selectFields.length > 0) {
-      selectParam = selectFields.map((f) => f.key || f.name || f).filter(Boolean).join(",") || "*";
-    }
-    const queryUrl = new URL(`${BACKEND_URL2}/api/database/table-data/${table}/`);
-    queryUrl.searchParams.set("limit", String(limit));
-    queryUrl.searchParams.set("select", selectParam);
-    queryUrl.searchParams.set("mode", "builder");
-    if (Array.isArray(whereConditions) && whereConditions.length > 0) {
-      whereConditions.forEach((condition) => {
-        if (condition.key && condition.value !== void 0) {
-          queryUrl.searchParams.set(`filter_${condition.key}`, String(condition.value));
-        }
-      });
-    }
-    console.log(`[Data Request] Fetching: ${queryUrl.toString()}`);
-    const response = await fetch(queryUrl.toString(), {
-      method: "GET",
-      headers: { "Content-Type": "application/json" }
-    });
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[Data Request] Error: ${response.status} - ${errorText}`);
-      return {
-        success: false,
-        error: `Query failed: ${response.status} - ${errorText}`,
-        data: [],
-        rowCount: 0
-      };
-    }
-    const result = await response.json();
-    const data = returnData ? result.data || result.rows || [] : [];
-    const total = result.total || data.length;
-    console.log(`[Data Request] Success: ${data.length} rows (total: ${total})`);
-    return {
-      success: true,
-      data,
-      rowCount: data.length,
-      total
-    };
-  } catch (error) {
-    console.error(`[Data Request] Error:`, error);
-    return {
-      success: false,
-      error: error.message || "Query execution failed",
-      data: [],
-      rowCount: 0
-    };
-  }
-}
-async function executeHttpRequest(node, inputs) {
-  const nodeInputs = node.inputs || [];
-  const url = inputs.url || nodeInputs.find((i) => i.name === "url")?.value;
-  const method = inputs.method || nodeInputs.find((i) => i.name === "method")?.value || "GET";
-  const headers = inputs.headers || nodeInputs.find((i) => i.name === "headers")?.value || {};
-  const body = inputs.body || nodeInputs.find((i) => i.name === "body")?.value;
-  const response = await fetch(url, {
-    method,
-    headers: { "Content-Type": "application/json", ...headers },
-    body: body ? JSON.stringify(body) : void 0
-  });
-  const data = await response.json().catch(() => response.text());
-  return {
-    status: response.status,
-    ok: response.ok,
-    data
-  };
-}
-function normalizeExpression(expr) {
-  return expr.replace(/\[['"]([^'"]+)['"]\]/g, ".$1").replace(/\[(\d+)\]/g, ".$1");
-}
-function getPath(obj, path2) {
-  const parts = path2.trim().split(".");
-  let current = obj;
-  for (const part of parts) {
-    if (current === null || current === void 0) return void 0;
-    current = current[part];
-  }
-  return current;
-}
-function safeEval(expression, data) {
-  expression = normalizeExpression(expression.trim());
-  if (expression === "true") return true;
-  if (expression === "false") return false;
-  if (expression === "null") return null;
-  if (expression === "undefined") return void 0;
-  if (/^\d+(\.\d+)?$/.test(expression)) {
-    return Number(expression);
-  }
-  const stringMatch = expression.match(/^['"](.*)['"]$/);
-  if (stringMatch) {
-    return stringMatch[1];
-  }
-  if (expression.startsWith("!")) {
-    return !safeEval(expression.substring(1), data);
-  }
-  if (expression.includes("||")) {
-    const parts = expression.split("||");
-    for (const part of parts) {
-      const val = safeEval(part, data);
-      if (val) return val;
-    }
-    return safeEval(parts[parts.length - 1], data);
-  }
-  if (expression.includes("&&")) {
-    const parts = expression.split("&&");
-    let val = true;
-    for (const part of parts) {
-      val = safeEval(part, data);
-      if (!val) return val;
-    }
-    return val;
-  }
-  const operators = ["===", "!==", "==", "!=", ">=", "<=", ">", "<"];
-  for (const op of operators) {
-    if (expression.includes(op)) {
-      const parts = expression.split(op).map((p) => p.trim());
-      if (parts.length === 2) {
-        const left = safeEval(parts[0], data);
-        const right = safeEval(parts[1], data);
-        switch (op) {
-          case "===":
-          case "==":
-            return left === right;
-          case "!==":
-          case "!=":
-            return left !== right;
-          case ">=":
-            return left >= right;
-          case "<=":
-            return left <= right;
-          case ">":
-            return left > right;
-          case "<":
-            return left < right;
-        }
-      }
-    }
-  }
-  if (expression === "data") return data;
-  if (expression.startsWith("data.")) {
-    return getPath({ data }, expression);
-  }
-  return getPath(data, expression);
-}
-function executeTransform(node, inputs) {
-  const expression = (node.inputs || []).find((i) => i.name === "expression")?.value;
-  if (expression && typeof expression === "string") {
-    try {
-      return { result: safeEval(expression, inputs) };
-    } catch (e) {
-      return { result: inputs, error: "Transform expression failed" };
-    }
-  }
-  return { result: inputs };
-}
-function executeCondition(node, inputs) {
-  const condition = (node.inputs || []).find((i) => i.name === "condition")?.value;
-  let result = false;
-  if (condition && typeof condition === "string") {
-    try {
-      result = !!safeEval(condition, inputs);
-    } catch (e) {
-      result = false;
-    }
-  }
-  return { result, branch: result ? "true" : "false", data: inputs };
-}
-function updateNodeStatus(context, nodeId, status, outputs, error) {
-  const execution = context.nodeExecutions.find((n) => n.nodeId === nodeId);
-  if (execution) {
-    execution.status = status;
-    if (outputs) execution.outputs = outputs;
-    if (error) execution.error = error;
-  }
-}
-async function updateExecutionStatus(executionId, status, nodeExecutions, stateProvider2) {
-  await stateProvider2.updateExecution(executionId, {
-    status,
-    nodeExecutions: JSON.stringify(nodeExecutions)
-  });
-}
-
-// src/engine/runtime.ts
-async function executeWorkflow(executionId, workflow, inputParameters, settings) {
-  const s = settings || (workflow.settings ? JSON.parse(workflow.settings) : {});
-  const timeoutMs = s.execution_timeout_ms || 3e4;
-  const cooldownMs = s.cooldown_ms || 0;
-  const tz = s.timezone || "UTC";
-  const log = createWorkflowLogger(s.log_level || "all", `[Workflow:${executionId.slice(0, 8)}]`);
-  const formatTime = () => {
-    try {
-      return (/* @__PURE__ */ new Date()).toLocaleString("sv-SE", { timeZone: tz }).replace(" ", "T");
-    } catch {
-      return (/* @__PURE__ */ new Date()).toISOString();
-    }
-  };
-  const nodes = JSON.parse(workflow.nodes);
-  const edges = JSON.parse(workflow.edges);
-  const context = {
-    executionId,
-    workflowId: workflow.id,
-    parameters: inputParameters,
-    nodeOutputs: {},
-    nodeExecutions: nodes.map((n) => ({
-      nodeId: n.id,
-      status: "idle"
-    })),
-    variableMutations: []
-  };
-  async function coreExecute() {
-    try {
-      const checkpoint = await loadCheckpoint(executionId);
-      const executed = /* @__PURE__ */ new Set();
-      if (checkpoint) {
-        log.info(`Resuming from checkpoint (${checkpoint.completedNodes.length} nodes done)`);
-        for (const nodeId of checkpoint.completedNodes) {
-          executed.add(nodeId);
-        }
-        Object.assign(context.nodeOutputs, checkpoint.nodeOutputs);
-        context.nodeExecutions = checkpoint.nodeExecutions;
-      }
-      await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
-      const targetNodeIds = new Set(edges.map((e) => e.target));
-      const startNodes = nodes.filter((n) => !targetNodeIds.has(n.id));
-      const queue = [...startNodes.map((n) => n.id)];
-      while (queue.length > 0) {
-        const nodeId = queue.shift();
-        if (executed.has(nodeId)) {
-          const outgoingEdges = edges.filter((e) => e.source === nodeId);
-          for (const edge of outgoingEdges) {
-            if (!executed.has(edge.target)) {
-              queue.push(edge.target);
-            }
-          }
-          continue;
-        }
-        const node = nodes.find((n) => n.id === nodeId);
-        if (!node) continue;
-        const incomingEdges = edges.filter((e) => e.target === nodeId);
-        const dependenciesMet = incomingEdges.every((e) => executed.has(e.source));
-        if (!dependenciesMet) {
-          queue.push(nodeId);
-          continue;
-        }
-        const inputs = {};
-        for (const edge of incomingEdges) {
-          const sourceOutputs = context.nodeOutputs[edge.source] || {};
-          if (edge.targetInput && edge.sourceOutput) {
-            inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
-          }
-        }
-        if (startNodes.some((n) => n.id === nodeId)) {
-          Object.assign(inputs, context.parameters);
-        }
-        try {
-          updateNodeStatus(context, nodeId, "executing");
-          const outputs = await executeNode(node, inputs, context);
-          context.nodeOutputs[nodeId] = outputs;
-          updateNodeStatus(context, nodeId, "completed", outputs);
-          executed.add(nodeId);
-          log.info(`Node ${node.type || nodeId} completed`);
-          await saveCheckpoint({
-            executionId,
-            workflowId: workflow.id,
-            completedNodes: Array.from(executed),
-            nodeOutputs: context.nodeOutputs,
-            nodeExecutions: context.nodeExecutions
-          });
-          const outgoingEdges = edges.filter((e) => e.source === nodeId);
-          for (const edge of outgoingEdges) {
-            if (!executed.has(edge.target)) {
-              queue.push(edge.target);
-            }
-          }
-        } catch (error) {
-          updateNodeStatus(context, nodeId, "error", void 0, error.message);
-          log.error(`Node ${node?.type || nodeId} failed: ${error.message}`);
-          throw error;
-        }
-      }
-      const sourceNodeIds = new Set(edges.map((e) => e.source));
-      const endNodes = nodes.filter((n) => !sourceNodeIds.has(n.id));
-      const result = {};
-      for (const node of endNodes) {
-        result[node.id] = context.nodeOutputs[node.id];
-      }
-      const responseNode = endNodes.find((n) => n.type === "http_response");
-      let httpResponse = void 0;
-      if (responseNode && context.nodeOutputs[responseNode.id]) {
-        const out = context.nodeOutputs[responseNode.id];
-        httpResponse = {
-          statusCode: out.statusCode || 200,
-          body: out.body,
-          headers: out.headers,
-          contentType: out.contentType || "application/json"
-        };
-      }
-      await stateProvider.updateExecution(executionId, {
-        status: "completed",
-        nodeExecutions: JSON.stringify(context.nodeExecutions),
-        result: JSON.stringify(result),
-        endedAt: formatTime()
-      });
-      await clearCheckpoint(executionId);
-      if (cooldownMs > 0) {
-        try {
-          const cooldownSec = Math.ceil(cooldownMs / 1e3);
-          await cacheProvider.setex(`wf:${workflow.id}:cooldown`, cooldownSec, "1");
-        } catch {
-        }
-      }
-      log.info(`Execution completed (${executed.size} nodes)`);
-      return { status: "completed", result, httpResponse, variableMutations: context.variableMutations };
-    } catch (error) {
-      if (s.dlq_enabled) {
-        try {
-          await stateProvider.createDeadLetter?.({
-            id: crypto.randomUUID?.() || executionId + "-dlq",
-            workflowId: workflow.id,
-            executionId,
-            error: error.message,
-            payload: JSON.stringify(inputParameters)
-          });
-        } catch {
-        }
-      }
-      await stateProvider.updateExecution(executionId, {
-        status: "error",
-        nodeExecutions: JSON.stringify(context.nodeExecutions),
-        error: error.message,
-        endedAt: formatTime()
-      });
-      log.error(`Execution failed: ${error.message}`);
-      return { status: "error", result: {}, error: error.message, variableMutations: context.variableMutations };
-    }
-  }
-  const timeoutPromise = new Promise(
-    (_, reject) => setTimeout(() => reject(new Error(
-      `Execution timed out after ${timeoutMs}ms`
-    )), timeoutMs)
-  );
-  return Promise.race([coreExecute(), timeoutPromise]);
-}
-async function executeSingleNode(executionId, workflow, targetNodeId, inputParameters) {
-  const nodes = JSON.parse(workflow.nodes);
-  const edges = JSON.parse(workflow.edges);
-  const targetNode = nodes.find((n) => n.id === targetNodeId);
-  if (!targetNode) {
-    throw new Error(`Node ${targetNodeId} not found in workflow`);
-  }
-  const context = {
-    executionId,
-    workflowId: workflow.id,
-    parameters: inputParameters,
-    nodeOutputs: {},
-    nodeExecutions: [],
-    variableMutations: []
-  };
-  try {
-    await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
-    const upstreamNodes = getUpstreamNodes(targetNodeId, nodes, edges);
-    const nodesToExecute = [...upstreamNodes, targetNodeId];
-    context.nodeExecutions = nodesToExecute.map((nodeId) => ({
-      nodeId,
-      status: "idle"
-    }));
-    const executed = /* @__PURE__ */ new Set();
-    const queue = [...nodesToExecute];
-    while (queue.length > 0) {
-      const nodeId = queue.shift();
-      if (executed.has(nodeId)) continue;
-      const node = nodes.find((n) => n.id === nodeId);
-      if (!node) continue;
-      const incomingEdges = edges.filter((e) => e.target === nodeId);
-      const dependenciesMet = incomingEdges.every(
-        (e) => !nodesToExecute.includes(e.source) || executed.has(e.source)
-      );
-      if (!dependenciesMet) {
-        queue.push(nodeId);
-        continue;
-      }
-      const inputs = {};
-      for (const edge of incomingEdges) {
-        const sourceOutputs = context.nodeOutputs[edge.source] || {};
-        if (edge.targetInput && edge.sourceOutput) {
-          inputs[edge.targetInput] = sourceOutputs[edge.sourceOutput];
-        }
-      }
-      const allTargetNodeIds = new Set(edges.map((e) => e.target));
-      if (!allTargetNodeIds.has(nodeId)) {
-        Object.assign(inputs, context.parameters);
-      }
-      try {
-        updateNodeStatus(context, nodeId, "executing");
-        await updateExecutionStatus(executionId, "executing", context.nodeExecutions, stateProvider);
-        const outputs = await executeNode(node, inputs, context);
-        context.nodeOutputs[nodeId] = outputs;
-        updateNodeStatus(context, nodeId, "completed", outputs);
-        executed.add(nodeId);
-      } catch (error) {
-        updateNodeStatus(context, nodeId, "error", void 0, error.message);
-        throw error;
-      }
-    }
-    const result = {
-      [targetNodeId]: context.nodeOutputs[targetNodeId]
-    };
-    await stateProvider.updateExecution(executionId, {
-      status: "completed",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      result: JSON.stringify(result),
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    });
-  } catch (error) {
-    await stateProvider.updateExecution(executionId, {
-      status: "error",
-      nodeExecutions: JSON.stringify(context.nodeExecutions),
-      error: error.message,
-      endedAt: (/* @__PURE__ */ new Date()).toISOString()
-    });
-  }
-}
-function getUpstreamNodes(targetNodeId, nodes, edges) {
-  const upstream = [];
-  const visited = /* @__PURE__ */ new Set();
-  const queue = [targetNodeId];
-  while (queue.length > 0) {
-    const nodeId = queue.shift();
-    if (visited.has(nodeId)) continue;
-    visited.add(nodeId);
-    const incomingEdges = edges.filter((e) => e.target === nodeId);
-    for (const edge of incomingEdges) {
-      if (!visited.has(edge.source)) {
-        upstream.push(edge.source);
-        queue.push(edge.source);
-      }
-    }
-  }
-  return upstream;
-}
-
-// src/routes/execute.ts
 init_redis();
 
 // src/engine/queue.ts
@@ -1123,8 +865,8 @@ function getQueueClient() {
   }
   if (provider === "qstash") {
     try {
-      const { Client: Client3 } = __require("@upstash/qstash");
-      queueClient = new Client3({ token });
+      const { Client: Client2 } = __require("@upstash/qstash");
+      queueClient = new Client2({ token });
       console.log("\u{1F504} Queue: QStash durable execution enabled");
       return queueClient;
     } catch {
@@ -1224,32 +966,6 @@ async function verifyQueueSignature(signature, _body) {
     return true;
   }
   return false;
-}
-
-// src/engine/concurrency.ts
-async function acquireConcurrency(workflowId, limit) {
-  if (limit <= 0) return true;
-  try {
-    const key = `wf:${workflowId}:concurrency`;
-    const current = await cacheProvider.incr(key);
-    if (current === 1) {
-      await cacheProvider.expire(key, 300);
-    }
-    if (current > limit) {
-      await cacheProvider.decr(key);
-      return false;
-    }
-    return true;
-  } catch {
-    return true;
-  }
-}
-async function releaseConcurrency(workflowId) {
-  try {
-    const key = `wf:${workflowId}:concurrency`;
-    await cacheProvider.decr(key);
-  } catch {
-  }
 }
 
 // src/routes/execute.ts
@@ -1365,7 +1081,7 @@ executeRoute.openapi(route3, async (c) => {
     }
   }
   if (debounceSec > 0) {
-    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-UO7EC3S7.js");
+    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-U67KC546.js");
     const debounced = await shouldDebounce2(id, debounceSec);
     if (debounced) {
       return c.json({
@@ -1412,7 +1128,7 @@ executeRoute.openapi(route3, async (c) => {
     startedAt: now
   });
   try {
-    const result = await executeWorkflow(executionId, workflow, body.parameters || {}, settings);
+    const result = await executeWorkflow(executionId, workflow, body.parameters || {}, settings, tenantSlug);
     return c.json({
       executionId,
       status: result.status === "completed" ? "completed" : "error",
@@ -1495,7 +1211,7 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
     startedAt: now
   });
   try {
-    await executeSingleNode(executionId, workflow, nodeId, body.parameters || {});
+    await executeSingleNode(executionId, workflow, nodeId, body.parameters || {}, tenantSlug);
     return c.json({
       executionId,
       status: "completed",
@@ -1513,35 +1229,10 @@ executeRoute.openapi(singleNodeRoute, async (c) => {
 });
 
 // src/routes/webhook.ts
+init_storage();
 import { OpenAPIHono as OpenAPIHono5, createRoute as createRoute4, z as z5 } from "@hono/zod-openapi";
 import { v4 as uuidv42 } from "uuid";
 init_redis();
-
-// src/middleware/rateLimit.ts
-init_redis();
-async function ipRateLimiter(c, next) {
-  const clientIp = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for")?.split(",")[0].trim() || c.req.header("x-real-ip") || "unknown";
-  if (clientIp === "unknown") {
-    return await next();
-  }
-  try {
-    const minuteTimestamp = Math.floor(Date.now() / 6e4);
-    const key = `rate:ip:${clientIp}:${minuteTimestamp}`;
-    const { allowed, remaining } = await rateLimit(key, 60, 60);
-    if (!allowed) {
-      console.warn(`[Edge Rate Limit] Blocked request from IP: ${clientIp}`);
-      return c.json({
-        error: "TooManyRequests",
-        message: "Rate limit exceeded. Maximum 60 requests per minute allowed."
-      }, 429);
-    }
-    c.header("X-RateLimit-IP-Remaining", String(remaining));
-  } catch (e) {
-  }
-  return await next();
-}
-
-// src/routes/webhook.ts
 var webhookRoute = new OpenAPIHono5();
 webhookRoute.use("*", ipRateLimiter);
 var route4 = createRoute4({
@@ -1780,7 +1471,266 @@ webhookRoute.openapi(route4, async (c) => {
   }
 });
 
+// src/routes/emailWebhooks.ts
+init_storage();
+import { Hono } from "hono";
+
+// src/engine/emailParsers.ts
+function safeString(v) {
+  return v === void 0 || v === null ? "" : String(v);
+}
+function parseSendgridInbound(body) {
+  const attachments = Array.isArray(body.attachments) ? body.attachments.map((a) => ({
+    filename: safeString(a.filename || a.name),
+    contentType: a.type || a.contentType,
+    size: a.size,
+    url: a.url
+  })) : [];
+  return {
+    from: safeString(body.from),
+    to: safeString(body.to),
+    subject: safeString(body.subject),
+    body: safeString(body.html),
+    text: safeString(body.text) || void 0,
+    attachments,
+    headers: body.headers || {},
+    timestamp: safeString(body["sendgrid-inbound"]) || (/* @__PURE__ */ new Date()).toISOString(),
+    provider: "sendgrid",
+    messageId: body["message-id"] || body.messageId
+  };
+}
+function parseMailgunInbound(body) {
+  const attachmentUrls = [];
+  if (body["attachment-count"] && body["attachment-1"]) {
+    const count = parseInt(safeString(body["attachment-count"]), 10) || 0;
+    for (let i = 1; i <= count; i++) {
+      const att = body[`attachment-${i}`];
+      attachmentUrls.push({
+        filename: typeof att === "string" ? att : safeString(att?.filename),
+        url: typeof att === "object" ? att?.url : void 0
+      });
+    }
+  }
+  return {
+    from: safeString(body.sender || body.from),
+    to: safeString(body.recipient || body.to),
+    subject: safeString(body.subject),
+    body: safeString(body["body-html"] || body["stripped-html"]),
+    text: safeString(body["body-plain"] || body["stripped-text"]) || void 0,
+    attachments: attachmentUrls,
+    headers: body["message-headers"] ? normalizeMailgunHeaders(body["message-headers"]) : {},
+    timestamp: safeString(body.timestamp) || (/* @__PURE__ */ new Date()).toISOString(),
+    provider: "mailgun",
+    messageId: body["Message-Id"] || body.messageId
+  };
+}
+function normalizeMailgunHeaders(raw) {
+  const out = {};
+  if (Array.isArray(raw)) {
+    for (const pair of raw) {
+      if (Array.isArray(pair) && pair.length === 2) {
+        out[safeString(pair[0])] = safeString(pair[1]);
+      }
+    }
+  }
+  return out;
+}
+function parseResendInbound(body) {
+  const attachments = Array.isArray(body.attachments) ? body.attachments.map((a) => ({
+    filename: safeString(a.filename || a.name),
+    contentType: a.contentType || a.type,
+    size: a.size,
+    url: a.url
+  })) : [];
+  return {
+    from: safeString(body.from),
+    to: Array.isArray(body.to) ? body.to.join(", ") : safeString(body.to),
+    subject: safeString(body.subject),
+    body: safeString(body.html),
+    text: safeString(body.text) || void 0,
+    attachments,
+    headers: body.headers || {},
+    timestamp: safeString(body.created_at || body.timestamp) || (/* @__PURE__ */ new Date()).toISOString(),
+    provider: "resend",
+    messageId: body.id || body.messageId
+  };
+}
+function parseInboundEmail(provider, body) {
+  switch (provider) {
+    case "sendgrid":
+      return parseSendgridInbound(body);
+    case "mailgun":
+      return parseMailgunInbound(body);
+    case "resend":
+      return parseResendInbound(body);
+    default:
+      throw new Error(`Unknown email inbound provider: ${provider}`);
+  }
+}
+
+// src/routes/emailWebhooks.ts
+import { v4 as uuidv43 } from "uuid";
+var emailWebhooksRoute = new Hono();
+emailWebhooksRoute.use("*", ipRateLimiter);
+function expectedSecret() {
+  const s = process.env.FRONTBASE_EMAIL_WEBHOOK_SECRET;
+  return s && s.length > 0 ? s : null;
+}
+emailWebhooksRoute.post("/:provider", async (c) => {
+  const providerRaw = c.req.param("provider").toLowerCase();
+  if (!["sendgrid", "mailgun", "resend"].includes(providerRaw)) {
+    return c.json({ error: "Unknown provider" }, 400);
+  }
+  const provider = providerRaw;
+  const secret = expectedSecret();
+  if (secret) {
+    const provided = c.req.header("x-webhook-secret") || c.req.query("secret");
+    if (provided !== secret) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+  } else {
+    console.warn("[EmailWebhook] FRONTBASE_EMAIL_WEBHOOK_SECRET unset \u2014 inbound email route is OPEN (dev only)");
+  }
+  let body;
+  try {
+    body = await c.req.json();
+  } catch {
+    try {
+      body = Object.fromEntries(await c.req.formData());
+    } catch {
+      return c.json({ error: "Invalid body" }, 400);
+    }
+  }
+  let parsed;
+  try {
+    parsed = parseInboundEmail(provider, body);
+  } catch (e) {
+    return c.json({ error: "ParseError", message: e.message }, 400);
+  }
+  const tenantSlug = c.get("tenantSlug") || "_default";
+  const workflows = await stateProvider.listWorkflows(tenantSlug);
+  const matching = workflows.filter((w) => {
+    if (!w.isActive) return false;
+    const types = (w.triggerType || "").split(",").map((t) => t.trim().toLowerCase());
+    if (!types.includes("email_trigger") && !types.includes("email")) return false;
+    try {
+      const cfg = w.triggerConfig ? JSON.parse(w.triggerConfig) : {};
+      const watched = (cfg.address || cfg.email || "").toLowerCase();
+      if (watched) {
+        return parsed.to.toLowerCase().includes(watched);
+      }
+    } catch {
+    }
+    return true;
+  });
+  if (matching.length === 0) {
+    return c.json({ received: true, dispatched: 0, message: "No matching email_trigger workflow" }, 200);
+  }
+  const executionIds = [];
+  for (const workflow of matching) {
+    const executionId = uuidv43();
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+    await stateProvider.createExecution({
+      id: executionId,
+      workflowId: workflow.id,
+      status: "started",
+      triggerType: "email_trigger",
+      triggerPayload: JSON.stringify(parsed),
+      startedAt: now
+    });
+    executeWorkflow(executionId, workflow, parsed, settings).catch(
+      (err) => console.error(`[EmailWebhook] Execution ${executionId} failed:`, err)
+    );
+    executionIds.push(executionId);
+  }
+  return c.json({ received: true, dispatched: matching.length, executionIds }, 200);
+});
+
+// src/routes/realtime.ts
+import { Hono as Hono2 } from "hono";
+import { streamSSE } from "hono/streaming";
+var realtimeRoute = new Hono2();
+realtimeRoute.get(
+  "/sse/:executionId",
+  (c) => streamSSE(c, async (stream) => {
+    const executionId = c.req.param("executionId");
+    const tenantSlug = c.get("tenantSlug") || "_default";
+    const hub = getExecutionEventHub();
+    const initial = await hub.getInitialState(executionId, tenantSlug);
+    await stream.writeSSE({ event: "snapshot", data: JSON.stringify(initial) });
+    for (const evt of hub.getBuffered(executionId)) {
+      await stream.writeSSE({ event: evt.type, data: JSON.stringify(evt) });
+    }
+    const queue = [];
+    let resolveNext = null;
+    let closed = false;
+    const unsubscribe = hub.subscribe(executionId, (event) => {
+      queue.push(event);
+      if (resolveNext) {
+        resolveNext(queue.shift());
+        resolveNext = null;
+      }
+    });
+    const heartbeat = setInterval(() => {
+      stream.writeSSE({ event: "ping", data: String(Date.now()) }).catch(() => {
+      });
+    }, 15e3);
+    const nextEvent = () => new Promise((resolve) => {
+      if (queue.length > 0) return resolve(queue.shift());
+      resolveNext = resolve;
+    });
+    try {
+      while (!closed) {
+        const event = await Promise.race([
+          nextEvent(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 3e4))
+        ]).catch(() => null);
+        if (!event) {
+          if (stream.aborted) break;
+          continue;
+        }
+        await stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+        if (event.type === "completed" || event.type === "error") {
+          break;
+        }
+      }
+    } catch (err) {
+      console.error("[Realtime SSE] stream error:", err);
+    } finally {
+      clearInterval(heartbeat);
+      unsubscribe();
+      try {
+        await stream.writeSSE({ event: "close", data: "{}" });
+      } catch {
+      }
+    }
+  })
+);
+realtimeRoute.get("/ws/:executionId", (c) => {
+  const executionId = c.req.param("executionId");
+  if (c.req.header("upgrade") !== "websocket") {
+    return c.json(
+      {
+        transport: "websocket",
+        executionId,
+        hint: "This endpoint expects a WebSocket upgrade. On runtimes without native WS (Node), use the SSE transport at /api/realtime/sse/:executionId instead."
+      },
+      426
+    );
+  }
+  return c.json(
+    {
+      transport: "websocket",
+      executionId,
+      hint: "WebSocket upgrade must be handled by the runtime adapter. Subscribe to the execution event hub via getExecutionEventHub().subscribe()."
+    },
+    200
+  );
+});
+
 // src/routes/executions.ts
+init_storage();
 import { OpenAPIHono as OpenAPIHono6, createRoute as createRoute5, z as z6 } from "@hono/zod-openapi";
 var executionsRoute = new OpenAPIHono6();
 var allRoute = createRoute5({
@@ -2031,11 +1981,11 @@ var route5 = createRoute6({
 updateRoute.openapi(route5, async (c) => {
   try {
     const { script_content, source_hash, version } = c.req.valid("json");
-    const path2 = await import("path");
+    const path3 = await import("path");
     const fs = await import("fs");
     const { fileURLToPath: fileURLToPath2 } = await import("url");
-    const distDir = path2.resolve(process.cwd(), "dist");
-    const entryFile = path2.join(distDir, "index.js");
+    const distDir = path3.resolve(process.cwd(), "dist");
+    const entryFile = path3.join(distDir, "index.js");
     if (!fs.existsSync(distDir)) {
       fs.mkdirSync(distDir, { recursive: true });
     }
@@ -2265,9 +2215,11 @@ cacheRoute.openapi(flushRoute, async (c) => {
 });
 
 // src/routes/edge-logs.ts
-import { Hono } from "hono";
+init_storage();
+init_schema();
+import { Hono as Hono3 } from "hono";
 import { desc, sql, and } from "drizzle-orm";
-var edgeLogsRoute = new Hono();
+var edgeLogsRoute = new Hono3();
 async function getDb() {
   await ensureInitialized();
   const provider = getStateProvider();
@@ -2350,7 +2302,282 @@ edgeLogsRoute.get("/", async (c) => {
 });
 
 // src/routes/workflows.ts
+init_storage();
 import { OpenAPIHono as OpenAPIHono9, createRoute as createRoute8, z as z9 } from "@hono/zod-openapi";
+
+// src/validation/connectionValidator.ts
+var NODE_DEFINITIONS = {
+  // Triggers
+  trigger: { outputs: { payload: "object" }, category: "triggers" },
+  manual_trigger: { outputs: { payload: "object" }, category: "triggers" },
+  webhook_trigger: {
+    outputs: { headers: "object", query: "object", body: "object" },
+    category: "triggers"
+  },
+  schedule_trigger: {
+    outputs: { timestamp: "string", scheduledTime: "string" },
+    category: "triggers"
+  },
+  data_change_trigger: {
+    outputs: { changes: "array", operation: "string", count: "number" },
+    category: "triggers"
+  },
+  ui_event_trigger: {
+    outputs: {
+      timestamp: "string",
+      eventType: "string",
+      element: "object",
+      value: "any",
+      checked: "boolean",
+      coordinates: "object",
+      modifiers: "object",
+      key: "string",
+      target: "object"
+    },
+    category: "triggers"
+  },
+  // Actions
+  http_request: {
+    outputs: { data: "any", status: "number", headers: "object" },
+    category: "actions"
+  },
+  transform: { outputs: { data: "any", count: "number" }, category: "actions" },
+  log: { outputs: { data: "any" }, category: "actions" },
+  // Logic
+  condition: { outputs: { "Condition 1": "any", else: "any" }, category: "logic" },
+  if: { outputs: { true: "any", false: "any" }, category: "logic" },
+  // Integrations
+  data_request: {
+    outputs: { data: "array", rowCount: "number", success: "boolean" },
+    category: "integrations"
+  },
+  // Interface
+  toast: { outputs: { data: "any" }, category: "interface" },
+  set_variable: { outputs: { data: "any" }, category: "interface" },
+  redirect: { outputs: {}, category: "interface" },
+  refresh: { outputs: {}, category: "interface" },
+  // Output
+  http_response: { outputs: {}, category: "output" }
+};
+function getNodeDefinition(nodeType) {
+  return NODE_DEFINITIONS[nodeType];
+}
+var COMPATIBILITY_MATRIX = {
+  any: /* @__PURE__ */ new Set(["*"]),
+  string: /* @__PURE__ */ new Set(["string", "number", "any", "json", "object"]),
+  number: /* @__PURE__ */ new Set(["number", "string", "any", "json", "boolean"]),
+  boolean: /* @__PURE__ */ new Set(["boolean", "string", "any", "json", "number"]),
+  array: /* @__PURE__ */ new Set(["array", "any", "json", "object"]),
+  object: /* @__PURE__ */ new Set(["object", "any", "json", "array", "string"]),
+  json: /* @__PURE__ */ new Set(["json", "object", "array", "string", "any"]),
+  void: /* @__PURE__ */ new Set(["void"])
+};
+function normalizeType(type) {
+  const normalized = type.toLowerCase().trim();
+  if (normalized.startsWith("array<") || normalized.endsWith("[]")) {
+    return "array";
+  }
+  if (normalized.includes("|")) {
+    const types = normalized.split("|").map((t) => normalizeType(t.trim()));
+    const uniqueTypes = new Set(types);
+    return uniqueTypes.size === 1 ? types[0] : "any";
+  }
+  if (["integer", "float", "double", "int"].includes(normalized)) {
+    return "number";
+  }
+  return normalized;
+}
+function areTypesCompatible(sourceType, targetType) {
+  const source = normalizeType(sourceType);
+  const target = normalizeType(targetType);
+  if (source === "any" || target === "any") return true;
+  if (source === target) return true;
+  const compatibleTargets = COMPATIBILITY_MATRIX[source];
+  return !!compatibleTargets && (compatibleTargets.has("*") || compatibleTargets.has(target));
+}
+function validateEdgeConnection(edge, nodes) {
+  const base = {
+    sourceNodeId: edge.source,
+    targetNodeId: edge.target,
+    edgeId: edge.id
+  };
+  if (edge.source === edge.target) {
+    return {
+      ...base,
+      isValid: false,
+      sourceType: "unknown",
+      targetType: "unknown",
+      error: "Cannot connect a node to itself"
+    };
+  }
+  const sourceNode = nodes.find((n) => n.id === edge.source);
+  const targetNode = nodes.find((n) => n.id === edge.target);
+  if (!sourceNode) {
+    return {
+      ...base,
+      isValid: false,
+      sourceType: "unknown",
+      targetType: "unknown",
+      error: `Source node ${edge.source} not found`
+    };
+  }
+  if (!targetNode) {
+    return {
+      ...base,
+      isValid: false,
+      sourceType: "unknown",
+      targetType: "unknown",
+      error: `Target node ${edge.target} not found`
+    };
+  }
+  const sourceDef = getNodeDefinition(sourceNode.type);
+  const targetDef = getNodeDefinition(targetNode.type);
+  if (!sourceDef) {
+    return {
+      ...base,
+      isValid: false,
+      sourceType: sourceNode.type,
+      targetType: targetNode.type,
+      error: `Unknown source node type: ${sourceNode.type}`
+    };
+  }
+  if (!targetDef) {
+    return {
+      ...base,
+      isValid: false,
+      sourceType: sourceNode.type,
+      targetType: targetNode.type,
+      error: `Unknown target node type: ${targetNode.type}`
+    };
+  }
+  if (Object.keys(sourceDef.outputs).length === 0) {
+    return {
+      ...base,
+      isValid: false,
+      sourceType: "void",
+      targetType: "any",
+      error: `Source node ${sourceNode.type} has no outputs (terminal node)`
+    };
+  }
+  if (targetDef.category === "triggers") {
+    return {
+      ...base,
+      isValid: false,
+      sourceType: "unknown",
+      targetType: "unknown",
+      error: `Cannot connect to trigger node ${targetNode.type}`
+    };
+  }
+  const sourceOutputName = edge.sourceHandle || edge.sourceOutput || Object.keys(sourceDef.outputs)[0];
+  const sourceType = sourceDef.outputs[sourceOutputName] || "any";
+  const targetType = "any";
+  if (!areTypesCompatible(sourceType, targetType)) {
+    return {
+      ...base,
+      isValid: false,
+      sourceOutput: sourceOutputName,
+      sourceType,
+      targetType,
+      error: `Type mismatch: ${sourceNode.type}.${sourceOutputName} (${sourceType}) -> ${targetNode.type} (${targetType})`
+    };
+  }
+  return {
+    ...base,
+    isValid: true,
+    sourceOutput: sourceOutputName,
+    sourceType,
+    targetType
+  };
+}
+function validateWorkflow(nodes, edges) {
+  const errors = [];
+  const warnings = [];
+  const triggerNodes = nodes.filter((n) => getNodeDefinition(n.type)?.category === "triggers");
+  if (triggerNodes.length === 0) {
+    errors.push({
+      type: "missing_trigger",
+      message: "Workflow must have at least one trigger node"
+    });
+  }
+  if (triggerNodes.length > 1) {
+    warnings.push({
+      type: "unused_output",
+      message: "Workflow has multiple trigger nodes (only one will be used)"
+    });
+  }
+  const connectedNodeIds = /* @__PURE__ */ new Set();
+  edges.forEach((edge) => {
+    connectedNodeIds.add(edge.source);
+    connectedNodeIds.add(edge.target);
+  });
+  nodes.forEach((node) => {
+    if (!connectedNodeIds.has(node.id) && getNodeDefinition(node.type)?.category !== "triggers") {
+      warnings.push({
+        type: "unused_output",
+        message: `Node ${node.id} (${node.type}) is not connected to the workflow`
+      });
+    }
+  });
+  const adjacencyList = /* @__PURE__ */ new Map();
+  nodes.forEach((node) => adjacencyList.set(node.id, []));
+  edges.forEach((edge) => {
+    const targets = adjacencyList.get(edge.source) || [];
+    targets.push(edge.target);
+    adjacencyList.set(edge.source, targets);
+  });
+  const visited = /* @__PURE__ */ new Set();
+  const recursionStack = /* @__PURE__ */ new Set();
+  function detectCycle(nodeId) {
+    visited.add(nodeId);
+    recursionStack.add(nodeId);
+    const neighbors = adjacencyList.get(nodeId) || [];
+    for (const neighbor of neighbors) {
+      if (!visited.has(neighbor)) {
+        if (detectCycle(neighbor)) return true;
+      } else if (recursionStack.has(neighbor)) {
+        return true;
+      }
+    }
+    recursionStack.delete(nodeId);
+    return false;
+  }
+  for (const node of nodes) {
+    if (!visited.has(node.id)) {
+      if (detectCycle(node.id)) {
+        errors.push({
+          type: "circular_dependency",
+          message: "Workflow contains circular dependencies"
+        });
+        break;
+      }
+    }
+  }
+  edges.forEach((edge) => {
+    const result = validateEdgeConnection(edge, nodes);
+    if (!result.isValid) {
+      errors.push({
+        type: "invalid_connection",
+        message: result.error || "Invalid connection",
+        edgeId: edge.id
+      });
+    }
+  });
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+// src/routes/workflows.ts
+async function teardownSchedules(workflowId, tenantSlug) {
+  try {
+    const wf = await stateProvider.getWorkflowById(workflowId, tenantSlug);
+    const handles = readScheduleMeta(wf?.settings ?? null);
+    if (handles.length) await unscheduleWorkflowTriggers(handles);
+  } catch {
+  }
+}
 var workflowsRoute = new OpenAPIHono9();
 var WorkflowSummarySchema = z9.object({
   id: z9.string(),
@@ -2459,8 +2686,43 @@ var deleteRoute = createRoute8({
 workflowsRoute.openapi(deleteRoute, async (c) => {
   const { id } = c.req.valid("param");
   const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  await teardownSchedules(id, tenantSlug);
   await stateProvider.deleteWorkflow(id, tenantSlug);
   return c.json({ success: true, message: `Workflow ${id} deleted` }, 200);
+});
+var validateRoute = createRoute8({
+  method: "post",
+  path: "/validate",
+  tags: ["Workflows"],
+  summary: "Validate workflow structure",
+  description: "Validates workflow nodes and edges for type compatibility and structural issues",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z9.object({
+            nodes: z9.array(WorkflowNodeSchema),
+            edges: z9.array(WorkflowEdgeSchema)
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Validation result (always 200; check `isValid` field)",
+      content: {
+        "application/json": {
+          schema: WorkflowValidationResultSchema
+        }
+      }
+    }
+  }
+});
+workflowsRoute.openapi(validateRoute, async (c) => {
+  const { nodes, edges } = c.req.valid("json");
+  const result = validateWorkflow(nodes, edges);
+  return c.json(result, 200);
 });
 var toggleRoute = createRoute8({
   method: "patch",
@@ -2499,6 +2761,20 @@ workflowsRoute.openapi(toggleRoute, async (c) => {
   const { id } = c.req.valid("param");
   const { isActive } = c.req.valid("json");
   const tenantSlug = c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  if (isActive) {
+    const workflow = await stateProvider.getWorkflowById(id, tenantSlug);
+    if (workflow && (needsSchedule(workflow.triggerType).dataChange || needsSchedule(workflow.triggerType).scheduled)) {
+      try {
+        const handles = await scheduleWorkflowTriggers(workflow);
+        const settingsWithSchedules = withScheduleMeta(workflow.settings, handles);
+        await stateProvider.upsertWorkflow({ ...workflow, settings: settingsWithSchedules });
+      } catch (e) {
+        console.warn(`[Workflows] Failed to reschedule workflow ${id}:`, e.message);
+      }
+    }
+  } else {
+    await teardownSchedules(id, tenantSlug);
+  }
   await stateProvider.toggleWorkflow(id, isActive, tenantSlug);
   return c.json({
     success: true,
@@ -2507,97 +2783,461 @@ workflowsRoute.openapi(toggleRoute, async (c) => {
   }, 200);
 });
 
-// src/routes/queue.ts
+// src/routes/versions.ts
+init_storage();
 import { OpenAPIHono as OpenAPIHono10, createRoute as createRoute9, z as z10 } from "@hono/zod-openapi";
-
-// src/services/queue/qstash-provider.ts
-import { Client } from "@upstash/qstash";
-var QStashProvider = class {
-  client;
-  handlers = /* @__PURE__ */ new Map();
-  constructor() {
-    this.client = new Client({ token: process.env.QSTASH_TOKEN });
-  }
-  async enqueue(jobName, data, opts) {
-    const baseUrl = process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3002}`;
-    const url = `${baseUrl}/api/queue/process?jobName=${jobName}`;
-    const notBefore = opts?.delay ? Math.floor(Date.now() / 1e3) + Math.floor(opts.delay / 1e3) : void 0;
-    const res = await this.client.publishJSON({
-      url,
-      body: data,
-      retries: opts?.retries,
-      notBefore
-    });
-    return res.messageId;
-  }
-  process(jobName, handler) {
-    this.handlers.set(jobName, handler);
-  }
-  getHandler(jobName) {
-    return this.handlers.get(jobName);
-  }
-};
-
-// src/services/queue/index.ts
-var NoopProvider = class {
-  async enqueue(jobName, data, opts) {
-    console.warn(`[Queue] No queue configured, dropped job: ${jobName}`);
-    return "noop-id";
-  }
-  process(jobName, handler) {
-    console.warn(`[Queue] No queue configured, ignored process attempt for: ${jobName}`);
-  }
-};
-async function createBullMQProvider() {
-  try {
-    const { Queue, Worker } = await import("bullmq");
-    const parseRedisUrl = () => {
-      const url = new URL(process.env.BULLMQ_REDIS_URL || "redis://localhost:6379");
-      return { host: url.hostname, port: url.port ? parseInt(url.port) : 6379 };
-    };
-    const queues = /* @__PURE__ */ new Map();
-    const workers = /* @__PURE__ */ new Map();
-    return {
-      async enqueue(jobName, data, opts) {
-        if (!queues.has(jobName)) {
-          queues.set(jobName, new Queue(jobName, { connection: parseRedisUrl() }));
+var versionsRoute = new OpenAPIHono10();
+function tenantOf(c) {
+  return c.get?.("tenantSlug") || c.req.query("tenant_slug") || void 0;
+}
+var VersionSummarySchema = z10.object({
+  id: z10.string(),
+  workflowId: z10.string(),
+  version: z10.number(),
+  name: z10.string(),
+  description: z10.string().nullable(),
+  triggerType: z10.string().nullable(),
+  createdAt: z10.string(),
+  createdBy: z10.string().nullable()
+});
+var listRoute3 = createRoute9({
+  method: "get",
+  path: "/workflow/:workflowId",
+  tags: ["Workflow Versions"],
+  summary: "List workflow versions",
+  request: {
+    params: z10.object({ workflowId: z10.string() }),
+    query: z10.object({ limit: z10.string().optional() })
+  },
+  responses: {
+    200: {
+      description: "Workflow versions",
+      content: {
+        "application/json": {
+          schema: z10.object({ versions: z10.array(VersionSummarySchema), total: z10.number() })
         }
-        const job = await queues.get(jobName).add(jobName, data, {
-          delay: opts?.delay,
-          attempts: opts?.retries,
-          priority: opts?.priority
-        });
-        return job.id;
-      },
-      process(jobName, handler) {
-        if (workers.has(jobName)) return;
-        const worker = new Worker(jobName, async (job) => {
-          await handler(job.data);
-        }, { connection: parseRedisUrl() });
-        workers.set(jobName, worker);
       }
-    };
-  } catch (e) {
-    console.warn("[Queue] bullmq not available \u2014 falling back to NoopProvider");
-    return new NoopProvider();
+    },
+    503: {
+      description: "Provider does not support version history",
+      content: { "application/json": { schema: ErrorResponseSchema } }
+    }
   }
+});
+versionsRoute.openapi(listRoute3, async (c) => {
+  if (!stateProvider.listWorkflowVersions) {
+    return c.json({ error: "NotSupported", message: "Version history not supported by this provider" }, 503);
+  }
+  const { workflowId } = c.req.valid("param");
+  const { limit } = c.req.valid("query");
+  const max = Math.min(parseInt(limit || "50"), 100);
+  const versions = await stateProvider.listWorkflowVersions(workflowId, max, tenantOf(c));
+  return c.json(
+    {
+      versions: versions.map((v) => ({
+        id: v.id,
+        workflowId: v.workflowId,
+        version: v.version,
+        name: v.name,
+        description: v.description,
+        triggerType: v.triggerType,
+        createdAt: v.createdAt,
+        createdBy: v.createdBy
+      })),
+      total: versions.length
+    },
+    200
+  );
+});
+var getRoute3 = createRoute9({
+  method: "get",
+  path: "/:id",
+  tags: ["Workflow Versions"],
+  summary: "Get a workflow version",
+  request: { params: z10.object({ id: z10.string() }) },
+  responses: {
+    200: {
+      description: "Workflow version",
+      content: {
+        "application/json": {
+          schema: z10.object({
+            version: z10.object({
+              id: z10.string(),
+              workflowId: z10.string(),
+              version: z10.number(),
+              name: z10.string(),
+              description: z10.string().nullable(),
+              triggerType: z10.string(),
+              nodes: z10.string(),
+              edges: z10.string(),
+              settings: z10.string().nullable(),
+              createdAt: z10.string(),
+              createdBy: z10.string().nullable()
+            })
+          })
+        }
+      }
+    },
+    404: { description: "Not found", content: { "application/json": { schema: ErrorResponseSchema } } },
+    503: { description: "Not supported", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+versionsRoute.openapi(getRoute3, async (c) => {
+  if (!stateProvider.getWorkflowVersion) {
+    return c.json({ error: "NotSupported", message: "Version history not supported by this provider" }, 503);
+  }
+  const { id } = c.req.valid("param");
+  const version = await stateProvider.getWorkflowVersion(id, tenantOf(c));
+  if (!version) {
+    return c.json({ error: "NotFound", message: `Version ${id} not found` }, 404);
+  }
+  return c.json(
+    {
+      version: {
+        id: version.id,
+        workflowId: version.workflowId,
+        version: version.version,
+        name: version.name,
+        description: version.description,
+        triggerType: version.triggerType,
+        nodes: version.nodes,
+        edges: version.edges,
+        settings: version.settings,
+        createdAt: version.createdAt,
+        createdBy: version.createdBy
+      }
+    },
+    200
+  );
+});
+var rollbackRoute = createRoute9({
+  method: "post",
+  path: "/rollback",
+  tags: ["Workflow Versions"],
+  summary: "Rollback a workflow to a previous version",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z10.object({
+            workflowId: z10.string(),
+            versionId: z10.string()
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Rolled back",
+      content: { "application/json": { schema: SuccessResponseSchema.extend({ currentVersion: z10.number() }) } }
+    },
+    400: { description: "Bad request", content: { "application/json": { schema: ErrorResponseSchema } } },
+    503: { description: "Not supported", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+versionsRoute.openapi(rollbackRoute, async (c) => {
+  if (!stateProvider.rollbackToVersion) {
+    return c.json({ error: "NotSupported", message: "Version history not supported by this provider" }, 503);
+  }
+  const { workflowId, versionId } = await c.req.json();
+  try {
+    await stateProvider.rollbackToVersion(workflowId, versionId, tenantOf(c));
+    const wf = await stateProvider.getWorkflowById(workflowId, tenantOf(c));
+    return c.json(
+      {
+        success: true,
+        message: `Workflow rolled back to version ${versionId}`,
+        currentVersion: wf?.version || 0
+      },
+      200
+    );
+  } catch (e) {
+    return c.json({ error: "RollbackError", message: e?.message || "Rollback failed" }, 400);
+  }
+});
+var deleteRoute2 = createRoute9({
+  method: "delete",
+  path: "/:id",
+  tags: ["Workflow Versions"],
+  summary: "Delete a workflow version",
+  request: { params: z10.object({ id: z10.string() }) },
+  responses: {
+    200: { description: "Deleted", content: { "application/json": { schema: SuccessResponseSchema } } },
+    404: { description: "Not found", content: { "application/json": { schema: ErrorResponseSchema } } },
+    503: { description: "Not supported", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+versionsRoute.openapi(deleteRoute2, async (c) => {
+  if (!stateProvider.deleteWorkflowVersion) {
+    return c.json({ error: "NotSupported", message: "Version history not supported by this provider" }, 503);
+  }
+  const { id } = c.req.valid("param");
+  const deleted = await stateProvider.deleteWorkflowVersion(id, tenantOf(c));
+  if (!deleted) {
+    return c.json({ error: "NotFound", message: `Version ${id} not found` }, 404);
+  }
+  return c.json({ success: true, message: `Version ${id} deleted` }, 200);
+});
+
+// src/routes/ui-events.ts
+init_storage();
+import { OpenAPIHono as OpenAPIHono11, createRoute as createRoute10, z as z11 } from "@hono/zod-openapi";
+
+// src/engine/uiEventTriggers.ts
+function readInputs(node) {
+  return node.data?.inputs ?? node.inputs ?? [];
 }
-async function createQueueService() {
-  if (process.env.BULLMQ_REDIS_URL) return createBullMQProvider();
-  if (process.env.QSTASH_TOKEN) return new QStashProvider();
-  return new NoopProvider();
+function getInputValue(inputs, name) {
+  return inputs.find((i) => i.name === name)?.value;
 }
-var queueServiceReady = createQueueService();
+function asString(value, fallback = "") {
+  if (value === null || value === void 0) return fallback;
+  return String(value);
+}
+function asNumber(value, fallback = 0) {
+  const n = Number(value);
+  return isNaN(n) ? fallback : n;
+}
+function asBool(value, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (value === void 0 || value === null) return fallback;
+  return String(value).toLowerCase().trim() === "true";
+}
+function extractUIEventTriggers(workflow) {
+  if (!workflow.isActive) return [];
+  let nodes = [];
+  try {
+    nodes = JSON.parse(workflow.nodes || "[]");
+  } catch {
+    return [];
+  }
+  const triggers = [];
+  for (const node of nodes) {
+    const type = node.data?.type ?? node.type;
+    if (type !== "ui_event_trigger") continue;
+    const inputs = readInputs(node);
+    const selector = asString(getInputValue(inputs, "elementSelector"));
+    if (!selector.trim()) continue;
+    triggers.push({
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      eventType: asString(getInputValue(inputs, "eventType"), "click"),
+      elementSelector: selector,
+      debounceMs: asNumber(getInputValue(inputs, "debounceMs"), 0),
+      throttleMs: asNumber(getInputValue(inputs, "throttleMs"), 0),
+      captureEventData: asBool(getInputValue(inputs, "captureEventData"), true),
+      preventDefault: asBool(getInputValue(inputs, "preventDefault"), false),
+      stopPropagation: asBool(getInputValue(inputs, "stopPropagation"), false),
+      keyFilter: asString(getInputValue(inputs, "keyFilter"))
+    });
+  }
+  return triggers;
+}
+function extractFromWorkflows(workflows) {
+  return workflows.flatMap(extractUIEventTriggers);
+}
+
+// src/routes/ui-events.ts
+var uiEventsRoute = new OpenAPIHono11();
+var UIEventTriggerSchema = z11.object({
+  workflowId: z11.string(),
+  workflowName: z11.string(),
+  eventType: z11.string(),
+  elementSelector: z11.string(),
+  debounceMs: z11.number(),
+  throttleMs: z11.number(),
+  captureEventData: z11.boolean(),
+  preventDefault: z11.boolean(),
+  stopPropagation: z11.boolean(),
+  keyFilter: z11.string()
+}).openapi("UIEventTrigger");
+var listRoute4 = createRoute10({
+  method: "get",
+  path: "/ui-events",
+  tags: ["UI Events"],
+  summary: "List active UI event triggers for the hydrated client",
+  description: "Returns ui_event_trigger node configurations for active workflows in this tenant. Public endpoint consumed by the page hydration script to wire DOM event listeners.",
+  responses: {
+    200: {
+      description: "Active UI event triggers",
+      content: {
+        "application/json": {
+          schema: z11.object({
+            triggers: z11.array(UIEventTriggerSchema),
+            count: z11.number()
+          })
+        }
+      }
+    }
+  }
+});
+uiEventsRoute.openapi(listRoute4, async (c) => {
+  const tenantSlug = c.env?.FRONTBASE_TENANT_SLUG || c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  const workflows = await stateProvider.listWorkflows(tenantSlug);
+  const triggers = extractFromWorkflows(workflows);
+  c.header("Cache-Control", "public, max-age=60, stale-while-revalidate=86400");
+  return c.json({ triggers, count: triggers.length }, 200);
+});
+
+// src/routes/public-execute.ts
+init_storage();
+import { OpenAPIHono as OpenAPIHono12, createRoute as createRoute11, z as z12 } from "@hono/zod-openapi";
+import { v4 as uuidv44 } from "uuid";
+init_redis();
+var publicExecuteRoute = new OpenAPIHono12();
+var route6 = createRoute11({
+  method: "post",
+  path: "/:id",
+  tags: ["UI Events"],
+  summary: "Publicly execute a ui_event workflow from the browser",
+  description: "Executes a published workflow by ID without authentication. Only workflows with a `ui_event` trigger type are reachable; all others return 403. Subject to the workflow's rate-limit / cooldown / debounce / concurrency settings.",
+  request: {
+    params: z12.object({
+      id: z12.string().uuid().openapi({ description: "Workflow ID" })
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: ExecuteRequestSchema
+        }
+      },
+      required: false
+    }
+  },
+  responses: {
+    200: {
+      description: "Execution result",
+      content: { "application/json": { schema: ExecuteResponseSchema } }
+    },
+    403: {
+      description: "Workflow is not publicly executable (not a ui_event trigger)",
+      content: { "application/json": { schema: ErrorResponseSchema } }
+    },
+    404: {
+      description: "Workflow not found / inactive",
+      content: { "application/json": { schema: ErrorResponseSchema } }
+    },
+    429: {
+      description: "Rate limited / cooldown / concurrency",
+      content: { "application/json": { schema: ErrorResponseSchema } }
+    }
+  }
+});
+function isUIEventWorkflow(triggerType) {
+  return triggerType.split(",").map((t) => t.trim().toLowerCase()).includes("ui_event");
+}
+publicExecuteRoute.openapi(route6, async (c) => {
+  const { id } = c.req.valid("param");
+  const rawBody = await c.req.text();
+  const body = rawBody ? JSON.parse(rawBody) : {};
+  const tenantSlug = c.env?.FRONTBASE_TENANT_SLUG || c.get("tenantSlug") || c.req.query("tenant_slug") || void 0;
+  const workflow = await stateProvider.getWorkflowById(id, tenantSlug);
+  if (!workflow) {
+    return c.json({ error: "NotFound", message: `Workflow ${id} not found` }, 404);
+  }
+  if (!workflow.isActive) {
+    return c.json({ error: "WorkflowInactive", message: `Workflow ${id} is not active` }, 404);
+  }
+  if (!isUIEventWorkflow(workflow.triggerType)) {
+    return c.json({
+      error: "Forbidden",
+      message: `Workflow ${id} is not publicly executable (ui_event triggers only)`
+    }, 403);
+  }
+  const settings = workflow.settings ? JSON.parse(workflow.settings) : {};
+  const rateLimitMax = settings.rate_limit_max || 60;
+  const cooldownMs = settings.cooldown_ms || 0;
+  const debounceSec = Math.ceil((settings.debounce_ms || 0) / 1e3);
+  const concurrencyLimit = settings.concurrency_limit || 0;
+  if (cooldownMs > 0) {
+    try {
+      const existing = await cacheProvider.get(`wf:${id}:cooldown`);
+      if (existing) {
+        return c.json({ error: "CoolDown", message: `Workflow ${id} is cooling down.` }, 429);
+      }
+      const timeoutSec = Math.ceil((settings.execution_timeout_ms || 3e4) / 1e3);
+      await cacheProvider.setex(`wf:${id}:cooldown`, timeoutSec, "running");
+    } catch {
+    }
+  }
+  if (debounceSec > 0) {
+    const { shouldDebounce: shouldDebounce2 } = await import("./debounce-U67KC546.js");
+    if (await shouldDebounce2(id, debounceSec)) {
+      return c.json({
+        error: "Debounced",
+        message: `Workflow ${id} was triggered too recently`
+      }, 429);
+    }
+  }
+  try {
+    const { allowed, remaining } = await rateLimit(
+      `wf:${id}:public-rate:${Math.floor(Date.now() / 6e4)}`,
+      rateLimitMax,
+      60
+    );
+    if (!allowed) {
+      return c.json({
+        error: "RateLimited",
+        message: `Workflow ${id} rate limit exceeded (${rateLimitMax}/min).`
+      }, 429);
+    }
+    c.header("X-RateLimit-Remaining", String(remaining));
+  } catch {
+  }
+  if (concurrencyLimit > 0) {
+    const acquired = await acquireConcurrency(id, concurrencyLimit);
+    if (!acquired) {
+      return c.json({
+        error: "ConcurrencyLimitExceeded",
+        message: `Workflow ${id} has reached its concurrency limit`
+      }, 429);
+    }
+  }
+  const executionId = uuidv44();
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  await stateProvider.createExecution({
+    id: executionId,
+    workflowId: id,
+    status: "started",
+    triggerType: "ui_event",
+    triggerPayload: JSON.stringify(body.parameters || {}),
+    nodeExecutions: JSON.stringify([]),
+    startedAt: now
+  });
+  try {
+    const result = await executeWorkflow(executionId, workflow, body.parameters || {}, settings);
+    return c.json({
+      executionId,
+      status: result.status === "completed" ? "completed" : "error",
+      result: result.result,
+      variableMutations: result.variableMutations || [],
+      error: result.error,
+      message: result.status === "completed" ? "Workflow execution completed" : "Workflow execution failed"
+    }, 200);
+  } catch (err) {
+    console.error(`[public-execute] ${executionId} failed:`, err);
+    return c.json({
+      executionId,
+      status: "error",
+      error: err.message,
+      message: "Workflow execution failed"
+    }, 200);
+  } finally {
+    if (concurrencyLimit > 0) releaseConcurrency(id);
+  }
+});
 
 // src/routes/queue.ts
-var queueRoute = new OpenAPIHono10();
+import { OpenAPIHono as OpenAPIHono13, createRoute as createRoute12, z as z13 } from "@hono/zod-openapi";
+var queueRoute = new OpenAPIHono13();
 function getQueueConfig2() {
   const url = process.env.FRONTBASE_QUEUE_URL;
   const token = process.env.FRONTBASE_QUEUE_TOKEN;
   if (!url || !token) return null;
   return { url: url.replace(/\/$/, ""), token };
 }
-var statsRoute3 = createRoute9({
+var statsRoute3 = createRoute12({
   method: "get",
   path: "/stats",
   tags: ["Queue"],
@@ -2608,11 +3248,11 @@ var statsRoute3 = createRoute9({
       description: "Queue stats",
       content: {
         "application/json": {
-          schema: z10.object({
-            configured: z10.boolean(),
-            provider: z10.string().optional(),
-            connected: z10.boolean().optional(),
-            message: z10.string()
+          schema: z13.object({
+            configured: z13.boolean(),
+            provider: z13.string().optional(),
+            connected: z13.boolean().optional(),
+            message: z13.string()
           })
         }
       }
@@ -2648,7 +3288,7 @@ queueRoute.openapi(statsRoute3, async (c) => {
     }, 200);
   }
 });
-var publishRoute = createRoute9({
+var publishRoute = createRoute12({
   method: "post",
   path: "/publish",
   tags: ["Queue"],
@@ -2658,10 +3298,10 @@ var publishRoute = createRoute9({
     body: {
       content: {
         "application/json": {
-          schema: z10.object({
-            topic: z10.string().min(1).openapi({ description: "Queue topic/destination URL" }),
-            payload: z10.record(z10.unknown()).openapi({ description: "Message body (JSON)" }),
-            delay: z10.number().int().min(0).optional().openapi({
+          schema: z13.object({
+            topic: z13.string().min(1).openapi({ description: "Queue topic/destination URL" }),
+            payload: z13.record(z13.unknown()).openapi({ description: "Message body (JSON)" }),
+            delay: z13.number().int().min(0).optional().openapi({
               description: "Delay in seconds before delivery (QStash only)"
             })
           })
@@ -2675,7 +3315,7 @@ var publishRoute = createRoute9({
       content: {
         "application/json": {
           schema: SuccessResponseSchema.extend({
-            messageId: z10.string().optional()
+            messageId: z13.string().optional()
           })
         }
       }
@@ -2736,7 +3376,7 @@ queueRoute.openapi(publishRoute, async (c) => {
     }, 400);
   }
 });
-var processRoute = createRoute9({
+var processRoute = createRoute12({
   method: "post",
   path: "/process",
   tags: ["Queue"],
@@ -2761,28 +3401,42 @@ queueRoute.openapi(processRoute, async (c) => {
     if (!signature) {
       return c.json({ error: "MissingSignature", message: "Missing upstash-signature header" }, 401);
     }
-    const handler = queueService.getHandler(jobName);
-    if (!handler) {
-      return c.json({ error: "NoHandler", message: `No handler configured for job ${jobName}` }, 404);
-    }
+  }
+  const handler = queueService.getHandler?.(jobName);
+  if (!handler) {
     try {
+      const { isResumeJob, handleResume, handleQueueMessage, QUEUE_JOB } = await import("./queueConsumer-UEUXXXXC.js");
       const data = await c.req.json();
-      await handler(data);
-      return c.json({ success: true, message: "Processed successfully" }, 200);
+      if (isResumeJob(jobName)) {
+        await handleResume(jobName, data || {});
+        return c.json({ success: true, message: "Resumed successfully" }, 200);
+      }
+      if (jobName.startsWith("queue:")) {
+        const workflowId = jobName.slice("queue:".length);
+        await handleQueueMessage(workflowId, data || {});
+        return c.json({ success: true, message: "Processed successfully" }, 200);
+      }
     } catch (e) {
       return c.json({ error: "HandlerError", message: e.message }, 500);
     }
+    return c.json({ error: "NoHandler", message: `No handler configured for job ${jobName}` }, 404);
   }
-  return c.json({ error: "InvalidProvider", message: "Not using QStashProvider" }, 400);
+  try {
+    const data = await c.req.json();
+    await handler(data);
+    return c.json({ success: true, message: "Processed successfully" }, 200);
+  } catch (e) {
+    return c.json({ error: "HandlerError", message: e.message }, 500);
+  }
 });
 
 // src/routes/config.ts
-import { OpenAPIHono as OpenAPIHono11, createRoute as createRoute10, z as z12 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono14, createRoute as createRoute13, z as z15 } from "@hono/zod-openapi";
 init_env();
 
 // src/engine/agent/auto-register.ts
 import { tool } from "ai";
-import { z as z11 } from "zod";
+import { z as z14 } from "zod";
 
 // src/engine/agent/tools/schema-helper.ts
 import { jsonSchema } from "ai";
@@ -2847,7 +3501,7 @@ async function buildAutoTools(profile, curatedNames) {
       return tools;
     }
     const spec = await res.json();
-    for (const [path2, methods] of Object.entries(spec.paths || {})) {
+    for (const [path3, methods] of Object.entries(spec.paths || {})) {
       if (Object.keys(tools).length >= maxAutoTools) {
         console.warn(`[AutoTools] Tool cap reached (${maxAutoTools}). Skipping remaining endpoints.`);
         break;
@@ -2857,7 +3511,7 @@ async function buildAutoTools(profile, curatedNames) {
         const op = operation;
         let operationId = op.operationId;
         if (!operationId) {
-          operationId = `${method}_${path2.replace(/[^a-zA-Z0-9_]/g, "_")}`.replace(/_+/g, "_").replace(/^_|_$/g, "");
+          operationId = `${method}_${path3.replace(/[^a-zA-Z0-9_]/g, "_")}`.replace(/_+/g, "_").replace(/^_|_$/g, "");
         }
         if (excluded.includes(operationId)) {
           continue;
@@ -2896,7 +3550,7 @@ async function buildAutoTools(profile, curatedNames) {
           };
           required.push("body");
         }
-        let desc2 = op.summary || `Execute ${method.toUpperCase()} ${path2}`;
+        let desc2 = op.summary || `Execute ${method.toUpperCase()} ${path3}`;
         if (op.description) desc2 += `
 ${op.description}`;
         try {
@@ -2907,7 +3561,7 @@ ${op.description}`;
             description: desc2,
             parameters: objectSchema(properties, required.length > 0 ? required : void 0),
             execute: async (args) => {
-              let actualPath = path2;
+              let actualPath = path3;
               for (const p of pathParams) {
                 if (args[p.name]) {
                   actualPath = actualPath.replace(`{${p.name}}`, encodeURIComponent(args[p.name]));
@@ -2956,13 +3610,271 @@ ${op.description}`;
 }
 
 // src/routes/config.ts
-var configRoute = new OpenAPIHono11();
+init_edgeSecrets();
+
+// src/config/audit.ts
+init_storage();
+function isAuditEnabled() {
+  return process.env.FRONTBASE_AUDIT_LOGGING !== "false";
+}
+async function logAuditOperation(params) {
+  if (!isAuditEnabled()) return;
+  if (typeof stateProvider.logAudit !== "function") return;
+  try {
+    const entry = {
+      operation: params.operation,
+      secretName: params.secretName,
+      version: params.version,
+      status: params.status,
+      errorMessage: params.errorMessage ?? null,
+      initiatedBy: params.initiatedBy,
+      metadata: params.metadata ?? null
+    };
+    await stateProvider.logAudit(entry);
+  } catch (err) {
+    console.error("[Audit] Failed to log operation:", err);
+  }
+}
+async function getAuditHistory(secretName, limit = 50) {
+  if (typeof stateProvider.getAuditHistory !== "function") return [];
+  try {
+    return await stateProvider.getAuditHistory(secretName, limit);
+  } catch (err) {
+    console.error("[Audit] Failed to fetch history:", err);
+    return [];
+  }
+}
+async function getAuditEntries(limit = 100, offset = 0) {
+  if (typeof stateProvider.getAuditEntries !== "function") return { entries: [], total: 0 };
+  try {
+    return await stateProvider.getAuditEntries(limit, offset);
+  } catch (err) {
+    console.error("[Audit] Failed to fetch entries:", err);
+    return { entries: [], total: 0 };
+  }
+}
+
+// src/config/keyRotation.ts
+init_storage();
+init_edgeSecrets();
+async function rotateVaultKey(oldSystemKey, newSystemKey, onProgress, timeoutMs = 6e4) {
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error("Rotation timed out")), timeoutMs);
+  });
+  const rotationPromise = (async () => {
+    if (typeof stateProvider.listEdgeSecrets !== "function" || typeof stateProvider.getEdgeSecret !== "function") {
+      throw new Error("Vault not supported by this state provider");
+    }
+    if (oldSystemKey === newSystemKey) {
+      throw new Error("New system key must differ from the old system key");
+    }
+    const metas = await stateProvider.listEdgeSecrets();
+    const progress = {
+      total: metas.length,
+      completed: 0,
+      failed: 0,
+      failedSecrets: []
+    };
+    onProgress?.(progress);
+    let newKeyEncryptedWithOld = null;
+    let rollbackArtifactWarning;
+    try {
+      newKeyEncryptedWithOld = await encryptSecret(newSystemKey, oldSystemKey);
+    } catch (err) {
+      const warning = `Could not encrypt rollback artifact: ${err?.message || "Unknown error"}`;
+      console.warn("[Rotation]", warning);
+      rollbackArtifactWarning = warning;
+    }
+    for (const meta of metas) {
+      try {
+        const row = await stateProvider.getEdgeSecret?.(meta.name);
+        if (!row) {
+          throw new Error("Secret disappeared during rotation");
+        }
+        let plaintext;
+        try {
+          plaintext = await decryptSecret(row.value, oldSystemKey);
+        } catch {
+          try {
+            plaintext = await decryptSecret(row.value, newSystemKey);
+          } catch (decryptErr) {
+            throw new Error(`undecryptable with either key: ${decryptErr?.message || decryptErr}`);
+          }
+        }
+        const newCiphertext = await encryptSecret(plaintext, newSystemKey);
+        const verifyPlaintext = await decryptSecret(newCiphertext, newSystemKey);
+        if (verifyPlaintext !== plaintext) {
+          throw new Error("verification failed \u2014 plaintext mismatch after re-encryption");
+        }
+        await stateProvider.setEdgeSecret?.(meta.name, newCiphertext);
+        progress.completed++;
+      } catch (err) {
+        progress.failed++;
+        progress.failedSecrets.push({ name: meta.name, error: err?.message || "Unknown error" });
+      }
+      onProgress?.(progress);
+    }
+    return {
+      success: progress.failed === 0,
+      progress,
+      newKeyEncryptedWithOld,
+      rollbackArtifactWarning
+    };
+  })();
+  return Promise.race([rotationPromise, timeoutPromise]);
+}
+async function verifyVaultKey(systemKey) {
+  if (typeof stateProvider.listEdgeSecrets !== "function" || typeof stateProvider.getEdgeSecret !== "function") {
+    return { valid: false, total: 0, corrupted: [] };
+  }
+  const metas = await stateProvider.listEdgeSecrets();
+  const corrupted = [];
+  for (const meta of metas) {
+    try {
+      const row = await stateProvider.getEdgeSecret?.(meta.name);
+      if (!row) {
+        corrupted.push(meta.name);
+        continue;
+      }
+      await decryptSecret(row.value, systemKey);
+    } catch {
+      corrupted.push(meta.name);
+    }
+  }
+  return {
+    valid: corrupted.length === 0,
+    total: metas.length,
+    corrupted
+  };
+}
+
+// src/config/export.ts
+init_storage();
+init_edgeSecrets();
+var EXPORT_FORMAT_VERSION = 1;
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(stableStringify).join(",") + "]";
+  const obj = value;
+  const keys = Object.keys(obj).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k])).join(",") + "}";
+}
+function canonicalSecrets(secrets) {
+  const sorted = [...secrets].sort(
+    (a, b) => a.name === b.name ? a.version - b.version : a.name.localeCompare(b.name)
+  );
+  return stableStringify(sorted);
+}
+async function sha256(data) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(data));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function exportVault() {
+  if (typeof stateProvider.listEdgeSecrets !== "function" || typeof stateProvider.getEdgeSecret !== "function") {
+    throw new Error("Vault not supported by this state provider");
+  }
+  const metas = await stateProvider.listEdgeSecrets();
+  const secrets = [];
+  for (const meta of metas) {
+    const row = await stateProvider.getEdgeSecret?.(meta.name);
+    if (!row) continue;
+    secrets.push({
+      name: meta.name,
+      version: row.version,
+      ciphertext: row.value,
+      createdAt: meta.createdAt,
+      updatedAt: meta.updatedAt
+    });
+  }
+  const checksum = await sha256(canonicalSecrets(secrets));
+  return {
+    formatVersion: EXPORT_FORMAT_VERSION,
+    exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    secrets,
+    checksum
+  };
+}
+async function importVault(exportData, options = {}) {
+  if (exportData.formatVersion !== EXPORT_FORMAT_VERSION) {
+    throw new Error(`Unsupported export format version: ${exportData.formatVersion}`);
+  }
+  const calculated = await sha256(canonicalSecrets(exportData.secrets ?? []));
+  if (calculated !== exportData.checksum) {
+    throw new Error("Checksum mismatch \u2014 export bundle is corrupted or tampered with");
+  }
+  if (options.verifyOnly) {
+    return { success: true, imported: 0, skipped: exportData.secrets.length, failed: 0, errors: [] };
+  }
+  if (typeof stateProvider.setEdgeSecret !== "function") {
+    throw new Error("Vault not supported by this state provider");
+  }
+  const TIER_3_SECRETS = /* @__PURE__ */ new Set(["FRONTBASE_STATE_DB"]);
+  let imported = 0;
+  let skipped = 0;
+  let failed = 0;
+  const errors = [];
+  const tier3Rejected = [];
+  const auditEntries = [];
+  const systemKey = getVaultSystemKey();
+  if (!systemKey) {
+    throw new Error("Vault not enabled \u2014 FRONTBASE_SYSTEM_KEY not configured");
+  }
+  for (const secret of exportData.secrets) {
+    if (TIER_3_SECRETS.has(secret.name)) {
+      tier3Rejected.push(secret.name);
+      skipped++;
+      auditEntries.push({ name: secret.name, operation: "import", status: "failure", error: "Tier-3 secret not allowed in vault" });
+      continue;
+    }
+    try {
+      const existing = await stateProvider.getEdgeSecret?.(secret.name);
+      if (existing && !options.force) {
+        skipped++;
+        auditEntries.push({ name: secret.name, operation: "import", status: "failure", error: "Skipped (already exists)" });
+        continue;
+      }
+      try {
+        const plaintext = await decryptSecret(secret.ciphertext, systemKey);
+        const { encryptSecret: encryptSecret2 } = await import("./edgeSecrets-OXDV32FC.js");
+        const freshCiphertext = await encryptSecret2(plaintext, systemKey);
+        await stateProvider.setEdgeSecret?.(secret.name, freshCiphertext);
+        imported++;
+        auditEntries.push({ name: secret.name, operation: "import", status: "success" });
+      } catch (decryptErr) {
+        failed++;
+        const errorMsg = `Decryption failed: ${decryptErr?.message || "Unknown error"}`;
+        errors.push({ name: secret.name, error: errorMsg });
+        auditEntries.push({ name: secret.name, operation: "import", status: "failure", error: errorMsg });
+      }
+    } catch (err) {
+      failed++;
+      const errorMsg = err?.message || "Unknown error";
+      errors.push({ name: secret.name, error: errorMsg });
+      auditEntries.push({ name: secret.name, operation: "import", status: "failure", error: errorMsg });
+    }
+  }
+  const result = {
+    success: failed === 0,
+    imported,
+    skipped,
+    failed,
+    errors,
+    tier3Rejected,
+    _auditEntries: auditEntries
+    // Internal — used by route handler for per-secret audit
+  };
+  return result;
+}
+
+// src/routes/config.ts
+init_storage();
+var configRoute = new OpenAPIHono14();
 function redact(value) {
   if (!value) return null;
   if (value.length <= 16) return "***";
   return `${value.substring(0, 8)}...${value.substring(value.length - 4)}`;
 }
-var getConfigRoute = createRoute10({
+var getConfigRoute = createRoute13({
   method: "get",
   path: "/",
   tags: ["System"],
@@ -2973,20 +3885,20 @@ var getConfigRoute = createRoute10({
       description: "Current config",
       content: {
         "application/json": {
-          schema: z12.object({
-            stateDb: z12.object({
-              provider: z12.string().nullable(),
-              url: z12.string().nullable()
+          schema: z15.object({
+            stateDb: z15.object({
+              provider: z15.string().nullable(),
+              url: z15.string().nullable()
             }),
-            cache: z12.object({
-              url: z12.string().nullable(),
-              configured: z12.boolean()
+            cache: z15.object({
+              url: z15.string().nullable(),
+              configured: z15.boolean()
             }),
-            queue: z12.object({
-              url: z12.string().nullable(),
-              configured: z12.boolean()
+            queue: z15.object({
+              url: z15.string().nullable(),
+              configured: z15.boolean()
             }),
-            engineMode: z12.string().nullable()
+            engineMode: z15.string().nullable()
           })
         }
       }
@@ -3018,7 +3930,7 @@ configRoute.openapi(getConfigRoute, async (c) => {
     engineMode: process.env.FRONTBASE_ADAPTER_PLATFORM || null
   }, 200);
 });
-var updateConfigRoute = createRoute10({
+var updateConfigRoute = createRoute13({
   method: "post",
   path: "/",
   tags: ["System"],
@@ -3028,22 +3940,22 @@ var updateConfigRoute = createRoute10({
     body: {
       content: {
         "application/json": {
-          schema: z12.object({
-            cache: z12.object({
-              url: z12.string().min(1),
-              token: z12.string().min(1)
+          schema: z15.object({
+            cache: z15.object({
+              url: z15.string().min(1),
+              token: z15.string().min(1)
             }).optional().openapi({ description: "Redis/Upstash cache credentials" }),
-            queue: z12.object({
-              url: z12.string().min(1),
-              token: z12.string().min(1)
+            queue: z15.object({
+              url: z15.string().min(1),
+              token: z15.string().min(1)
             }).optional().openapi({ description: "QStash/queue credentials" }),
-            apiKeys: z12.object({
-              systemKey: z12.string().optional(),
-              apiKeyHashes: z12.array(z12.object({
-                prefix: z12.string().optional(),
-                hash: z12.string(),
-                scope: z12.string().optional(),
-                expires_at: z12.string().nullable().optional()
+            apiKeys: z15.object({
+              systemKey: z15.string().optional(),
+              apiKeyHashes: z15.array(z15.object({
+                prefix: z15.string().optional(),
+                hash: z15.string(),
+                scope: z15.string().optional(),
+                expires_at: z15.string().nullable().optional()
               })).optional()
             }).optional().openapi({ description: "API key hashes for engine access control" })
           })
@@ -3057,7 +3969,7 @@ var updateConfigRoute = createRoute10({
       content: {
         "application/json": {
           schema: SuccessResponseSchema.extend({
-            updated: z12.array(z12.string())
+            updated: z15.array(z15.string())
           })
         }
       }
@@ -3108,9 +4020,742 @@ configRoute.openapi(updateConfigRoute, async (c) => {
     }, 400);
   }
 });
+var SECRET_NAME_RE = /^(FRONTBASE_[A-Z0-9_]+|SENTRY_DSN)$/;
+var SECRET_CONFIG_RESET = {
+  FRONTBASE_STATE_DB: "stateDb",
+  FRONTBASE_AUTH: "auth",
+  FRONTBASE_API_KEYS: "apiKeys",
+  FRONTBASE_CACHE: "cache",
+  FRONTBASE_QUEUE: "queue",
+  FRONTBASE_VECTOR: "vector",
+  FRONTBASE_GPU: "gpu",
+  FRONTBASE_AGENT_PROFILES: "agentProfiles"
+};
+var upsertSecretsRoute = createRoute13({
+  method: "post",
+  path: "/secrets",
+  tags: ["System"],
+  summary: "Push secrets to the local vault",
+  description: "Encrypts and stores engine-level infrastructure credentials in the local vault, then applies them to the running process. Standalone/self-hosted engines only.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z15.record(z15.string(), z15.string()).openapi({ description: "Map of secret name \u2192 plaintext value (JSON strings). Names must match /^FRONTBASE_[A-Z0-9_]+$/ or be SENTRY_DSN." })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Secrets stored",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            updated: z15.array(z15.string()),
+            errors: z15.array(z15.object({ name: z15.string(), error: z15.string() }))
+          })
+        }
+      }
+    },
+    400: {
+      description: "No system key / unsupported provider",
+      content: { "application/json": { schema: ErrorResponseSchema } }
+    }
+  }
+});
+configRoute.openapi(upsertSecretsRoute, async (c) => {
+  const systemKey = getVaultSystemKey();
+  if (!systemKey) {
+    return c.json({ error: "ConfigError", message: "FRONTBASE_SYSTEM_KEY not configured \u2014 local vault disabled" }, 400);
+  }
+  if (typeof stateProvider.setEdgeSecret !== "function") {
+    return c.json({ error: "ConfigError", message: "State provider does not support the local vault" }, 400);
+  }
+  const secrets = c.req.valid("json");
+  const updated = [];
+  const errors = [];
+  for (const [name, value] of Object.entries(secrets)) {
+    if (!SECRET_NAME_RE.test(name)) {
+      errors.push({ name, error: "name must match /^FRONTBASE_[A-Z0-9_]+$/ or be SENTRY_DSN" });
+      continue;
+    }
+    try {
+      const ciphertext = await encryptSecret(value, systemKey);
+      const version = await stateProvider.setEdgeSecret(name, ciphertext);
+      process.env[name] = value;
+      updated.push(name);
+      void logAuditOperation({
+        operation: "create",
+        secretName: name,
+        version,
+        status: "success",
+        initiatedBy: "system"
+      });
+    } catch (err) {
+      errors.push({ name, error: err?.message || "Unknown error" });
+      void logAuditOperation({
+        operation: "create",
+        secretName: name,
+        version: 0,
+        status: "failure",
+        errorMessage: err?.message || "Unknown error",
+        initiatedBy: "system"
+      });
+    }
+  }
+  if (updated.length > 0) {
+    clearLazySecretCache();
+  }
+  const resetKeys = /* @__PURE__ */ new Set();
+  let cacheChanged = false;
+  for (const name of updated) {
+    const key = SECRET_CONFIG_RESET[name];
+    if (key) {
+      resetKeys.add(key);
+      if (key === "cache") cacheChanged = true;
+    }
+  }
+  for (const key of resetKeys) resetConfig(key);
+  if (updated.length > 0) {
+    invalidateAutoToolCache();
+  }
+  if (cacheChanged) {
+    try {
+      const { provider, url, token } = getCacheConfig();
+      if (provider !== "none" && url) {
+        const { initRedis: initRedis2 } = await import("./redis-ISXX7Q6Q.js");
+        initRedis2({ url, token });
+        console.log("[Config] Cache reinitialized from vault secret");
+      }
+    } catch (err) {
+      console.warn("[Config] Cache reinit from vault secret failed:", err?.message);
+    }
+  }
+  return c.json({
+    success: true,
+    message: updated.length > 0 ? `Stored ${updated.length} secret(s) in vault` : "No secrets stored",
+    updated,
+    errors
+  }, 200);
+});
+var listSecretsRoute = createRoute13({
+  method: "get",
+  path: "/secrets",
+  tags: ["System"],
+  summary: "List secrets in the local vault",
+  description: "Returns the names and versions of secrets stored in the local vault. Ciphertext is never returned.",
+  responses: {
+    200: {
+      description: "Vault contents",
+      content: {
+        "application/json": {
+          schema: z15.object({
+            enabled: z15.boolean(),
+            secrets: z15.array(z15.object({
+              name: z15.string(),
+              version: z15.number(),
+              updatedAt: z15.string().nullable()
+            })),
+            count: z15.number()
+          })
+        }
+      }
+    }
+  }
+});
+configRoute.openapi(listSecretsRoute, async (c) => {
+  const listFn = stateProvider.listEdgeSecrets;
+  if (!getVaultSystemKey() || typeof listFn !== "function") {
+    return c.json({ enabled: false, secrets: [], count: 0 }, 200);
+  }
+  try {
+    const secrets = await listFn();
+    return c.json({
+      enabled: true,
+      secrets: secrets.map((s) => ({ name: s.name, version: s.version, updatedAt: s.updatedAt })),
+      count: secrets.length
+    }, 200);
+  } catch (err) {
+    return c.json({ enabled: false, secrets: [], count: 0, error: err?.message }, 200);
+  }
+});
+var exportSecretsRoute = createRoute13({
+  method: "get",
+  path: "/secrets/export",
+  tags: ["System"],
+  summary: "Export the local vault (backup)",
+  description: "Returns every vault secret in its encrypted (ciphertext) form plus a SHA-256 checksum. The bundle is only retrievable behind system-key auth and is useless without FRONTBASE_SYSTEM_KEY \u2014 still, transport it over HTTPS and store it securely.",
+  responses: {
+    200: {
+      description: "Vault export bundle",
+      content: {
+        "application/json": {
+          schema: z15.object({
+            formatVersion: z15.number(),
+            exportedAt: z15.string(),
+            secrets: z15.array(z15.object({
+              name: z15.string(),
+              version: z15.number(),
+              ciphertext: z15.string(),
+              createdAt: z15.string(),
+              updatedAt: z15.string()
+            })),
+            checksum: z15.string()
+          })
+        }
+      }
+    },
+    400: { description: "Vault unsupported", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+configRoute.openapi(exportSecretsRoute, async (c) => {
+  try {
+    const bundle = await exportVault();
+    void logAuditOperation({
+      operation: "export",
+      secretName: "*",
+      version: 0,
+      status: "success",
+      initiatedBy: "api",
+      metadata: { exportFormat: bundle.formatVersion, secretCount: bundle.secrets.length }
+    });
+    return c.json(bundle, 200);
+  } catch (err) {
+    return c.json({ error: "VaultExportError", message: err?.message || "Export failed" }, 400);
+  }
+});
+var listAuditRoute = createRoute13({
+  method: "get",
+  path: "/secrets/audit",
+  tags: ["System"],
+  summary: "List vault audit entries (paginated)",
+  description: "Returns the newest audit entries across all secrets. Use ?limit and ?offset for pagination.",
+  responses: {
+    200: {
+      description: "Audit entries",
+      content: {
+        "application/json": {
+          schema: z15.object({
+            entries: z15.array(z15.object({
+              id: z15.string(),
+              operation: z15.string(),
+              secretName: z15.string(),
+              version: z15.number(),
+              status: z15.string(),
+              errorMessage: z15.string().nullable(),
+              initiatedBy: z15.string(),
+              timestamp: z15.string(),
+              metadata: z15.any().nullable()
+            })),
+            total: z15.number(),
+            limit: z15.number(),
+            offset: z15.number()
+          })
+        }
+      }
+    }
+  }
+});
+configRoute.openapi(listAuditRoute, async (c) => {
+  const limit = Math.min(parseInt(c.req.query("limit") || "100", 10) || 100, 500);
+  const offset = Math.max(parseInt(c.req.query("offset") || "0", 10) || 0, 0);
+  const result = await getAuditEntries(limit, offset);
+  return c.json({ ...result, limit, offset }, 200);
+});
+var importSecretsRoute = createRoute13({
+  method: "post",
+  path: "/secrets/import",
+  tags: ["System"],
+  summary: "Import secrets from an export bundle",
+  description: "Restores secrets from a previously exported bundle. The bundle must have been encrypted with the same vault key. Existing secrets are skipped unless ?force=true. Imported secrets are applied to the running process.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z15.object({
+            formatVersion: z15.number(),
+            exportedAt: z15.string(),
+            secrets: z15.array(z15.object({
+              name: z15.string(),
+              version: z15.number(),
+              ciphertext: z15.string(),
+              createdAt: z15.string(),
+              updatedAt: z15.string()
+            })),
+            checksum: z15.string()
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Import result",
+      content: {
+        "application/json": {
+          schema: z15.object({
+            success: z15.boolean(),
+            imported: z15.number(),
+            skipped: z15.number(),
+            failed: z15.number(),
+            errors: z15.array(z15.object({ name: z15.string(), error: z15.string() }))
+          })
+        }
+      }
+    },
+    400: { description: "Invalid bundle / checksum mismatch", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+configRoute.openapi(importSecretsRoute, async (c) => {
+  const bundle = c.req.valid("json");
+  const force = c.req.query("force") === "true";
+  const systemKey = getVaultSystemKey();
+  let result;
+  try {
+    result = await importVault(bundle, { force });
+  } catch (err) {
+    void logAuditOperation({
+      operation: "import",
+      secretName: "*",
+      version: 0,
+      status: "failure",
+      errorMessage: err?.message || "Import failed",
+      initiatedBy: "api"
+    });
+    return c.json({ error: "VaultImportError", message: err?.message || "Import failed" }, 400);
+  }
+  const applied = [];
+  if (systemKey && result.imported > 0) {
+    for (const secret of bundle.secrets) {
+      const wasImported = !result.errors.some((e) => e.name === secret.name) && !result.tier3Rejected?.includes(secret.name);
+      if (wasImported) {
+        try {
+          const plaintext = await decryptSecret(secret.ciphertext, systemKey);
+          process.env[secret.name] = plaintext;
+          applied.push(secret.name);
+        } catch {
+        }
+      }
+    }
+    const resetKeys = /* @__PURE__ */ new Set();
+    for (const name of applied) {
+      const key = SECRET_CONFIG_RESET[name];
+      if (key) resetKeys.add(key);
+    }
+    for (const key of resetKeys) resetConfig(key);
+    clearLazySecretCache();
+    if (applied.length > 0) invalidateAutoToolCache();
+  }
+  const auditEntries = result._auditEntries || [];
+  for (const entry of auditEntries) {
+    void logAuditOperation({
+      operation: "import",
+      secretName: entry.name,
+      version: 0,
+      status: entry.status,
+      errorMessage: entry.error,
+      initiatedBy: "api"
+    });
+  }
+  void logAuditOperation({
+    operation: "import",
+    secretName: "*",
+    version: 0,
+    status: result.success ? "success" : "partial",
+    initiatedBy: "api",
+    metadata: {
+      imported: result.imported,
+      skipped: result.skipped,
+      failed: result.failed,
+      tier3Rejected: result.tier3Rejected?.length || 0
+    }
+  });
+  const { _auditEntries, ...cleanResult } = result;
+  return c.json(cleanResult, 200);
+});
+var rotateSecretsRoute = createRoute13({
+  method: "post",
+  path: "/secrets/rotate",
+  tags: ["System"],
+  summary: "Rotate the vault encryption key",
+  description: "Re-encrypts every vault secret from the old system key to a new one. Idempotent (safe to retry if interrupted). Use dryRun=true to pre-flight without changing anything. NOTE: switching the engine to the new FRONTBASE_SYSTEM_KEY still requires a backend key update + redeploy.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z15.object({
+            oldSystemKey: z15.string().min(1),
+            newSystemKey: z15.string().min(1),
+            dryRun: z15.boolean().optional()
+          })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Rotation result",
+      content: {
+        "application/json": {
+          schema: z15.object({
+            success: z15.boolean(),
+            dryRun: z15.boolean().optional(),
+            totalSecrets: z15.number().optional(),
+            progress: z15.object({
+              total: z15.number(),
+              completed: z15.number(),
+              failed: z15.number(),
+              failedSecrets: z15.array(z15.object({ name: z15.string(), error: z15.string() }))
+            }).optional(),
+            newKeyEncryptedWithOld: z15.string().nullable().optional(),
+            rollbackArtifactWarning: z15.string().optional()
+          })
+        }
+      }
+    },
+    400: { description: "Invalid request / old key cannot decrypt", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+configRoute.openapi(rotateSecretsRoute, async (c) => {
+  const { oldSystemKey, newSystemKey, dryRun } = c.req.valid("json");
+  const preflight = await verifyVaultKey(oldSystemKey);
+  if (!preflight.valid && preflight.total > 0) {
+    void logAuditOperation({
+      operation: "rotate",
+      secretName: "*",
+      version: 0,
+      status: "failure",
+      errorMessage: "Old key cannot decrypt vault",
+      initiatedBy: "api",
+      metadata: { corrupted: preflight.corrupted }
+    });
+    return c.json({
+      error: "RotationAborted",
+      message: "Old system key cannot decrypt the existing vault",
+      corrupted: preflight.corrupted
+    }, 400);
+  }
+  if (dryRun) {
+    return c.json({
+      success: true,
+      dryRun: true,
+      totalSecrets: preflight.total,
+      message: "Dry run \u2014 old key verified successfully"
+    }, 200);
+  }
+  const result = await rotateVaultKey(oldSystemKey, newSystemKey);
+  void logAuditOperation({
+    operation: "rotate",
+    secretName: "*",
+    version: 0,
+    status: result.success ? "success" : "partial",
+    initiatedBy: "api",
+    metadata: { rotationProgress: result.progress }
+  });
+  clearLazySecretCache();
+  return c.json(result, 200);
+});
+var getOneSecretRoute = createRoute13({
+  method: "get",
+  path: "/secrets/{name}",
+  tags: ["System"],
+  summary: "Get metadata for a specific secret",
+  description: "Returns metadata only (version, timestamps, health, recent versions). Never returns the ciphertext or plaintext value.",
+  request: {
+    params: z15.object({
+      name: z15.string().min(1)
+    })
+  },
+  responses: {
+    200: {
+      description: "Secret metadata",
+      content: {
+        "application/json": {
+          schema: z15.object({
+            name: z15.string(),
+            version: z15.number(),
+            createdAt: z15.string().nullable(),
+            updatedAt: z15.string().nullable(),
+            tier: z15.number(),
+            health: z15.enum(["healthy", "corrupted"]),
+            recentVersions: z15.array(z15.object({
+              version: z15.number(),
+              createdAt: z15.string(),
+              createdVia: z15.string(),
+              isActive: z15.boolean()
+            }))
+          })
+        }
+      }
+    },
+    404: { description: "Secret not found", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+configRoute.openapi(getOneSecretRoute, async (c) => {
+  const { name } = c.req.valid("param");
+  if (!SECRET_NAME_RE.test(name)) {
+    return c.json({
+      error: "InvalidRequest",
+      message: "Invalid secret name format"
+    }, 400);
+  }
+  if (!getVaultSystemKey() || typeof stateProvider.getEdgeSecret !== "function") {
+    return c.json({ error: "VaultDisabled", message: "Vault not enabled on this engine" }, 404);
+  }
+  const detail = await stateProvider.getEdgeSecretDetail?.(name);
+  let ciphertext;
+  let version;
+  let createdAt;
+  let updatedAt;
+  if (detail) {
+    ciphertext = detail.value;
+    version = detail.version;
+    createdAt = detail.createdAt;
+    updatedAt = detail.updatedAt;
+  } else {
+    const basic = await stateProvider.getEdgeSecret?.(name);
+    if (!basic) {
+      return c.json({ error: "NotFound", message: `Secret ${name} not found` }, 404);
+    }
+    ciphertext = basic.value;
+    version = basic.version;
+    createdAt = null;
+    updatedAt = null;
+  }
+  const systemKey = getVaultSystemKey();
+  let health = "healthy";
+  try {
+    await decryptSecret(ciphertext, systemKey);
+  } catch {
+    health = "corrupted";
+  }
+  let recentVersions = [];
+  if (typeof stateProvider.getSecretVersions === "function") {
+    try {
+      recentVersions = (await stateProvider.getSecretVersions(name)).slice(0, 5).map((v) => ({
+        version: v.version,
+        createdAt: v.createdAt,
+        createdVia: v.createdVia,
+        isActive: v.isActive
+      }));
+    } catch {
+      recentVersions = [];
+    }
+  }
+  void logAuditOperation({
+    operation: "read",
+    secretName: name,
+    version,
+    status: "success",
+    initiatedBy: "api"
+  });
+  return c.json({
+    name,
+    version,
+    createdAt,
+    updatedAt,
+    tier: getSecretTier(name),
+    health,
+    recentVersions
+  }, 200);
+});
+var getSecretAuditRoute = createRoute13({
+  method: "get",
+  path: "/secrets/{name}/audit",
+  tags: ["System"],
+  summary: "Get the audit trail for a specific secret",
+  request: {
+    params: z15.object({ name: z15.string().min(1) })
+  },
+  responses: {
+    200: {
+      description: "Audit history",
+      content: {
+        "application/json": {
+          schema: z15.object({
+            entries: z15.array(z15.object({
+              id: z15.string(),
+              operation: z15.string(),
+              version: z15.number(),
+              status: z15.string(),
+              errorMessage: z15.string().nullable(),
+              initiatedBy: z15.string(),
+              timestamp: z15.string(),
+              metadata: z15.any().nullable()
+            })),
+            count: z15.number()
+          })
+        }
+      }
+    }
+  }
+});
+configRoute.openapi(getSecretAuditRoute, async (c) => {
+  const { name } = c.req.valid("param");
+  const limit = Math.min(parseInt(c.req.query("limit") || "50", 10) || 50, 500);
+  const entries = await getAuditHistory(name, limit);
+  return c.json({ entries, count: entries.length }, 200);
+});
+var getSecretVersionsRoute = createRoute13({
+  method: "get",
+  path: "/secrets/{name}/versions",
+  tags: ["System"],
+  summary: "Get version history for a secret",
+  description: "Returns version metadata (never ciphertext). Use with POST /secrets/:name/rollback to restore a prior version.",
+  request: {
+    params: z15.object({ name: z15.string().min(1) })
+  },
+  responses: {
+    200: {
+      description: "Version history",
+      content: {
+        "application/json": {
+          schema: z15.object({
+            versions: z15.array(z15.object({
+              id: z15.string(),
+              version: z15.number(),
+              createdAt: z15.string(),
+              createdVia: z15.string(),
+              isActive: z15.boolean()
+            })),
+            count: z15.number()
+          })
+        }
+      }
+    },
+    400: { description: "Not supported", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+configRoute.openapi(getSecretVersionsRoute, async (c) => {
+  const { name } = c.req.valid("param");
+  if (typeof stateProvider.getSecretVersions !== "function") {
+    return c.json({ error: "NotSupported", message: "Versioning not supported by this provider" }, 400);
+  }
+  const versions = await stateProvider.getSecretVersions(name);
+  return c.json({ versions, count: versions.length }, 200);
+});
+var rollbackSecretRoute = createRoute13({
+  method: "post",
+  path: "/secrets/{name}/rollback",
+  tags: ["System"],
+  summary: "Roll a secret back to a prior version",
+  request: {
+    params: z15.object({ name: z15.string().min(1) }),
+    body: {
+      content: {
+        "application/json": {
+          schema: z15.object({ version: z15.number().int().min(1) })
+        }
+      }
+    }
+  },
+  responses: {
+    200: {
+      description: "Rollback successful",
+      content: {
+        "application/json": {
+          schema: SuccessResponseSchema.extend({
+            rolledBackTo: z15.number(),
+            previousVersion: z15.number()
+          })
+        }
+      }
+    },
+    400: { description: "Version not found / unsupported", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+configRoute.openapi(rollbackSecretRoute, async (c) => {
+  const { name } = c.req.valid("param");
+  const { version: target } = c.req.valid("json");
+  if (typeof stateProvider.rollbackSecret !== "function") {
+    return c.json({ error: "NotSupported", message: "Versioning not supported by this provider" }, 400);
+  }
+  if (!SECRET_NAME_RE.test(name)) {
+    return c.json({ error: "InvalidName", message: "Invalid secret name" }, 400);
+  }
+  const before = await stateProvider.getEdgeSecret?.(name);
+  const previousVersion = before?.version ?? 0;
+  try {
+    await stateProvider.rollbackSecret(name, target);
+  } catch (err) {
+    void logAuditOperation({
+      operation: "rollback",
+      secretName: name,
+      version: target,
+      status: "failure",
+      errorMessage: err?.message || "Rollback failed",
+      initiatedBy: "api"
+    });
+    return c.json({ error: "RollbackFailed", message: err?.message || "Rollback failed" }, 400);
+  }
+  const systemKey = getVaultSystemKey();
+  if (systemKey) {
+    const restored = await stateProvider.getEdgeSecret?.(name);
+    if (restored) {
+      try {
+        process.env[name] = await decryptSecret(restored.value, systemKey);
+        const resetKey = SECRET_CONFIG_RESET[name];
+        if (resetKey) resetConfig(resetKey);
+      } catch {
+      }
+    }
+  }
+  clearLazySecretCache();
+  invalidateAutoToolCache();
+  void logAuditOperation({
+    operation: "rollback",
+    secretName: name,
+    version: target,
+    status: "success",
+    initiatedBy: "api",
+    metadata: { rollbackFrom: previousVersion }
+  });
+  return c.json({
+    success: true,
+    message: `Rolled back ${name} to version ${target}`,
+    rolledBackTo: target,
+    previousVersion
+  }, 200);
+});
+var deleteVersionRoute = createRoute13({
+  method: "delete",
+  path: "/secrets/{name}/versions/{version}",
+  tags: ["System"],
+  summary: "Delete a specific (non-active) version",
+  request: {
+    params: z15.object({
+      name: z15.string().min(1),
+      version: z15.string().min(1)
+    })
+  },
+  responses: {
+    200: { description: "Version deleted", content: { "application/json": { schema: SuccessResponseSchema } } },
+    400: { description: "Cannot delete active / not found / unsupported", content: { "application/json": { schema: ErrorResponseSchema } } }
+  }
+});
+configRoute.openapi(deleteVersionRoute, async (c) => {
+  const { name, version: versionStr } = c.req.valid("param");
+  const version = parseInt(versionStr, 10);
+  if (!Number.isFinite(version) || version < 1) {
+    return c.json({ error: "InvalidVersion", message: "Version must be a positive integer" }, 400);
+  }
+  if (typeof stateProvider.deleteSecretVersion !== "function") {
+    return c.json({ error: "NotSupported", message: "Versioning not supported by this provider" }, 400);
+  }
+  try {
+    await stateProvider.deleteSecretVersion(name, version);
+  } catch (err) {
+    return c.json({ error: "DeleteFailed", message: err?.message || "Delete failed" }, 400);
+  }
+  return c.json({
+    success: true,
+    message: `Deleted version ${version} of ${name}`
+  }, 200);
+});
 
 // src/routes/openai.ts
-import { OpenAPIHono as OpenAPIHono12 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono15 } from "@hono/zod-openapi";
 import {
   generateText,
   streamText,
@@ -3398,435 +5043,10 @@ ${profile.systemPrompt}
 };
 
 // src/engine/agent/tools.ts
-import { tool as tool6 } from "ai";
-
-// src/routes/data.ts
-import { Hono as Hono2 } from "hono";
-init_IStateProvider();
-init_redis();
-
-// src/middleware/captchaVerify.ts
-async function verifyCaptchaToken(token, clientIp) {
-  try {
-    const botConfig = await getBotProtectionAsync();
-    if (!botConfig || !botConfig.enabled) {
-      return { success: true };
-    }
-    const { provider, secretKey } = botConfig;
-    if (!secretKey) {
-      console.warn("[CAPTCHA] Bot protection is enabled but secretKey is missing. Failing open.");
-      return { success: true };
-    }
-    let verifyUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-    if (provider === "recaptcha_v2" || provider === "recaptcha_v3") {
-      verifyUrl = "https://www.google.com/recaptcha/api/siteverify";
-    }
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3e3);
-    try {
-      const formData = new URLSearchParams();
-      formData.append("secret", secretKey);
-      formData.append("response", token);
-      formData.append("remoteip", clientIp);
-      const response = await fetch(verifyUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: formData.toString(),
-        signal: controller.signal
-      });
-      clearTimeout(timeoutId);
-      if (!response.ok) {
-        console.warn(`[CAPTCHA] Siteverify response error: ${response.status}. Failing open.`);
-        return { success: true };
-      }
-      const result = await response.json();
-      if (result && typeof result === "object") {
-        if (provider === "recaptcha_v3") {
-          const score = typeof result.score === "number" ? result.score : 1;
-          if (result.success && score < 0.5) {
-            console.warn(`[CAPTCHA] reCAPTCHA v3 blocked request: score ${score} is below threshold 0.5.`);
-            return { success: false, error: "Low CAPTCHA score" };
-          }
-        }
-        return {
-          success: !!result.success,
-          error: result.success ? void 0 : result["error-codes"]?.join(", ") || "Verification failed"
-        };
-      }
-    } catch (fetchErr) {
-      clearTimeout(timeoutId);
-      console.warn("[CAPTCHA] Verification request timed out or failed. Failing open.", fetchErr.message);
-      return { success: true };
-    }
-  } catch (e) {
-    console.error("[CAPTCHA] Unexpected error in verifyCaptchaToken. Failing open.", e);
-    return { success: true };
-  }
-  return { success: true };
-}
-
-// src/routes/data.ts
-var dataRoute = new Hono2();
-dataRoute.use("*", ipRateLimiter);
-var cachedDatasource = null;
-var _datasourcesCache = null;
-function getDatasourceCredentials(datasourceId) {
-  if (!_datasourcesCache) {
-    const raw = process.env.FRONTBASE_DATASOURCES || "";
-    if (!raw) return null;
-    try {
-      _datasourcesCache = JSON.parse(raw);
-    } catch {
-      console.error("[Data Execute] Invalid FRONTBASE_DATASOURCES JSON");
-      return null;
-    }
-  }
-  return _datasourcesCache?.[datasourceId] || null;
-}
-function buildProxyRequest(datasourceId, queryConfig, body) {
-  const creds = getDatasourceCredentials(datasourceId);
-  if (!creds) {
-    console.error(`[Data Execute] No credentials found for datasource: ${datasourceId}`);
-    return null;
-  }
-  const dsType = creds.type || "unknown";
-  if (dsType === "neon") {
-    const httpUrl = creds.httpUrl || creds.apiUrl || "";
-    const apiKey = creds.apiKey || "";
-    return {
-      url: `${httpUrl}/sql`,
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: body || { query: queryConfig.sql || "", params: [] }
-    };
-  }
-  if (dsType === "turso") {
-    const httpUrl = creds.httpUrl || creds.apiUrl || "";
-    const authToken = creds.apiKey || creds.authToken || "";
-    return {
-      url: `${httpUrl}/v2/pipeline`,
-      headers: {
-        "Authorization": `Bearer ${authToken}`,
-        "Content-Type": "application/json"
-      },
-      body: body || { statements: [{ q: queryConfig.sql || "" }] }
-    };
-  }
-  if (dsType === "planetscale") {
-    const httpUrl = creds.httpUrl || creds.apiUrl || "";
-    const auth = creds.apiKey || "";
-    return {
-      url: `${httpUrl}/query`,
-      headers: {
-        "Authorization": auth,
-        "Content-Type": "application/json"
-      },
-      body: body || { query: queryConfig.sql || "" }
-    };
-  }
-  if (dsType === "mysql" || dsType === "postgres") {
-    const httpUrl = creds.httpUrl || creds.apiUrl || "";
-    const apiKey = creds.apiKey || "";
-    if (httpUrl) {
-      return {
-        url: `${httpUrl}/sql`,
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: body || { query: queryConfig.sql || "", params: [] }
-      };
-    }
-    console.error(`[Data Execute] No HTTP URL for ${dsType} datasource: ${datasourceId}`);
-    return null;
-  }
-  console.error(`[Data Execute] Unsupported datasource type: ${dsType}`);
-  return null;
-}
-function isPrivateUrl(urlStr) {
-  try {
-    const parsed = new URL(urlStr);
-    const hostname = parsed.hostname.toLowerCase();
-    if (hostname === "localhost" || hostname === "localhost.localdomain" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "0.0.0.0") {
-      return true;
-    }
-    if (hostname.endsWith(".local") || hostname.endsWith(".localhost") || hostname.endsWith(".internal")) {
-      return true;
-    }
-    if (/^10\./.test(hostname)) return true;
-    if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)) return true;
-    if (/^192\.168\./.test(hostname)) return true;
-    if (/^169\.254\./.test(hostname)) return true;
-    if (/^127\./.test(hostname)) return true;
-    if (/^0\./.test(hostname)) return true;
-    if (hostname.startsWith("[fc") || hostname.startsWith("[fd") || hostname.startsWith("[fe80")) {
-      return true;
-    }
-    return false;
-  } catch {
-    return true;
-  }
-}
-function getByPath(obj, path2) {
-  if (!path2) return obj;
-  const parts = path2.replace(/\[(\d+)\]/g, ".$1").split(".");
-  let current = obj;
-  for (const part of parts) {
-    if (current === null || current === void 0) return void 0;
-    current = current[part];
-  }
-  return current;
-}
-function flattenRelations(data) {
-  return data.map((record) => {
-    if (record === null || record === void 0) return record;
-    if (typeof record !== "object") return record;
-    if (Array.isArray(record)) return record;
-    const flat = {};
-    for (const [key, value] of Object.entries(record)) {
-      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-        for (const [subKey, subValue] of Object.entries(value)) {
-          flat[`${key}.${subKey}`] = subValue;
-        }
-      } else {
-        flat[key] = value;
-      }
-    }
-    return flat;
-  });
-}
-async function executeDataRequest2(dataRequest) {
-  let url;
-  let headers = {};
-  let body = dataRequest.body;
-  const isProxy = dataRequest.fetchStrategy === "proxy" && dataRequest.datasourceId;
-  if (isProxy) {
-    const proxyReq = buildProxyRequest(
-      dataRequest.datasourceId,
-      dataRequest.queryConfig || {},
-      dataRequest.body
-    );
-    if (!proxyReq) {
-      throw new Error(`Cannot resolve credentials for datasource: ${dataRequest.datasourceId}`);
-    }
-    url = proxyReq.url;
-    headers = proxyReq.headers;
-    body = proxyReq.body;
-  } else {
-    url = dataRequest.url;
-    for (const [key, value] of Object.entries(dataRequest.headers || {})) {
-      headers[key] = value;
-    }
-  }
-  if (isPrivateUrl(url)) {
-    console.warn(`[Data Execute] Blocked private URL request to: ${url}`);
-    throw new Error(`Access to private URL is blocked: ${url}`);
-  }
-  console.log(`[Data Execute] ${isProxy ? "Proxy" : "Direct"}: ${url.substring(0, 100)}...`);
-  const cacheKey = `data:${url}:${body ? JSON.stringify(body) : ""}`;
-  const cacheTTL = 60;
-  try {
-    const redis = getRedis();
-    return await cached(cacheKey, async () => {
-      return await executeDataRequestUncached(dataRequest, url, headers, body);
-    }, cacheTTL);
-  } catch (e) {
-    if (e.message?.includes("not initialized")) {
-    } else {
-      console.warn("[Data Execute] Redis cache error, falling back to direct fetch:", e);
-    }
-  }
-  return await executeDataRequestUncached(dataRequest, url, headers, body);
-}
-async function executeDataRequestUncached(dataRequest, url, headers, resolvedBody) {
-  const body = resolvedBody !== void 0 ? resolvedBody : dataRequest.body;
-  const fetchOptions = {
-    method: dataRequest.method || "GET",
-    headers
-  };
-  if (body && dataRequest.method === "POST") {
-    fetchOptions.body = JSON.stringify(body);
-    if (body.filters && Array.isArray(body.filters) && body.filters.length > 0) {
-      console.log(`[Data Execute] Filters:`, JSON.stringify(body.filters));
-    }
-  }
-  const response = await fetch(url, fetchOptions);
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
-  }
-  let total = null;
-  const contentRange = response.headers.get("content-range");
-  if (contentRange) {
-    const match = contentRange.match(/\/(\d+)$/);
-    if (match) {
-      total = parseInt(match[1], 10);
-    }
-  }
-  const json = await response.json();
-  let data = getByPath(json, dataRequest.resultPath || "");
-  if (!Array.isArray(data)) {
-    data = data ? [data] : [];
-  }
-  if (dataRequest.flattenRelations !== false) {
-    data = flattenRelations(data);
-  }
-  if (total === null && typeof json.total === "number") {
-    total = json.total;
-  }
-  return { data, total };
-}
-async function getDefaultDatasource(tenantSlug) {
-  if (!isMultiTenantSlug(tenantSlug) && cachedDatasource) return cachedDatasource;
-  try {
-    const pages = await stateProvider.listPages(tenantSlug);
-    if (pages.length > 0) {
-      const page = await stateProvider.getPageBySlug(pages[0].slug, tenantSlug);
-      if (page?.datasources && page.datasources.length > 0) {
-        if (!isMultiTenantSlug(tenantSlug)) {
-          cachedDatasource = page.datasources[0];
-        }
-        console.log(`[Data API] Using datasource: ${page.datasources[0].name} (${page.datasources[0].type})`);
-        return page.datasources[0];
-      }
-    }
-  } catch (error) {
-    console.error("[Data API] Error getting datasource:", error);
-  }
-  return null;
-}
-dataRoute.get("/:table", async (c) => {
-  const table = c.req.param("table");
-  const query = c.req.query();
-  try {
-    const columns = query.select?.split(",").map((col) => col.trim()) || ["*"];
-    const limit = parseInt(query.limit || "100");
-    const offset = parseInt(query.offset || "0");
-    const orderBy = query.orderBy ? {
-      column: query.orderBy,
-      direction: query.order || "asc"
-    } : void 0;
-    console.log(`[Data API] Querying ${table}:`, { columns, limit, offset });
-    const tenantSlug = c.get("tenantSlug");
-    const datasource = await getDefaultDatasource(tenantSlug);
-    const result = await handleDataQuery(table, {
-      columns,
-      limit,
-      offset,
-      orderBy
-    }, datasource || void 0);
-    if (result.error) {
-      console.error(`[Data API] Error:`, result.error);
-      return c.json({
-        success: false,
-        error: result.error
-      }, 500);
-    }
-    c.header("Cache-Control", "public, max-age=60, s-maxage=300");
-    return c.json({
-      success: true,
-      data: result.data,
-      count: result.count
-    });
-  } catch (error) {
-    console.error(`[Data API] Error:`, error);
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, 500);
-  }
-});
-dataRoute.get("/:table/:id", async (c) => {
-  const table = c.req.param("table");
-  const id = c.req.param("id");
-  try {
-    const tenantSlug = c.get("tenantSlug");
-    const datasource = await getDefaultDatasource(tenantSlug);
-    const result = await handleDataQuery(table, {
-      filters: { id },
-      limit: 1
-    }, datasource || void 0);
-    return c.json({
-      success: true,
-      data: result.data[0] || null
-    });
-  } catch (error) {
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-      data: null
-    }, 500);
-  }
-});
-dataRoute.post("/execute", async (c) => {
-  try {
-    const body = await c.req.json();
-    const dataRequest = body.dataRequest;
-    const tenantSlug = c.get("tenantSlug");
-    if (!dataRequest) {
-      return c.json({
-        success: false,
-        error: "Invalid dataRequest: missing dataRequest object"
-      }, 400);
-    }
-    const isProxy = dataRequest.fetchStrategy === "proxy" && dataRequest.datasourceId;
-    if (!isProxy && !dataRequest.url) {
-      return c.json({
-        success: false,
-        error: "Invalid dataRequest: missing url (direct) or datasourceId (proxy)"
-      }, 400);
-    }
-    if (isProxy && dataRequest.datasourceId) {
-      const isAuthorized = await stateProvider.isDatasourceAuthorized(dataRequest.datasourceId, tenantSlug);
-      if (!isAuthorized) {
-        console.warn(`[Data Execute] Unauthorized access attempt: tenantSlug='${tenantSlug}', datasourceId='${dataRequest.datasourceId}'`);
-        return c.json({
-          success: false,
-          error: "Unauthorized access to this datasource"
-        }, 403);
-      }
-    }
-    const botConfig = getBotProtection();
-    if (botConfig && botConfig.enabled && dataRequest.method === "POST") {
-      const captchaToken = body.captchaToken || c.req.header("x-captcha-token") || "";
-      if (!captchaToken) {
-        return c.json({ success: false, error: "CAPTCHA required for write operations" }, 403);
-      }
-      const clientIp = c.req.header("cf-connecting-ip") || c.req.header("x-forwarded-for")?.split(",")[0].trim() || c.req.header("x-real-ip") || "unknown";
-      const result = await verifyCaptchaToken(captchaToken, clientIp);
-      if (!result.success) {
-        return c.json({ success: false, error: result.error || "CAPTCHA verification failed" }, 403);
-      }
-    }
-    const label = isProxy ? `proxy:${dataRequest.datasourceId}` : dataRequest.url?.substring(0, 80);
-    console.log(`[Data Execute] Processing: ${label}...`);
-    const { data, total } = await executeDataRequest2(dataRequest);
-    return c.json({
-      success: true,
-      data,
-      count: data.length,
-      total: total ?? data.length
-      // Use server total or fallback to data length
-    });
-  } catch (error) {
-    console.error(`[Data Execute] Error:`, error);
-    return c.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error"
-    }, 500);
-  }
-});
-dataRoute.post("/clear-cache", async (c) => {
-  cachedDatasource = null;
-  _datasourcesCache = null;
-  return c.json({ success: true, message: "Cache cleared" });
-});
+import { tool as tool7 } from "ai";
 
 // src/engine/agent/tools/pages.ts
+init_storage();
 import { tool as tool2 } from "ai";
 function buildPageTools(profile) {
   const tools = {};
@@ -3992,6 +5212,7 @@ function buildPageTools(profile) {
 }
 
 // src/engine/agent/tools/styles.ts
+init_storage();
 import { tool as tool3 } from "ai";
 function buildStyleTools(profile) {
   const tools = {};
@@ -4124,6 +5345,7 @@ function buildStyleTools(profile) {
 }
 
 // src/engine/agent/tools/engine.ts
+init_storage();
 import { tool as tool4 } from "ai";
 function buildEngineTools(profile) {
   const tools = {};
@@ -4161,7 +5383,7 @@ function buildEngineTools(profile) {
     }),
     execute: async ({ dummy }) => {
       try {
-        const { getStateDbConfig: getStateDbConfig2, getCacheConfig: getCacheConfig2, getQueueConfig: getQueueConfig3, getGpuModels: getGpuModels2, getAgentProfilesConfig: getAgentProfilesConfig2 } = await import("./env-YBQ7MHV3.js");
+        const { getStateDbConfig: getStateDbConfig2, getCacheConfig: getCacheConfig2, getQueueConfig: getQueueConfig3, getGpuModels: getGpuModels2, getAgentProfilesConfig: getAgentProfilesConfig2 } = await import("./env-UIMF3Y6O.js");
         const stateDb = getStateDbConfig2();
         const cache = getCacheConfig2();
         const queue = getQueueConfig3();
@@ -4238,10 +5460,623 @@ function buildEngineTools(profile) {
   return tools;
 }
 
-// src/engine/agent/tools/user-tools.ts
+// src/engine/agent/tools/rag.ts
 import { tool as tool5 } from "ai";
-import { z as z13 } from "zod";
-import { Client as Client2 } from "@modelcontextprotocol/sdk/client/index.js";
+
+// src/services/document-processor.ts
+var WorkersAiEmbedding = class {
+  accountId;
+  apiToken;
+  constructor(accountId, apiToken) {
+    this.accountId = accountId || (process.env.CLOUDFLARE_ACCOUNT_ID || "");
+    this.apiToken = apiToken || (process.env.CLOUDFLARE_API_TOKEN || "");
+  }
+  async embed(text) {
+    if (!this.accountId || !this.apiToken) {
+      throw new Error("Cloudflare credentials not configured");
+    }
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/ai/run/@cf/baai/bge-base-en-v1.5`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.apiToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ text })
+      }
+    );
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.errors?.[0]?.message || "Embedding failed");
+    }
+    return data.result?.data?.[0] || data.result || [];
+  }
+};
+var OllamaEmbedding = class {
+  baseUrl;
+  model;
+  constructor(baseUrl, model) {
+    this.baseUrl = baseUrl || "http://localhost:11434";
+    this.model = model || "nomic-embed-text";
+  }
+  async embed(text) {
+    const response = await fetch(`${this.baseUrl}/api/embed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: this.model,
+        input: text
+      })
+    });
+    const data = await response.json();
+    if (data.error) {
+      throw new Error(data.error);
+    }
+    return data.embeddings?.[0] || [];
+  }
+};
+function getEmbeddingService() {
+  if (process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN) {
+    return new WorkersAiEmbedding();
+  }
+  if (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_ENDPOINT) {
+    return new OllamaEmbedding();
+  }
+  throw new Error("No embedding service configured. Set CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN for Workers AI, or OLLAMA_BASE_URL for Ollama.");
+}
+
+// src/services/rag/storage-adapter.ts
+init_env();
+
+// src/services/rag/vector-adapter.ts
+init_env();
+var LibSqlVectorAdapter = class {
+  url;
+  token;
+  constructor(config) {
+    this.url = config.url.replace(/\/$/, "");
+    this.token = config.token;
+  }
+  async upsert(tableName, vectors) {
+    const client = this.getClient();
+    for (const doc of vectors) {
+      const metadataStr = JSON.stringify(doc.metadata || {});
+      const vectorStr = JSON.stringify(doc.vector);
+      await client.execute({
+        sql: `
+                    INSERT OR REPLACE INTO ${tableName} (id, vector, text, metadata)
+                    VALUES (?, ?, ?, ?)
+                `,
+        args: [doc.id, vectorStr, doc.text, metadataStr]
+      });
+    }
+  }
+  async search(tableName, queryVector, limit, filters) {
+    const client = this.getClient();
+    let whereClause = "";
+    const filterValues = [];
+    if (filters && Object.keys(filters).length > 0) {
+      const conditions = [];
+      for (const [key, value] of Object.entries(filters)) {
+        conditions.push(`json_extract(metadata, '$.${key}') = ?`);
+        filterValues.push(value);
+      }
+      whereClause = " AND " + conditions.join(" AND ");
+    }
+    const queryStr = JSON.stringify(queryVector);
+    const result = await client.execute({
+      sql: `
+                SELECT
+                    id,
+                    text,
+                    metadata,
+                    vector_distance(vector, ?) as distance
+                FROM ${tableName}
+                WHERE vector IS NOT NULL${whereClause}
+                ORDER BY distance
+                LIMIT ?
+            `,
+      args: [queryStr, ...filterValues, limit]
+    });
+    return result.rows.map((row) => ({
+      id: row.id,
+      text: row.text,
+      score: 1 - (row.distance || 0),
+      // Convert distance to similarity
+      metadata: typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata || {}
+    }));
+  }
+  async delete(tableName, ids) {
+    const client = this.getClient();
+    await client.execute({
+      sql: `DELETE FROM ${tableName} WHERE id IN (${ids.map(() => "?").join(",")})`,
+      args: ids
+    });
+  }
+  async ensureTable(tableName) {
+    const client = this.getClient();
+    await client.execute({
+      sql: `
+                CREATE TABLE IF NOT EXISTS ${tableName} (
+                    id TEXT PRIMARY KEY,
+                    vector TEXT,
+                    text TEXT,
+                    metadata TEXT
+                )
+            `,
+      args: []
+    });
+  }
+  getClient() {
+    const { createClient } = __require("@libsql/client");
+    return createClient({
+      url: this.url,
+      authToken: this.token
+    });
+  }
+};
+var VectorizeAdapter = class {
+  accountId;
+  apiToken;
+  indexName;
+  constructor(config) {
+    this.accountId = config.accountId;
+    this.apiToken = config.apiToken;
+    this.indexName = config.indexName;
+  }
+  async upsert(tableName, vectors) {
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/vectorize/indexes/${this.indexName}/upsert`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.apiToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          vectors: vectors.map((v) => ({
+            id: v.id,
+            vector: v.vector,
+            metadata: {
+              text: v.text,
+              ...v.metadata
+            }
+          }))
+        })
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Vectorize upsert failed: ${response.statusText}`);
+    }
+  }
+  async search(tableName, queryVector, limit, filters) {
+    let filter = void 0;
+    if (filters && Object.keys(filters).length > 0) {
+      filter = filters;
+    }
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/vectorize/indexes/${this.indexName}/query`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.apiToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          vector: queryVector,
+          topK: limit,
+          filter,
+          returnValues: true,
+          returnMetadata: true
+        })
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Vectorize query failed: ${response.statusText}`);
+    }
+    const data = await response.json();
+    return (data.result?.matches || []).map((match) => ({
+      id: match.id,
+      text: match.metadata?.text || "",
+      score: match.score,
+      metadata: match.metadata || {}
+    }));
+  }
+  async delete(tableName, ids) {
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${this.accountId}/vectorize/indexes/${this.indexName}/delete_by_ids`,
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.apiToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ ids })
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Vectorize delete failed: ${response.statusText}`);
+    }
+  }
+  async ensureTable(tableName) {
+  }
+};
+var LanceDbAdapter = class {
+  uri;
+  constructor(config) {
+    this.uri = config.uri;
+  }
+  async upsert(tableName, vectors) {
+    const lancedb = await import("@lancedb/lancedb");
+    const conn = await lancedb.connect({ uri: this.uri });
+    const table = await conn.openTable(tableName).catch(() => null);
+    if (!table) {
+      await this.ensureTable(tableName);
+    }
+    const actualTable = await conn.openTable(tableName);
+    const records = vectors.map((v) => ({
+      id: v.id,
+      vector: v.vector,
+      text: v.text,
+      ...v.metadata
+    }));
+    await actualTable.add(records);
+  }
+  async search(tableName, queryVector, limit, filters) {
+    const lancedb = await import("@lancedb/lancedb");
+    const conn = await lancedb.connect({ uri: this.uri });
+    const table = await conn.openTable(tableName);
+    let query = table.search(queryVector).limit(limit);
+    if (filters && Object.keys(filters).length > 0) {
+      query = query.where(filters);
+    }
+    const results = await query.execute();
+    return results.map((row) => ({
+      id: row.id,
+      text: row.text || "",
+      score: row._distance || 0,
+      metadata: row
+    }));
+  }
+  async delete(tableName, ids) {
+    const lancedb = await import("@lancedb/lancedb");
+    const conn = await lancedb.connect({ uri: this.uri });
+    const table = await conn.openTable(tableName);
+    await table.delete(`id IN (${ids.map((id) => `'${id}'`).join(",")})`);
+  }
+  async ensureTable(tableName) {
+    const lancedb = await import("@lancedb/lancedb");
+    const conn = await lancedb.connect({ uri: this.uri });
+    await conn.createTable({
+      name: tableName,
+      schema: {
+        id: lancedb.schema.string(),
+        vector: lancedb.schema.vector(1536),
+        // OpenAI embedding dimension
+        text: lancedb.schema.string()
+      }
+    });
+  }
+};
+var PgVectorAdapter = class {
+  url;
+  constructor(config) {
+    this.url = config.url;
+  }
+  async upsert(tableName, vectors) {
+    const client = await this.getClient();
+    for (const doc of vectors) {
+      const metadataStr = JSON.stringify(doc.metadata || {});
+      const vectorArray = `[${doc.vector.join(",")}]`;
+      await client.query(
+        `
+                    INSERT INTO ${tableName} (id, embedding, text, metadata)
+                    VALUES ($1, $2::vector, $3, $4)
+                    ON CONFLICT (id) DO UPDATE SET
+                        embedding = EXCLUDED.embedding,
+                        text = EXCLUDED.text,
+                        metadata = EXCLUDED.metadata
+                `,
+        [doc.id, vectorArray, doc.text, metadataStr]
+      );
+    }
+    await client.end();
+  }
+  async search(tableName, queryVector, limit, filters) {
+    const client = await this.getClient();
+    let whereClause = "";
+    const filterValues = [];
+    let paramIndex = 3;
+    if (filters && Object.keys(filters).length > 0) {
+      const conditions = [];
+      for (const [key, value] of Object.entries(filters)) {
+        conditions.push(`metadata->>$${paramIndex} = $${paramIndex + 1}`);
+        filterValues.push(key, value);
+        paramIndex += 2;
+      }
+      whereClause = " AND " + conditions.join(" AND ");
+    }
+    const vectorArray = `[${queryVector.join(",")}]`;
+    const result = await client.query(
+      `
+                SELECT
+                    id,
+                    text,
+                    metadata,
+                    1 - (embedding <=> $1::vector) as score
+                FROM ${tableName}
+                WHERE embedding IS NOT NULL${whereClause}
+                ORDER BY embedding <=> $1::vector
+                LIMIT $2
+            `,
+      [vectorArray, limit, ...filterValues]
+    );
+    await client.end();
+    return result.rows.map((row) => ({
+      id: row.id,
+      text: row.text,
+      score: row.score,
+      metadata: typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata || {}
+    }));
+  }
+  async delete(tableName, ids) {
+    const client = await this.getClient();
+    await client.query(
+      `DELETE FROM ${tableName} WHERE id = ANY($1)`,
+      [ids]
+    );
+    await client.end();
+  }
+  async ensureTable(tableName) {
+    const client = await this.getClient();
+    await client.query(`
+            CREATE TABLE IF NOT EXISTS ${tableName} (
+                id TEXT PRIMARY KEY,
+                embedding vector(1536),
+                text TEXT,
+                metadata JSONB
+            );
+
+            CREATE INDEX IF NOT EXISTS ${tableName}_embedding_idx
+                ON ${tableName} USING ivfflat (embedding vector_cosine_ops)
+                WITH (lists = 100);
+        `);
+    await client.end();
+  }
+  async getClient() {
+    const pg = await import("pg");
+    const { Pool } = pg.default || pg;
+    const pool = new Pool({ connectionString: this.url });
+    return pool.connect();
+  }
+};
+var _adapter = null;
+function getVectorAdapter() {
+  if (_adapter) {
+    return _adapter;
+  }
+  const config = getVectorConfig();
+  try {
+    switch (config.provider) {
+      case "turso":
+      case "libsql":
+        if (!config.url) {
+          throw new Error("libSQL requires url");
+        }
+        _adapter = new LibSqlVectorAdapter({
+          url: config.url,
+          token: config.token
+        });
+        break;
+      case "cloudflare":
+      case "vectorize":
+        if (!config.cfAccountId || !config.cfApiToken) {
+          throw new Error("Vectorize requires accountId and apiToken");
+        }
+        _adapter = new VectorizeAdapter({
+          accountId: config.cfAccountId,
+          apiToken: config.cfApiToken,
+          indexName: config.url || "rag_documents"
+        });
+        break;
+      case "lancedb":
+        _adapter = new LanceDbAdapter({
+          uri: config.url || "./lancedb"
+        });
+        break;
+      case "pgvector":
+      case "supabase":
+      case "neon":
+        if (!config.url) {
+          throw new Error("pgvector requires url");
+        }
+        _adapter = new PgVectorAdapter({ url: config.url });
+        break;
+      default:
+        throw new Error(`Unsupported vector provider: ${config.provider}`);
+    }
+    return _adapter;
+  } catch (err) {
+    throw new Error(`Failed to initialize vector adapter: ${err.message}`);
+  }
+}
+
+// src/services/rag/processor.ts
+async function searchRagDocuments(query, options = {}) {
+  const embeddingService = getEmbeddingService();
+  const queryVector = await embeddingService.embed(query);
+  const tableName = process.env.RAG_VECTOR_TABLE || "rag_documents";
+  const limit = options.limit || 10;
+  const vectorFilters = {};
+  if (options.tenant_id) {
+    vectorFilters.tenant_id = options.tenant_id;
+  }
+  if (options.project_id) {
+    vectorFilters.project_id = options.project_id;
+  }
+  if (options.filters?.client_id) {
+    vectorFilters.client_id = options.filters.client_id;
+  }
+  if (options.filters?.source_config_id) {
+    vectorFilters.source_config_id = options.filters.source_config_id;
+  }
+  if (options.filters?.bucket) {
+    vectorFilters.bucket = options.filters.bucket;
+  }
+  if (options.filters?.custom) {
+    Object.assign(vectorFilters, options.filters.custom);
+  }
+  const vectorAdapter = getVectorAdapter();
+  let results = await vectorAdapter.search(tableName, queryVector, limit * 2, vectorFilters);
+  return results.slice(0, limit).map((r) => ({
+    chunk_id: r.id,
+    text: r.text || "",
+    score: r.score || 0,
+    source: {
+      bucket: r.metadata?.bucket,
+      path: r.metadata?.path
+    },
+    metadata: {
+      tenant_id: r.metadata?.tenant_id,
+      project_id: r.metadata?.project_id,
+      client_id: r.metadata?.client_id,
+      content_type: r.metadata?.content_type,
+      source_config_id: r.metadata?.source_config_id
+    }
+  }));
+}
+
+// src/engine/agent/tools/rag.ts
+function validateTenantContext(profile, targetTenantId) {
+  if (profile.tenantSlug && targetTenantId && targetTenantId !== profile.tenantSlug) {
+    throw new Error(`Tenant isolation violation: profile ${profile.name} (tenant: ${profile.tenantSlug}) cannot access tenant ${targetTenantId}`);
+  }
+}
+function buildRagTools(profile) {
+  const tools = {};
+  const perms = profile.permissions?.["rag.all"] || [];
+  const hasRead = perms.includes("read") || perms.includes("all");
+  if (!hasRead) return tools;
+  tools["rag_search"] = tool5({
+    description: "Search documents using semantic similarity. Returns relevant text chunks with their sources. Use this to find information from uploaded documents, knowledge bases, or documentation. Results are automatically scoped to the current tenant and project.",
+    parameters: objectSchema({
+      query: S.string("The search query - what information you are looking for"),
+      client_id: S.string('Optional: Filter to a specific client ID (e.g., "acme-corp", "user-123"). Leave empty to search across all clients.', true),
+      limit: S.number("Maximum number of results to return (default: 5, max: 20)", true)
+    }),
+    execute: async ({ query, client_id, limit }) => {
+      try {
+        validateTenantContext(profile, profile.tenantSlug);
+        const results = await searchRagDocuments(query, {
+          tenant_id: profile.tenantSlug,
+          project_id: profile.projectId,
+          filters: client_id ? { client_id } : void 0,
+          limit: Math.min(limit || 5, 20)
+        });
+        return {
+          count: results.length,
+          results: results.map((r) => ({
+            text: r.text,
+            score: r.score,
+            source: r.source,
+            client_id: r.metadata.client_id,
+            content_type: r.metadata.content_type
+          }))
+        };
+      } catch (e) {
+        return { error: `RAG search failed: ${e.message}` };
+      }
+    }
+  });
+  tools["rag_client_search"] = tool5({
+    description: 'Search documents for a specific client. Use this when the user asks about a particular client, customer, or user (e.g., "What did Acme Corp request?"). Automatically extracts client ID from common patterns like "client XYZ", "customer ABC", or "user-123".',
+    parameters: objectSchema({
+      query: S.string("The search query - what information you are looking for"),
+      client_identifier: S.string('The client or customer identifier (e.g., "acme-corp", "user-123"). If not provided, will attempt to extract from the query.', true),
+      limit: S.number("Maximum number of results to return (default: 5, max: 20)", true)
+    }),
+    execute: async ({ query, client_identifier, limit }) => {
+      try {
+        validateTenantContext(profile, profile.tenantSlug);
+        let clientId = client_identifier;
+        if (!clientId) {
+          const patterns = [
+            /client[:\s]+([a-zA-Z0-9_-]+)/i,
+            /customer[:\s]+([a-zA-Z0-9_-]+)/i,
+            /user[:\s]+([a-zA-Z0-9_-]+)/i,
+            /for\s+([a-zA-Z0-9_-]+)\s+request/i
+          ];
+          for (const pattern of patterns) {
+            const match = query.match(pattern);
+            if (match && match[1]) {
+              clientId = match[1];
+              break;
+            }
+          }
+        }
+        if (!clientId) {
+          return { error: "Could not identify client from query. Please provide the client_identifier parameter." };
+        }
+        const results = await searchRagDocuments(query, {
+          tenant_id: profile.tenantSlug,
+          project_id: profile.projectId,
+          filters: { client_id: clientId },
+          limit: Math.min(limit || 5, 20)
+        });
+        return {
+          client_id: clientId,
+          count: results.length,
+          results: results.map((r) => ({
+            text: r.text,
+            score: r.score,
+            source: r.source,
+            content_type: r.metadata.content_type
+          }))
+        };
+      } catch (e) {
+        return { error: `RAG client search failed: ${e.message}` };
+      }
+    }
+  });
+  tools["rag_bucket_search"] = tool5({
+    description: 'Search documents within a specific storage bucket. Use this when you know the documents are in a particular bucket (e.g., "contracts", "invoices", "documentation").',
+    parameters: objectSchema({
+      query: S.string("The search query - what information you are looking for"),
+      bucket: S.string('The bucket name to search within (e.g., "documents", "contracts")'),
+      limit: S.number("Maximum number of results to return (default: 5, max: 20)", true)
+    }),
+    execute: async ({ query, bucket, limit }) => {
+      try {
+        validateTenantContext(profile, profile.tenantSlug);
+        const results = await searchRagDocuments(query, {
+          tenant_id: profile.tenantSlug,
+          project_id: profile.projectId,
+          filters: { bucket },
+          limit: Math.min(limit || 5, 20)
+        });
+        return {
+          bucket,
+          count: results.length,
+          results: results.map((r) => ({
+            text: r.text,
+            score: r.score,
+            path: r.source.path,
+            client_id: r.metadata.client_id
+          }))
+        };
+      } catch (e) {
+        return { error: `RAG bucket search failed: ${e.message}` };
+      }
+    }
+  });
+  return tools;
+}
+
+// src/engine/agent/tools/user-tools.ts
+import { tool as tool6 } from "ai";
+import { z as z16 } from "zod";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 function parametersToJsonSchema(params) {
   const properties = {};
@@ -4286,7 +6121,7 @@ function parametersToJsonSchema(params) {
 function buildWorkflowTool(toolDef, config, profile) {
   const schema = config.parameters?.length > 0 ? parametersToJsonSchema(config.parameters) : objectSchema({ dummy: S.string("Not used, pass empty string") });
   return {
-    [toolDef.name]: tool5({
+    [toolDef.name]: tool6({
       description: toolDef.description || `Trigger workflow: ${toolDef.name}`,
       parameters: schema,
       execute: async (args) => {
@@ -4320,7 +6155,7 @@ async function buildMcpClientTools(toolDef, config) {
     const transport = new SSEClientTransport(sseUrl, {
       requestInit: { headers: config.headers || {} }
     });
-    const client = new Client2(
+    const client = new Client(
       { name: `frontbase-edge-client`, version: "1.0.0" },
       { capabilities: {} }
     );
@@ -4333,9 +6168,9 @@ async function buildMcpClientTools(toolDef, config) {
             continue;
           }
         }
-        tools[`mcp_${toolDef.name}_${mTool.name}`] = tool5({
+        tools[`mcp_${toolDef.name}_${mTool.name}`] = tool6({
           description: `[From ${toolDef.name} MCP]: ${mTool.description || `Tool ${mTool.name}`}`,
-          parameters: z13.any(),
+          parameters: z16.any(),
           execute: async (args) => {
             try {
               const result = await client.callTool({
@@ -4363,7 +6198,7 @@ async function buildMcpClientTools(toolDef, config) {
     }
   } catch (err) {
     console.error(`[UserTools] Failed to initialize MCP Client '${toolDef.name}':`, err.message);
-    tools[`mcp_${toolDef.name}_status`] = tool5({
+    tools[`mcp_${toolDef.name}_status`] = tool6({
       description: `MCP Server '${toolDef.name}' is currently unreachable.`,
       parameters: objectSchema({ dummy: S.string("Not used, pass empty string") }),
       execute: async ({ dummy }) => ({
@@ -4425,7 +6260,8 @@ var buildAgentTools = async (profile, stateProvider2) => {
   Object.assign(tools, buildPageTools(profile));
   Object.assign(tools, buildStyleTools(profile));
   Object.assign(tools, buildEngineTools(profile));
-  tools.queryDatasource = tool6({
+  Object.assign(tools, buildRagTools(profile));
+  tools.queryDatasource = tool7({
     description: "Execute a read-only SQL SELECT query against a connected external Datasource. Use this to query live app data.",
     parameters: objectSchema({
       datasourceId: S.string("The UUID of the connected datasource to query."),
@@ -4448,7 +6284,7 @@ var buildAgentTools = async (profile, stateProvider2) => {
           body: { query: sql2, params: [] },
           queryConfig: { sql: sql2 }
         };
-        const result = await executeDataRequest2(dataReq);
+        const result = await executeDataRequest(dataReq);
         return result.data;
       } catch (e) {
         return { error: `Query failed: ${e.message || "Unknown query error"}` };
@@ -4457,7 +6293,7 @@ var buildAgentTools = async (profile, stateProvider2) => {
   });
   const workflowPerms = profile.permissions?.["workflows.all"] || [];
   if (workflowPerms.includes("trigger") || workflowPerms.includes("all")) {
-    tools.triggerWorkflow = tool6({
+    tools.triggerWorkflow = tool7({
       description: "Trigger an Action Workflow deployed on this Edge Engine.",
       parameters: objectSchema({
         workflowId: S.string("The ID of the workflow to trigger."),
@@ -4491,7 +6327,8 @@ var buildAgentTools = async (profile, stateProvider2) => {
 };
 
 // src/routes/openai.ts
-var openaiRoute = new OpenAPIHono12();
+init_storage();
+var openaiRoute = new OpenAPIHono15();
 function resolveModel(modelSlug, c) {
   if (!modelSlug) {
     return { error: c.json({ error: { message: "Missing required field: model", type: "invalid_request_error", code: "missing_field" } }, 400) };
@@ -5062,8 +6899,9 @@ openaiRoute.post("/responses", async (c) => {
 });
 
 // src/routes/agent-tools.ts
-import { OpenAPIHono as OpenAPIHono13 } from "@hono/zod-openapi";
-var agentToolsRoute = new OpenAPIHono13();
+init_storage();
+import { OpenAPIHono as OpenAPIHono16 } from "@hono/zod-openapi";
+var agentToolsRoute = new OpenAPIHono16();
 agentToolsRoute.get("/:profileSlug", async (c) => {
   const profileSlug = c.req.param("profileSlug");
   const includeInactive = c.req.query("includeInactive") === "true";
@@ -5138,10 +6976,11 @@ agentToolsRoute.delete("/:id", async (c) => {
 
 // src/routes/mcp.ts
 init_env();
-import { OpenAPIHono as OpenAPIHono14 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono17 } from "@hono/zod-openapi";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPTransport } from "@hono/mcp";
-var mcpServerRoute = new OpenAPIHono14();
+init_storage();
+var mcpServerRoute = new OpenAPIHono17();
 var serverCache = /* @__PURE__ */ new Map();
 mcpServerRoute.all("/:profileSlug/*", async (c) => {
   const profileSlug = c.req.param("profileSlug");
@@ -5245,11 +7084,12 @@ mcpServerRoute.all("/:profileSlug/*", async (c) => {
 });
 
 // src/routes/agent.ts
-import { OpenAPIHono as OpenAPIHono15 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono18 } from "@hono/zod-openapi";
 import { verify } from "hono/jwt";
 import { generateText as generateText2, streamText as streamText2 } from "ai";
 init_env();
-var agentRoute = new OpenAPIHono15();
+init_storage();
+var agentRoute = new OpenAPIHono18();
 function convertOpenAIMessages2(messages) {
   if (!Array.isArray(messages)) return messages;
   return messages.map((msg) => {
@@ -5477,6 +7317,10 @@ init_env();
 init_env();
 import { jwt } from "hono/jwt";
 import { csrf } from "hono/csrf";
+async function resolveApiKeysConfig() {
+  if (getApiKeysConfigSync()) return;
+  await getApiKeysConfigAsync();
+}
 function parseKeyHashes() {
   const config = getApiKeysConfig();
   return config.apiKeyHashes || null;
@@ -5486,7 +7330,7 @@ function extractBearerToken(c) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
   return authHeader.slice(7).trim();
 }
-async function sha256(input) {
+async function sha2562(input) {
   const data = new TextEncoder().encode(input);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -5495,7 +7339,7 @@ async function sha256(input) {
 async function validateApiKey(token, allowedScopes) {
   const keyEntries = parseKeyHashes();
   if (!keyEntries || keyEntries.length === 0) return null;
-  const tokenHash = await sha256(token);
+  const tokenHash = await sha2562(token);
   const matched = keyEntries.find((k) => k.hash === tokenHash);
   if (!matched) return null;
   const keyScope = matched.scope || "user";
@@ -5508,6 +7352,7 @@ async function validateApiKey(token, allowedScopes) {
   return matched;
 }
 var systemKeyAuth = async (c, next) => {
+  await resolveApiKeysConfig();
   const systemKey = getApiKeysConfig().systemKey;
   if (!systemKey) {
     const isDev = (process.env.NODE_ENV || "development") === "development";
@@ -5556,6 +7401,7 @@ var systemKeyAuth = async (c, next) => {
   }, 401);
 };
 var userApiKeyAuth = async (c, next) => {
+  await resolveApiKeysConfig();
   const config = getApiKeysConfig();
   const isDev = (process.env.NODE_ENV || "development") === "development";
   if (!config.apiKeyHashes) {
@@ -5632,6 +7478,292 @@ var csrfProtection = csrf({
   }
 });
 
+// src/lib/sentry.ts
+import { Toucan } from "toucan-js";
+var _client;
+function getClient() {
+  if (_client !== void 0) return _client;
+  const dsn = process.env.SENTRY_DSN;
+  if (!dsn) {
+    _client = null;
+    return null;
+  }
+  try {
+    _client = new Toucan({
+      dsn,
+      // Low sample rate — keep ingest volume modest; errors are the point.
+      sampleRate: parseFloat(process.env.SENTRY_SAMPLE_RATE || "1"),
+      environment: process.env.FRONTBASE_DEPLOYMENT_MODE || "edge"
+      // default fetch transport (runtime-agnostic)
+    });
+  } catch {
+    _client = null;
+  }
+  return _client;
+}
+function captureEdgeException(err, c) {
+  const client = getClient();
+  if (!client) return;
+  const tags = {
+    runtime: process.env.FRONTBASE_ADAPTER_PLATFORM || "unknown"
+  };
+  if (c) {
+    try {
+      const slug = c.var?.tenantSlug;
+      if (slug) tags.tenant = String(slug);
+    } catch {
+    }
+    try {
+      tags.path = new URL(c.req.url).pathname;
+    } catch {
+    }
+    try {
+      tags.method = c.req.method;
+    } catch {
+    }
+  }
+  try {
+    client.withScope((scope) => {
+      scope.setTags(tags);
+      scope.captureException(err);
+    });
+  } catch {
+  }
+}
+
+// src/engine/changeDetection.ts
+var DEFAULT_KEY = "id";
+function keyOf(row, keyColumn) {
+  const k = row[keyColumn];
+  return k === void 0 || k === null ? "" : String(k);
+}
+function detectChanges(current, prev, opts = {}) {
+  const keyColumn = opts.keyColumn || DEFAULT_KEY;
+  if (!prev) {
+    return { inserts: [], updates: [], deletes: [], seeded: true };
+  }
+  const inserts = [];
+  const updates = [];
+  for (const row of current) {
+    const k = keyOf(row, keyColumn);
+    if (!k) continue;
+    if (prev.has(k)) {
+      if (opts.watermark) updates.push(row);
+    } else {
+      inserts.push(row);
+    }
+  }
+  const deletes = [];
+  if (!opts.watermark) {
+    const currentKeys = new Set(current.map((r) => keyOf(r, keyColumn)));
+    for (const [k, row] of prev) {
+      if (!currentKeys.has(k)) deletes.push(row);
+    }
+  }
+  return { inserts, updates, deletes, seeded: false };
+}
+function buildSnapshot(rows, keyColumn = DEFAULT_KEY) {
+  const snap = /* @__PURE__ */ new Map();
+  for (const row of rows) {
+    const k = keyOf(row, keyColumn);
+    if (k) snap.set(k, row);
+  }
+  return snap;
+}
+
+// src/engine/dataChangePoller.ts
+var BASELINE_KEY = (id) => `wf:${id}:dc:snapshot`;
+var WATERMARK_KEY = (id) => `wf:${id}:dc:watermark`;
+async function readBaseline(workflowId, keyColumn) {
+  try {
+    const raw = await cacheProvider.get(BASELINE_KEY(workflowId));
+    if (!raw) return null;
+    const arr = JSON.parse(raw);
+    return buildSnapshot(arr, keyColumn);
+  } catch {
+    return null;
+  }
+}
+async function writeBaseline(workflowId, snapshot) {
+  try {
+    await cacheProvider.setex(BASELINE_KEY(workflowId), 0, JSON.stringify([...snapshot.values()]));
+  } catch {
+  }
+}
+async function pollDataChanges(config, fetchRows) {
+  const keyColumn = config.keyColumn || "id";
+  const pageSize = config.pageSize || 1e3;
+  const watermarkCol = config.timestampColumn;
+  const prev = await readBaseline(config.workflowId, keyColumn);
+  const hasBaseline = prev !== null;
+  const rows = await fetchRows({
+    columns: watermarkCol ? `${keyColumn},${watermarkCol}` : keyColumn,
+    filter: watermarkCol && hasBaseline ? { column: watermarkCol, op: "gt", value: await readWatermark(config.workflowId) || "" } : null,
+    pageSize
+  });
+  const changeSet = detectChanges(rows, prev, { keyColumn, watermark: !!watermarkCol });
+  if (changeSet.seeded) {
+    await writeBaseline(config.workflowId, buildSnapshot(rows, keyColumn));
+    if (watermarkCol) await writeWatermark(config.workflowId, rows, watermarkCol);
+    return { changeSet, seeded: true };
+  }
+  const next = prev ? new Map(prev) : /* @__PURE__ */ new Map();
+  for (const r of [...changeSet.inserts, ...changeSet.updates]) {
+    next.set(String(r[keyColumn]), r);
+  }
+  for (const r of changeSet.deletes) {
+    next.delete(String(r[keyColumn]));
+  }
+  await writeBaseline(config.workflowId, next);
+  if (watermarkCol) await writeWatermark(config.workflowId, rows, watermarkCol);
+  return { changeSet, seeded: false };
+}
+async function readWatermark(workflowId) {
+  try {
+    return await cacheProvider.get(WATERMARK_KEY(workflowId));
+  } catch {
+    return null;
+  }
+}
+async function writeWatermark(workflowId, rows, watermarkCol) {
+  let max = "";
+  for (const r of rows) {
+    const v = r[watermarkCol];
+    if (v !== void 0 && v !== null && String(v) > max) max = String(v);
+  }
+  if (max) {
+    try {
+      await cacheProvider.setex(WATERMARK_KEY(workflowId), 0, max);
+    } catch {
+    }
+  }
+}
+
+// src/engine/tickHandlers.ts
+init_storage();
+function buildPollQuery(config, watermark) {
+  const filter = config.timestampColumn && watermark ? { column: config.timestampColumn, op: "gt", value: watermark } : null;
+  return {
+    kind: "rows",
+    table: config.table,
+    columns: config.timestampColumn ? `${config.keyColumn || "id"},${config.timestampColumn}` : config.keyColumn || "id",
+    filters: filter ? [filter] : [],
+    pageSize: config.pageSize || 1e3,
+    page: 0
+  };
+}
+async function fetchRowsViaDispatch(datasourceId, query) {
+  const result = await dispatchByMode(
+    { queryConfig: query, datasourceId },
+    "_default"
+  );
+  return result.data || [];
+}
+async function handleDataChangeTick(workflowId) {
+  const workflow = await stateProvider.getWorkflowById(workflowId, "_default");
+  if (!workflow || !workflow.isActive) {
+    console.log(`[Tick] Workflow ${workflowId} not found or inactive, skipping`);
+    return;
+  }
+  const cfg = parseTriggerConfig(workflow);
+  const datasourceId = cfg.dataSource;
+  const table = cfg.table;
+  if (!datasourceId || !table) {
+    console.error(`[Tick] Workflow ${workflowId} missing dataSource or table in triggerConfig`);
+    return;
+  }
+  const pollerConfig = {
+    workflowId,
+    table,
+    timestampColumn: cfg.timestampColumn,
+    keyColumn: cfg.keyColumn,
+    pageSize: cfg.pageSize ? Number(cfg.pageSize) : 1e3
+  };
+  const fetchRows = async (q) => {
+    const query = buildPollQuery(pollerConfig, q.filter?.value || null);
+    return fetchRowsViaDispatch(datasourceId, query);
+  };
+  const result = await pollDataChanges(pollerConfig, fetchRows);
+  if (result.seeded) {
+    console.log(`[Tick] Workflow ${workflowId}: first run seeded baseline (${result.changeSet.inserts.length + result.changeSet.updates.length + result.changeSet.deletes.length} rows)`);
+    return;
+  }
+  const { inserts, updates, deletes } = result.changeSet;
+  const totalChanges = inserts.length + updates.length + deletes.length;
+  if (totalChanges === 0) {
+    console.log(`[Tick] Workflow ${workflowId}: no changes detected`);
+    return;
+  }
+  console.log(`[Tick] Workflow ${workflowId}: ${inserts.length} inserts, ${updates.length} updates, ${deletes.length} deletes`);
+  const settings = JSON.parse(workflow.settings || "{}");
+  if (inserts.length > 0) {
+    await executeWithGuards(workflow, { changes: inserts, operation: "insert", count: inserts.length }, settings);
+  }
+  if (updates.length > 0) {
+    await executeWithGuards(workflow, { changes: updates, operation: "update", count: updates.length }, settings);
+  }
+  if (deletes.length > 0) {
+    await executeWithGuards(workflow, { changes: deletes, operation: "delete", count: deletes.length }, settings);
+  }
+}
+async function handleScheduledTick(workflowId) {
+  const workflow = await stateProvider.getWorkflowById(workflowId, "_default");
+  if (!workflow || !workflow.isActive) {
+    console.log(`[Tick] Workflow ${workflowId} not found or inactive, skipping`);
+    return;
+  }
+  const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+  console.log(`[Tick] Workflow ${workflowId}: scheduled fire at ${timestamp}`);
+  const settings = JSON.parse(workflow.settings || "{}");
+  await executeWithGuards(workflow, { timestamp, scheduledTime: timestamp }, settings);
+}
+async function executeWithGuards(workflow, triggerPayload, settings) {
+  const guard = await acquireExecutionGuards(workflow.id, settings, { rateLimitAlwaysOn: true });
+  if (!guard.allowed) {
+    console.log(`[Tick] Workflow ${workflow.id} blocked by guard: ${guard.body?.message || "unknown"}`);
+    return;
+  }
+  try {
+    const inputParameters = {
+      triggerType: workflow.triggerType,
+      triggerPayload,
+      parameters: settings.parameters || {}
+    };
+    await executeWorkflow(
+      `tick-${workflow.id}-${Date.now()}`,
+      workflow,
+      inputParameters,
+      settings
+    );
+  } finally {
+    guard.release();
+  }
+}
+async function registerTickHandlers() {
+  try {
+    const queue = await queueServiceReady;
+    const workflows = await stateProvider.listWorkflows("_default");
+    const activeWorkflows = workflows.filter((w) => w.isActive);
+    let registered = 0;
+    for (const workflow of activeWorkflows) {
+      const { dataChange, scheduled } = needsSchedule(workflow.triggerType);
+      if (dataChange) {
+        const jobName = DC_JOB(workflow.id);
+        queue.process(jobName, () => handleDataChangeTick(workflow.id));
+        registered++;
+      }
+      if (scheduled) {
+        const jobName = SCHEDULED_JOB(workflow.id);
+        queue.process(jobName, () => handleScheduledTick(workflow.id));
+        registered++;
+      }
+    }
+    console.log(`[TickHandlers] Registered ${registered} tick handlers for ${activeWorkflows.length} active workflows`);
+  } catch (e) {
+    console.warn(`[TickHandlers] Failed to register tick handlers (may be test env):`, e.message);
+  }
+}
+
 // src/engine/lite.ts
 var liquidEngine = new Liquid({
   strictVariables: false,
@@ -5671,7 +7803,7 @@ var ENGINE_PROFILES = {
 };
 function createLiteApp(mode = "lite") {
   const profile = ENGINE_PROFILES[mode];
-  const app2 = new OpenAPIHono16({
+  const app2 = new OpenAPIHono19({
     defaultHook: (result, c) => {
       if (!result.success) {
         console.error("[Zod Validation Error]", JSON.stringify(result.error.issues, null, 2));
@@ -5692,6 +7824,7 @@ function createLiteApp(mode = "lite") {
         details: err.issues || err.message
       }, 400);
     }
+    captureEdgeException(err, c);
     return c.json({
       success: false,
       error: err.message || "Internal server error"
@@ -5700,8 +7833,8 @@ function createLiteApp(mode = "lite") {
   app2.use("*", async (c, next) => {
     const disabled = process.env.FRONTBASE_DISABLED;
     if (disabled === "true" || disabled === "1") {
-      const path2 = new URL(c.req.url).pathname;
-      if (path2.startsWith("/api/health")) return next();
+      const path3 = new URL(c.req.url).pathname;
+      if (path3.startsWith("/api/health")) return next();
       return c.html(
         `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Engine Paused</title><style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f1117;color:#e4e4e7;font-family:Inter,system-ui,sans-serif;text-align:center}.c{max-width:420px;padding:2rem}h1{font-size:1.5rem;margin:0 0 .5rem;color:#6366f1}p{color:#a1a1aa;margin:0;font-size:.9rem}</style></head><body><div class="c"><h1>\u23F8 Engine Paused</h1><p>This Frontbase Edge Engine has been paused by the administrator. It will resume when re-enabled from the dashboard.</p></div></body></html>`,
         503
@@ -5740,6 +7873,7 @@ function createLiteApp(mode = "lite") {
   app2.use("/api/manifest/*", systemKeyAuth);
   app2.use("/api/executions/*", systemKeyAuth);
   app2.use("/api/workflows/*", systemKeyAuth);
+  app2.use("/api/versions/*", systemKeyAuth);
   app2.use("/api/queue/*", systemKeyAuth);
   app2.use("/api/config/*", systemKeyAuth);
   app2.use("/api/agent-tools/*", systemKeyAuth);
@@ -5749,11 +7883,16 @@ function createLiteApp(mode = "lite") {
   app2.route("/api/deploy", deployRoute);
   app2.route("/api/execute", executeRoute);
   app2.route("/api/webhook", webhookRoute);
+  app2.route("/api/email-webhook", emailWebhooksRoute);
+  app2.route("/api/realtime", realtimeRoute);
   app2.route("/api/executions", executionsRoute);
   app2.route("/api/update", updateRoute);
   app2.route("/api/cache", cacheRoute);
   app2.route("/api/edge-logs", edgeLogsRoute);
   app2.route("/api/workflows", workflowsRoute);
+  app2.route("/api/versions", versionsRoute);
+  app2.route("/api/public", uiEventsRoute);
+  app2.route("/api/public/execute", publicExecuteRoute);
   app2.route("/api/queue", queueRoute);
   app2.route("/api/config", configRoute);
   app2.route("/api/agent-tools", agentToolsRoute);
@@ -5959,6 +8098,8 @@ function createLiteApp(mode = "lite") {
   return app2;
 }
 var liteApp = createLiteApp();
+void registerTickHandlers();
+void registerQueueConsumers();
 liteApp.get("/", (c) => c.json({
   service: "Frontbase Edge Engine",
   mode: "lite",
@@ -5996,7 +8137,7 @@ var HYDRATE_CSS = "%%HYDRATE_CSS%%";
 var FAVICON_PNG_B64 = "%%FAVICON_PNG_B64%%";
 
 // src/routes/pages.ts
-import { OpenAPIHono as OpenAPIHono17, createRoute as createRoute11, z as z14 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono20, createRoute as createRoute14, z as z17 } from "@hono/zod-openapi";
 
 // src/ssr/components/static.ts
 function escapeHtml(str) {
@@ -6783,6 +8924,8 @@ function renderDataComponent(type, id, props, childrenHtml) {
       return renderDataCard(id, props, childrenHtml, propsJson);
     case "Grid":
       return renderDataGrid(id, props, propsJson);
+    case "Repeater":
+      return renderRepeater(id, props, propsJson);
     default:
       return `<div data-fb-id="${id}" data-fb-type="${type}" data-fb-hydrate="data" data-fb-props="${escapeHtml3(propsJson)}" class="fb-data-component">
                 <div class="fb-skeleton" style="height:200px;border-radius:0.5rem">&nbsp;</div>
@@ -7040,6 +9183,32 @@ function renderDataGrid(id, props, propsJson) {
                     <div class="h-3 bg-muted rounded w-1/2 animate-pulse"></div>
                     <div class="h-3 bg-muted rounded w-1/3 animate-pulse"></div>
                 </div>
+            </div>
+        </div>
+    `).join("");
+  return `<div ${attrs}>
+        ${skeletonCards}
+    </div>`;
+}
+function renderRepeater(id, props, propsJson) {
+  const columns = props.columns || 3;
+  const layout = props.layout || "grid";
+  const layoutClass = layout === "list" ? "flex flex-col gap-4" : columns <= 1 ? "grid grid-cols-1 gap-4" : columns === 2 ? "grid grid-cols-1 md:grid-cols-2 gap-4" : columns === 3 ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4";
+  const attrs = getCommonAttributes3(
+    id,
+    layoutClass,
+    props,
+    "",
+    "repeater",
+    propsJson,
+    `data-react-component="Repeater" data-component-id="${id}"`
+  );
+  const skeletonCards = Array(Math.min(columns || 3, 4)).fill(0).map(() => `
+        <div class="rounded-lg border bg-card text-card-foreground shadow-sm animate-pulse">
+            <div class="h-32 bg-muted rounded-t-lg"></div>
+            <div class="p-6 space-y-2">
+                <div class="h-4 bg-muted rounded w-3/4"></div>
+                <div class="h-3 bg-muted rounded w-1/2"></div>
             </div>
         </div>
     `).join("");
@@ -7905,8 +10074,117 @@ function renderFooter(id, props, stylesData) {
 }
 
 // src/ssr/lib/liquid.ts
+import { Liquid as Liquid3 } from "liquidjs";
+
+// ../../packages/liquid-core/src/engine.ts
 import { Liquid as Liquid2 } from "liquidjs";
-var liquid = new Liquid2({
+
+// ../../packages/liquid-core/src/filters.ts
+function registerFrontbaseFilters(engine) {
+  engine.registerFilter("money", (value, currency = "USD") => {
+    const symbols = {
+      USD: "$",
+      EUR: "\u20AC",
+      GBP: "\xA3",
+      KES: "KSh",
+      JPY: "\xA5",
+      CNY: "\xA5",
+      INR: "\u20B9",
+      BRL: "R$",
+      AUD: "A$",
+      CAD: "C$"
+    };
+    const symbol = symbols[currency] || currency + " ";
+    const num = Number(value);
+    if (isNaN(num)) return value;
+    return `${symbol}${num.toFixed(2)}`;
+  });
+  engine.registerFilter("time_ago", (value) => {
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return value;
+    const now = /* @__PURE__ */ new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 6e4);
+    const diffHours = Math.floor(diffMs / 36e5);
+    const diffDays = Math.floor(diffMs / 864e5);
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+    if (diffDays < 30) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
+    if (diffDays < 365) {
+      const months = Math.floor(diffDays / 30);
+      return `${months} month${months > 1 ? "s" : ""} ago`;
+    }
+    const years = Math.floor(diffDays / 365);
+    return `${years} year${years > 1 ? "s" : ""} ago`;
+  });
+  engine.registerFilter("timezone", (value, tz) => {
+    try {
+      const date = new Date(value);
+      if (isNaN(date.getTime())) return value;
+      return date.toLocaleString("en-US", { timeZone: tz || "UTC" });
+    } catch {
+      return value;
+    }
+  });
+  engine.registerFilter("date_format", (value, format = "short") => {
+    try {
+      const date = new Date(value);
+      if (isNaN(date.getTime())) return value;
+      switch (format) {
+        case "short":
+          return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        case "long":
+          return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+        case "iso":
+          return date.toISOString().split("T")[0];
+        case "time":
+          return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+        default:
+          return date.toLocaleDateString();
+      }
+    } catch {
+      return value;
+    }
+  });
+  engine.registerFilter("json", (value) => {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  });
+  engine.registerFilter("pluralize", (count, singular, plural) => {
+    return count === 1 ? singular : plural;
+  });
+  engine.registerFilter("escape_html", (value) => {
+    if (typeof value !== "string") return value;
+    return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  });
+  engine.registerFilter("truncate_words", (value, wordCount = 10) => {
+    if (typeof value !== "string") return value;
+    const words = value.split(/\s+/);
+    if (words.length <= wordCount) return value;
+    return words.slice(0, wordCount).join(" ") + "...";
+  });
+  engine.registerFilter("slugify", (value) => {
+    if (typeof value !== "string") return value;
+    return value.toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
+  });
+  engine.registerFilter("number", (value, locale = "en-US") => {
+    const num = Number(value);
+    if (isNaN(num)) return value;
+    return num.toLocaleString(locale);
+  });
+  engine.registerFilter("percent", (value, decimals = 0) => {
+    const num = Number(value);
+    if (isNaN(num)) return value;
+    return `${(num * 100).toFixed(decimals)}%`;
+  });
+}
+
+// src/ssr/lib/liquid.ts
+var liquid = new Liquid3({
   strictVariables: false,
   // Allow undefined variables (render as empty)
   strictFilters: false,
@@ -7917,106 +10195,7 @@ var liquid = new Liquid2({
   trimOutputLeft: false,
   trimOutputRight: false
 });
-liquid.registerFilter("money", (value, currency = "USD") => {
-  const symbols = {
-    USD: "$",
-    EUR: "\u20AC",
-    GBP: "\xA3",
-    KES: "KSh",
-    JPY: "\xA5",
-    CNY: "\xA5",
-    INR: "\u20B9",
-    BRL: "R$",
-    AUD: "A$",
-    CAD: "C$"
-  };
-  const symbol = symbols[currency] || currency + " ";
-  const num = Number(value);
-  if (isNaN(num)) return value;
-  return `${symbol}${num.toFixed(2)}`;
-});
-liquid.registerFilter("time_ago", (value) => {
-  const date = new Date(value);
-  if (isNaN(date.getTime())) return value;
-  const now = /* @__PURE__ */ new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 6e4);
-  const diffHours = Math.floor(diffMs / 36e5);
-  const diffDays = Math.floor(diffMs / 864e5);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? "s" : ""} ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
-  if (diffDays < 30) return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`;
-  if (diffDays < 365) {
-    const months = Math.floor(diffDays / 30);
-    return `${months} month${months > 1 ? "s" : ""} ago`;
-  }
-  const years = Math.floor(diffDays / 365);
-  return `${years} year${years > 1 ? "s" : ""} ago`;
-});
-liquid.registerFilter("timezone", (value, tz) => {
-  try {
-    const date = new Date(value);
-    if (isNaN(date.getTime())) return value;
-    return date.toLocaleString("en-US", { timeZone: tz || "UTC" });
-  } catch {
-    return value;
-  }
-});
-liquid.registerFilter("date_format", (value, format = "short") => {
-  try {
-    const date = new Date(value);
-    if (isNaN(date.getTime())) return value;
-    switch (format) {
-      case "short":
-        return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      case "long":
-        return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-      case "iso":
-        return date.toISOString().split("T")[0];
-      case "time":
-        return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-      default:
-        return date.toLocaleDateString();
-    }
-  } catch {
-    return value;
-  }
-});
-liquid.registerFilter("json", (value) => {
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-});
-liquid.registerFilter("pluralize", (count, singular, plural) => {
-  return count === 1 ? singular : plural;
-});
-liquid.registerFilter("escape_html", (value) => {
-  if (typeof value !== "string") return value;
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-});
-liquid.registerFilter("truncate_words", (value, wordCount = 10) => {
-  if (typeof value !== "string") return value;
-  const words = value.split(/\s+/);
-  if (words.length <= wordCount) return value;
-  return words.slice(0, wordCount).join(" ") + "...";
-});
-liquid.registerFilter("slugify", (value) => {
-  if (typeof value !== "string") return value;
-  return value.toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
-});
-liquid.registerFilter("number", (value, locale = "en-US") => {
-  const num = Number(value);
-  if (isNaN(num)) return value;
-  return num.toLocaleString(locale);
-});
-liquid.registerFilter("percent", (value, decimals = 0) => {
-  const num = Number(value);
-  if (isNaN(num)) return value;
-  return `${(num * 100).toFixed(decimals)}%`;
-});
+registerFrontbaseFilters(liquid);
 
 // src/ssr/styleHelpers.ts
 var UNITLESS_PROPS = /* @__PURE__ */ new Set([
@@ -8202,6 +10381,7 @@ function buildClassName(...classes) {
 }
 
 // src/ssr/PageRenderer.ts
+init_storage();
 var STATIC_COMPONENTS = /* @__PURE__ */ new Set([
   "Text",
   "Heading",
@@ -8656,7 +10836,7 @@ async function getAuthProvider(tenantSlug) {
   }
   const authCfg = getAuthConfig(key);
   if (authCfg.provider === "supabase" && authCfg.url && authCfg.anonKey) {
-    const { SupabaseAuthProvider: SupabaseAuthProvider2 } = await import("./SupabaseAuthProvider-HJK2KTCC.js");
+    const { SupabaseAuthProvider: SupabaseAuthProvider2 } = await import("./SupabaseAuthProvider-CEJG4R5A.js");
     const provider = new SupabaseAuthProvider2(authCfg);
     _providers.set(key, provider);
     console.log(`[Auth Factory] Resolved SupabaseAuthProvider for tenant "${key}" from FRONTBASE_AUTH: ${authCfg.url.substring(0, 30)}...`);
@@ -8859,6 +11039,9 @@ function buildSystemContext() {
   };
 }
 
+// src/routes/pages.ts
+init_storage();
+
 // src/ssr/baseStyles.ts
 var FALLBACK_CSS = `
 /* FALLBACK CSS - Used when cssBundle is not available (legacy pages) */
@@ -8974,6 +11157,9 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
   const title = page.title || page.name;
   const description = page.description || "";
   const keywords = page.keywords || "";
+  const analyticsHead = buildAnalyticsHead(trackingConfig);
+  const gtmNoscript = buildGtmNoscript(trackingConfig.gtmContainerId);
+  const customHead = sanitizeCustomHead(trackingConfig.customHeadHtml);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8983,7 +11169,7 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
     ${description ? `<meta name="description" content="${escapeHtml5(description)}">` : ""}
     ${keywords ? `<meta name="keywords" content="${escapeHtml5(keywords)}">` : ""}
     <meta name="generator" content="Frontbase">
-    
+    ${analyticsHead}
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="${faviconUrl}">
     <link rel="apple-touch-icon" href="${faviconUrl}">
@@ -9032,8 +11218,10 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
     <style>
         ${page.cssBundle || FALLBACK_CSS}
     </style>
+    ${customHead}
 </head>
 <body>
+    ${gtmNoscript}
     <div id="root">${bodyHtml}</div>
     <!-- Initial state for hydration -->
     <script>
@@ -9205,6 +11393,42 @@ function safeJsonStringify(obj) {
 }
 function escapeHtml5(str) {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+}
+var GA4_RE = /^G-[A-Z0-9]{6,}$/;
+var GTM_RE = /^GTM-[A-Z0-9]+$/;
+function buildAnalyticsHead(cfg) {
+  const parts = [];
+  const gtm = cfg.gtmContainerId && GTM_RE.test(cfg.gtmContainerId) ? cfg.gtmContainerId : "";
+  const ga4 = cfg.ga4MeasurementId && GA4_RE.test(cfg.ga4MeasurementId) ? cfg.ga4MeasurementId : "";
+  if (gtm) {
+    parts.push(`<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','${gtm}');</script>
+<!-- End Google Tag Manager -->`);
+  } else if (ga4) {
+    parts.push(`<!-- Google Analytics 4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=${ga4}"></script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${ga4}');
+</script>`);
+  }
+  return parts.join("\n    ");
+}
+function buildGtmNoscript(gtmContainerId) {
+  if (!gtmContainerId || !GTM_RE.test(gtmContainerId)) return "";
+  return `<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=${gtmContainerId}"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>`;
+}
+function sanitizeCustomHead(html) {
+  if (!html || !html.trim()) return "";
+  return html.replace(/<\/\s*(head|body|html)\s*>/gi, "").replace(/<\s*html\b/gi, "&lt;html").replace(/<\/\s*script\s*>/gi, "<\\/script>");
 }
 
 // src/ssr/gatedPage.ts
@@ -9394,12 +11618,12 @@ var SETTINGS_TIMEOUT_MS = 3e3;
 var _settingsCache = /* @__PURE__ */ new Map();
 async function getCachedSettings(tenantSlug, sessionAccessToken) {
   const cacheKey = tenantSlug || "_default";
-  const cached2 = _settingsCache.get(cacheKey);
-  if (cached2 && Date.now() - cached2.ts < SETTINGS_TTL_MS) {
-    if (sessionAccessToken && cached2.authConfig) {
-      return { ...cached2, authConfig: { ...cached2.authConfig, accessToken: sessionAccessToken } };
+  const cached = _settingsCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < SETTINGS_TTL_MS) {
+    if (sessionAccessToken && cached.authConfig) {
+      return { ...cached, authConfig: { ...cached.authConfig, accessToken: sessionAccessToken } };
     }
-    return cached2;
+    return cached;
   }
   try {
     const settings = await Promise.race([
@@ -9429,17 +11653,17 @@ async function getCachedSettings(tenantSlug, sessionAccessToken) {
   } catch (e) {
     console.warn("[Pages] Settings fetch failed/timeout:", e.message);
     return {
-      faviconUrl: cached2?.faviconUrl || DEFAULT_FAVICON2,
+      faviconUrl: cached?.faviconUrl || DEFAULT_FAVICON2,
       authConfig: null,
       ts: Date.now()
     };
   }
 }
-var ErrorResponseSchema2 = z14.object({
-  error: z14.string(),
-  message: z14.string().optional()
+var ErrorResponseSchema2 = z17.object({
+  error: z17.string(),
+  message: z17.string().optional()
 });
-var pagesRoute = new OpenAPIHono17();
+var pagesRoute = new OpenAPIHono20();
 pagesRoute.use("*", ipBlocklist);
 pagesRoute.use("*", async (c, next) => {
   await next();
@@ -9448,15 +11672,15 @@ pagesRoute.use("*", async (c, next) => {
     c.res.headers.set("X-Content-Type", ct);
   }
 });
-var renderPageRoute = createRoute11({
+var renderPageRoute = createRoute14({
   method: "get",
   path: "/:slug",
   tags: ["Pages"],
   summary: "Render a published page",
   description: "Server-side renders a published page by slug. Returns full HTML document.",
   request: {
-    params: z14.object({
-      slug: z14.string().min(1).describe("Page slug")
+    params: z17.object({
+      slug: z17.string().min(1).describe("Page slug")
     })
   },
   responses: {
@@ -9464,7 +11688,7 @@ var renderPageRoute = createRoute11({
       description: "Rendered HTML page",
       content: {
         "text/html": {
-          schema: z14.string()
+          schema: z17.string()
         }
       }
     },
@@ -9483,9 +11707,9 @@ async function fetchPage(slug, tenantSlug) {
   const cacheKey = `${cachePrefix}${slug}`;
   try {
     const redis = getRedis();
-    const cached2 = await redis.get(cacheKey);
-    if (cached2) {
-      return cached2;
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      return cached;
     }
   } catch {
   }
@@ -9701,9 +11925,9 @@ pagesRoute.get("/", async (c) => {
     let homepage = null;
     try {
       const redis = getRedis();
-      const cached2 = await redis.get(cacheKey);
-      if (cached2) {
-        homepage = cached2;
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        homepage = cached;
       }
     } catch {
     }
@@ -9717,39 +11941,41 @@ pagesRoute.get("/", async (c) => {
           c.header("Content-Type", "text/html; charset=utf-8");
           return c.html(renderWorkspaceNotFound(tenantSlug), 404);
         }
-        const apiBase = getSafeApiBase();
-        if (!apiBase) {
-          return c.json({ homepage: false, message: "Waiting for Homepage to be published." }, 200);
-        }
-        console.log("[SSR] No local homepage found, pulling from FastAPI...");
-        try {
-          const response = await fetch(`${apiBase}/api/pages/homepage/`);
-          if (response.ok) {
-            const result = await response.json();
-            const pageData = result.data;
-            const publishData = {
-              id: pageData.id,
-              slug: pageData.slug,
-              name: pageData.name,
-              title: pageData.title || void 0,
-              description: pageData.description || void 0,
-              layoutData: pageData.layoutData,
-              seoData: pageData.seoData || void 0,
-              datasources: pageData.datasources || void 0,
-              version: 1,
-              publishedAt: (/* @__PURE__ */ new Date()).toISOString(),
-              isPublic: pageData.isPublic ?? true,
-              isHomepage: true,
-              tenantSlug: "_default"
-            };
-            await stateProvider.upsertPage(publishData);
-            console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
-            homepage = publishData;
-          } else {
-            console.warn(`[SSR] FastAPI homepage fetch failed: ${response.status}`);
+        if (!isCloudEnv()) {
+          const apiBase = getSafeApiBase();
+          if (!apiBase) {
+            return c.json({ homepage: false, message: "Waiting for Homepage to be published." }, 200);
           }
-        } catch (fetchError) {
-          console.error("[SSR] Pull-publish failed:", fetchError);
+          console.log("[SSR] No local homepage found, pulling from FastAPI...");
+          try {
+            const response = await fetch(`${apiBase}/api/pages/homepage/`);
+            if (response.ok) {
+              const result = await response.json();
+              const pageData = result.data;
+              const publishData = {
+                id: pageData.id,
+                slug: pageData.slug,
+                name: pageData.name,
+                title: pageData.title || void 0,
+                description: pageData.description || void 0,
+                layoutData: pageData.layoutData,
+                seoData: pageData.seoData || void 0,
+                datasources: pageData.datasources || void 0,
+                version: 1,
+                publishedAt: (/* @__PURE__ */ new Date()).toISOString(),
+                isPublic: pageData.isPublic ?? true,
+                isHomepage: true,
+                tenantSlug: "_default"
+              };
+              await stateProvider.upsertPage(publishData);
+              console.log(`[SSR] Pull-published homepage: ${pageData.slug}`);
+              homepage = publishData;
+            } else {
+              console.warn(`[SSR] FastAPI homepage fetch failed: ${response.status}`);
+            }
+          } catch (fetchError) {
+            console.error("[SSR] Pull-publish failed:", fetchError);
+          }
         }
       }
       if (homepage) {
@@ -9880,11 +12106,11 @@ pagesRoute.get("/", async (c) => {
 });
 
 // src/routes/import.ts
-import { Hono as Hono3 } from "hono";
+import { Hono as Hono4 } from "hono";
 
 // src/schemas/publish.ts
-import { z as z15 } from "zod";
-var ComponentTypeSchema = z15.enum([
+import { z as z18 } from "zod";
+var ComponentTypeSchema = z18.enum([
   // Static
   "Text",
   "Heading",
@@ -9921,7 +12147,7 @@ var ComponentTypeSchema = z15.enum([
   "Card",
   "Panel"
 ]);
-var DatasourceTypeSchema = z15.enum([
+var DatasourceTypeSchema = z18.enum([
   "supabase",
   "neon",
   "planetscale",
@@ -9930,48 +12156,48 @@ var DatasourceTypeSchema = z15.enum([
   "mysql",
   "sqlite"
 ]);
-var DatasourceConfigSchema = z15.object({
-  id: z15.string(),
+var DatasourceConfigSchema = z18.object({
+  id: z18.string(),
   type: DatasourceTypeSchema,
-  name: z15.string(),
+  name: z18.string(),
   // URL is safe to publish (no password)
-  url: z15.string().optional(),
+  url: z18.string().optional(),
   // For Supabase: anon key is safe to publish
-  anonKey: z15.string().optional(),
+  anonKey: z18.string().optional(),
   // Secret environment variable name (actual secret NOT published)
-  secretEnvVar: z15.string().optional()
+  secretEnvVar: z18.string().optional()
 });
-var ColumnOverrideSchema = z15.object({
-  visible: z15.boolean().nullish(),
-  label: z15.string().nullish(),
-  width: z15.string().nullish(),
-  sortable: z15.boolean().nullish(),
-  filterable: z15.boolean().nullish(),
-  type: z15.string().nullish(),
-  primaryKey: z15.string().nullish()
+var ColumnOverrideSchema = z18.object({
+  visible: z18.boolean().nullish(),
+  label: z18.string().nullish(),
+  width: z18.string().nullish(),
+  sortable: z18.boolean().nullish(),
+  filterable: z18.boolean().nullish(),
+  type: z18.string().nullish(),
+  primaryKey: z18.string().nullish()
   // Added for FK reference
 });
-var DataRequestSchema = z15.object({
-  url: z15.string().default(""),
+var DataRequestSchema = z18.object({
+  url: z18.string().default(""),
   // Full URL (may be empty for proxy — resolved server-side)
-  method: z15.string().default("GET"),
+  method: z18.string().default("GET"),
   // HTTP method
-  headers: z15.record(z15.string(), z15.string()).default({}),
+  headers: z18.record(z18.string(), z18.string()).default({}),
   // Headers
-  body: z15.record(z15.string(), z15.unknown()).optional(),
+  body: z18.record(z18.string(), z18.unknown()).optional(),
   // For POST requests
-  resultPath: z15.string().default(""),
+  resultPath: z18.string().default(""),
   // JSON path to extract data
-  flattenRelations: z15.boolean().default(true),
+  flattenRelations: z18.boolean().default(true),
   // Flatten nested objects
-  queryConfig: z15.record(z15.string(), z15.unknown()).optional(),
+  queryConfig: z18.record(z18.string(), z18.unknown()).optional(),
   // RPC config for DataTable
-  fetchStrategy: z15.enum(["direct", "proxy"]).default("proxy"),
+  fetchStrategy: z18.enum(["direct", "proxy"]).default("proxy"),
   // Publish-time routing decision
-  datasourceId: z15.string().nullish()
+  datasourceId: z18.string().nullish()
   // Datasource ID for proxy strategy (server-side credential resolution)
 });
-var HiddenFilterOperatorSchema = z15.enum([
+var HiddenFilterOperatorSchema = z18.enum([
   "eq",
   "neq",
   "gt",
@@ -9989,148 +12215,149 @@ var HiddenFilterOperatorSchema = z15.enum([
   "is_within_last_days",
   "is_today"
 ]);
-var HiddenFilterSchema = z15.object({
-  id: z15.string(),
-  column: z15.string(),
+var HiddenFilterSchema = z18.object({
+  id: z18.string(),
+  column: z18.string(),
   operator: HiddenFilterOperatorSchema,
-  value: z15.string().optional(),
-  previewValue: z15.string().optional()
+  value: z18.string().optional(),
+  previewValue: z18.string().optional()
 });
-var ComponentBindingSchema = z15.object({
-  componentId: z15.string().nullish(),
-  datasourceId: z15.string().nullish(),
-  tableName: z15.string().nullish(),
+var ComponentBindingSchema = z18.object({
+  componentId: z18.string().nullish(),
+  datasourceId: z18.string().nullish(),
+  tableName: z18.string().nullish(),
   // columns can be string[] (column names) or object[] (enriched schema from publish)
-  columns: z15.union([
-    z15.array(z15.string()),
-    z15.array(z15.object({
-      name: z15.string(),
-      type: z15.string(),
-      nullable: z15.boolean().optional(),
-      primary_key: z15.boolean().optional(),
-      default: z15.any().optional(),
-      foreign_key_table: z15.string().nullish(),
-      foreign_key_column: z15.string().nullish()
+  columns: z18.union([
+    z18.array(z18.string()),
+    z18.array(z18.object({
+      name: z18.string(),
+      type: z18.string(),
+      nullable: z18.boolean().optional(),
+      primary_key: z18.boolean().optional(),
+      default: z18.any().optional(),
+      foreign_key_table: z18.string().nullish(),
+      foreign_key_column: z18.string().nullish()
     }).passthrough())
   ]).nullish(),
-  columnOrder: z15.array(z15.string()).nullish(),
-  columnOverrides: z15.record(z15.string(), ColumnOverrideSchema).nullish(),
-  filters: z15.record(z15.string(), z15.unknown()).nullish(),
-  primaryKey: z15.string().nullish(),
-  foreignKeys: z15.array(z15.object({
-    column: z15.string(),
-    referencedTable: z15.string(),
-    referencedColumn: z15.string()
+  columnOrder: z18.array(z18.string()).nullish(),
+  columnOverrides: z18.record(z18.string(), ColumnOverrideSchema).nullish(),
+  filters: z18.record(z18.string(), z18.unknown()).nullish(),
+  primaryKey: z18.string().nullish(),
+  foreignKeys: z18.array(z18.object({
+    column: z18.string(),
+    referencedTable: z18.string(),
+    referencedColumn: z18.string()
   }).passthrough()).nullish(),
   dataRequest: DataRequestSchema.nullish(),
-  chartConfig: z15.record(z15.string(), z15.unknown()).nullish(),
+  chartConfig: z18.record(z18.string(), z18.unknown()).nullish(),
   // Form-specific fields
-  fieldOverrides: z15.record(z15.string(), z15.unknown()).nullish(),
-  fieldOrder: z15.array(z15.string()).nullish(),
-  dataSourceId: z15.string().nullish(),
+  fieldOverrides: z18.record(z18.string(), z18.unknown()).nullish(),
+  fieldOrder: z18.array(z18.string()).nullish(),
+  dataSourceId: z18.string().nullish(),
   // camelCase alias
   // Dynamic feature configuration (for DataTable server-side features)
-  frontendFilters: z15.array(z15.record(z15.string(), z15.unknown())).nullish(),
-  hiddenFilters: z15.array(HiddenFilterSchema).nullish(),
-  sorting: z15.record(z15.string(), z15.unknown()).nullish(),
-  pagination: z15.record(z15.string(), z15.unknown()).nullish(),
-  filtering: z15.record(z15.string(), z15.unknown()).nullish()
+  frontendFilters: z18.array(z18.record(z18.string(), z18.unknown())).nullish(),
+  hiddenFilters: z18.array(HiddenFilterSchema).nullish(),
+  sorting: z18.record(z18.string(), z18.unknown()).nullish(),
+  pagination: z18.record(z18.string(), z18.unknown()).nullish(),
+  filtering: z18.record(z18.string(), z18.unknown()).nullish()
 }).passthrough();
-var VisibilitySettingsSchema = z15.object({
-  mobile: z15.boolean().default(true),
-  tablet: z15.boolean().default(true),
-  desktop: z15.boolean().default(true)
+var VisibilitySettingsSchema = z18.object({
+  mobile: z18.boolean().default(true),
+  tablet: z18.boolean().default(true),
+  desktop: z18.boolean().default(true)
 });
-var ViewportOverridesSchema = z15.object({
-  mobile: z15.record(z15.string(), z15.any()).nullable().optional(),
-  tablet: z15.record(z15.string(), z15.any()).nullable().optional()
+var ViewportOverridesSchema = z18.object({
+  mobile: z18.record(z18.string(), z18.any()).nullable().optional(),
+  tablet: z18.record(z18.string(), z18.any()).nullable().optional()
 }).passthrough();
-var StylesDataSchema = z15.object({
-  values: z15.record(z15.string(), z15.any()).nullable().optional(),
-  activeProperties: z15.array(z15.string()).nullable().optional(),
-  stylingMode: z15.string().default("visual"),
+var StylesDataSchema = z18.object({
+  values: z18.record(z18.string(), z18.any()).nullable().optional(),
+  activeProperties: z18.array(z18.string()).nullable().optional(),
+  stylingMode: z18.string().default("visual"),
   viewportOverrides: ViewportOverridesSchema.nullable().optional()
 }).passthrough();
-var ComponentStylesSchema = z15.record(z15.string(), z15.any()).nullable().optional();
-var PageComponentSchema = z15.lazy(
-  () => z15.object({
-    id: z15.string(),
-    type: z15.string(),
+var ComponentStylesSchema = z18.record(z18.string(), z18.any()).nullable().optional();
+var PageComponentSchema = z18.lazy(
+  () => z18.object({
+    id: z18.string(),
+    type: z18.string(),
     // ComponentTypeSchema is too strict for flexibility
-    props: z15.record(z15.string(), z15.unknown()).nullable().optional(),
+    props: z18.record(z18.string(), z18.unknown()).nullable().optional(),
     styles: ComponentStylesSchema,
     // Legacy: direct styles
     stylesData: StylesDataSchema.nullable().optional(),
     // New: structured styles with overrides
     visibility: VisibilitySettingsSchema.nullable().optional(),
     // Per-viewport visibility
-    visibilityCondition: z15.string().nullish(),
+    visibilityCondition: z18.string().nullish(),
     // Client or server visibility expression
-    children: z15.array(PageComponentSchema).nullable().optional(),
+    children: z18.array(PageComponentSchema).nullable().optional(),
     binding: ComponentBindingSchema.nullable().optional()
   })
 );
-var PageLayoutSchema = z15.object({
-  content: z15.array(PageComponentSchema),
-  root: z15.record(z15.string(), z15.unknown()).optional()
+var PageLayoutSchema = z18.object({
+  content: z18.array(PageComponentSchema),
+  root: z18.record(z18.string(), z18.unknown()).optional()
 });
-var SeoDataSchema = z15.object({
-  title: z15.string().optional(),
-  description: z15.string().optional(),
-  keywords: z15.array(z15.string()).optional(),
-  ogImage: z15.string().optional(),
-  canonical: z15.string().optional()
+var SeoDataSchema = z18.object({
+  title: z18.string().optional(),
+  description: z18.string().optional(),
+  keywords: z18.array(z18.string()).optional(),
+  ogImage: z18.string().optional(),
+  canonical: z18.string().optional()
 });
-var PublishPageSchema = z15.object({
+var PublishPageSchema = z18.object({
   // Page identity (can be UUID or custom string ID like "default-homepage")
-  id: z15.string().min(1),
-  slug: z15.string().min(1),
-  tenantSlug: z15.string().default("_default"),
+  id: z18.string().min(1),
+  slug: z18.string().min(1),
+  tenantSlug: z18.string().default("_default"),
   // Tenant namespace (community engine)
-  name: z15.string(),
-  title: z15.string().optional(),
-  description: z15.string().optional(),
+  name: z18.string(),
+  title: z18.string().optional(),
+  description: z18.string().optional(),
   // Layout & structure
   layoutData: PageLayoutSchema,
   // SEO
   seoData: SeoDataSchema.nullable().optional(),
   // Datasources (non-sensitive config only)
-  datasources: z15.array(DatasourceConfigSchema).nullable().optional(),
+  datasources: z18.array(DatasourceConfigSchema).nullable().optional(),
   // CSS Bundle (tree-shaken, component-specific CSS from FastAPI)
-  cssBundle: z15.string().nullable().optional(),
+  cssBundle: z18.string().nullable().optional(),
   // Versioning
-  version: z15.number().int().min(1),
-  publishedAt: z15.string().datetime(),
+  version: z18.number().int().min(1),
+  publishedAt: z18.string().datetime(),
   // Flags
-  isPublic: z15.boolean().default(true),
-  isHomepage: z15.boolean().default(false),
+  isPublic: z18.boolean().default(true),
+  isHomepage: z18.boolean().default(false),
   // Content hash for drift detection (SHA-256 of publishable attributes)
-  contentHash: z15.string().nullable().optional(),
+  contentHash: z18.string().nullable().optional(),
   // Auth form config baked at publish time (for private page gating overlay)
-  _primaryAuthForm: z15.record(z15.string(), z15.unknown()).nullable().optional(),
+  _primaryAuthForm: z18.record(z18.string(), z18.unknown()).nullable().optional(),
   // Global app variables baked at publish time (non-secret only)
-  appVariables: z15.record(z15.string(), z15.unknown()).nullish()
+  appVariables: z18.record(z18.string(), z18.unknown()).nullish()
 });
-var ImportPageRequestSchema = z15.object({
+var ImportPageRequestSchema = z18.object({
   page: PublishPageSchema,
   // Optional: force overwrite even if version is same
-  force: z15.boolean().default(false)
+  force: z18.boolean().default(false)
 });
-var ImportPageResponseSchema = z15.object({
-  success: z15.boolean(),
-  slug: z15.string(),
-  version: z15.number(),
-  previewUrl: z15.string(),
-  message: z15.string().optional()
+var ImportPageResponseSchema = z18.object({
+  success: z18.boolean(),
+  slug: z18.string(),
+  version: z18.number(),
+  previewUrl: z18.string(),
+  message: z18.string().optional()
 });
-var ErrorResponseSchema3 = z15.object({
-  success: z15.literal(false),
-  error: z15.string(),
-  details: z15.record(z15.string(), z15.unknown()).optional()
+var ErrorResponseSchema3 = z18.object({
+  success: z18.literal(false),
+  error: z18.string(),
+  details: z18.record(z18.string(), z18.unknown()).optional()
 });
 
 // src/routes/import.ts
-var importRoute = new Hono3();
+init_storage();
+var importRoute = new Hono4();
 importRoute.post("/", async (c) => {
   try {
     const rawBody = await c.req.json();
@@ -10285,7 +12512,7 @@ importRoute.post("/settings", async (c) => {
     if (body.appUrl !== void 0) updates.appUrl = body.appUrl || null;
     if (body.authForms !== void 0) updates.authForms = body.authForms || null;
     if (body.securityConfig !== void 0) {
-      const { updateSecurityConfig } = await import("./securityConfig-WBFYRYJ7.js");
+      const { updateSecurityConfig } = await import("./securityConfig-TDPXGQ22.js");
       updateSecurityConfig(body.securityConfig);
       console.log("[Import Settings] Security config updated");
     }
@@ -10323,11 +12550,89 @@ importRoute.get("/status", async (c) => {
     ready: true
   });
 });
+importRoute.post("/secrets", async (c) => {
+  try {
+    const body = await c.req.json();
+    const { tenantSlug, kind, payload } = body ?? {};
+    if (!tenantSlug || typeof tenantSlug !== "string" || !kind || typeof kind !== "string" || !payload || typeof payload !== "string") {
+      return c.json({ success: false, error: "Missing required fields (tenantSlug, kind, payload)" }, 400);
+    }
+    await stateProvider.upsertTenantSecret(tenantSlug, kind, payload);
+    const { invalidateTenantSecret } = await import("./tenantSecrets-VXH6V2NR.js");
+    invalidateTenantSecret(kind, tenantSlug);
+    console.log(`[Import/Secrets] Upserted ${kind} for tenant ${tenantSlug}`);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("[Import/Secrets] Upsert failed:", error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : "Failed to upsert secret" }, 500);
+  }
+});
+importRoute.post("/secrets/batch", async (c) => {
+  try {
+    const body = await c.req.json();
+    const secrets = Array.isArray(body?.secrets) ? body.secrets : null;
+    if (!secrets) {
+      return c.json({ success: false, error: "Invalid secrets array" }, 400);
+    }
+    const { invalidateTenantSecret } = await import("./tenantSecrets-VXH6V2NR.js");
+    const results = [];
+    for (const item of secrets) {
+      const { tenantSlug, kind, payload } = item ?? {};
+      if (!tenantSlug || !kind || typeof payload !== "string") {
+        results.push({ tenantSlug: tenantSlug || "", kind: kind || "", success: false, error: "invalid entry" });
+        continue;
+      }
+      try {
+        await stateProvider.upsertTenantSecret(tenantSlug, kind, payload);
+        invalidateTenantSecret(kind, tenantSlug);
+        results.push({ tenantSlug, kind, success: true });
+      } catch (err) {
+        results.push({ tenantSlug, kind, success: false, error: err instanceof Error ? err.message : "upsert failed" });
+      }
+    }
+    const ok = results.filter((r) => r.success).length;
+    console.log(`[Import/Secrets] Batch upserted ${ok}/${results.length} secret(s)`);
+    return c.json({ success: true, results });
+  } catch (error) {
+    console.error("[Import/Secrets] Batch upsert failed:", error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : "Failed to batch upsert secrets" }, 500);
+  }
+});
+importRoute.delete("/secrets", async (c) => {
+  try {
+    const tenantSlug = c.req.query("tenantSlug");
+    const kind = c.req.query("kind");
+    if (!tenantSlug || !kind) {
+      return c.json({ success: false, error: "Missing tenantSlug or kind query parameter" }, 400);
+    }
+    await stateProvider.deleteTenantSecret(tenantSlug, kind);
+    const { invalidateTenantSecret } = await import("./tenantSecrets-VXH6V2NR.js");
+    invalidateTenantSecret(kind, tenantSlug);
+    console.log(`[Import/Secrets] Deleted ${kind} for tenant ${tenantSlug}`);
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("[Import/Secrets] Delete failed:", error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : "Failed to delete secret" }, 500);
+  }
+});
+importRoute.get("/secrets", async (c) => {
+  try {
+    if (typeof stateProvider.listTenantSecrets !== "function") {
+      return c.json({ success: false, error: "listTenantSecrets not supported by this state provider" }, 501);
+    }
+    const secrets = await stateProvider.listTenantSecrets();
+    return c.json({ success: true, secrets });
+  } catch (error) {
+    console.error("[Import/Secrets] List failed:", error);
+    return c.json({ success: false, error: error instanceof Error ? error.message : "Failed to list secrets" }, 500);
+  }
+});
 
 // src/routes/manage.ts
-import { OpenAPIHono as OpenAPIHono18, createRoute as createRoute12, z as z16 } from "@hono/zod-openapi";
-var manageRoute = new OpenAPIHono18();
-var listPagesRoute = createRoute12({
+init_storage();
+import { OpenAPIHono as OpenAPIHono21, createRoute as createRoute15, z as z19 } from "@hono/zod-openapi";
+var manageRoute = new OpenAPIHono21();
+var listPagesRoute = createRoute15({
   method: "get",
   path: "/pages",
   tags: ["Pages"],
@@ -10338,13 +12643,13 @@ var listPagesRoute = createRoute12({
       description: "Page list",
       content: {
         "application/json": {
-          schema: z16.object({
-            pages: z16.array(z16.object({
-              slug: z16.string(),
-              name: z16.string(),
-              version: z16.number()
+          schema: z19.object({
+            pages: z19.array(z19.object({
+              slug: z19.string(),
+              name: z19.string(),
+              version: z19.number()
             })),
-            total: z16.number()
+            total: z19.number()
           })
         }
       }
@@ -10356,15 +12661,15 @@ manageRoute.openapi(listPagesRoute, async (c) => {
   const pages = await stateProvider.listPages(tenantSlug);
   return c.json({ pages, total: pages.length }, 200);
 });
-var getPageRoute = createRoute12({
+var getPageRoute = createRoute15({
   method: "get",
   path: "/pages/:slug",
   tags: ["Pages"],
   summary: "Get page by slug",
   description: "Returns the full page bundle including layout, SEO, datasources, and CSS",
   request: {
-    params: z16.object({
-      slug: z16.string().openapi({ description: "Page slug" })
+    params: z19.object({
+      slug: z19.string().openapi({ description: "Page slug" })
     })
   },
   responses: {
@@ -10372,7 +12677,7 @@ var getPageRoute = createRoute12({
       description: "Page bundle",
       content: {
         "application/json": {
-          schema: z16.object({ page: z16.record(z16.unknown()) })
+          schema: z19.object({ page: z19.record(z19.unknown()) })
         }
       }
     },
@@ -10393,15 +12698,15 @@ manageRoute.openapi(getPageRoute, async (c) => {
   }
   return c.json({ page }, 200);
 });
-var deletePageRoute = createRoute12({
+var deletePageRoute = createRoute15({
   method: "delete",
   path: "/pages/:slug",
   tags: ["Pages"],
   summary: "Delete a page",
   description: "Removes a published page from this engine and invalidates Redis cache",
   request: {
-    params: z16.object({
-      slug: z16.string().openapi({ description: "Page slug" })
+    params: z19.object({
+      slug: z19.string().openapi({ description: "Page slug" })
     })
   },
   responses: {
@@ -10428,8 +12733,9 @@ manageRoute.openapi(deletePageRoute, async (c) => {
 });
 
 // src/routes/seo.ts
-import { Hono as Hono4 } from "hono";
-var seoRoute = new Hono4();
+init_storage();
+import { Hono as Hono5 } from "hono";
+var seoRoute = new Hono5();
 seoRoute.use("*", async (c, next) => {
   await next();
   const ct = c.res.headers.get("Content-Type");
@@ -10453,12 +12759,12 @@ seoRoute.get("/sitemap.xml", async (c) => {
   try {
     const { getRedis: getRedis2 } = await import("./redis-ISXX7Q6Q.js");
     const redis = getRedis2();
-    const cached2 = await redis.get(cacheKey);
-    if (cached2) {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
       c.header("Content-Type", "application/xml");
       c.header("Cache-Control", "public, max-age=3600");
       c.header("X-Cache", "HIT");
-      return c.body(cached2);
+      return c.body(cached);
     }
   } catch {
   }
@@ -10507,12 +12813,12 @@ seoRoute.get("/llms.txt", async (c) => {
   try {
     const { getRedis: getRedis2 } = await import("./redis-ISXX7Q6Q.js");
     const redis = getRedis2();
-    const cached2 = await redis.get(cacheKey);
-    if (cached2) {
+    const cached = await redis.get(cacheKey);
+    if (cached) {
       c.header("Content-Type", "text/plain");
       c.header("Cache-Control", "public, max-age=3600");
       c.header("X-Cache", "HIT");
-      return c.body(cached2);
+      return c.body(cached);
     }
   } catch {
   }
@@ -10550,8 +12856,9 @@ function escapeXml(str) {
 }
 
 // src/routes/embed.ts
-import { OpenAPIHono as OpenAPIHono19 } from "@hono/zod-openapi";
-var embedRoute = new OpenAPIHono19();
+init_storage();
+import { OpenAPIHono as OpenAPIHono22 } from "@hono/zod-openapi";
+var embedRoute = new OpenAPIHono22();
 embedRoute.get("/embed.js", (c) => {
   c.header("Content-Type", "application/javascript");
   c.header("Cache-Control", "public, max-age=3600");
@@ -10768,7 +13075,8 @@ function esc(str) {
 }
 
 // src/routes/auth.ts
-import { OpenAPIHono as OpenAPIHono20 } from "@hono/zod-openapi";
+import { OpenAPIHono as OpenAPIHono23 } from "@hono/zod-openapi";
+init_storage();
 init_env();
 init_redis();
 function isSafeRedirect(urlStr, requestUrl) {
@@ -10852,7 +13160,7 @@ async function resolveDynamicRedirect(client, userId, formId, isEmbed, fallbackR
   }
   return fallbackRedirect;
 }
-var authRoute = new OpenAPIHono20();
+var authRoute = new OpenAPIHono23();
 authRoute.post("/login", async (c) => {
   let email = "";
   let password = "";
@@ -11182,12 +13490,13 @@ app.route("/api/auth", authRoute);
 app.route("", pagesRoute);
 
 // src/startup/sync.ts
+init_storage();
 var BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 async function initEmbeddedRedis() {
   let adapter = null;
   try {
     const { IoRedisAdapter } = await import("./ioredis-adapter-BNGRWZKT.js");
-    const { setCacheProvider } = await import("./cache-O2IECQQT.js");
+    const { setCacheProvider } = await import("./cache-IW7Y3WEC.js");
     adapter = new IoRedisAdapter("redis://localhost:6379");
     await adapter.ping();
     setCacheProvider(adapter);
@@ -11207,6 +13516,8 @@ async function initEmbeddedRedis() {
 async function runStartupSync() {
   console.log("[Startup Sync] \u{1F680} Starting Edge database initialization...");
   await stateProvider.init();
+  const { loadEdgeSecrets } = await import("./loadSecrets-O5EPBYGE.js");
+  await loadEdgeSecrets();
   const platform = getPlatform();
   if (platform === "docker") {
     console.log("[Startup Sync] Initializing embedded Redis...");
@@ -11218,12 +13529,14 @@ async function runStartupSync() {
 // src/index.ts
 app.use("*", compress());
 var __filename = fileURLToPath(import.meta.url);
-var __dirname = path.dirname(__filename);
-var publicPath = path.resolve(__dirname, "../public");
+var __dirname = path2.dirname(__filename);
+var publicPath = path2.resolve(__dirname, "../public");
 app.use("/static/*", serveStatic({
   root: publicPath,
   rewriteRequestPath: (p) => p.replace(/^\/static/, "")
 }));
+app.use("/api/vector/*", systemKeyAuth);
+app.route("/api/vector", vectorRoute);
 app.post("/api/build-bundle", async (c) => {
   const { execSync } = await import("child_process");
   const fs = await import("fs");
@@ -11253,8 +13566,8 @@ app.post("/api/build-bundle", async (c) => {
     }
     const { config: configFile, output: outputFile } = cfg;
     const label = `${provider.charAt(0).toUpperCase() + provider.slice(1)} ${isFull ? "Full" : "Lite"}`;
-    const edgeRoot = path.resolve(__dirname, "..");
-    const distFile = path.join(edgeRoot, "dist", outputFile);
+    const edgeRoot = path2.resolve(__dirname, "..");
+    const distFile = path2.join(edgeRoot, "dist", outputFile);
     if (fs.existsSync(distFile)) fs.unlinkSync(distFile);
     console.log(`[Build] Building ${label} bundle in ${edgeRoot}...`);
     const result = execSync(`npx tsup --config ${configFile}`, {
@@ -11289,8 +13602,8 @@ app.get("/api/source-snapshot", async (c) => {
   const provider = c.req.query("provider") || "";
   const adapterType = c.req.query("adapter_type") || "full";
   const isLite = ["automations", "lite", ""].includes(adapterType);
-  const edgeRoot = path.resolve(__dirname, "..");
-  const srcDir = path.join(edgeRoot, "src");
+  const edgeRoot = path2.resolve(__dirname, "..");
+  const srcDir = path2.join(edgeRoot, "src");
   if (!fs.existsSync(srcDir)) {
     return c.json({ success: false, error: "Source directory not found" }, 404);
   }
@@ -11306,7 +13619,7 @@ app.get("/api/source-snapshot", async (c) => {
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         if (entry.name === "__tests__" || entry.name === "node_modules") continue;
-        walkDir(path.join(dir, entry.name), rel);
+        walkDir(path2.join(dir, entry.name), rel);
       } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
         if (rel.includes(".bak")) continue;
         if (rel.startsWith("adapters/") && otherProviders.size > 0) {
@@ -11315,7 +13628,7 @@ app.get("/api/source-snapshot", async (c) => {
         }
         if (isLite && fullOnlyDirs.some((d) => rel.startsWith(d))) continue;
         try {
-          const content = fs.readFileSync(path.join(dir, entry.name), "utf-8");
+          const content = fs.readFileSync(path2.join(dir, entry.name), "utf-8");
           files[`${CORE_PREFIX}/${rel}`] = content;
           totalSize += content.length;
         } catch {
@@ -11367,8 +13680,8 @@ Published **pages and workflows** are stored in the attached state database
 app.get("/api/source-hash", async (c) => {
   const fs = await import("fs");
   const crypto2 = await import("crypto");
-  const edgeRoot = path.resolve(__dirname, "..");
-  const srcDir = path.join(edgeRoot, "src");
+  const edgeRoot = path2.resolve(__dirname, "..");
+  const srcDir = path2.join(edgeRoot, "src");
   if (!fs.existsSync(srcDir)) {
     return c.json({ success: false, hash: null }, 404);
   }
@@ -11380,11 +13693,11 @@ app.get("/api/source-hash", async (c) => {
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         if (entry.name === "__tests__" || entry.name === "node_modules") continue;
-        walkDir(path.join(dir, entry.name), rel);
+        walkDir(path2.join(dir, entry.name), rel);
       } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
         try {
           hasher.update(rel);
-          hasher.update(fs.readFileSync(path.join(dir, entry.name)));
+          hasher.update(fs.readFileSync(path2.join(dir, entry.name)));
           fileCount++;
         } catch {
         }

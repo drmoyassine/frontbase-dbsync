@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
-from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent, agent_mcp, agent_settings, users, workflows, edge_vectors, security_events
+from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent, agent_mcp, agent_settings, workflows, edge_vectors, security_events
 from app.middleware.test_mode import TestModeMiddleware
 from app.config.edition import is_cloud, DEPLOYMENT_MODE
 
@@ -1259,10 +1259,7 @@ if is_cloud():
         app.include_router(tenants_router.router, prefix="/api/tenants", tags=["Tenants"])
     except ImportError:
         pass  # Tenants router not yet available
-    try:
-        app.include_router(users.router, prefix="/api/users", tags=["App Users"])
-    except ImportError:
-        pass  # App-user management router not available
+
     try:
         from app.routers import vector as vector_router
         app.include_router(vector_router.router)  # prefix defined on router (/api/vector)

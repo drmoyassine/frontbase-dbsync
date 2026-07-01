@@ -18,8 +18,7 @@ COPY services/edge/tsup.config.ts ./
 COPY services/edge/drizzle.config.ts ./
 COPY services/edge/vite.config.ts ./
 
-# Build TypeScript - run both builds separately for better error visibility
-RUN npm run build:client || echo "Client build completed"
+# Build TypeScript
 RUN npx tsup src/index.ts --format esm --outDir dist
 
 # Verify builds succeeded
@@ -33,9 +32,9 @@ WORKDIR /app
 # Install Redis server (embedded — edge-local cache, no network dependency)
 RUN apk add --no-cache redis
 
-# Copy package files and install ALL deps
+# Copy package files and install production deps only
 COPY services/edge/package*.json ./
-RUN npm install
+RUN npm install --omit=dev
 
 # BullMQ — only needed in Docker where Redis is embedded
 RUN npm install bullmq

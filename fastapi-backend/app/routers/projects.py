@@ -13,6 +13,7 @@ from typing import Optional, List, Literal
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.database.config import SessionLocal
 from app.models.models import (
@@ -440,7 +441,10 @@ async def grant_datasource(project_id: str, body: GrantBody, ctx: TenantContext 
         if not exists:
             check_quota(db, ctx, "datasources", _owned_or_granted_count(db, project_id, Datasource, ProjectDatasource, "datasource_id"))
             db.add(ProjectDatasource(id=str(uuid.uuid4()), tenant_id=ctx.tenant_id, project_id=project_id, datasource_id=body.resource_id, created_at=_now()))
-            db.commit()
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
         return {"success": True}
     except HTTPException:
         raise
@@ -477,7 +481,10 @@ async def grant_connected_account(project_id: str, body: GrantBody, ctx: TenantC
         ).first()
         if not exists:
             db.add(ProjectConnectedAccount(id=str(uuid.uuid4()), tenant_id=ctx.tenant_id, project_id=project_id, account_id=body.resource_id, created_at=_now()))
-            db.commit()
+            try:
+                db.commit()
+            except IntegrityError:
+                db.rollback()
         return {"success": True}
     except HTTPException:
         raise

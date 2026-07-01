@@ -56,6 +56,10 @@ class MySQLAdapter(SQLAdapter):
             self._pool.close()
             await self._pool.wait_closed()
             self._pool = None
+
+    def _q_ident(self, name: str) -> str:
+        """Safely quote a MySQL identifier."""
+        return "`" + name.replace("`", "``") + "`"
     
     async def get_tables(self) -> List[str]:
         """Get list of WordPress tables."""
@@ -76,15 +80,13 @@ class MySQLAdapter(SQLAdapter):
         limit: int = 10,
     ) -> List[Dict[str, Any]]:
         """Group by `category` and aggregate per group (MySQL dialect). Returns [{category, value}]."""
-        def q_ident(name: str) -> str:
-            return "`" + str(name).replace("`", "``") + "`"
 
         agg = (aggregation or "count").lower()
-        cat = q_ident(category)
+        cat = self._q_ident(category)
         if agg == "count" or not value:
             measure = "COUNT(*)"
         else:
-            col = q_ident(value)
+            col = self._q_ident(value)
             fn = {"sum": "SUM", "average": "AVG", "min": "MIN", "max": "MAX"}.get(agg, "SUM")
             measure = f"{fn}(CAST({col} AS DECIMAL(38,6)))" if agg in ("sum", "average") else f"{fn}({col})"
 
@@ -94,7 +96,7 @@ class MySQLAdapter(SQLAdapter):
         elif sort == "desc":
             order_sql = " ORDER BY `value` DESC"
         try:
-            lim = max(1, min(int(limit or 10), 1000))
+            lim = max(1, min(limit or 10, 1000))
         except (TypeError, ValueError):
             lim = 10
 
@@ -112,17 +114,17 @@ class MySQLAdapter(SQLAdapter):
             if fval is None or fval == "":
                 continue
             if op in ("==", "eq", "dropdown"):
-                conds.append(f"{q_ident(fcol)} = %s")
+                conds.append(f"{self._q_ident(fcol)} = %s")
                 params.append(fval)
             elif op in ("contains", "text", "ilike"):
-                conds.append(f"CAST({q_ident(fcol)} AS CHAR) LIKE %s")
+                conds.append(f"CAST({self._q_ident(fcol)} AS CHAR) LIKE %s")
                 params.append(f"%{fval}%")
         if conds:
             where_sql = " WHERE " + " AND ".join(conds)
 
         sql = (
             f"SELECT {cat} AS `category`, {measure} AS `value` "
-            f"FROM {q_ident(table)}{where_sql} GROUP BY {cat}{order_sql} LIMIT {lim}"
+            f"FROM {self._q_ident(table)}{where_sql} GROUP BY {cat}{order_sql} LIMIT {lim}"
         )
         async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
@@ -137,7 +139,7 @@ class MySQLAdapter(SQLAdapter):
         """Get column information for a table, including foreign key relationships."""
         async with self._ensure_pool().acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute(f"DESCRIBE `{table}`")
+                await cur.execute(f"DESCRIBE {self._q_ident(table)}")
                 rows = await cur.fetchall()
                 
                 # Get FK info for this table
@@ -712,7 +714,7 @@ class MySQLAdapter(SQLAdapter):
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 # Get posts
                 await cur.execute(f"""
-                    SELECT * FROM `{posts_table}`
+                    SELECT * FROM {self._q_ident(posts_table)}
                     WHERE post_type = %s AND post_status = %s
                     ORDER BY post_date DESC
                     LIMIT %s
@@ -723,7 +725,7 @@ class MySQLAdapter(SQLAdapter):
                 for post in posts:
                     await cur.execute(f"""
                         SELECT meta_key, meta_value
-                        FROM `{meta_table}`
+                        FROM {self._q_ident(meta_table)}
                         WHERE post_id = %s
                     """, (post["ID"],))
                     meta_rows = await cur.fetchall()
@@ -757,7 +759,7 @@ class MySQLAdapter(SQLAdapter):
                             value = json.dumps(value)
                         
                         await cur.execute(f"""
-                            INSERT INTO `{meta_table}` (post_id, meta_key, meta_value)
+                            INSERT INTO {self._q_ident(meta_table)} (post_id, meta_key, meta_value)
                             VALUES (%s, %s, %s)
                             ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value)
                         """, (post_id, key, value))

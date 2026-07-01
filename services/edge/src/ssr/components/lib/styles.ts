@@ -9,6 +9,19 @@ export interface StylesData {
     rawCSS?: string;
 }
 
+export function sanitizeCSS(css: string | undefined | null): string {
+    if (!css) return "";
+    let sanitized = css;
+    // Prevent HTML context breakout
+    sanitized = sanitized.replace(/<\/\s*style\s*>/gi, "");
+    // Prevent obsolete but dangerous CSS vectors
+    sanitized = sanitized.replace(/expression\s*\(/gi, "no-expression(");
+    sanitized = sanitized.replace(/url\s*\(\s*['"]?javascript:/gi, "url(");
+    sanitized = sanitized.replace(/behavior\s*:/gi, "no-behavior:");
+    sanitized = sanitized.replace(/-moz-binding\s*:/gi, "no-binding:");
+    return sanitized;
+}
+
 /**
  * Convert StylesData to inline CSS string
  */
@@ -17,7 +30,7 @@ export function stylesDataToCSS(stylesData?: StylesData): string {
 
     // Handle raw CSS mode
     if (stylesData.stylingMode === 'css' && stylesData.rawCSS) {
-        return stylesData.rawCSS;
+        return sanitizeCSS(stylesData.rawCSS);
     }
 
     // Handle visual mode with values

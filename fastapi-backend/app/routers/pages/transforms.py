@@ -7,6 +7,25 @@ import httpx
 import asyncio
 import re
 
+def sanitize_css(css: str) -> str:
+    """
+    Sanitizes raw CSS to prevent XSS attacks when injecting into <style> tags.
+    Crucially removes closing </style> tags to prevent HTML context breakout.
+    """
+    if not css or not isinstance(css, str):
+        return ""
+    
+    # 1. Prevent HTML context breakout (critical for dangerouslySetInnerHTML)
+    css = re.sub(r'</\s*style\s*>', '', css, flags=re.IGNORECASE)
+    
+    # 2. Prevent obsolete but dangerous CSS vectors
+    css = re.sub(r'expression\s*\(', 'no-expression(', css, flags=re.IGNORECASE)
+    css = re.sub(r'url\s*\(\s*[\'"]?javascript:', 'url(', css, flags=re.IGNORECASE)
+    css = re.sub(r'behavior\s*:', 'no-behavior:', css, flags=re.IGNORECASE)
+    css = re.sub(r'-moz-binding\s*:', 'no-binding:', css, flags=re.IGNORECASE)
+    
+    return css
+
 
 def normalize_binding_location(component: Dict) -> Dict:
     """
@@ -84,7 +103,7 @@ def map_styles_schema(component: Dict) -> Dict:
         
         # PRESERVE rawCSS if the user entered Custom CSS directly via the Styling Panel
         if 'rawCSS' in styles_data:
-            result['styles']['rawCSS'] = styles_data['rawCSS']
+            result['styles']['rawCSS'] = sanitize_css(styles_data['rawCSS'])
         
         # Keep stylesData as well for backward compatibility with Edge
         # (Edge reads from both styles and stylesData)

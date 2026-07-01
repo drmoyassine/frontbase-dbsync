@@ -40,7 +40,7 @@ def serialize_page(page: Page) -> dict:
     if isinstance(layout_data, str):
         try:
             layout_data = json.loads(layout_data)
-        except:
+        except Exception:
             layout_data = {"content": [], "root": {}}
     api_deployments = []
     has_unpublished_changes = False

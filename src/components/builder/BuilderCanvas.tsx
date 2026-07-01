@@ -4,7 +4,7 @@ import { useBuilderStore, type Page } from '@/stores/builder';
 import { DraggableComponent } from './DraggableComponent';
 import { CanvasGrid } from './CanvasGrid';
 import { ComponentBreadcrumb } from './ComponentBreadcrumb';
-import { cn } from '@/lib/utils';
+import { cn, sanitizeCSS } from '@/lib/utils';
 import { getDefaultProps } from '@/lib/componentDefaults';
 import { stylesToCSS } from '@/lib/styles/converters';
 import type { StylesData } from '@/types/builder';
@@ -270,7 +270,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     >
       {/* Dynamic Component Themes CSS */}
       {pageRawCSS && (
-        <style dangerouslySetInnerHTML={{ __html: pageRawCSS }} />
+        <style dangerouslySetInnerHTML={{ __html: sanitizeCSS(pageRawCSS) }} />
       )}
 
       {/* Scroll Target Selection Mode Banner */}

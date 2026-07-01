@@ -117,7 +117,7 @@ export const useDashboardStore = create<DashboardState>()(
               set({ connections: transformedConnections });
             }
             get().notifyConnectionChange();
-            debug.info('DASHBOARD', 'Connections updated:', Object.keys(transformedConnections));
+            debug.log('DASHBOARD', 'Connections updated:', Object.keys(transformedConnections));
           } catch (error) {
             debug.error('DASHBOARD', 'Connection fetch error:', error);
           }
@@ -126,7 +126,7 @@ export const useDashboardStore = create<DashboardState>()(
 
       notifyConnectionChange: () => {
         // This will be used by data-binding store to react to connection changes
-        debug.info('DASHBOARD', 'Connection change notification sent');
+        debug.log('DASHBOARD', 'Connection change notification sent');
       },
     }),
     {

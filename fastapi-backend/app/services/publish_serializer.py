@@ -313,7 +313,7 @@ async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: 
     if isinstance(layout_data, str):
         try:
             layout_data = json.loads(layout_data)
-        except:
+        except Exception:
             layout_data = {"content": [], "root": {}}
     
     # Convert components with stylesData → styles mapping AND compute dataRequest
@@ -342,10 +342,14 @@ async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: 
     print(f"[publish] CSS bundle generated: {len(css_bundle)} bytes")
     # ======================
     
+    root_data = layout_data.get("root", {}) if isinstance(layout_data, dict) else {}
+    if not isinstance(root_data, dict):
+        root_data = {}
+
     # Build PageLayout
     page_layout = PageLayout(
         content=[PageComponent(**c) for c in converted_content],
-        root=layout_data.get("root", {})
+        root=root_data
     )
     
     # Parse SEO data if exists
@@ -355,7 +359,7 @@ async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: 
         if isinstance(seo_raw, str):
             try:
                 seo_raw = json.loads(seo_raw)
-            except:
+            except Exception:
                 seo_raw = {}
         seo_data = SeoData(**seo_raw) if isinstance(seo_raw, dict) and seo_raw else None
     

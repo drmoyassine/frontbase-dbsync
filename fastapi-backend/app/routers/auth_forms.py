@@ -72,7 +72,7 @@ def parse_json_field(value, default):
         try:
             # Try eval as fallback for Python dict strings
             return eval(value)
-        except:
+        except Exception:
             return default
 
 

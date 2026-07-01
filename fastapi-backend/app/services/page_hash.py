@@ -34,7 +34,7 @@ def compute_page_hash(page) -> str:
             try:
                 obj = json.loads(d)
                 return json.dumps(obj, sort_keys=True) if isinstance(obj, dict) else json.dumps(obj)
-            except: return d
+            except Exception: return d
         return json.dumps(d, sort_keys=True)
 
     # Dynamically collect column values in alphabetical order for determinism

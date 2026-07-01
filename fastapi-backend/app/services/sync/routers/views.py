@@ -374,7 +374,7 @@ async def trigger_view_webhook(
                 # Handle templates or jinja if engine is available
                 try:
                     transformed_data[target] = engine.evaluate(source_template, payload)  # type: ignore[arg-type]
-                except:
+                except Exception:
                     transformed_data[target] = source_template
     else:
         transformed_data = payload

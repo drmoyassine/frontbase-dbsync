@@ -319,20 +319,21 @@ export class SupabaseAuthClient implements AuthClient {
     try {
       const { data } = await supabaseClient.auth.getSession();
 
-      if (data.session?.access_token && data.user) {
-        const tenantData = await this.getTenantData(data.user.id);
+      if (data.session?.access_token && data.session.user) {
+        const user = data.session.user;
+        const tenantData = await this.getTenantData(user.id);
 
         const session: AuthSession = {
           user: {
-            id: data.user.id,
-            email: data.user.email || '',
-            username: data.user.user_metadata?.username,
+            id: user.id,
+            email: user.email || '',
+            username: user.user_metadata?.username,
             tenant_id: tenantData?.tenant_id,
             tenant_slug: tenantData?.tenant_slug,
             role: tenantData?.role || 'owner',
             is_master: tenantData?.is_master || false,
-            created_at: data.user.created_at,
-            updated_at: data.user.updated_at,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
           },
           tenant: tenantData?.tenant,
           token: data.session.access_token,
@@ -526,26 +527,27 @@ export class SupabaseAuthClient implements AuthClient {
       // Just get the current session
       const { data, error } = await supabaseClient.auth.getSession();
 
-      if (error || !data.session || !data.user) {
+      if (error || !data.session || !data.session.user) {
         return {
           success: false,
           error: error?.message || 'OAuth callback failed',
         };
       }
 
-      const tenantData = await this.getTenantData(data.user.id);
+      const user = data.session.user;
+      const tenantData = await this.getTenantData(user.id);
 
       this.sessionCache = {
         user: {
-          id: data.user.id,
-          email: data.user.email || '',
-          username: data.user.user_metadata?.username,
+          id: user.id,
+          email: user.email || '',
+          username: user.user_metadata?.username,
           tenant_id: tenantData?.tenant_id,
           tenant_slug: tenantData?.tenant_slug,
           role: tenantData?.role || 'owner',
           is_master: tenantData?.is_master || false,
-          created_at: data.user.created_at,
-          updated_at: data.user.updated_at,
+          created_at: user.created_at,
+          updated_at: user.updated_at,
         },
         tenant: tenantData?.tenant,
         token: data.session.access_token,
@@ -608,26 +610,27 @@ export class SupabaseAuthClient implements AuthClient {
       // Just get the current session
       const { data, error } = await supabaseClient.auth.getSession();
 
-      if (error || !data.session || !data.user) {
+      if (error || !data.session || !data.session.user) {
         return {
           success: false,
           error: error?.message || 'Magic link verification failed',
         };
       }
 
-      const tenantData = await this.getTenantData(data.user.id);
+      const user = data.session.user;
+      const tenantData = await this.getTenantData(user.id);
 
       this.sessionCache = {
         user: {
-          id: data.user.id,
-          email: data.user.email || '',
-          username: data.user.user_metadata?.username,
+          id: user.id,
+          email: user.email || '',
+          username: user.user_metadata?.username,
           tenant_id: tenantData?.tenant_id,
           tenant_slug: tenantData?.tenant_slug,
           role: tenantData?.role || 'owner',
           is_master: tenantData?.is_master || false,
-          created_at: data.user.created_at,
-          updated_at: data.user.updated_at,
+          created_at: user.created_at,
+          updated_at: user.updated_at,
         },
         tenant: tenantData?.tenant,
         token: data.session.access_token,

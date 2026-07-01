@@ -19,7 +19,7 @@ async def get_variables(db: Session = Depends(get_db), ctx: TenantContext | None
 @router.post("/", response_model=VariableResponse)
 async def create_variable_endpoint(request: VariableCreateRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new variable"""
-    variable = create_variable(db, request.dict(), ctx)
+    variable = create_variable(db, request.model_dump(), ctx)
     return variable
 
 @router.get("/{variable_id}", response_model=VariableResponse)
@@ -67,7 +67,7 @@ async def update_variable_endpoint(variable_id: str, request: VariableUpdateRequ
         )
     
     # Update fields
-    update_data = request.dict(exclude_unset=True)
+    update_data = request.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(variable, field, value)
     
@@ -287,7 +287,7 @@ async def get_template_registry(page_id: Optional[str] = None, db: Session = Dep
                 if isinstance(layout, str):
                     try:
                         layout = json.loads(layout)
-                    except:
+                    except Exception:
                         layout = {}
                 if isinstance(layout, dict):
                     root_config = layout.get("root", {})

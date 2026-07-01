@@ -5,7 +5,7 @@ populated when DEPLOYMENT_MODE=cloud.  In self-host mode the tables
 exist (harmless) but remain empty.
 """
 
-from sqlalchemy import Column, String, Text, Integer, ForeignKey
+from sqlalchemy import Column, String, Text, Integer, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from ..database.config import Base
@@ -97,6 +97,10 @@ class ProjectDatasource(Base):
     datasource_id = Column(String, nullable=False)
     created_at = Column(String, nullable=False)
 
+    __table_args__ = (
+        UniqueConstraint('project_id', 'datasource_id', name='uq_project_datasources_project_id_datasource_id'),
+    )
+
 
 class ProjectStorage(Base):
     """Grant of a tenant-owned storage bucket to a project (shareable, per-project-capped)."""
@@ -116,6 +120,10 @@ class ProjectConnectedAccount(Base):
     project_id = Column(String, ForeignKey('project.id'), nullable=False)
     account_id = Column(String, ForeignKey('edge_providers_accounts.id'), nullable=False)
     created_at = Column(String, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint('project_id', 'account_id', name='uq_project_connected_accounts_project_id_account_id'),
+    )
 
 
 class TenantAddon(Base):

@@ -24,10 +24,10 @@ export const useBuilderStore = create<BuilderState>()(
         set({
           project: null,
           pages: [],
-          activePageId: null,
-          variables: [],
+          currentPageId: null,
+          appVariables: [],
           selectedComponentId: null,
-          hoveredComponentId: null,
+
         });
       },
     }),

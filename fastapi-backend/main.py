@@ -216,7 +216,7 @@ def _ensure_local_edge():
             # Bind (or unbind) the system vector store. When LanceDB is enabled we
             # link it; when disabled we clear any stale binding so the engine never
             # references a vector store that isn't (or shouldn't be) provisioned.
-            desired_vector_id = sys_vector.id if sys_vector else None
+            desired_vector_id = sys_vector.id
             if str(sys_engine.edge_vector_id or "") != str(desired_vector_id or ""):
                 sys_engine.edge_vector_id = desired_vector_id  # type: ignore[assignment]
                 changed = True
@@ -224,7 +224,7 @@ def _ensure_local_edge():
             # Ensure engine_config has a system_key
             # The local edge container expects this specific key (set in docker-compose.yml)
             new_config = inject_system_key(str(sys_engine.engine_config) if str(sys_engine.engine_config) != "None" and str(sys_engine.engine_config) else None, force_key="fb_sys_local_dev_key")
-            if str(new_config) != str(sys_engine.engine_config):
+            if new_config != str(sys_engine.engine_config):
                 sys_engine.engine_config = new_config  # type: ignore[assignment]
                 changed = True
                 

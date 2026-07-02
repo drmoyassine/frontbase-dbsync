@@ -25,7 +25,7 @@ def column_exists(inspector, table_name: str, column_name: str) -> bool:
     try:
         columns = {col['name'] for col in inspector.get_columns(table_name)}
         return column_name in columns
-    except:
+    except Exception:
         return False
 
 

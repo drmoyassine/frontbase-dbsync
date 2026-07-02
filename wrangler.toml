@@ -1,0 +1,7 @@
+name = "frontbase-frontend"
+compatibility_date = "2024-03-20"
+pages_build_output_dir = "dist"
+
+[env.production]
+# Add environment variables here if needed
+# VITE_API_URL = "https://api.yourdomain.com"

@@ -22,7 +22,7 @@ describe('AuthClientFactory', () => {
     mockIsCloud.mockReset();
 
     // Clear module cache to reset env vars
-    delete (import.meta as any).env.VITE_AUTH_PROVIDER;
+    vi.unstubAllEnvs();
   });
 
   afterEach(() => {
@@ -43,7 +43,7 @@ describe('AuthClientFactory', () => {
     });
 
     it('should return SupabaseAuthClient in cloud mode with Supabase provider', async () => {
-      (import.meta as any).env.VITE_AUTH_PROVIDER = 'supabase';
+      vi.stubEnv('VITE_AUTH_PROVIDER', 'supabase');
       mockIsCloud.mockReturnValue(true);
 
       const { createAuthClient } = await import('../AuthClientFactory');
@@ -55,7 +55,7 @@ describe('AuthClientFactory', () => {
     });
 
     it('should return SuperTokensAuthClient in cloud mode with SuperTokens provider', async () => {
-      (import.meta as any).env.VITE_AUTH_PROVIDER = 'supertokens';
+      vi.stubEnv('VITE_AUTH_PROVIDER', 'supertokens');
       mockIsCloud.mockReturnValue(true);
 
       const { createAuthClient } = await import('../AuthClientFactory');
@@ -187,7 +187,7 @@ describe('AuthClientFactory', () => {
 
   describe('getCurrentAuthProvider', () => {
     it('should return supabase when configured', async () => {
-      (import.meta as any).env.VITE_AUTH_PROVIDER = 'supabase';
+      vi.stubEnv('VITE_AUTH_PROVIDER', 'supabase');
 
       const { getCurrentAuthProvider } = await import('../AuthClientFactory');
 
@@ -195,7 +195,7 @@ describe('AuthClientFactory', () => {
     });
 
     it('should return supertokens when configured', async () => {
-      (import.meta as any).env.VITE_AUTH_PROVIDER = 'supertokens';
+      vi.stubEnv('VITE_AUTH_PROVIDER', 'supertokens');
 
       const { getCurrentAuthProvider } = await import('../AuthClientFactory');
 
@@ -203,7 +203,7 @@ describe('AuthClientFactory', () => {
     });
 
     it('should return undefined when not configured', async () => {
-      delete (import.meta as any).env.VITE_AUTH_PROVIDER;
+      vi.unstubAllEnvs();
 
       const { getCurrentAuthProvider } = await import('../AuthClientFactory');
 
@@ -213,7 +213,7 @@ describe('AuthClientFactory', () => {
 
   describe('isSupabaseAuth', () => {
     it('should return true in cloud mode with Supabase provider', async () => {
-      (import.meta as any).env.VITE_AUTH_PROVIDER = 'supabase';
+      vi.stubEnv('VITE_AUTH_PROVIDER', 'supabase');
       mockIsCloud.mockReturnValue(true);
 
       const { isSupabaseAuth } = await import('../AuthClientFactory');
@@ -222,7 +222,7 @@ describe('AuthClientFactory', () => {
     });
 
     it('should return false in self-host mode even with Supabase configured', async () => {
-      (import.meta as any).env.VITE_AUTH_PROVIDER = 'supabase';
+      vi.stubEnv('VITE_AUTH_PROVIDER', 'supabase');
       mockIsCloud.mockReturnValue(false);
 
       const { isSupabaseAuth } = await import('../AuthClientFactory');
@@ -231,7 +231,7 @@ describe('AuthClientFactory', () => {
     });
 
     it('should return false in cloud mode with SuperTokens', async () => {
-      (import.meta as any).env.VITE_AUTH_PROVIDER = 'supertokens';
+      vi.stubEnv('VITE_AUTH_PROVIDER', 'supertokens');
       mockIsCloud.mockReturnValue(true);
 
       const { isSupabaseAuth } = await import('../AuthClientFactory');
@@ -242,7 +242,7 @@ describe('AuthClientFactory', () => {
 
   describe('isSuperTokensAuth', () => {
     it('should return true in cloud mode with SuperTokens provider', async () => {
-      (import.meta as any).env.VITE_AUTH_PROVIDER = 'supertokens';
+      vi.stubEnv('VITE_AUTH_PROVIDER', 'supertokens');
       mockIsCloud.mockReturnValue(true);
 
       const { isSuperTokensAuth } = await import('../AuthClientFactory');
@@ -252,7 +252,7 @@ describe('AuthClientFactory', () => {
 
     it('should return true in cloud mode when provider not set (default)', async () => {
       mockIsCloud.mockReturnValue(true);
-      delete (import.meta as any).env.VITE_AUTH_PROVIDER;
+      vi.unstubAllEnvs();
 
       const { isSuperTokensAuth } = await import('../AuthClientFactory');
 
@@ -268,7 +268,7 @@ describe('AuthClientFactory', () => {
     });
 
     it('should return false in cloud mode with Supabase', async () => {
-      (import.meta as any).env.VITE_AUTH_PROVIDER = 'supabase';
+      vi.stubEnv('VITE_AUTH_PROVIDER', 'supabase');
       mockIsCloud.mockReturnValue(true);
 
       const { isSuperTokensAuth } = await import('../AuthClientFactory');

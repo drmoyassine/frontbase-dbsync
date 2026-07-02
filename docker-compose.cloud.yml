@@ -59,33 +59,6 @@ services:
       retries: 5
       start_period: 120s
 
-  celery-worker:
-    build:
-      context: .
-      dockerfile: fastapi-backend/Dockerfile
-    command: celery -A app.services.task_queue worker --loglevel=info --concurrency=2
-    user: "1000:1000"  # Run as non-root user (UID 1000 is common 'node' user)
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - DATABASE=${COMPOSE_PROFILES:-sqlite}
-      - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
-      # Email Platform Settings
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - MAILGUN_API_KEY=${MAILGUN_API_KEY}
-      - MAILGUN_DOMAIN=${MAILGUN_DOMAIN}
-      - MAILGUN_REGION=${MAILGUN_REGION}
-      - EMAIL_FROM=${EMAIL_FROM}
-      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME}
-      # Frontend and Backend URLs for SuperTokens links
-      - FRONTEND_URL=${FRONTEND_URL}
-      - BACKEND_URL=${BACKEND_URL}
-    depends_on:
-      redis:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
 
   # PostgreSQL — only starts when COMPOSE_PROFILES=postgresql
   postgres:

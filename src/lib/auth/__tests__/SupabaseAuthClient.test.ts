@@ -458,13 +458,17 @@ describe('SupabaseAuthClient', () => {
         updated_at: '2024-01-01T00:00:00Z',
       };
 
+      // Supabase's getSession() nests the user INSIDE session (data.session.user),
+      // which is what SupabaseAuthClient.getSession() reads. The previous mock put
+      // `user` as a sibling of `session`, so data.session.user was undefined and the
+      // client returned an empty (unauthenticated) session.
       mockGetSession.mockResolvedValue({
         data: {
           session: {
             access_token: 'session-token',
             expires_at: 9999999999,
+            user: mockUser,
           },
-          user: mockUser,
         },
       });
 

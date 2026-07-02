@@ -185,11 +185,49 @@ fi
 # Start the application with proxy headers support (for HTTPS behind reverse proxy)
 # - Self-host/VPS: Running as root, drop to appuser via gosu (security best practice)
 # - Cloud/Kubernetes: Already running as non-root, skip gosu and run directly
+#
+# Single-container model: the Celery worker and the API run side by side. Bash stays
+# PID 1 (no `exec`) so it can (a) forward SIGTERM to BOTH children on `docker stop`
+# for a graceful drain, and (b) take the whole container down the moment EITHER
+# process dies — otherwise a crashed/OOM-killed worker would leave the container
+# reporting "healthy" (uvicorn still up) while all background jobs silently stop.
+#
+# --beat embeds Celery Beat in the worker so the periodic schedule in
+# app.services.task_queue (retention prune, cleanups) actually fires. This is safe
+# precisely because there is exactly ONE worker in this single container — no risk
+# of duplicate beat schedulers. --concurrency is capped to keep memory bounded
+# (default prefork spawns one child per CPU core; tune CELERY_CONCURRENCY per host).
+CELERY_CONCURRENCY="${CELERY_CONCURRENCY:-2}"
+
+echo "Starting Celery worker (with embedded beat, concurrency=${CELERY_CONCURRENCY}) in the background..."
+if [ "$(id -u)" = "0" ]; then
+  gosu appuser celery -A app.services.task_queue worker --beat --concurrency="${CELERY_CONCURRENCY}" --loglevel=info &
+else
+  celery -A app.services.task_queue worker --beat --concurrency="${CELERY_CONCURRENCY}" --loglevel=info &
+fi
+CELERY_PID=$!
+
 echo "Starting application..."
 if [ "$(id -u)" = "0" ]; then
   # Running as root — drop privileges to appuser
-  exec gosu appuser uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+  gosu appuser uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*' &
 else
   # Already running as non-root (cloud/Kubernetes) — run directly
-  exec uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'
+  uvicorn main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*' &
 fi
+UVICORN_PID=$!
+
+# Forward termination signals to both children for a graceful shutdown.
+term() {
+  echo "Received termination signal, shutting down worker and API..."
+  kill -TERM "$CELERY_PID" 2>/dev/null || true
+  kill -TERM "$UVICORN_PID" 2>/dev/null || true
+}
+trap term TERM INT
+
+# Block until EITHER process exits; then tear the other down so the orchestrator
+# restarts a clean container instead of serving a half-dead one.
+wait -n || true
+echo "A managed process exited — bringing the container down for a clean restart."
+term
+exit 1

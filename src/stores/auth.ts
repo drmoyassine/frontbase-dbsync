@@ -10,6 +10,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { isCloud } from '@/lib/edition';
+import { createAuthClient } from '@/lib/auth/AuthClientFactory';
 
 // User interface — extended for cloud tenancy
 export interface User {
@@ -145,33 +146,18 @@ export const useAuthStore = create<AuthState>()(
       login: async (email, password, website, turnstileToken) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await fetch(
-            `${API_BASE}/api/auth/login`,
-            {
-              method: 'POST',
-              ...fetchOpts(null, { body: JSON.stringify({ email, password, website, turnstile_token: turnstileToken }) }),
-            }
-          );
-
-          if (!response.ok) {
-            const data = await response.json();
-            set({ isLoading: false, error: data.detail || 'Login failed' });
-            return { success: false, error: data.detail };
+          const authClient = createAuthClient({ apiBaseUrl: API_BASE });
+          const result = await authClient.login({ email, password, website, turnstileToken });
+          
+          if (!result.success) {
+            set({ isLoading: false, error: result.error || 'Login failed' });
+            return { success: false, error: result.error };
           }
 
-          const data = await response.json();
-
-          // Both modes use cookie sessions — tenant context comes from the user object
           set({
-            user: data.user,
-            tenant: data.user?.tenant_id ? {
-              id: data.user.tenant_id,
-              slug: data.user.tenant_slug || '',
-              name: data.user.tenant_slug || '', // Will be enriched on tenant fetch
-              plan: 'free',
-              status: 'active',
-            } : null,
-            token: null,  // Cookie-based — no JWT
+            user: result.user as User || null,
+            tenant: result.tenant as TenantInfo || null,
+            token: result.token || null,
             isAuthenticated: true,
             isLoading: false,
             error: null,
@@ -191,30 +177,18 @@ export const useAuthStore = create<AuthState>()(
 
         set({ isLoading: true, error: null });
         try {
-          const response = await fetch(`${API_BASE}/api/auth/signup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              email,
-              password,
-              workspace_name: workspaceName,
-              slug,
-            }),
-          });
-
-          if (!response.ok) {
-            const data = await response.json();
-            set({ isLoading: false, error: data.detail || 'Signup failed' });
-            return { success: false, error: data.detail };
+          const authClient = createAuthClient({ apiBaseUrl: API_BASE });
+          const result = await authClient.signup({ email, password, workspaceName, slug });
+          
+          if (!result.success) {
+            set({ isLoading: false, error: result.error || 'Signup failed' });
+            return { success: false, error: result.error };
           }
 
-          const data = await response.json();
-
           set({
-            user: data.user,
-            tenant: data.tenant || null,
-            token: data.token,
+            user: result.user as User || null,
+            tenant: result.tenant as TenantInfo || null,
+            token: result.token || null,
             isAuthenticated: true,
             isLoading: false,
             error: null,
@@ -230,11 +204,8 @@ export const useAuthStore = create<AuthState>()(
 
       logout: async () => {
         try {
-          // Both modes: hit logout endpoint to clear server session
-          await fetch(`${API_BASE}/api/auth/logout`, {
-            method: 'POST',
-            credentials: 'include',
-          });
+          const authClient = createAuthClient({ apiBaseUrl: API_BASE });
+          await authClient.logout();
         } catch {
           // Ignore logout errors
         }
@@ -258,30 +229,27 @@ export const useAuthStore = create<AuthState>()(
         }
 
         _checkAuthPromise = (async () => {
-          // Both modes use cookie sessions — always check the backend
           set({ isLoading: true });
           try {
-            const response = await fetch(
-              `${API_BASE}/api/auth/me`,
-              { credentials: 'include' },
-            );
+            const authClient = createAuthClient({ apiBaseUrl: API_BASE });
+            const result = await authClient.getSession();
 
-            if (response.ok) {
-              const data = await response.json();
+            if (result.isAuthenticated && result.user) {
               if (get().isImpersonating) {
                 // If impersonating, background-sync the real identity without disturbing the fake UI
                 set({
-                  _realUser: data.user,
-                  _realTenant: data.tenant || get()._realTenant,
+                  _realUser: result.user as User,
+                  _realTenant: (result.tenant as TenantInfo) || get()._realTenant,
                   isAuthenticated: true,
                   isLoading: false,
                 });
               } else {
                 set({
-                  user: data.user,
-                  tenant: data.tenant || get().tenant,
+                  user: result.user as User,
+                  tenant: (result.tenant as TenantInfo) || get().tenant,
                   isAuthenticated: true,
                   isLoading: false,
+                  token: result.token || get().token,
                 });
               }
             } else {

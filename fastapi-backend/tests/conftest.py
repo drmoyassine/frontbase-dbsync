@@ -81,6 +81,27 @@ for mod_name in _sync_modules:
 from fastapi import FastAPI as _FastAPI
 sys.modules["app.services.sync.main"].sync_app = _FastAPI()
 
+# ── Expose the REAL DatasourceType enum on the mocked datasource module ──
+# app/schemas/publish.py imports DatasourceType from app.services.sync.models.
+# datasource and annotates a Pydantic field with it (DatasourceConfig). With the
+# module mocked above, DatasourceType is a MagicMock and Pydantic raises
+# PydanticSchemaGenerationError while building that model at import time —
+# breaking EVERY test that imports main (e.g. all of test_supabase_auth.py).
+# Load the real enum from source (no duplication → no drift). The source file
+# also defines ORM models, so give the mocked sync DB module a real declarative
+# Base first so exec succeeds.
+import importlib.util as _ilu
+from sqlalchemy.orm import declarative_base as _declarative_base
+
+sys.modules["app.services.sync.database"].Base = _declarative_base()
+_ds_src = os.path.join(
+    os.path.dirname(__file__), "..", "app", "services", "sync", "models", "datasource.py"
+)
+_ds_spec = _ilu.spec_from_file_location("_real_datasource_source", _ds_src)
+_ds_mod = _ilu.module_from_spec(_ds_spec)
+_ds_spec.loader.exec_module(_ds_mod)
+sys.modules["app.services.sync.models.datasource"].DatasourceType = _ds_mod.DatasourceType
+
 # Also mock the CSS bundler's sync deps
 if "app.services.css_bundler" not in sys.modules:
     sys.modules["app.services.css_bundler"] = MockModule(name="app.services.css_bundler")

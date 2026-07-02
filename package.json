@@ -10,6 +10,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
+    "deploy:cf": "npm run build && wrangler pages deploy dist",
+    "deploy:deno": "npm run build && deployctl deploy --project=frontbase-frontend server.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run src/lib/auth/__tests__",

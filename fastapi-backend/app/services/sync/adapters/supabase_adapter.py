@@ -64,14 +64,20 @@ class SupabaseAdapter(SQLAdapter):
             self.logger.info(f"[SUPABASE-RESOLVE] Missing api_key={bool(api_key)}, api_url={bool(api_url)} — resolving from Connected Account")
             try:
                 from app.database.config import SessionLocal
-                from app.core.credential_resolver import get_supabase_context
+                from app.core.credential_resolver import get_datasource_credentials, get_supabase_context
                 sync_db = SessionLocal()
                 try:
-                    ctx = get_supabase_context(sync_db, mode="builder")
-                    if ctx:
-                        api_url = api_url or ctx.get("url", "")
-                        api_key = api_key or ctx.get("auth_key", "")
-                        self.logger.info(f"[SUPABASE-RESOLVE] Resolved from {ctx.get('source')}: url={bool(api_url)}, key={bool(api_key)}")
+                    if self.datasource.provider_account_id:
+                        ctx = get_datasource_credentials(sync_db, self.datasource)
+                        api_url = api_url or ctx.get("api_url", "")
+                        api_key = api_key or ctx.get("service_role_key", "") or ctx.get("anon_key", "")
+                        self.logger.info(f"[SUPABASE-RESOLVE] Resolved from connected account: url={bool(api_url)}, key={bool(api_key)}")
+                    else:
+                        ctx = get_supabase_context(sync_db, mode="builder", project_id=self.datasource.project_id)
+                        if ctx:
+                            api_url = api_url or ctx.get("url", "")
+                            api_key = api_key or ctx.get("auth_key", "")
+                            self.logger.info(f"[SUPABASE-RESOLVE] Resolved from {ctx.get('source')}: url={bool(api_url)}, key={bool(api_key)}")
                 finally:
                     sync_db.close()
             except Exception as e:

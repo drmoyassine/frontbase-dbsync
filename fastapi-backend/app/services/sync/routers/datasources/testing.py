@@ -102,20 +102,42 @@ async def test_new_datasource(data: DatasourceTestRequest, db: AsyncSession = De
 
         # For Supabase without explicit URL and/or key: resolve the gaps from the Connected Account
         if data.type.value == "supabase" and (not api_key or not api_url):
-            logger.info(f"[SUPABASE-RESOLVE] No api_key in request, resolving from Connected Account...")
+            logger.info(
+                f"[SUPABASE-RESOLVE] Inline creds missing — api_url={bool(api_url)}, "
+                f"api_key={bool(api_key)}, provider_account_id={data.provider_account_id!r}"
+            )
             try:
                 from app.database.config import SessionLocal
-                from app.core.credential_resolver import get_supabase_context
+                from app.core.credential_resolver import get_supabase_context, get_provider_context_by_id
                 sync_db = SessionLocal()
                 try:
-                    ctx = get_supabase_context(sync_db, mode="builder")
-                    logger.info(f"[SUPABASE-RESOLVE] ctx source={ctx.get('source')}, url={bool(ctx.get('url'))}, auth_key={bool(ctx.get('auth_key'))}")
-                    api_url = api_url or ctx.get("url", "")
-                    api_key = api_key or ctx.get("auth_key", "")
+                    if data.provider_account_id:
+                        logger.info(f"[SUPABASE-RESOLVE] Looking up provider account: {data.provider_account_id}")
+                        ctx = get_provider_context_by_id(sync_db, data.provider_account_id)
+                        logger.info(
+                            f"[SUPABASE-RESOLVE] Provider ctx keys: {list(ctx.keys())}, "
+                            f"api_url={bool(ctx.get('api_url'))}, "
+                            f"service_role_key={bool(ctx.get('service_role_key'))}, "
+                            f"anon_key={bool(ctx.get('anon_key'))}, "
+                            f"provider_type={ctx.get('provider_type')}"
+                        )
+                        api_url = api_url or ctx.get("api_url", "")
+                        api_key = api_key or ctx.get("service_role_key", "") or ctx.get("anon_key", "")
+                    else:
+                        logger.info("[SUPABASE-RESOLVE] No provider_account_id — falling back to get_supabase_context()")
+                        ctx = get_supabase_context(sync_db, mode="builder")
+                        if ctx:
+                            logger.info(f"[SUPABASE-RESOLVE] ctx source={ctx.get('source')}, url={bool(ctx.get('url'))}, auth_key={bool(ctx.get('auth_key'))}")
+                            api_url = api_url or ctx.get("url", "")
+                            api_key = api_key or ctx.get("auth_key", "")
+                        else:
+                            logger.warning("[SUPABASE-RESOLVE] get_supabase_context returned None/empty")
                 finally:
                     sync_db.close()
             except Exception as e:
-                logger.warning(f"Could not resolve Supabase credentials from Connected Account: {e}")
+                logger.warning(f"Could not resolve Supabase credentials from Connected Account: {type(e).__name__}: {e}", exc_info=True)
+
+            logger.info(f"[SUPABASE-RESOLVE] Final state — api_url={bool(api_url)}, api_key={bool(api_key)}")
 
         # Supabase needs both an API URL and an API key for its REST client. If
         # neither inline values nor a Connected Account supplied them, fail fast

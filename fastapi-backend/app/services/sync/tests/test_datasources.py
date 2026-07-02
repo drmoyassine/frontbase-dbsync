@@ -261,3 +261,50 @@ async def test_datasource_name_uniqueness_scoped(client, db):
 
     # Clear overrides
     sync_app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_test_raw_supabase_missing_api_url_does_not_raise(client, monkeypatch):
+    """Regression (Sentry FRONTBASE-BACKEND-Z): testing a Supabase datasource with
+    an API key but a blank API URL — and no Supabase Connected Account to resolve
+    from — must return a clean success=False result with actionable guidance,
+    not raise ValueError("Supabase requires API URL and API Key") into Sentry.
+    """
+    # No Supabase Connected Account configured (the 404 that triggered the issue).
+    import app.core.credential_resolver as cred_resolver
+    monkeypatch.setattr(cred_resolver, "get_supabase_context", lambda *a, **k: {})
+
+    response = await client.post("/datasources/test-raw/", json={
+        "name": "Studygram DB",
+        "type": "supabase",
+        "api_url": "",
+        "api_key": "dummy-service-role-key",
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert "supabase requires" in data["error"].lower()
+    assert "api url" in data["error"].lower()
+    # Actionable guidance must steer the user toward providing creds / connecting an account
+    assert data["suggestion"] is not None
+    suggestion = data["suggestion"].lower()
+    assert "settings" in suggestion or "account" in suggestion
+
+
+@pytest.mark.asyncio
+async def test_test_raw_supabase_both_credentials_missing(client, monkeypatch):
+    """When both Supabase URL and key are blank and no account is connected, the
+    endpoint returns a combined 'requires API URL and API Key' message."""
+    import app.core.credential_resolver as cred_resolver
+    monkeypatch.setattr(cred_resolver, "get_supabase_context", lambda *a, **k: {})
+
+    response = await client.post("/datasources/test-raw/", json={
+        "name": "Studygram DB",
+        "type": "supabase",
+        "api_url": "",
+        "api_key": "",
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is False
+    assert "supabase requires api url and api key" in data["error"].lower()

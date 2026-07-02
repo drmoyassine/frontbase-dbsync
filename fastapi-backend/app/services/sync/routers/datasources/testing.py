@@ -37,7 +37,23 @@ def _get_error_suggestion(e: Exception) -> Optional[str]:
         return "The connection timed out. Check your firewall settings and ensure the server is listening on the correct port."
     if "'nonetype' object has no attribute 'group'" in msg or "authentication" in msg:
         return "This is a known issue with asyncpg during the authentication handshake. If using Supabase/Neon, ensure you are using the DIRECT port (5432) instead of the pooled port (6543), as the pooler sometimes interferes with the SASL handshake."
+    if msg.startswith("supabase requires"):
+        return "Enter your Supabase Project URL and API key (anon or service_role) in the connection form, or connect a Supabase account in Settings → Accounts so the credentials are filled in automatically."
     return None
+
+
+def _log_test_failure(log: logging.Logger, context: str, e: Exception) -> None:
+    """Log a connection-test failure at the level its cause warrants.
+
+    ValueError here means a missing or invalid configuration value (e.g. Supabase
+    credentials not supplied) — an expected, user-correctable outcome of a test,
+    so it is logged at WARNING without a traceback to avoid noisy Sentry events.
+    Any other exception is logged at ERROR with a traceback for diagnosis.
+    """
+    if isinstance(e, ValueError):
+        log.warning(f"{context}: {e}")
+    else:
+        log.error(f"{context}: {e}", exc_info=True)
 
 
 @router.post("/{datasource_id}/test/", response_model=DatasourceTestResult)
@@ -63,7 +79,7 @@ async def test_datasource(
             tables=tables
         )
     except Exception as e:
-        logger.error(f"Error testing datasource {datasource.id}: {str(e)}", exc_info=True)
+        _log_test_failure(logger, f"Error testing datasource {datasource.id}", e)
         datasource.last_tested_at = datetime.utcnow()  # naive UTC — column is TIMESTAMP WITHOUT TIME ZONE (asyncpg rejects aware datetimes: BACKEND-F)
         datasource.last_test_success = False
         await db.commit()
@@ -84,8 +100,8 @@ async def test_new_datasource(data: DatasourceTestRequest, db: AsyncSession = De
         api_url = data.api_url
         api_key = data.api_key
 
-        # For Supabase without explicit keys: resolve from Connected Account
-        if data.type.value == "supabase" and not api_key:
+        # For Supabase without explicit URL and/or key: resolve the gaps from the Connected Account
+        if data.type.value == "supabase" and (not api_key or not api_url):
             logger.info(f"[SUPABASE-RESOLVE] No api_key in request, resolving from Connected Account...")
             try:
                 from app.database.config import SessionLocal
@@ -95,11 +111,28 @@ async def test_new_datasource(data: DatasourceTestRequest, db: AsyncSession = De
                     ctx = get_supabase_context(sync_db, mode="builder")
                     logger.info(f"[SUPABASE-RESOLVE] ctx source={ctx.get('source')}, url={bool(ctx.get('url'))}, auth_key={bool(ctx.get('auth_key'))}")
                     api_url = api_url or ctx.get("url", "")
-                    api_key = ctx.get("auth_key", "")
+                    api_key = api_key or ctx.get("auth_key", "")
                 finally:
                     sync_db.close()
             except Exception as e:
                 logger.warning(f"Could not resolve Supabase credentials from Connected Account: {e}")
+
+        # Supabase needs both an API URL and an API key for its REST client. If
+        # neither inline values nor a Connected Account supplied them, fail fast
+        # with an actionable result instead of raising mid-connect.
+        if data.type.value == "supabase" and (not api_url or not api_key):
+            if not api_url and not api_key:
+                requirement = "Supabase requires API URL and API Key"
+            elif not api_url:
+                requirement = "Supabase requires an API URL"
+            else:
+                requirement = "Supabase requires an API Key"
+            return DatasourceTestResult(
+                success=False,
+                message="Connection failed",
+                error=f"{requirement}.",
+                suggestion=_get_error_suggestion(ValueError(requirement)),
+            )
 
         datasource = Datasource(
             name=data.name,
@@ -137,7 +170,7 @@ async def test_new_datasource(data: DatasourceTestRequest, db: AsyncSession = De
             tables=tables
         )
     except Exception as e:
-        logger.error(f"Error testing raw datasource {data.name}: {str(e)}", exc_info=True)
+        _log_test_failure(logger, f"Error testing raw datasource {data.name}", e)
         return DatasourceTestResult(
             success=False,
             message="Connection failed",
@@ -200,7 +233,7 @@ async def test_datasource_update(
             tables=tables
         )
     except Exception as e:
-        logger.error(f"Error testing update for datasource {datasource.id}: {str(e)}", exc_info=True)
+        _log_test_failure(logger, f"Error testing update for datasource {datasource.id}", e)
         return DatasourceTestResult(
             success=False,
             message="Connection failed with these settings",

@@ -42,7 +42,8 @@ async def database_exception_handler(request: Request, exc: SQLAlchemyError):
     """
     Handle database-specific errors.
     """
-    logger.error(f"Database error: {str(exc)}")
+    logger.error(f"Database error on {request.method} {request.url.path}: {str(exc)}")
+    logger.error(traceback.format_exc())
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={

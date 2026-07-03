@@ -34,8 +34,8 @@ services:
       # Backend Redis (control plane caching)
       - REDIS_URL=${REDIS_URL:-redis://${CACHE_PROVIDER:-redis}:6379}
       # Admin Authentication (master admin)
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       # Email Platform Settings
       - RESEND_API_KEY=${RESEND_API_KEY}

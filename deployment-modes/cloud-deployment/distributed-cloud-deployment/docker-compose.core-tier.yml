@@ -29,8 +29,8 @@ services:
       - EDGE_URL=http://edge:3002
       - EDGE_SSR_URL=http://edge:3002
       - REDIS_URL=redis://${CACHE_PROVIDER:-redis}:6379
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       # Dynamic Auth Provider
       - AUTH_PROVIDER=${AUTH_PROVIDER:-supabase}

@@ -30,8 +30,8 @@ services:
       # Redis URL (override for distributed deployment)
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
       # Admin Authentication
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ENVIRONMENT=${ENVIRONMENT:-production}
     volumes:
       - backend_data:/app/data

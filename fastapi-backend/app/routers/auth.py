@@ -40,18 +40,22 @@ sessions: dict[str, dict] = {}
 SESSION_COOKIE_NAME = "frontbase_session"
 SESSION_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
 
-ADMIN_USERS = {
-    os.getenv("ADMIN_EMAIL", "admin@frontbase.dev"): {
+_admin_email = os.getenv("ADMIN_EMAIL", "").strip()
+_admin_password = os.getenv("ADMIN_PASSWORD", "").strip()
+
+ADMIN_USERS: dict[str, dict] = {}
+if _admin_email and _admin_password:
+    ADMIN_USERS[_admin_email] = {
         "id": "admin-1",
-        "email": os.getenv("ADMIN_EMAIL", "admin@frontbase.dev"),
-        "password_hash": hashlib.sha256(
-            os.getenv("ADMIN_PASSWORD", "admin123").encode()
-        ).hexdigest(),
+        "email": _admin_email,
+        "password_hash": hashlib.sha256(_admin_password.encode()).hexdigest(),
         "created_at": "2024-01-01T00:00:00Z",
         "updated_at": "2024-01-01T00:00:00Z",
     }
-}
-
+else:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning("[Auth] ADMIN_EMAIL or ADMIN_PASSWORD not set — master admin login disabled.")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Schemas
@@ -663,14 +667,6 @@ async def login(request: Request, body: LoginRequest, response: Response):
     # ── Path 1: Master Admin ────────────────────────────────────────────
     admin = ADMIN_USERS.get(body.email)
     if admin:
-        if is_cloud():
-            default_email = "admin@frontbase.dev"
-            default_password_hash = hashlib.sha256(b"admin123").hexdigest()
-            is_using_default_email = body.email == default_email and os.getenv("ADMIN_EMAIL") is None
-            is_using_default_password = admin["password_hash"] == default_password_hash and os.getenv("ADMIN_PASSWORD") is None
-            if is_using_default_email or is_using_default_password:
-                logger.warning("[Auth] Master admin login rejected: default credentials are not allowed in cloud mode.")
-                raise HTTPException(status_code=401, detail="Invalid email or password")
 
         if admin["password_hash"] != hash_password(body.password):
             if not is_cloud():

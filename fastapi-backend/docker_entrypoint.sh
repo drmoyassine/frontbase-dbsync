@@ -182,6 +182,9 @@ else
   alembic upgrade head
 fi
 
+echo "Upserting master admin user..."
+python create_admin.py
+
 # Start the application with proxy headers support (for HTTPS behind reverse proxy)
 # - Self-host/VPS: Running as root, drop to appuser via gosu (security best practice)
 # - Cloud/Kubernetes: Already running as non-root, skip gosu and run directly

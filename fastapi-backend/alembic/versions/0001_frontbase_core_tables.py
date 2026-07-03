@@ -135,12 +135,7 @@ def upgrade() -> None:
             sa.Column('created_at', sa.Text(), nullable=False),
             sa.Column('updated_at', sa.Text(), nullable=False)
         )
-        # Insert default admin user
-        op.execute(f"""
-            INSERT INTO users (id, username, email, password_hash, created_at, updated_at)
-            VALUES ('default-admin', 'admin', 'admin@frontbase.dev', '$2b$10$KIXl9Q9q9Q9q9Q9q9Q9q9uJ1J1J1J1J1J1J1J1J1J1J1J1J1J1J1J1', {now_func}, {now_func})
-        """)
-    
+
     # User sessions table
     if not table_exists(inspector, 'user_sessions'):
         op.create_table('user_sessions',

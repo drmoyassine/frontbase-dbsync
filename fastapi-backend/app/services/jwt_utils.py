@@ -14,7 +14,9 @@ from typing import Optional
 
 from jose import jwt, JWTError  # python-jose
 
-SECRET_KEY: str = os.getenv("SECRET_KEY", "change-me-in-production")
+SECRET_KEY: str = os.getenv("SECRET_KEY", "")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is required but not set.")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 7
 

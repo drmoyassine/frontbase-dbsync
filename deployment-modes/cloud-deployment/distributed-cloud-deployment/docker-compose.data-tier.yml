@@ -16,7 +16,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: frontbase
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: frontbase
     volumes:
       - postgres_data:/var/lib/postgresql/data

@@ -22,9 +22,9 @@ services:
     environment:
       - DEPLOYMENT_MODE=cloud
       - DATABASE=postgresql
-      - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
+      - DB_PASSWORD=${DB_PASSWORD}
       - DATABASE_URL=${DATABASE_URL:-}
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - EDGE_URL=http://edge:3002
       - EDGE_SSR_URL=http://edge:3002

@@ -7,7 +7,7 @@ from sqlalchemy.orm import sessionmaker
 # Priority: DATABASE_URL (full conn string) > DATABASE + DB_PASSWORD (constructed)
 DATABASE_URL_OVERRIDE = os.getenv("DATABASE_URL")
 DATABASE = os.getenv("DATABASE", "sqlite")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "frontbase-dev-password")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 
 if DATABASE_URL_OVERRIDE:
     # Normalize PostgreSQL URLs to use the psycopg2 sync driver

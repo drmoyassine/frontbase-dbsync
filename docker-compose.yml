@@ -21,8 +21,8 @@ services:
     environment:
       # Database: derived from COMPOSE_PROFILES (sqlite default, postgresql if profile active)
       - DATABASE=${COMPOSE_PROFILES:-sqlite}
-      - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       # Edge Engine URL (override for distributed deployment)
       - EDGE_URL=${EDGE_URL:-http://edge:3002}
@@ -51,7 +51,7 @@ services:
     profiles: [ "postgresql" ]
     environment:
       POSTGRES_USER: frontbase
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: frontbase
     volumes:
       - postgres_data:/var/lib/postgresql/data

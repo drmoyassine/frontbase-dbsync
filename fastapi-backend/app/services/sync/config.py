@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # Database — auto-construct URL from DATABASE env var
     # Uses async drivers for the FastAPI async endpoints
     database_url: str = (
-        f"postgresql+asyncpg://frontbase:{os.getenv('DB_PASSWORD', 'frontbase-dev-password')}@postgres:5432/frontbase"
+        f"postgresql+asyncpg://frontbase:{os.getenv('DB_PASSWORD', '')}@postgres:5432/frontbase"
         if os.getenv("DATABASE", "sqlite") == "postgresql"
         else f"sqlite+aiosqlite:///{'/app/data' if os.path.isdir('/app/data') else '.'}/frontbase.db"
     )
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
             # we must manually evaluate the fallback because Pydantic blindly overrides the field with ""
             if not v.strip():
                 return (
-                    f"postgresql+asyncpg://frontbase:{os.getenv('DB_PASSWORD', 'frontbase-dev-password')}@postgres:5432/frontbase"
+                    f"postgresql+asyncpg://frontbase:{os.getenv('DB_PASSWORD', '')}@postgres:5432/frontbase"
                     if os.getenv("DATABASE", "sqlite") == "postgresql"
                     else f"sqlite+aiosqlite:///{'/app/data' if os.path.isdir('/app/data') else '.'}/frontbase.db"
                 )

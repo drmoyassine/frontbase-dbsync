@@ -45,7 +45,7 @@ print('Tables bootstrapped successfully')
 
 if [ $BOOTSTRAP_OK -ne 0 ]; then
   # Check if it's a readonly database error
-  if python -c "
+  python -c "
 import sys
 try:
   from app.database.config import Base, engine
@@ -56,7 +56,10 @@ except Exception as e:
   if 'readonly' in str(e).lower() or 'attempt to write' in str(e).lower():
     sys.exit(1)  # Confirmed readonly error
   sys.exit(2)  # Other error
-  " ; then
+  "
+  READONLY_STATUS=$?
+
+  if [ $READONLY_STATUS -eq 1 ]; then
     echo "Database is readonly (volume ownership issue). Fixing as root..."
 
     # Fix volume ownership BEFORE creating tables (only works as root)

@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Cloud, Server, Loader2, Search, Trash2, Power, RefreshCw, Upload, Cpu, Brain, Shield, Globe } from 'lucide-react';
+import { Cloud, Server, Loader2, Search, Trash2, Power, RefreshCw, Upload, Download, Cpu, Brain, Shield, Globe, Lock } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     useEdgeEngines,
@@ -28,6 +28,9 @@ import { AITestDialog } from './AITestDialog';
 import { EdgeEndpointDialog } from './EdgeEndpointDialog';
 import { EdgeResourceRow } from './EdgeResourceRow';
 import { HealthCheckPopover } from './HealthCheckPopover';
+import { ImportEngineDialog } from './ImportEngineDialog';
+import { ExportEngineDialog } from './ExportEngineDialog';
+import { MoveResolutionControls } from './FinalizeMoveDialog';
 import { toast } from 'sonner';
 
 import { isCloud } from '@/lib/edition';
@@ -103,6 +106,7 @@ export function EdgeEnginesSection() {
                 </div>
                 <div className="flex items-center gap-2">
                     <FetchEnginesDialog />
+                    <ImportEngineDialog />
                     <DeployEngineWizard />
                 </div>
             </CardHeader>
@@ -262,6 +266,11 @@ export function EdgeEnginesSection() {
                                                 {!engine.is_active && (
                                                     <Badge variant="secondary" className="text-[10px] h-5 py-0 bg-muted text-muted-foreground">Paused</Badge>
                                                 )}
+                                                {engine.move_status === 'moved_out' && (
+                                                    <Badge variant="outline" className="text-[10px] h-5 py-0 bg-amber-500/10 text-amber-500 border-amber-500/30">
+                                                        <Lock className="h-3 w-3 mr-1" /> Moved (pending)
+                                                    </Badge>
+                                                )}
                                                 {engine.adapter_type && engine.adapter_type !== 'full' && (
                                                     <EdgeEndpointDialog engineName={engine.name} engineUrl={engine.url} engineId={engine.id} trigger={
                                                         <button className="inline-flex items-center no-underline" title="Edge Endpoint Details">
@@ -304,7 +313,9 @@ export function EdgeEnginesSection() {
                                             }
                                             actions={
                                                 <div className="flex items-center space-x-2">
-                                                    {canManage && (
+                                                    {engine.move_status === 'moved_out' ? (
+                                                        <MoveResolutionControls engine={engine} />
+                                                    ) : canManage && (
                                                         <>
                                                             <Switch
                                                                 title={engine.is_active ? "Pause Engine" : "Activate Engine"}
@@ -343,6 +354,11 @@ export function EdgeEnginesSection() {
                                                                     : <Upload className={`h-4 w-4 ${engine.is_outdated ? 'text-orange-400' : 'text-muted-foreground'}`} />
                                                                 }
                                                             </Button>
+                                                            <ExportEngineDialog engine={engine} trigger={
+                                                                <Button variant="ghost" size="icon" title="Export to another account (portable move)">
+                                                                    <Download className="h-4 w-4 text-muted-foreground" />
+                                                                </Button>
+                                                            } />
                                                             <ReconfigureEngineDialog engine={engine} />
                                                             <DeleteResourceDialog
                                                                 resourceName={engine.name}

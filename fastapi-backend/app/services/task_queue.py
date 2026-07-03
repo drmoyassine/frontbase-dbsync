@@ -39,8 +39,28 @@ celery_app.conf.update(
             "task": "app.services.agent_quota.reset_all_daily",
             "schedule": crontab(minute=5, hour=0),
         },
+        # Portable engine-move housekeeping: auto-revert moved_out engines older
+        # than the TTL (default 7 days) so a lost/abandoned export bundle never
+        # strands an engine in the soft-locked state forever. Daily at 03:30 UTC.
+        "prune-stale-engine-moves": {
+            "task": "app.services.engine_move.prune_stale_moves",
+            "schedule": crontab(minute=30, hour=3),
+        },
     },
 )
+
+
+@celery_app.task(name="app.services.engine_move.prune_stale_moves")
+def prune_stale_engine_moves_task() -> int:
+    """Revert moved_out engines past the TTL back to active (see engine_move.prune_stale_moves)."""
+    from app.database.config import SessionLocal
+    from app.services.engine_move import prune_stale_moves
+
+    db = SessionLocal()
+    try:
+        return prune_stale_moves(db)
+    finally:
+        db.close()
 
 
 @celery_app.task(name="app.services.retention.prune_executions")

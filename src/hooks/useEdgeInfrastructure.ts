@@ -56,6 +56,8 @@ export interface EdgeEngine {
     last_synced_at?: string | null;
     sync_status?: 'synced' | 'stale' | 'unknown';
     is_outdated?: boolean;
+    move_status?: string | null;   // null | 'moved_out' (pending portable move)
+    moved_out_at?: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -232,6 +234,51 @@ export const edgeInfrastructureApi = {
             // Silent — manifest sync is best-effort
         }
         return result;
+    },
+    // ── Portable engine move ───────────────────────────────────────────────
+    exportEngine: async (id: string, passphrase: string): Promise<{ bundle: string; engine_id: string; move_status: string }> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/${id}/export`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ passphrase }),
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || 'Export failed');
+        }
+        return res.json();
+    },
+    importEngine: async (bundle: string, passphrase: string): Promise<{ engine_id: string; summary: any; confirm_secret: string }> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bundle, passphrase }),
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || 'Import failed');
+        }
+        return res.json();
+    },
+    finalizeMove: async (id: string, confirm_secret: string): Promise<{ finalized: boolean }> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/${id}/finalize-move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm_secret }),
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || 'Finalize failed');
+        }
+        return res.json();
+    },
+    cancelMove: async (id: string): Promise<{ cancelled: boolean; engine: EdgeEngine }> => {
+        const res = await fetch(`${API_BASE}/api/edge-engines/${id}/cancel-move`, { method: 'POST' });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || 'Cancel failed');
+        }
+        return res.json();
     },
     syncManifest: async (id: string): Promise<any> => {
         const res = await fetch(`${API_BASE}/api/edge-engines/${id}/sync-manifest`, { method: 'POST' });

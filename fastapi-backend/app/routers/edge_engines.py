@@ -21,13 +21,17 @@ from pydantic import BaseModel, Field
 from typing import List, Literal
 from datetime import datetime, UTC
 import asyncio
+import hashlib
+import hmac
 import json
+import logging
 import uuid
 
 from ..database.config import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from ..models.models import EdgeEngine, EdgeProviderAccount
+from ..models.edge import MOVE_STATUS_MOVED_OUT
 
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
@@ -44,6 +48,16 @@ from ..services.engine_manifest import sync_engine_manifest
 from ..services.engine_serializer import serialize_engine, get_current_hashes
 from ..services.engine_provisioner import provision_and_deploy
 from ..services.edge_client import resolve_engine_url
+from ..services.engine_bundle import (
+    seal as seal_bundle, unseal as unseal_bundle, generate_move_secret,
+    BadPassphrase, TamperedBundle, IncompatibleVersion as BundleVersionMismatch,
+)
+from ..services.engine_move import (
+    build_manifest, import_manifest, move_engine_to_project, ManifestIncompatible,
+)
+from ..schemas.engine_move import (
+    ExportRequest, ImportRequest, FinalizeMoveRequest, MoveToProjectRequest,
+)
 
 router = APIRouter(prefix="/api/edge-engines", tags=["Edge Engines"])
 
@@ -113,6 +127,22 @@ def _validate_resource_ownership(
                     raise HTTPException(403, f"Access denied: storage provider {st_id} not found or does not belong to this tenant")
 
 
+def _assert_not_moved_out(engine: EdgeEngine) -> None:
+    """Refuse mutating operations on an engine soft-locked by a pending move.
+
+    A moved_out engine has had its config sealed into a portable-move bundle; it
+    must stay frozen until the move is finalized (delete) or cancelled (restore).
+    Read paths (list/get/sync-check/audit) stay open so the owner can still see
+    the pending state. Returns 409 so callers can surface "finalize or cancel".
+    """
+    if getattr(engine, "move_status", None) == MOVE_STATUS_MOVED_OUT:
+        raise HTTPException(
+            status_code=409,
+            detail="Engine is locked: a portable move is pending. "
+                   "Finalize or cancel the move before making changes.",
+        )
+
+
 # =============================================================================
 # CRUD Endpoints
 # =============================================================================
@@ -130,6 +160,55 @@ async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get
     """Provider-agnostic one-click deploy. Delegates to engine_provisioner."""
     _validate_resource_ownership(db, ctx, payload.provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id)
     return await provision_and_deploy(payload, db, ctx)
+
+
+@router.post("/import")
+async def import_engine(
+    payload: ImportRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Import an engine from a sealed bundle into this tenant's project.
+
+    Unseals the bundle, remaps IDs, matches-or-creates shared resources, re-encrypts
+    secrets with the local key, and inserts the engine (inactive, undeployed) in one
+    transaction. Returns the new engine id, a summary, and the confirm secret S —
+    paste S back into the source's finalize-move to complete the transfer.
+    """
+    project = get_project(db, ctx)
+    if not project:
+        raise HTTPException(403, "No target project in this tenant")
+    project_id = str(project.id)
+
+    try:
+        manifest = unseal_bundle(payload.bundle, payload.passphrase)
+    except BadPassphrase:
+        raise HTTPException(400, "Wrong passphrase or unrecognized bundle")
+    except TamperedBundle:
+        raise HTTPException(400, "Bundle is corrupt or has been tampered with")
+    except BundleVersionMismatch:
+        raise HTTPException(400, "Bundle format version is not supported")
+
+    try:
+        result = import_manifest(manifest, db, project_id=project_id)
+        db.commit()
+    except ManifestIncompatible as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        db.rollback()
+        logging.getLogger(__name__).warning("engine move import failed: %s", e)
+        raise HTTPException(400, f"Import failed: {e}")
+
+    logging.getLogger(__name__).info(
+        "engine move import: engine=%s tenant=%s summary=%s",
+        result["engine_id"], ctx.tenant_id if ctx else None, result["summary"],
+    )
+    return {
+        "engine_id": result["engine_id"],
+        "summary": result["summary"],
+        "confirm_secret": result["move_secret"],
+    }
 
 
 # =============================================================================
@@ -158,6 +237,9 @@ async def batch_redeploy_engines(payload: BatchRequest, db: Session = Depends(ge
         engine = query.first()
         if not engine:
             result.failed.append({"id": eid, "error": "Not found"})
+            continue
+        if getattr(engine, "move_status", None) == MOVE_STATUS_MOVED_OUT:
+            result.failed.append({"id": eid, "error": "Engine is locked (pending move)"})
             continue
         engines.append(engine)
 
@@ -251,6 +333,9 @@ async def batch_toggle_engines(
         if not engine:
             result.failed.append({"id": eid, "error": "Not found"})
             continue
+        if getattr(engine, "move_status", None) == MOVE_STATUS_MOVED_OUT:
+            result.failed.append({"id": eid, "error": "Engine is locked (pending move)"})
+            continue
         engine.is_active = payload.is_active  # type: ignore[assignment]
         engine.updated_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
         result.success.append(eid)
@@ -332,6 +417,9 @@ async def batch_rotate_secrets_key(
         engine = query.first()
         if not engine:
             result.failed.append({"id": eid, "error": "Not found"})
+            continue
+        if getattr(engine, "move_status", None) == MOVE_STATUS_MOVED_OUT:
+            result.failed.append({"id": eid, "error": "Engine is locked (pending move)"})
             continue
         if not bool(engine.is_shared):
             result.failed.append({"id": eid, "error": "Not a shared engine"})
@@ -508,8 +596,10 @@ async def update_engine(
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
+    _assert_not_moved_out(engine)
+
     _validate_resource_ownership(
-        db, ctx, 
+        db, ctx,
         payload.edge_provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id,
         payload.datasource_ids, payload.storage_ids
     )
@@ -591,6 +681,8 @@ async def reconfigure_engine(
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
+    _assert_not_moved_out(engine)
+
     _validate_resource_ownership(
         db, ctx,
         edge_db_id=payload.edge_db_id, edge_cache_id=payload.edge_cache_id, edge_queue_id=payload.edge_queue_id,
@@ -625,9 +717,163 @@ async def redeploy_engine(
     if not engine:
         raise HTTPException(status_code=404, detail="Edge engine not found")
 
+    _assert_not_moved_out(engine)
+
     result = await engine_deploy.redeploy(engine, db)
     result["engine"] = serialize_engine(engine)
     return result
+
+
+# =============================================================================
+# Portable Move — export an engine to a sealed bundle (Step 3)
+# =============================================================================
+
+@router.post("/{engine_id}/export")
+async def export_engine(
+    engine_id: str,
+    payload: ExportRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Export an engine into a sealed, portable bundle and soft-lock it (moved_out).
+
+    Cross-deployment move: the full dependency closure (engine + owned children +
+    shared infra + connected accounts + datasources + storage) is decrypted with the
+    local key and sealed with the caller's passphrase. The source engine is then
+    frozen (move_status=moved_out, is_active=False) until the move is finalized or
+    cancelled. System/shared engines cannot be moved. See
+    docs/portable-engine-move-plan.md.
+    """
+    engine = _load_engine_for_owner(engine_id, db, ctx)
+
+    if bool(engine.is_system):
+        raise HTTPException(400, "System engines cannot be moved")
+    if bool(engine.is_shared):
+        raise HTTPException(400, "Shared/community engines cannot be moved")
+    if getattr(engine, "move_status", None) == MOVE_STATUS_MOVED_OUT:
+        raise HTTPException(
+            409, "This engine already has a pending move. Cancel it before exporting again."
+        )
+
+    # Build + seal. The manifest holds plaintext secrets (decrypted with the local
+    # key); pass it straight to seal_bundle() and never log its contents.
+    move_secret = generate_move_secret()
+    manifest = build_manifest(engine, db, move_secret=move_secret)
+    bundle = seal_bundle(manifest, payload.passphrase)
+
+    # Soft-lock the source. Store sha256(S) only (never bare S); S is embedded inside
+    # the sealed payload and revealed by the target only after a successful import.
+    engine.move_status = MOVE_STATUS_MOVED_OUT  # type: ignore[assignment]
+    engine.move_secret_hash = hashlib.sha256(move_secret.encode()).hexdigest()  # type: ignore[assignment]
+    engine.moved_out_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
+    engine.is_active = False  # type: ignore[assignment]
+    engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
+    db.commit()
+
+    logging.getLogger(__name__).info(
+        "engine move export: engine=%s tenant=%s accounts=%d datasources=%d storages=%d",
+        engine_id, ctx.tenant_id if ctx else None,
+        len(manifest["connected_accounts"]), len(manifest["datasources"]),
+        len(manifest["storages"]),
+    )
+    return {"bundle": bundle, "engine_id": str(engine.id), "move_status": engine.move_status}
+
+
+@router.post("/{engine_id}/finalize-move")
+async def finalize_move(
+    engine_id: str,
+    payload: FinalizeMoveRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Finalize a pending move: verify the confirm secret and delete the source engine.
+
+    Constant-time compare of ``sha256(confirm_secret)`` against the stored
+    ``move_secret_hash``. A match proves the target successfully unsealed the bundle and
+    committed the import — safe to cascade-delete the source (owned children go with it;
+    shared accounts/infra/datasources/storage stay). Idempotent in the sense that a
+    repeat call 404s once the engine is gone.
+    """
+    engine = _load_engine_for_owner(engine_id, db, ctx)
+    if getattr(engine, "move_status", None) != MOVE_STATUS_MOVED_OUT:
+        raise HTTPException(409, "Engine is not pending a move.")
+    if not engine.move_secret_hash:
+        raise HTTPException(409, "Engine has no pending move secret.")
+
+    provided = hashlib.sha256(payload.confirm_secret.encode()).hexdigest()
+    if not hmac.compare_digest(provided, str(engine.move_secret_hash)):
+        raise HTTPException(403, "Confirmation secret does not match.")
+
+    db.delete(engine)  # owned children cascade-delete; shared resources are left intact
+    db.commit()
+    logging.getLogger(__name__).info(
+        "engine move finalize: engine=%s tenant=%s",
+        engine_id, ctx.tenant_id if ctx else None)
+    return {"finalized": True, "engine_id": engine_id}
+
+
+@router.post("/{engine_id}/cancel-move")
+async def cancel_move(
+    engine_id: str,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Cancel a pending move and restore the engine to active."""
+    engine = _load_engine_for_owner(engine_id, db, ctx)
+    if getattr(engine, "move_status", None) != MOVE_STATUS_MOVED_OUT:
+        raise HTTPException(409, "Engine is not pending a move.")
+    engine.move_status = None  # type: ignore[assignment]
+    engine.move_secret_hash = None  # type: ignore[assignment]
+    engine.moved_out_at = None  # type: ignore[assignment]
+    engine.is_active = True  # type: ignore[assignment]
+    engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]
+    db.commit()
+    return {"cancelled": True, "engine": serialize_engine(engine)}
+
+
+@router.post("/{engine_id}/move-to-project")
+async def move_engine_to_project_endpoint(
+    engine_id: str,
+    payload: MoveToProjectRequest,
+    db: Session = Depends(get_db),
+    ctx: TenantContext | None = Depends(get_tenant_context),
+):
+    """Same-deployment fast path (Step 6): move an engine to another project in THIS
+    deployment atomically — no bundle, no passphrase, no confirm token. Source and
+    target share the local FERNET_KEY, so transport crypto is unnecessary.
+    """
+    engine = _load_engine_for_owner(engine_id, db, ctx)
+    if bool(engine.is_system):
+        raise HTTPException(400, "System engines cannot be moved")
+    if bool(engine.is_shared):
+        raise HTTPException(400, "Shared/community engines cannot be moved")
+    if getattr(engine, "move_status", None) == MOVE_STATUS_MOVED_OUT:
+        raise HTTPException(409, "Engine is locked by a pending cross-deployment move.")
+
+    from ..models.models import Project
+    target = db.query(Project).filter(Project.id == payload.target_project_id).first()
+    if not target:
+        raise HTTPException(404, "Target project not found")
+    # Authorization: a non-master caller may only move an engine into a project in
+    # their OWN tenant. Without this, a tenant user who knows another tenant's
+    # project_id could relocate an engine — with its credentials — into that project.
+    # Master admin (tenant_id=None) and self-host (no tenant isolation) are unrestricted.
+    # Mirrors the tenant-scope guard used in the datasource CRUD.
+    if ctx and ctx.tenant_id and not getattr(ctx, "is_master", False):
+        if target.tenant_id != ctx.tenant_id:
+            raise HTTPException(403, "Destination project must belong to your tenant.")
+
+    try:
+        result = move_engine_to_project(db, engine, target_project_id=str(target.id))
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logging.getLogger(__name__).warning("same-deploy move failed: %s", e)
+        raise HTTPException(400, f"Move failed: {e}")
+    logging.getLogger(__name__).info(
+        "engine same-deploy move: src=%s -> project=%s new_engine=%s",
+        engine_id, target.id, result["engine_id"])
+    return {"engine_id": result["engine_id"], "summary": result["summary"]}
 
 
 # =============================================================================
@@ -674,6 +920,7 @@ async def rotate_secrets_key(
     transition). See services/edge_secrets_push.rotate_secrets_key.
     """
     engine = _load_engine_for_owner(engine_id, db, ctx)
+    _assert_not_moved_out(engine)
 
     if not bool(engine.is_shared):
         raise HTTPException(
@@ -721,6 +968,7 @@ async def rollback_rotation(
     services/edge_secrets_push.rollback_rotation.
     """
     engine = _load_engine_for_owner(engine_id, db, ctx)
+    _assert_not_moved_out(engine)
 
     if not bool(engine.is_shared):
         raise HTTPException(

@@ -157,6 +157,13 @@ class EdgeProviderAccount(Base):
     edge_engines = relationship("EdgeEngine", back_populates="edge_provider")
 
 
+# Portable engine-move status values (see docs/portable-engine-move-plan.md).
+# An engine is 'moved_out' while a portable-move bundle has been exported and it
+# awaits finalize (delete) or cancel (restore). Canonical value shared by the
+# model, the router guards, and the move service (Step 3+).
+MOVE_STATUS_MOVED_OUT = "moved_out"
+
+
 class EdgeEngine(Base):
     """Edge engine deployed instance — a registered edge provider endpoint.
     
@@ -182,6 +189,18 @@ class EdgeEngine(Base):
     is_imported = Column(Boolean, default=False)          # True = imported from provider, False = deployed from Frontbase
     is_shared = Column(Boolean, default=False)             # True = shared community engine, visible to all tenants
     is_managed = Column(Boolean, default=False)            # True = Frontbase-provisioned (managed tier)
+    # --- Portable engine-move state (see docs/portable-engine-move-plan.md) ---
+    # null normally; MOVE_STATUS_MOVED_OUT while a move bundle is exported and the
+    # engine awaits finalize/cancel. The router refuses to deploy/reconfigure/
+    # redeploy/toggle/rotate a moved_out engine so its state can't drift mid-move.
+    move_status = Column(String(20), nullable=True)
+    # sha256 hex of the one-time confirm token S. We never store bare S: export
+    # embeds raw S in the sealed bundle, the target reveals it post-import, and the
+    # user pastes it back to authorize finalize (constant-time hash compare).
+    move_secret_hash = Column(String(128), nullable=True)
+    # ISO timestamp set when the engine entered moved_out; the TTL prune auto-
+    # reverts stale moves so a lost bundle never strands an engine forever.
+    moved_out_at = Column(String, nullable=True)
     bundle_checksum = Column(String(64), nullable=True)  # SHA-256 of deployed JS bundle
     config_checksum = Column(String(64), nullable=True)  # SHA-256 of local config (db+cache+adapter+secrets)
     last_deployed_at = Column(String, nullable=True)     # ISO timestamp of last successful deploy

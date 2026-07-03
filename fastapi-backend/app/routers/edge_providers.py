@@ -218,47 +218,25 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
             db.commit()
             return _provider_response(existing_turso)
 
+    # Resolve the caller's project (tenant scope) once — used for dedup and create.
+    project_id_val = None
+    if ctx and ctx.tenant_id:
+        proj = get_project(db, ctx)
+        if proj:
+            project_id_val = proj.id
+
     if payload.provider_credentials and payload.provider != "turso":
-        # Determine which credential fields identify the account uniquely
-        _PRIMARY_KEYS: dict[str, list[str]] = {
-            "cloudflare": ["api_token"],
-            "supabase":   ["access_token", "project_ref"],
-            "vercel":     ["api_token"],
-            "netlify":    ["api_token"],
-            "deno":       ["access_token"],
-            "upstash":    ["api_token", "email"],
-        }
-        identity_keys = _PRIMARY_KEYS.get(payload.provider, ["api_token"])
-
-        # Extract the incoming identity values
-        incoming_identity = {
-            k: payload.provider_credentials.get(k, "")
-            for k in identity_keys
-            if payload.provider_credentials.get(k)
-        }
-
-        if incoming_identity:
-            same_provider_accounts = _scoped_provider_query(db, ctx).filter(
-                EdgeProviderAccount.provider == payload.provider,
-            ).all()
-
-            for acct in same_provider_accounts:
-                if not str(acct.provider_credentials or ""):
-                    continue
-                try:
-                    stored_creds = decrypt_credentials(str(acct.provider_credentials))
-                    if all(
-                        stored_creds.get(k) == incoming_identity.get(k)
-                        for k in incoming_identity
-                    ):
-                        raise HTTPException(
-                            status_code=409,
-                            detail=f"This {payload.provider} account is already connected as '{acct.name}'"
-                        )
-                except HTTPException:
-                    raise  # Re-raise the 409
-                except Exception:
-                    continue  # Skip accounts we can't decrypt
+        # Dedup by account IDENTITY (primary credential), scoped to THIS tenant's
+        # project only — never name-based, never another tenant's accounts.
+        from ..core.account_identity import find_account_by_identity
+        existing = find_account_by_identity(
+            db, project_id_val, payload.provider, payload.provider_credentials
+        )
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"This {payload.provider} account is already connected as '{existing.name}'"
+            )
 
     # Check connected_accounts capacity quota limit (F1)
     if ctx and ctx.tenant_id and not ctx.is_master:
@@ -281,11 +259,6 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
         if metadata:
             metadata_str = json.dumps(metadata)
     
-    project_id_val = None
-    if ctx and ctx.tenant_id:
-        proj = get_project(db, ctx)
-        if proj: project_id_val = proj.id
-
     provider = EdgeProviderAccount(
         id=str(uuid.uuid4()),
         name=payload.name,

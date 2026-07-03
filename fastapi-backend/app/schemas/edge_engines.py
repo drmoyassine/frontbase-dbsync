@@ -78,6 +78,8 @@ class EdgeEngineResponse(BaseModel):
     is_system: bool = False
     is_imported: bool = False
     is_shared: bool = False
+    move_status: Optional[str] = None       # null | 'moved_out' (pending portable move)
+    moved_out_at: Optional[str] = None
     bundle_checksum: Optional[str] = None
     config_checksum: Optional[str] = None
     last_deployed_at: Optional[str] = None

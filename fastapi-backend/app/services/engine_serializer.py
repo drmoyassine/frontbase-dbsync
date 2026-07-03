@@ -87,51 +87,34 @@ def serialize_engine(engine: EdgeEngine, current_hashes: dict | None = None) -> 
         for m in (engine.gpu_models or [])
     ]
 
-    # Resolve engine-specific bindings (datasources & storages)
+    # Resolve engine-specific bindings (datasources & storages) via the shared
+    # closure helpers in engine_closure — the structural traversal now lives there
+    # and is reused by engine_move.build_manifest (single source of truth).
     from sqlalchemy.orm import object_session
-    import sqlalchemy as sa
 
     db = object_session(engine)
-    datasource_ids = []
-    storage_ids = []
-    datasources_data = []
-    storages_data = []
+    datasource_ids: list[str] = []
+    storage_ids: list[str] = []
+    datasources_data: list[dict] = []
+    storages_data: list[dict] = []
 
     if db is not None:
         try:
-            from app.models.edge import engine_datasources, engine_storages
-            from app.services.sync.models.datasource import Datasource
-            from app.models.storage_provider import StorageProvider
+            from app.services.engine_closure import bound_datasources, bound_storages
 
-            # Query datasource IDs
-            ds_stmt = sa.select(engine_datasources.c.datasource_id).where(engine_datasources.c.engine_id == engine.id)
-            datasource_ids = list(db.execute(ds_stmt).scalars().all())
-
-            # Query storage IDs
-            store_stmt = sa.select(engine_storages.c.storage_id).where(engine_storages.c.engine_id == engine.id)
-            storage_ids = list(db.execute(store_stmt).scalars().all())
-
-            if datasource_ids:
-                ds_list = db.query(Datasource).filter(Datasource.id.in_(datasource_ids)).all()
-                datasources_data = [
-                    {
-                        "id": str(ds.id),
-                        "name": str(ds.name),
-                        "type": str(ds.type.value) if ds.type else ""
-                    }
-                    for ds in ds_list
-                ]
-
-            if storage_ids:
-                sp_list = db.query(StorageProvider).filter(StorageProvider.id.in_(storage_ids)).all()
-                storages_data = [
-                    {
-                        "id": str(sp.id),
-                        "name": str(sp.name),
-                        "provider": str(sp.provider)
-                    }
-                    for sp in sp_list
-                ]
+            ds_list = bound_datasources(db, str(engine.id))
+            sp_list = bound_storages(db, str(engine.id))
+            datasource_ids = [str(ds.id) for ds in ds_list]
+            storage_ids = [str(sp.id) for sp in sp_list]
+            datasources_data = [
+                {"id": str(ds.id), "name": str(ds.name),
+                 "type": str(ds.type.value) if ds.type else ""}
+                for ds in ds_list
+            ]
+            storages_data = [
+                {"id": str(sp.id), "name": str(sp.name), "provider": str(sp.provider)}
+                for sp in sp_list
+            ]
         except Exception as e:
             print(f"[Serializer] Failed to resolve bindings for engine {engine.id}: {e}")
 

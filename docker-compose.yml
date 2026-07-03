@@ -78,7 +78,7 @@ services:
       - DATABASE_URL=file:/app/data/edge.db
       - PAGES_DB_URL=${PAGES_DB_URL:-file:/app/data/pages.db}
       # Backend URL (override for distributed deployment)
-      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - BACKEND_URL=${EDGE_BACKEND_URL:-http://backend:8000}
       # Webhook API keys (comma-separated)
       - API_KEYS=${API_KEYS:-}
       # System key for local backend-to-edge management traffic

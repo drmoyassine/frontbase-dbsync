@@ -79,13 +79,30 @@ docker-compose -f docker-compose.api-tier.yml --env-file .env.api-tier up -d
 
 **3. On Machine C (Edge Tier):**
 ```bash
-docker-compose -f docker-compose.edge.yml --env-file .env.edge-tier up -d
+# Note: the Edge tier uses the unified repo-root compose file, not a per-tier one.
+docker-compose -f ../../../docker-compose.edge.yml --env-file .env.edge-tier up -d
 ```
 
 **4. On Machine D (Static Tier):**
 ```bash
 docker-compose -f docker-compose.static-tier.yml --env-file .env.static-tier up -d
 ```
+
+---
+
+## Authentication Provider
+
+The distributed tiers (`docker-compose.api-tier.yml`, `docker-compose.core-tier.yml`)
+default to **`AUTH_PROVIDER=supabase`** and do **not** ship a SuperTokens
+container. This is intentional for cloud SaaS deployments backed by Supabase
+Auth.
+
+If you need SuperTokens in a distributed setup, add the `supertokens` and
+`postgres` services (and the `supertokens` compose profile) modeled on
+[`standard-cloud-deployment/docker-compose.cloud.yml`](../standard-cloud-deployment/docker-compose.cloud.yml),
+set `AUTH_PROVIDER=supertokens` in `.env.api-tier`, and run the Data Tier
+Postgres with a `supertokens` schema. For most cloud deployments, Supabase Auth
+is the simpler choice and requires no extra containers.
 
 ---
 

@@ -1,0 +1,217 @@
+version: '3.8'
+
+# ==============================================================================
+# FRONTBASE CLOUD DOCKER COMPOSE 
+# ==============================================================================
+#
+# Multi-tenant SaaS mode — backend connects to Supabase Postgres,
+# edge has embedded Redis, backend has its own Redis container.
+#
+# Usage: docker-compose -f docker-compose.cloud.yml up -d
+#
+# ==============================================================================
+
+services:
+  backend:
+    build:
+      context: ../../../
+      dockerfile: fastapi-backend/Dockerfile
+    user: "1000:1000"  # Run as non-root user
+    expose:
+      - "8000"
+    environment:
+      - DEPLOYMENT_MODE=cloud
+      # Database: Supabase Postgres connection string
+      - DATABASE_URL=${DATABASE_URL}
+      # Legacy DB config (unused when DATABASE_URL is set, kept for compat)
+      - DATABASE=${COMPOSE_PROFILES:-sqlite}
+      - DB_PASSWORD=${DB_PASSWORD:-frontbase-dev-password}
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      # Edge Engine URL (override for distributed deployment)
+      - EDGE_URL=${EDGE_URL:-http://edge:3002}
+      - EDGE_SSR_URL=${EDGE_URL:-http://edge:3002}
+      # Backend Redis (control plane caching)
+      - REDIS_URL=${REDIS_URL:-redis://${CACHE_PROVIDER:-redis}:6379}
+      # Admin Authentication (master admin)
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@frontbase.dev}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me-in-production}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      # Email Platform Settings
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - MAILGUN_API_KEY=${MAILGUN_API_KEY}
+      - MAILGUN_DOMAIN=${MAILGUN_DOMAIN}
+      - MAILGUN_REGION=${MAILGUN_REGION}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME}
+      # Frontend and Backend URLs for SuperTokens links
+      - FRONTEND_URL=${FRONTEND_URL}
+      - BACKEND_URL=${BACKEND_URL}
+      # Observability — Sentry error tracking (optional; unset = off)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      # Dynamic Auth Provider
+      - AUTH_PROVIDER=${AUTH_PROVIDER:-supertokens}
+      # Supabase Auth Credentials (used if AUTH_PROVIDER=supabase)
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
+    volumes:
+      - backend_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://127.0.0.1:8000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+
+  # PostgreSQL — only starts when COMPOSE_PROFILES=supertokens (or manually specified)
+  postgres:
+    image: postgres:16-alpine
+    profiles: [ "supertokens" ]
+    environment:
+      POSTGRES_USER: frontbase
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase-dev-password}
+      POSTGRES_DB: frontbase
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U frontbase" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  edge:
+    build:
+      context: ../../../
+      dockerfile: services/edge/Dockerfile
+    expose:
+      - "3002"
+    environment:
+      - NODE_ENV=production
+      - FRONTBASE_DEPLOYMENT_MODE=cloud
+      - PORT=${EDGE_PORT:-3002}
+      # Edge has embedded Redis — no external cache config needed for Docker
+      # Database for edge storage (SQLite fallback)
+      - SQLITE_PATH=/app/data/edge.db
+      - DATABASE_URL=file:/app/data/edge.db
+      - FRONTBASE_STATE_DB={"provider":"sqlite"}
+      - PAGES_DB_URL=${PAGES_DB_URL:-file:/app/data/pages.db}
+      # Internal address edge uses to reach the backend (startup sync, etc.).
+      # Distinct from the backend's own BACKEND_URL (its PUBLIC url, used for
+      # SuperTokens email links) — do NOT set EDGE_BACKEND_URL to the public URL.
+      - BACKEND_URL=${EDGE_BACKEND_URL:-http://backend:8000}
+      # Webhook API keys (comma-separated)
+      - API_KEYS=${API_KEYS:-}
+      # System key for local backend-to-edge management traffic. MUST match the
+      # backend's hardcoded system key (fastapi-backend/main.py inject_system_key
+      # force_key). This is internal plumbing for the in-cluster system edge, not
+      # a user-facing secret — user-deployed Edge nodes use FRONTBASE_SYSTEM_KEY.
+      - FRONTBASE_API_KEYS={"systemKey":"fb_sys_local_dev_key"}
+      # Public URL for preview links (set PRIMARY_DOMAIN or leave empty for auto-detect)
+      - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
+      # Observability — Sentry error tracking (optional; unset = off)
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    volumes:
+      - edge_data:/app/data
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3002/api/health" ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ../../../
+      dockerfile: Dockerfile.frontend
+      args:
+        # Empty = use relative URLs (recommended for production)
+        VITE_API_URL: ""
+        VITE_DEPLOYMENT_MODE: "cloud"
+        # Observability (optional — sourced from the host .env; empty = off).
+        # NOTE: these are build-time args → rebuilding the frontend image is required.
+        VITE_SENTRY_DSN: "${VITE_SENTRY_DSN:-}"
+        VITE_POSTHOG_KEY: "${VITE_POSTHOG_KEY:-}"
+        # EU projects: set VITE_POSTHOG_HOST=https://eu.i.posthog.com in the host .env
+        VITE_POSTHOG_HOST: "${VITE_POSTHOG_HOST:-}"
+        # Supabase Builder Auth (Only baked in if provided)
+        VITE_SUPABASE_URL: "${SUPABASE_URL:-}"
+        VITE_SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY:-}"
+    expose:
+      - "80"
+    environment:
+      - DEPLOYMENT_MODE=cloud
+    depends_on:
+      - backend
+      - edge
+    restart: unless-stopped
+
+
+  # Backend Redis — control plane caching only.
+  # Edge engines have their own embedded Redis.
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Alternative: Dragonfly (Drop-in Redis Replacement) ---
+  dragonfly:
+    image: 'docker.dragonflydb.io/dragonflydb/dragonfly'
+    profiles: ["dragonfly"]
+    expose:
+      - "6379"
+    ulimits:
+      memlock: -1
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # SuperTokens — Identity and Access Management
+  # Activate with: docker compose --profile supertokens up (or via .env)
+  supertokens:
+    image: registry.supertokens.io/supertokens/supertokens-postgresql:latest
+    profiles: ["supertokens"]
+    expose:
+      - "3567"
+    environment:
+      POSTGRESQL_CONNECTION_URI: postgresql://frontbase:${DB_PASSWORD:-frontbase-dev-password}@postgres:5432/frontbase
+      POSTGRESQL_TABLE_SCHEMA: supertokens
+      API_KEYS: ${SUPERTOKENS_API_KEY:-frontbase-dev-secret-key-change-me}
+      ENABLE_MULTI_TENANCY: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: >
+        bash -c 'exec 3<>/dev/tcp/127.0.0.1/3567 && echo -e "GET /hello HTTP/1.1\r\nhost: 127.0.0.1:3567\r\nConnection: close\r\n\r\n" >&3 && cat <&3 | grep "Hello"'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  backend_data:
+  postgres_data:
+  edge_data:
+  redis_data:

@@ -9245,10 +9245,20 @@ function escapeHtml4(str) {
 }
 
 // src/ssr/components/lib/styles.ts
+function sanitizeCSS(css) {
+  if (!css) return "";
+  let sanitized = css;
+  sanitized = sanitized.replace(/<\/\s*style\s*>/gi, "");
+  sanitized = sanitized.replace(/expression\s*\(/gi, "no-expression(");
+  sanitized = sanitized.replace(/url\s*\(\s*['"]?javascript:/gi, "url(");
+  sanitized = sanitized.replace(/behavior\s*:/gi, "no-behavior:");
+  sanitized = sanitized.replace(/-moz-binding\s*:/gi, "no-binding:");
+  return sanitized;
+}
 function stylesDataToCSS(stylesData) {
   if (!stylesData) return "";
   if (stylesData.stylingMode === "css" && stylesData.rawCSS) {
-    return stylesData.rawCSS;
+    return sanitizeCSS(stylesData.rawCSS);
   }
   if (!stylesData.values) return "";
   const styleParts = [];
@@ -11273,7 +11283,7 @@ function generateHtmlDocument(page, bodyHtml, initialState, trackingConfig, favi
                     // 2. Clear localStorage
                     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
                     // 3. POST to logout endpoint
-                    fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+                    fetch('/api/page-auth/logout', { method: 'POST', credentials: 'same-origin' })
                         .finally(function() {
                             window.location.href = redirectTo || '/';
                         });
@@ -11494,7 +11504,7 @@ function buildAuthOverlay(config, currentPath = "/") {
 
     <div id="fb-auth-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:0.625rem;border-radius:0.375rem;font-size:0.8125rem;margin-bottom:0.75rem"></div>
 
-    <form id="fb-auth-form" action="/api/auth/login" method="POST" style="display:flex;flex-direction:column;gap:0.75rem">
+    <form id="fb-auth-form" action="/api/page-auth/login" method="POST" style="display:flex;flex-direction:column;gap:0.75rem">
         <input type="hidden" name="redirectTo" value="${escapeHtml6(currentPath)}">
         <div>
             <label for="fb-email" style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Email</label>
@@ -11565,7 +11575,7 @@ function buildAuthOverlay(config, currentPath = "/") {
     // Toggle login/signup mode
     window.fbToggleMode = function() {
         isLoginMode = !isLoginMode;
-        form.action = isLoginMode ? '/api/auth/login' : '/api/auth/signup';
+        form.action = isLoginMode ? '/api/page-auth/login' : '/api/page-auth/signup';
         document.getElementById('fb-auth-title').textContent = isLoginMode ? '${escapeHtml6(config.type === "both" ? "Welcome Back" : title)}' : 'Create an Account';
         submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
         document.getElementById('fb-toggle-text').textContent = isLoginMode ? "Don't have an account?" : 'Already have an account?';
@@ -12988,7 +12998,7 @@ embedRoute.get("/auth/:formId", async (c) => {
         <p>\u2713 Check your email for a confirmation link.</p>
     </div>
 
-    <form id="fb-auth-form" class="fb-form" action="/api/auth/login" method="POST">
+    <form id="fb-auth-form" class="fb-form" action="/api/page-auth/login" method="POST">
         <input type="hidden" name="redirectTo" value="${esc(redirectUrl)}">
         <input type="hidden" name="isEmbed" value="true">
         <input type="hidden" name="formId" value="${esc(formId)}">
@@ -13054,7 +13064,7 @@ embedRoute.get("/auth/:formId", async (c) => {
     // Toggle login/signup mode
     window.fbToggleMode=function(){
         isLoginMode=!isLoginMode;
-        form.action=isLoginMode?'/api/auth/login':'/api/auth/signup';
+        form.action=isLoginMode?'/api/page-auth/login':'/api/page-auth/signup';
         document.getElementById('fb-auth-title').textContent=isLoginMode?'${esc(type === "both" ? "Welcome Back" : title)}':'Create an Account';
         submitBtn.textContent=isLoginMode?'Sign In':'Sign Up';
         document.getElementById('fb-toggle-text').textContent=isLoginMode?"Don't have an account?":'Already have an account?';
@@ -13480,13 +13490,13 @@ app.use("/api/data/*", systemKeyAuth);
 app.use("/api/manage/*", systemKeyAuth);
 app.use("/api/data/execute", ipBlocklist);
 app.use("/api/embed/*", ipBlocklist);
-app.use("/api/auth/*", ipBlocklist);
+app.use("/api/page-auth/*", ipBlocklist);
 app.route("/api/import", importRoute);
 app.route("/api/data", dataRoute);
 app.route("/api/manage", manageRoute);
 app.route("", seoRoute);
 app.route("/api/embed", embedRoute);
-app.route("/api/auth", authRoute);
+app.route("/api/page-auth", authRoute);
 app.route("", pagesRoute);
 
 // src/startup/sync.ts
@@ -13516,7 +13526,7 @@ async function initEmbeddedRedis() {
 async function runStartupSync() {
   console.log("[Startup Sync] \u{1F680} Starting Edge database initialization...");
   await stateProvider.init();
-  const { loadEdgeSecrets } = await import("./loadSecrets-O5EPBYGE.js");
+  const { loadEdgeSecrets } = await import("./loadSecrets-NDEDOR55.js");
   await loadEdgeSecrets();
   const platform = getPlatform();
   if (platform === "docker") {

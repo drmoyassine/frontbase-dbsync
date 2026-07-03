@@ -7,7 +7,7 @@
 #    docker-compose -f docker-compose.edge.yml --env-file .env.standalone up -d
 #
 # 2. Distributed Self-Host Deployment (Connects to your local API Tier)
-#    docker-compose -f docker-compose.edge.yml --env-file docker-compose.distributed/.env.edge-tier up -d
+#    docker-compose -f docker-compose.edge.yml --env-file docs/cloud-deployment/distributed-cloud-deployment/.env.edge-tier up -d
 # ==============================================================================
 
 services:

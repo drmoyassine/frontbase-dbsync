@@ -118,7 +118,7 @@ function buildAuthOverlay(
 
     <div id="fb-auth-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;padding:0.625rem;border-radius:0.375rem;font-size:0.8125rem;margin-bottom:0.75rem"></div>
 
-    <form id="fb-auth-form" action="/api/auth/login" method="POST" style="display:flex;flex-direction:column;gap:0.75rem">
+    <form id="fb-auth-form" action="/api/page-auth/login" method="POST" style="display:flex;flex-direction:column;gap:0.75rem">
         <input type="hidden" name="redirectTo" value="${escapeHtml(currentPath)}">
         <div>
             <label for="fb-email" style="display:block;font-size:0.8125rem;font-weight:500;color:#374151;margin-bottom:0.25rem">Email</label>
@@ -189,7 +189,7 @@ function buildAuthOverlay(
     // Toggle login/signup mode
     window.fbToggleMode = function() {
         isLoginMode = !isLoginMode;
-        form.action = isLoginMode ? '/api/auth/login' : '/api/auth/signup';
+        form.action = isLoginMode ? '/api/page-auth/login' : '/api/page-auth/signup';
         document.getElementById('fb-auth-title').textContent = isLoginMode ? '${escapeHtml(config.type === 'both' ? 'Welcome Back' : title)}' : 'Create an Account';
         submitBtn.textContent = isLoginMode ? 'Sign In' : 'Sign Up';
         document.getElementById('fb-toggle-text').textContent = isLoginMode ? "Don't have an account?" : 'Already have an account?';

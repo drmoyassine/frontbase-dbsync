@@ -169,7 +169,7 @@ export function generateHtmlDocument(
                     // 2. Clear localStorage
                     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
                     // 3. POST to logout endpoint
-                    fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+                    fetch('/api/page-auth/logout', { method: 'POST', credentials: 'same-origin' })
                         .finally(function() {
                             window.location.href = redirectTo || '/';
                         });

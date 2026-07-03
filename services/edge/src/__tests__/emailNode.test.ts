@@ -1,11 +1,24 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { executeEmailNode, validateEmailNode } from '../nodes/EmailNode.js';
+import { getTenantSecret } from '../config/tenantSecrets.js';
+
+vi.mock('../config/tenantSecrets.js', () => ({
+    getTenantSecret: vi.fn(),
+}));
 
 global.fetch = vi.fn() as any;
 
 describe('Email Node', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // Single-tenant credential source consumed by resolveEmailCredentials().
+        process.env.FRONTBASE_INTEGRATIONS = JSON.stringify({
+            'acct-1': { provider: 'resend', api_key: 're_test_key' },
+        });
+    });
+
+    afterEach(() => {
+        delete process.env.FRONTBASE_INTEGRATIONS;
     });
 
     describe('validateEmailNode', () => {
@@ -52,7 +65,7 @@ describe('Email Node', () => {
         it('sends an email with valid inputs', async () => {
             (global.fetch as any).mockResolvedValue({
                 ok: true,
-                json: async () => ({ success: true, message_id: 'msg-123' }),
+                json: async () => ({ id: 'msg-123' }),
             });
 
             const result = await executeEmailNode({
@@ -64,12 +77,22 @@ describe('Email Node', () => {
 
             expect(result.sent).toBe(true);
             expect(result.messageId).toBe('msg-123');
-            expect(global.fetch).toHaveBeenCalled();
+            expect(result.provider).toBe('resend');
+            expect(global.fetch).toHaveBeenCalledWith(
+                'https://api.resend.com/emails',
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: expect.objectContaining({
+                        Authorization: 'Bearer re_test_key',
+                    }),
+                }),
+            );
         });
 
         it('handles API errors gracefully', async () => {
             (global.fetch as any).mockResolvedValue({
                 ok: false,
+                status: 503,
                 text: async () => 'Service unavailable',
             });
 
@@ -96,10 +119,24 @@ describe('Email Node', () => {
             expect(result.error).toContain('Network error');
         });
 
+        it('fails when no email provider credentials are configured', async () => {
+            delete process.env.FRONTBASE_INTEGRATIONS;
+
+            const result = await executeEmailNode({
+                to: 'test@example.com',
+                subject: 'Test',
+                body: 'Test',
+            });
+
+            expect(result.sent).toBe(false);
+            expect(result.error).toContain('No email provider credentials');
+            expect(global.fetch).not.toHaveBeenCalled();
+        });
+
         it('wraps a single recipient into an array', async () => {
             (global.fetch as any).mockResolvedValue({
                 ok: true,
-                json: async () => ({ success: true, message_id: 'msg-123' }),
+                json: async () => ({ id: 'msg-123' }),
             });
 
             await executeEmailNode({
@@ -117,7 +154,7 @@ describe('Email Node', () => {
         it('wraps plain-text body in HTML tags', async () => {
             (global.fetch as any).mockResolvedValue({
                 ok: true,
-                json: async () => ({ success: true, message_id: 'msg-123' }),
+                json: async () => ({ id: 'msg-123' }),
             });
 
             await executeEmailNode({
@@ -132,23 +169,27 @@ describe('Email Node', () => {
             expect(body.html).toBe('<p>Plain text</p>');
         });
 
-        it('forwards tenant routing keys as query params', async () => {
+        it('resolves multi-tenant credentials via getTenantSecret', async () => {
+            (getTenantSecret as any).mockResolvedValue({
+                'tenant-acct': { provider: 'resend', api_key: 're_tenant_key' },
+            });
             (global.fetch as any).mockResolvedValue({
                 ok: true,
-                json: async () => ({ success: true }),
+                json: async () => ({ id: 'msg-456' }),
             });
 
-            await executeEmailNode({
+            const result = await executeEmailNode({
                 to: 'test@example.com',
                 subject: 'Test',
                 body: 'Test',
                 _tenantSlug: 'acme',
-                _projectId: 'proj-1',
             });
 
-            const url = (global.fetch as any).mock.calls[0][0] as string;
-            expect(url).toContain('tenant_slug=acme');
-            expect(url).toContain('project_id=proj-1');
+            expect(getTenantSecret).toHaveBeenCalledWith('integrations', 'acme');
+            expect(result.sent).toBe(true);
+            // Tenant credentials win over FRONTBASE_INTEGRATIONS.
+            const callArgs = (global.fetch as any).mock.calls[0];
+            expect(callArgs[1].headers.Authorization).toBe('Bearer re_tenant_key');
         });
     });
 });

@@ -163,7 +163,10 @@ describe('Phase 3 Part 1 — Async accessors & prewarm', () => {
         await holder.provider.setEdgeSecret('FRONTBASE_AUTH', await encryptSecret(authBlob, TEST_KEY));
 
         // FRONTBASE_API_KEYS is set in beforeEach (manual override) so it's skipped.
-        await loadEdgeSecrets();
+        // backgroundPrewarm: false — the fire-and-forget prewarm would race the
+        // explicit prewarmTier2() below (concurrent reads on the same provider),
+        // making the deferral assertions nondeterministic.
+        await loadEdgeSecrets({ backgroundPrewarm: false });
 
         // Tier-1 loaded eagerly into env.
         expect(process.env.FRONTBASE_CACHE).toBe(cacheBlob);

@@ -62,7 +62,7 @@ app.use('/api/manage/*', systemKeyAuth);
 // ── IP Blocklist — public routes only ──────────────────────────────────
 app.use('/api/data/execute', ipBlocklist);
 app.use('/api/embed/*', ipBlocklist);
-app.use('/api/auth/*', ipBlocklist);
+app.use('/api/page-auth/*', ipBlocklist);
 
 // ── Page / SSR Routes ──────────────────────────────────────────────────
 app.route('/api/import', importRoute);
@@ -70,7 +70,7 @@ app.route('/api/data', dataRoute);
 app.route('/api/manage', manageRoute);
 app.route('', seoRoute);       // /sitemap.xml, /robots.txt, /llms.txt
 app.route('/api/embed', embedRoute);  // /api/embed/embed.js, /api/embed/auth/:formId (public, no auth)
-app.route('/api/auth', authRoute);    // /api/auth/login, /signup, /logout (public)
+app.route('/api/page-auth', authRoute);    // /api/page-auth/login, /signup, /logout (public)
 app.route('', pagesRoute); // SSR pages at /{slug}
 
 export { app as fullApp };

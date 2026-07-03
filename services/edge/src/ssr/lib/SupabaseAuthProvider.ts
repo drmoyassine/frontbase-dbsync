@@ -5,7 +5,7 @@
  * SSR authentication. All cookie management (chunking, naming, refresh)
  * is handled by the library.
  * 
- * Client-side: gated page form POSTs to /api/auth/login (no client SDK)
+ * Client-side: gated page form POSTs to /api/page-auth/login (no client SDK)
  * Server-side: createServerClient reads/writes cookies natively
  */
 

@@ -22,7 +22,8 @@ init_storage();
 init_edgeSecrets();
 init_env();
 var BOOT_EXCLUDED = /* @__PURE__ */ new Set(["FRONTBASE_STATE_DB"]);
-async function loadEdgeSecrets() {
+async function loadEdgeSecrets(options) {
+  const backgroundPrewarm = options?.backgroundPrewarm ?? true;
   const systemKey = getVaultSystemKey();
   if (!systemKey) {
     console.log("[EdgeSecrets] No FRONTBASE_SYSTEM_KEY \u2014 local vault disabled");
@@ -83,7 +84,7 @@ async function loadEdgeSecrets() {
   console.log(
     `[EdgeSecrets] Loaded ${loaded} Tier-1 secret(s) from vault` + (deferred ? `, deferred ${deferred} Tier-2 (background prewarm)` : "") + (skipped ? `, skipped ${skipped} (env override / excluded / tier-3)` : "") + (failed.length ? `, failed: ${failed.join(", ")}` : "")
   );
-  if (deferred > 0) {
+  if (deferred > 0 && backgroundPrewarm) {
     void prewarmTier2().catch((err) => {
       console.error("[EdgeSecrets] Tier-2 background prewarm failed:", err);
     });

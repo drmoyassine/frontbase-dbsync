@@ -68,7 +68,7 @@ describe('Gated Page Overlay', () => {
         );
 
         // Auth uses server-side form POST, not client-side Supabase SDK
-        expect(html).toContain('/api/auth/login');
+        expect(html).toContain('/api/page-auth/login');
         expect(html).toContain('fb-auth-form');
     });
 

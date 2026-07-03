@@ -134,7 +134,7 @@ async function resolveDynamicRedirect(
 const authRoute = new OpenAPIHono();
 
 // =============================================================================
-// POST /api/auth/login
+// POST /api/page-auth/login
 // =============================================================================
 
 authRoute.post('/login', async (c) => {
@@ -273,7 +273,7 @@ authRoute.post('/login', async (c) => {
 });
 
 // =============================================================================
-// GET /api/auth/me
+// GET /api/page-auth/me
 // =============================================================================
 
 authRoute.get('/me', async (c) => {
@@ -289,7 +289,7 @@ authRoute.get('/me', async (c) => {
 });
 
 // =============================================================================
-// POST /api/auth/signup
+// POST /api/page-auth/signup
 // =============================================================================
 
 authRoute.post('/signup', async (c) => {
@@ -460,7 +460,7 @@ authRoute.post('/signup', async (c) => {
 });
 
 // =============================================================================
-// POST /api/auth/logout
+// POST /api/page-auth/logout
 // =============================================================================
 
 authRoute.post('/logout', async (c) => {

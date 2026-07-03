@@ -167,7 +167,7 @@ embedRoute.get('/auth/:formId', async (c) => {
         <p>✓ Check your email for a confirmation link.</p>
     </div>
 
-    <form id="fb-auth-form" class="fb-form" action="/api/auth/login" method="POST">
+    <form id="fb-auth-form" class="fb-form" action="/api/page-auth/login" method="POST">
         <input type="hidden" name="redirectTo" value="${esc(redirectUrl)}">
         <input type="hidden" name="isEmbed" value="true">
         <input type="hidden" name="formId" value="${esc(formId)}">
@@ -233,7 +233,7 @@ embedRoute.get('/auth/:formId', async (c) => {
     // Toggle login/signup mode
     window.fbToggleMode=function(){
         isLoginMode=!isLoginMode;
-        form.action=isLoginMode?'/api/auth/login':'/api/auth/signup';
+        form.action=isLoginMode?'/api/page-auth/login':'/api/page-auth/signup';
         document.getElementById('fb-auth-title').textContent=isLoginMode?'${esc(type === 'both' ? 'Welcome Back' : title)}':'Create an Account';
         submitBtn.textContent=isLoginMode?'Sign In':'Sign Up';
         document.getElementById('fb-toggle-text').textContent=isLoginMode?"Don't have an account?":'Already have an account?';

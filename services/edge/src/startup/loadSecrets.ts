@@ -45,7 +45,16 @@ const BOOT_EXCLUDED = new Set<string>(['FRONTBASE_STATE_DB']);
  *     O(all secrets). The async accessors (getXxxConfigAsync) and the prewarm
  *     materialize them on demand / shortly after boot.
  */
-export async function loadEdgeSecrets(): Promise<void> {
+export async function loadEdgeSecrets(options?: {
+    /**
+     * Fire the Tier-2 background prewarm after the eager Tier-1 load
+     * (default true). Tests that want to control prewarm timing themselves
+     * pass false — the unawaited prewarm would otherwise race an explicit
+     * prewarmTier2() call against the same state provider.
+     */
+    backgroundPrewarm?: boolean;
+}): Promise<void> {
+    const backgroundPrewarm = options?.backgroundPrewarm ?? true;
     const systemKey = getVaultSystemKey();
     if (!systemKey) {
         // No system key ⇒ vault disabled. This is normal for engines that still
@@ -136,7 +145,7 @@ export async function loadEdgeSecrets(): Promise<void> {
     // Phase 3: background-prewarm the deferred Tier-2 secrets without blocking
     // boot. A failure here is logged inside prewarmTier2 and never fatal — the
     // async accessors can still materialize on demand later.
-    if (deferred > 0) {
+    if (deferred > 0 && backgroundPrewarm) {
         void prewarmTier2().catch((err) => {
             console.error('[EdgeSecrets] Tier-2 background prewarm failed:', err);
         });

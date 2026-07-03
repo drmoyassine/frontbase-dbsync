@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from passlib.context import CryptContext
+import bcrypt
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
@@ -18,8 +18,12 @@ except ImportError as e:
     sys.exit(1)
 
 def hash_password(password: str) -> str:
-    pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
-    return pwd_context.hash(password)
+    # Safely truncate UTF-8 encoded password to 72 bytes to maintain 
+    # backward compatibility with older bcrypt versions that silently truncated.
+    pwd_bytes = password.encode('utf-8')[:72]
+    
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def main():
     admin_email = os.getenv("ADMIN_EMAIL", "").strip()

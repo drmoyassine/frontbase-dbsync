@@ -188,6 +188,14 @@ fi
 echo "Upserting master admin user..."
 python create_admin.py
 
+# Final ownership pass: alembic/create_admin above ran as root and may have left
+# root-owned SQLite sidecar files (-wal/-shm/journal) behind. Fix them now so the
+# appuser processes below never hit "attempt to write a readonly database".
+if [ "$(id -u)" = "0" ]; then
+  chown -R 1000:1000 /app/data 2>/dev/null || true
+  chmod -R u+rwX /app/data 2>/dev/null || true
+fi
+
 # Start the application with proxy headers support (for HTTPS behind reverse proxy)
 # - Self-host/VPS: Running as root, drop to appuser via gosu (security best practice)
 # - Cloud/Kubernetes: Already running as non-root, skip gosu and run directly

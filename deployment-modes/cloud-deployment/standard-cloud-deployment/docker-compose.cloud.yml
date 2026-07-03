@@ -16,7 +16,10 @@ services:
     build:
       context: ../../../
       dockerfile: fastapi-backend/Dockerfile
-    user: "1000:1000"  # Run as non-root user
+    # NOTE: no `user:` override here — the entrypoint MUST boot as root so it can
+    # chown legacy root-owned SQLite volumes (self-healing), then it drops to
+    # appuser (UID 1000) via gosu before starting uvicorn/celery. Forcing
+    # user: "1000:1000" defeats that and traps old volumes in a readonly crash loop.
     expose:
       - "8000"
     environment:

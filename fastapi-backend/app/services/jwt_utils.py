@@ -9,14 +9,44 @@ Uses python-jose (already in requirements.txt) rather than PyJWT.
 """
 
 import os
+import secrets
+import logging
 from datetime import datetime, timedelta, UTC
 from typing import Optional
 
 from jose import jwt, JWTError  # python-jose
 
-SECRET_KEY: str = os.getenv("SECRET_KEY", "")
-if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY environment variable is required but not set.")
+_logger = logging.getLogger(__name__)
+
+
+def _resolve_secret_key() -> str:
+    """Resolve SECRET_KEY: env var > persisted file > auto-generate and persist."""
+    # 1. Explicit env var takes priority
+    env_key = os.getenv("SECRET_KEY", "").strip()
+    if env_key:
+        return env_key
+
+    # 2. Check for a previously auto-generated key on the data volume
+    data_dir = "/app/data" if os.path.isdir("/app/data") else "."
+    key_file = os.path.join(data_dir, ".secret_key")
+    if os.path.isfile(key_file):
+        stored = open(key_file).read().strip()
+        if stored:
+            _logger.info("[JWT] Using persisted SECRET_KEY from %s", key_file)
+            return stored
+
+    # 3. Auto-generate, persist, and return
+    generated = secrets.token_hex(32)
+    try:
+        with open(key_file, "w") as f:
+            f.write(generated)
+        _logger.info("[JWT] Auto-generated SECRET_KEY and persisted to %s", key_file)
+    except OSError as e:
+        _logger.warning("[JWT] Could not persist SECRET_KEY to %s: %s (using ephemeral key)", key_file, e)
+    return generated
+
+
+SECRET_KEY: str = _resolve_secret_key()
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 7
 

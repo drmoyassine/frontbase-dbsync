@@ -95,55 +95,83 @@ def _install_idempotent_ddl() -> None:
     below head, ``alembic upgrade`` still has real work to do (the ALTERs on old
     tables), yet its create_table/add_column calls for objects create_all already
     built blow up with "table/column already exists" and trap the container in a
-    crash loop (the edge_gpu_models 0024 failure).
+    crash loop (e.g. the 0024 edge_gpu_models and 0050 ip_address_anonymized
+    failures on legacy cloud deploys).
 
     Most migrations guard themselves inline (get_table_names / if_not_exists /
     get_columns), but not all historically did. Rather than depend on every author
     remembering the guard, we encode the create_all-before-alembic contract in ONE
-    place: skip a DDL op when its target object is already present, and otherwise
-    run it unchanged. Genuinely-missing ALTERs (the whole point of upgrading a
-    stuck DB) still apply normally. Only affects online mode (needs a live bind).
+    place: skip a DDL op when its target object is already present, otherwise run
+    it unchanged. Genuinely-missing ALTERs (the whole point of upgrading a stuck
+    DB) still apply normally.
+
+    We patch ``alembic.ddl.impl.DefaultImpl`` rather than ``Operations`` because it
+    is the single seam BOTH regular ops (op.create_table via toimpl) and batch ops
+    (op.batch_alter_table -> batch flush) funnel through — the Operations layer
+    misses ``batch_op.add_column`` entirely. Patching the impl also preserves the
+    Table object ``op.create_table`` returns to migrations (toimpl returns it
+    independently of the impl call), so create_table()+bulk_insert() chains keep
+    working. Skips are no-ops when there is no live connection (offline/--sql mode).
     """
     from sqlalchemy import inspect as sa_inspect
-    from alembic.operations import Operations
+    from alembic.ddl.impl import DefaultImpl
 
-    if getattr(Operations, "_frontbase_idempotent_ddl", False):
+    if getattr(DefaultImpl, "_frontbase_idempotent_ddl", False):
         return  # guard against double-patching within one process
 
-    _orig_create_table = Operations.create_table
-    _orig_add_column = Operations.add_column
-    _orig_create_index = Operations.create_index
+    _orig_create_table = DefaultImpl.create_table
+    _orig_add_column = DefaultImpl.add_column
+    _orig_create_index = DefaultImpl.create_index
 
-    def create_table(self, table_name, *columns, **kw):
-        insp = sa_inspect(self.get_bind())
-        if table_name in insp.get_table_names(schema=kw.get("schema")):
-            return None
-        return _orig_create_table(self, table_name, *columns, **kw)
-
-    def add_column(self, table_name, column, **kw):
+    def _inspector(self):
+        conn = getattr(self, "connection", None)
+        if conn is None:
+            return None  # offline / --sql mode: nothing to reflect against
         try:
-            existing = [c["name"] for c in sa_inspect(self.get_bind()).get_columns(
-                table_name, schema=kw.get("schema"))]
+            return sa_inspect(conn)
         except Exception:
-            existing = []
-        if column.name in existing:
             return None
-        return _orig_add_column(self, table_name, column, **kw)
 
-    def create_index(self, index_name, table_name=None, *args, **kw):
-        try:
-            existing = [i["name"] for i in sa_inspect(self.get_bind()).get_indexes(
-                table_name, schema=kw.get("schema"))]
-        except Exception:
-            existing = []
-        if index_name in existing:
-            return None
-        return _orig_create_index(self, index_name, table_name, *args, **kw)
+    def create_table(self, table, **kw):
+        insp = _inspector(self)
+        if insp is not None:
+            try:
+                if table.name in insp.get_table_names(schema=table.schema):
+                    return None
+            except Exception:
+                pass
+        return _orig_create_table(self, table, **kw)
 
-    Operations.create_table = create_table
-    Operations.add_column = add_column
-    Operations.create_index = create_index
-    Operations._frontbase_idempotent_ddl = True
+    def add_column(self, table_name, column, *, schema=None, **kw):
+        insp = _inspector(self)
+        if insp is not None:
+            try:
+                existing = [c["name"] for c in insp.get_columns(table_name, schema=schema)]
+                if column.name in existing:
+                    return None
+            except Exception:
+                pass
+        return _orig_add_column(self, table_name, column, schema=schema, **kw)
+
+    def create_index(self, index, **kw):
+        insp = _inspector(self)
+        if insp is not None:
+            try:
+                table = getattr(index, "table", None)
+                tbl_name = table.name if table is not None else None
+                tbl_schema = table.schema if table is not None else None
+                if tbl_name is not None:
+                    existing = [i["name"] for i in insp.get_indexes(tbl_name, schema=tbl_schema)]
+                    if index.name in existing:
+                        return None
+            except Exception:
+                pass
+        return _orig_create_index(self, index, **kw)
+
+    DefaultImpl.create_table = create_table
+    DefaultImpl.add_column = add_column
+    DefaultImpl.create_index = create_index
+    DefaultImpl._frontbase_idempotent_ddl = True
 
 
 def run_migrations_online() -> None:

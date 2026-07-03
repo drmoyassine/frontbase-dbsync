@@ -50,7 +50,6 @@ def main():
             admin_user.email = admin_email  # type: ignore[assignment]
             admin_user.username = "admin"  # type: ignore[assignment]
             admin_user.password_hash = hashed_pw  # type: ignore[assignment]
-            admin_user.is_active = True  # type: ignore[assignment]
         else:
             logger.info("Admin user 'default-admin' not found, creating...")
             admin_user = User(
@@ -58,7 +57,8 @@ def main():
                 username="admin",
                 email=admin_email,
                 password_hash=hashed_pw,
-                is_active=True
+                created_at=datetime.utcnow().isoformat(),
+                updated_at=datetime.utcnow().isoformat(),
             )
             db.add(admin_user)
         

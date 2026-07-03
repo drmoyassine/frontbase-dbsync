@@ -85,6 +85,67 @@ def _ensure_wide_version_column(connection) -> None:
         ))
 
 
+def _install_idempotent_ddl() -> None:
+    """Make create_table / add_column / create_index tolerate pre-existing objects.
+
+    The Docker entrypoint runs ``Base.metadata.create_all()`` BEFORE
+    ``alembic upgrade`` (see docker_entrypoint.sh). create_all() builds the FULL
+    current schema — every current table with its full current column set — but it
+    does NOT add columns to tables that already existed. So on a legacy DB stuck
+    below head, ``alembic upgrade`` still has real work to do (the ALTERs on old
+    tables), yet its create_table/add_column calls for objects create_all already
+    built blow up with "table/column already exists" and trap the container in a
+    crash loop (the edge_gpu_models 0024 failure).
+
+    Most migrations guard themselves inline (get_table_names / if_not_exists /
+    get_columns), but not all historically did. Rather than depend on every author
+    remembering the guard, we encode the create_all-before-alembic contract in ONE
+    place: skip a DDL op when its target object is already present, and otherwise
+    run it unchanged. Genuinely-missing ALTERs (the whole point of upgrading a
+    stuck DB) still apply normally. Only affects online mode (needs a live bind).
+    """
+    from sqlalchemy import inspect as sa_inspect
+    from alembic.operations import Operations
+
+    if getattr(Operations, "_frontbase_idempotent_ddl", False):
+        return  # guard against double-patching within one process
+
+    _orig_create_table = Operations.create_table
+    _orig_add_column = Operations.add_column
+    _orig_create_index = Operations.create_index
+
+    def create_table(self, table_name, *columns, **kw):
+        insp = sa_inspect(self.get_bind())
+        if table_name in insp.get_table_names(schema=kw.get("schema")):
+            return None
+        return _orig_create_table(self, table_name, *columns, **kw)
+
+    def add_column(self, table_name, column, **kw):
+        try:
+            existing = [c["name"] for c in sa_inspect(self.get_bind()).get_columns(
+                table_name, schema=kw.get("schema"))]
+        except Exception:
+            existing = []
+        if column.name in existing:
+            return None
+        return _orig_add_column(self, table_name, column, **kw)
+
+    def create_index(self, index_name, table_name=None, *args, **kw):
+        try:
+            existing = [i["name"] for i in sa_inspect(self.get_bind()).get_indexes(
+                table_name, schema=kw.get("schema"))]
+        except Exception:
+            existing = []
+        if index_name in existing:
+            return None
+        return _orig_create_index(self, index_name, table_name, *args, **kw)
+
+    Operations.create_table = create_table
+    Operations.add_column = add_column
+    Operations.create_index = create_index
+    Operations._frontbase_idempotent_ddl = True
+
+
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode.
 
@@ -92,6 +153,11 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Encode the create_all-before-alembic contract: DDL ops skip objects that
+    # bootstrap create_all() already built, so legacy DBs stuck below head can
+    # still apply their pending ALTERs instead of crash-looping on "already exists".
+    _install_idempotent_ddl()
+
     # Use the synchronous driver for Alembic (FastAPI app uses sync driver but logic might differ)
     # Our DATABASE_URL in config.py handles this logic (it's sqlite:///./unified.db usually)
 

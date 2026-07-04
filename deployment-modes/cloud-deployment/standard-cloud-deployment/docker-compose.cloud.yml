@@ -200,7 +200,12 @@ services:
     environment:
       POSTGRESQL_CONNECTION_URI: postgresql://frontbase:${DB_PASSWORD}@postgres:5432/frontbase
       POSTGRESQL_TABLE_SCHEMA: supertokens
-      API_KEYS: ${SUPERTOKENS_API_KEY}
+      # API_KEYS is intentionally NOT set by default. The core is network-isolated
+      # (expose-only, not published), so it runs open and the backend connects with no
+      # key — SuperTokens login works with zero config. A *set-but-empty* API_KEYS would
+      # enable key-auth with an empty accepted list and 401 every request (the
+      # post-scrub regression). To harden, set SUPERTOKENS_API_KEY and add it here AND
+      # on the backend (app/auth/supertokens.py reads it; omit-when-empty is built in).
       ENABLE_MULTI_TENANCY: "true"
     depends_on:
       postgres:

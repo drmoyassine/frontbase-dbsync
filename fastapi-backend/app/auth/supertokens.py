@@ -153,7 +153,11 @@ def init_supertokens():
         ),
         supertokens_config=SupertokensConfig(
             connection_uri=supertokens_uri,
-            api_key=api_key
+            # Only pass api_key when it's actually set. Newer supertokens-python sends
+            # an `api-key` header even for an empty string, which the core (running open
+            # when no key is configured) rejects with 401 "Invalid API key". Omitting it
+            # restores the old behaviour: open core, no header, request accepted.
+            **({"api_key": api_key} if api_key else {}),
         ),
         framework='fastapi',
         recipe_list=[

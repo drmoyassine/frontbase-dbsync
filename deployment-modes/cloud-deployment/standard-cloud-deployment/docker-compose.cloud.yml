@@ -2,10 +2,19 @@
 # FRONTBASE CLOUD DOCKER COMPOSE
 # ==============================================================================
 #
-# Multi-tenant SaaS mode — backend connects to Supabase Postgres,
-# edge has embedded Redis, backend has its own Redis container.
+# Multi-tenant SaaS mode. BATTERIES INCLUDED BY DEFAULT:
+#   postgres + supertokens + redis ALWAYS run — `docker compose up -d` gives a
+#   fully working stack (DB, auth, cache) with ZERO env vars set.
 #
-# Usage: docker-compose -f docker-compose.cloud.yml up -d
+# Opt-in alternatives (set env vars to switch):
+#   - Supabase Postgres:  DATABASE_URL=<supabase connection string>
+#   - Supabase Auth:      AUTH_PROVIDER=supabase + SUPABASE_* keys
+#   - Dragonfly cache:    COMPOSE_PROFILES=dragonfly + CACHE_PROVIDER=dragonfly
+#   (The default containers keep running but sit idle when overridden —
+#    deliberately: NO service is profile-gated, so a missing/typo'd env var
+#    can never silently delete your auth stack again.)
+#
+# Usage: docker compose -f docker-compose.cloud.yml up -d
 #
 # ==============================================================================
 
@@ -22,11 +31,11 @@ services:
       - "8000"
     environment:
       - DEPLOYMENT_MODE=cloud
-      # Database: Supabase Postgres connection string
-      - DATABASE_URL=${DATABASE_URL}
-      # Legacy DB config (unused when DATABASE_URL is set, kept for compat)
-      - DATABASE=${COMPOSE_PROFILES:-sqlite}
-      - DB_PASSWORD=${DB_PASSWORD}
+      # Database. DEFAULT: the built-in postgres container (always running).
+      # To use Supabase/external Postgres, set DATABASE_URL to its connection
+      # string. Keep the password in sync with DB_PASSWORD when using the default.
+      - DATABASE_URL=${DATABASE_URL:-postgresql://frontbase:${DB_PASSWORD:-frontbase}@postgres:5432/frontbase}
+      - DB_PASSWORD=${DB_PASSWORD:-frontbase}
       - SECRET_KEY=${SECRET_KEY}
       # Fernet encryption key for credentials-at-rest. Optional: if unset, the
       # backend auto-generates one and persists it to the backend_data volume
@@ -80,19 +89,19 @@ services:
       start_period: 120s
 
 
-  # PostgreSQL — only starts when COMPOSE_PROFILES=supertokens (or manually specified).
-  # BOTH profile names are accepted: the service was historically gated behind
-  # "postgresql" (old root compose) and was renamed to "supertokens" when moved here.
-  # Accepting both keeps old deploy .envs working — a mismatched COMPOSE_PROFILES
-  # silently DROPS this service AND the supertokens core (compose skips unprofiled
-  # services; deploy.sh's --remove-orphans then deletes the running containers),
-  # which kills cloud login entirely.
+  # PostgreSQL — DEFAULT, always on (no profile gate). This is the built-in DB
+  # for the backend AND the SuperTokens core. To use Supabase instead, set
+  # DATABASE_URL — this container then sits idle (supertokens still uses it).
+  # ⚠️  Deliberately NOT profile-gated: a missing COMPOSE_PROFILES var used to
+  # silently skip this service and `up --remove-orphans` deleted the running
+  # container → auth died. Never again.
+  # NOTE: the password is baked into postgres_data on FIRST boot — changing
+  # DB_PASSWORD later requires recreating the volume (or ALTER USER).
   postgres:
     image: postgres:16-alpine
-    profiles: [ "supertokens", "postgresql" ]
     environment:
       POSTGRES_USER: frontbase
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-frontbase}
       POSTGRES_DB: frontbase
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -173,11 +182,12 @@ services:
     restart: unless-stopped
 
 
-  # Backend Redis — control plane caching only.
-  # Edge engines have their own embedded Redis.
+  # Backend Redis — control plane caching only. DEFAULT, always on (no profile
+  # gate — see postgres note). Edge engines have their own embedded Redis.
+  # To use Dragonfly instead: COMPOSE_PROFILES=dragonfly + CACHE_PROVIDER=dragonfly
+  # (this container then sits idle).
   redis:
     image: redis:7-alpine
-    profiles: ["redis"]
     expose:
       - "6379"
     volumes:
@@ -189,7 +199,10 @@ services:
       timeout: 5s
       retries: 5
 
-  # --- Alternative: Dragonfly (Drop-in Redis Replacement) ---
+  # --- Alternative: Dragonfly (Drop-in Redis Replacement, opt-in) ---
+  # Enable: COMPOSE_PROFILES=dragonfly + CACHE_PROVIDER=dragonfly (the backend's
+  # REDIS_URL then targets dragonfly:6379). Own volume — the always-on redis
+  # keeps redis_data; running both against one volume corrupts it.
   dragonfly:
     image: 'docker.dragonflydb.io/dragonflydb/dragonfly'
     profiles: ["dragonfly"]
@@ -198,7 +211,7 @@ services:
     ulimits:
       memlock: -1
     volumes:
-      - redis_data:/data
+      - dragonfly_data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -206,17 +219,15 @@ services:
       timeout: 5s
       retries: 5
 
-  # SuperTokens — Identity and Access Management
-  # Activate with: docker compose --profile supertokens up (or via .env).
-  # Both profile spellings accepted (see postgres note above) so legacy
-  # COMPOSE_PROFILES=postgresql deployments keep their auth stack.
+  # SuperTokens — Identity and Access Management. DEFAULT, always on (no
+  # profile gate — see postgres note). When AUTH_PROVIDER=supabase, the backend
+  # never calls it and this container sits idle.
   supertokens:
     image: registry.supertokens.io/supertokens/supertokens-postgresql:latest
-    profiles: ["supertokens", "postgresql"]
     expose:
       - "3567"
     environment:
-      POSTGRESQL_CONNECTION_URI: postgresql://frontbase:${DB_PASSWORD}@postgres:5432/frontbase
+      POSTGRESQL_CONNECTION_URI: postgresql://frontbase:${DB_PASSWORD:-frontbase}@postgres:5432/frontbase
       POSTGRESQL_TABLE_SCHEMA: supertokens
       # Core + backend MUST share the same API key. Both read SUPERTOKENS_API_KEY with
       # one shared INTERNAL default, so cloud login works with ZERO config; set
@@ -248,3 +259,4 @@ volumes:
   postgres_data:
   edge_data:
   redis_data:
+  dragonfly_data:

@@ -28,6 +28,11 @@ services:
       - DATABASE=${COMPOSE_PROFILES:-sqlite}
       - DB_PASSWORD=${DB_PASSWORD}
       - SECRET_KEY=${SECRET_KEY}
+      # Fernet encryption key for credentials-at-rest. Optional: if unset, the
+      # backend auto-generates one and persists it to the backend_data volume
+      # (survives redeploys). Set explicitly when the DB is external — losing
+      # the volume while data lives elsewhere orphans every stored credential.
+      - FERNET_KEY=${FERNET_KEY:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       # Edge Engine URL (override for distributed deployment)
       - EDGE_URL=${EDGE_URL:-http://edge:3002}

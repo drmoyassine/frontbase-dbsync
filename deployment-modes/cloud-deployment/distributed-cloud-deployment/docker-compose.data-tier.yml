@@ -27,5 +27,37 @@ services:
       timeout: 5s
       retries: 5
 
+  # SuperTokens core — OPTIONAL. Only needed when the API tier runs
+  # AUTH_PROVIDER=supertokens (distributed default is supabase). Enable with
+  # COMPOSE_PROFILES=supertokens (or --profile supertokens). Point the API
+  # tier's SUPERTOKENS_URI at http://MACHINE_B_IP:3567 and give both sides the
+  # same SUPERTOKENS_API_KEY.
+  # ⚠️  Unlike the standard cloud compose, this publishes 3567 — firewall it to
+  # the API tier's IP and ALWAYS set a strong SUPERTOKENS_API_KEY here.
+  # ⚠️  Key charset: alphanumerics, '-' and '=' ONLY — an underscore makes the
+  # core crash-loop at boot ("Invalid characters in API key").
+  supertokens:
+    image: registry.supertokens.io/supertokens/supertokens-postgresql:latest
+    profiles: ["supertokens"]
+    env_file:
+      - .env.data-tier
+    ports:
+      - "${SUPERTOKENS_PORT:-3567}:3567"
+    environment:
+      POSTGRESQL_CONNECTION_URI: postgresql://frontbase:${DB_PASSWORD}@postgres:5432/frontbase
+      POSTGRESQL_TABLE_SCHEMA: supertokens
+      API_KEYS: ${SUPERTOKENS_API_KEY:-fb-internal-supertokens-key}
+      ENABLE_MULTI_TENANCY: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: >
+        bash -c 'exec 3<>/dev/tcp/127.0.0.1/3567 && echo -e "GET /hello HTTP/1.1\r\nhost: 127.0.0.1:3567\r\nConnection: close\r\n\r\n" >&3 && cat <&3 | grep "Hello"'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:

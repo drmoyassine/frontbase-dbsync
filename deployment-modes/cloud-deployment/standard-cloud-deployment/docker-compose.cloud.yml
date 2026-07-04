@@ -1,7 +1,5 @@
-version: '3.8'
-
 # ==============================================================================
-# FRONTBASE CLOUD DOCKER COMPOSE 
+# FRONTBASE CLOUD DOCKER COMPOSE
 # ==============================================================================
 #
 # Multi-tenant SaaS mode — backend connects to Supabase Postgres,
@@ -61,7 +59,11 @@ services:
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
       # SuperTokens core API key — MUST match the supertokens core's API_KEYS. Shared
       # internal default → zero-config cloud login; override via SUPERTOKENS_API_KEY.
-      - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY:-fb_internal_supertokens_key}
+      # ⚠️  Charset: alphanumerics, '-' and '=' ONLY — an underscore crashes the core.
+      - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY:-fb-internal-supertokens-key}
+      # Where the backend reaches the core. Default = the local supertokens service;
+      # override to use an external/managed core (then omit the local profile).
+      - SUPERTOKENS_URI=${SUPERTOKENS_URI:-http://supertokens:3567}
     volumes:
       - backend_data:/app/data
     restart: unless-stopped
@@ -73,10 +75,16 @@ services:
       start_period: 120s
 
 
-  # PostgreSQL — only starts when COMPOSE_PROFILES=supertokens (or manually specified)
+  # PostgreSQL — only starts when COMPOSE_PROFILES=supertokens (or manually specified).
+  # BOTH profile names are accepted: the service was historically gated behind
+  # "postgresql" (old root compose) and was renamed to "supertokens" when moved here.
+  # Accepting both keeps old deploy .envs working — a mismatched COMPOSE_PROFILES
+  # silently DROPS this service AND the supertokens core (compose skips unprofiled
+  # services; deploy.sh's --remove-orphans then deletes the running containers),
+  # which kills cloud login entirely.
   postgres:
     image: postgres:16-alpine
-    profiles: [ "supertokens" ]
+    profiles: [ "supertokens", "postgresql" ]
     environment:
       POSTGRES_USER: frontbase
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -194,10 +202,12 @@ services:
       retries: 5
 
   # SuperTokens — Identity and Access Management
-  # Activate with: docker compose --profile supertokens up (or via .env)
+  # Activate with: docker compose --profile supertokens up (or via .env).
+  # Both profile spellings accepted (see postgres note above) so legacy
+  # COMPOSE_PROFILES=postgresql deployments keep their auth stack.
   supertokens:
     image: registry.supertokens.io/supertokens/supertokens-postgresql:latest
-    profiles: ["supertokens"]
+    profiles: ["supertokens", "postgresql"]
     expose:
       - "3567"
     environment:
@@ -212,7 +222,10 @@ services:
       # API_KEYS is fragile across core versions and deploy platforms (a set-but-empty
       # value makes the core 401 every request, a plain-absent one only works on some
       # platforms), so an explicit shared key is the robust choice.
-      API_KEYS: ${SUPERTOKENS_API_KEY:-fb_internal_supertokens_key}
+      # ⚠️  Key charset: alphanumerics, '-' and '=' ONLY. An underscore (or any other
+      # character) makes the core CRASH-LOOP at boot with "Invalid characters in API
+      # key" — the service appears to vanish. Verified locally 2026-07-05.
+      API_KEYS: ${SUPERTOKENS_API_KEY:-fb-internal-supertokens-key}
       ENABLE_MULTI_TENANCY: "true"
     depends_on:
       postgres:

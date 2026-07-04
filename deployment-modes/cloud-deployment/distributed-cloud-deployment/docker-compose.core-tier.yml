@@ -8,8 +8,6 @@
 #   docker-compose -f docker-compose.core-tier.yml --env-file .env.core-tier up -d
 # ==============================================================================
 
-version: '3.8'
-
 services:
   backend:
     build:
@@ -39,6 +37,12 @@ services:
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
+      # SuperTokens (used if AUTH_PROVIDER=supertokens). This tier has NO local
+      # supertokens core — point SUPERTOKENS_URI at where you run one, and set
+      # SUPERTOKENS_API_KEY to match that core's API_KEYS (charset: alphanumerics,
+      # '-' and '=' ONLY — underscores crash the core at boot).
+      - SUPERTOKENS_URI=${SUPERTOKENS_URI:-}
+      - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY:-}
     volumes:
       - backend_data:/app/data
     restart: unless-stopped

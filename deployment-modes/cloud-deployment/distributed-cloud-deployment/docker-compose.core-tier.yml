@@ -132,13 +132,18 @@ services:
       timeout: 5s
       retries: 5
 
-  # API Gateway to split traffic correctly between backend and edge
+  # API Gateway to split traffic correctly between backend and edge.
+  # nginx.conf is a bare `server {}` block, so it MUST be mounted as a
+  # conf.d snippet (included inside the stock image's http{} context) — NOT as
+  # /etc/nginx/nginx.conf, where a top-level `server` directive is illegal
+  # ("emerg: server directive is not allowed here"). This mirrors how
+  # Dockerfile.frontend copies it (COPY nginx.conf /etc/nginx/conf.d/default.conf).
   api-gateway:
     image: nginx:alpine
     ports:
       - "${API_GATEWAY_PORT:-8080}:80"
     volumes:
-      - ../../../nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../../nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
       - edge

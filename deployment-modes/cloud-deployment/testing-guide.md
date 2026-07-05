@@ -27,7 +27,7 @@
 
 ```bash
 cd docs/cloud-deployment/standard-cloud-deployment
-cp .env.cloud.example .env
+cp .env.example .env
 # Edit .env: set SECRET_KEY, ADMIN_EMAIL, ADMIN_PASSWORD, FRONTEND_URL, BACKEND_URL
 docker compose -f docker-compose.cloud.yml --env-file .env up -d --build
 ```

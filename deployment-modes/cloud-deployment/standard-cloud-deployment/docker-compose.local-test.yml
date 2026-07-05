@@ -1,0 +1,13 @@
+# LOCAL TEST override — publish ports so a host-run backend can reach the
+# dockerized postgres + supertokens core (and curl can hit a dockerized backend).
+# Usage: docker compose -f docker-compose.cloud.yml -f docker-compose.local-test.yml up -d
+services:
+  backend:
+    ports:
+      - "8000:8000"
+  postgres:
+    ports:
+      - "5432:5432"
+  supertokens:
+    ports:
+      - "3567:3567"

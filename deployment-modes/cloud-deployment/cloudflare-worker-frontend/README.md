@@ -67,19 +67,18 @@ Custom Domains** → add `app.yourdomain.com`.
 
 ## 5. Verify
 
-The backend health route is `/health` (NOT under `/api`). The `/api/*` prefix
-is the SPA's application routes, proxied to the backend.
+Through the gateway, the backend is only reachable under `/api/*`. Everything
+else falls through nginx's catch-all to the **edge** (SSR page handler), so
+`/health` returns an edge "page not found" — that endpoint is backend-internal
+(Docker healthcheck on 127.0.0.1:8000), NOT publicly routed. Use an `/api`
+route to prove the chain:
 
 ```bash
-# Gateway direct (TLS): backend liveness
-curl https://api.yourdomain.com/health          # → {"status":"healthy",...}
-
-# Proxied /api route reaching the backend (401 = correct when unauthenticated,
-# and proves the /api/* → backend path works end to end):
+# Proxied /api route reaching the backend. 401 is the CORRECT answer when
+# unauthenticated, and proves the /api/* → backend path works end to end:
 curl https://api.yourdomain.com/api/auth/me      # → {"detail":"Not authenticated"}
 
-# Same two through the Worker (once deployed):
-curl https://app.yourdomain.com/health
+# Same through the Worker (once deployed):
 curl https://app.yourdomain.com/api/auth/me
 ```
 

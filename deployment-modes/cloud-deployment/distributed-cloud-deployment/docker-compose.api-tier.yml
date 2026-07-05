@@ -13,7 +13,12 @@ services:
       context: ../../../
       dockerfile: fastapi-backend/Dockerfile
     env_file:
-      - .env.api-tier
+      # Optional: present when following the CLI workflow (copy .env.api-tier.example
+      # -> .env.api-tier). Panel deployments (EasyPanel etc.) write a plain .env
+      # instead — compose auto-reads it for ${VAR} interpolation — so a missing
+      # tier file must not fail the deploy.
+      - path: .env.api-tier
+        required: false
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:

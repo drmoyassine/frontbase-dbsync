@@ -14,7 +14,12 @@ services:
       context: ../../../
       dockerfile: fastapi-backend/Dockerfile
     env_file:
-      - .env.core-tier
+      # Optional: present when following the CLI workflow (copy .env.core-tier.example
+      # -> .env.core-tier). Panel deployments (EasyPanel etc.) write a plain .env
+      # instead — compose auto-reads it for ${VAR} interpolation — so a missing
+      # tier file must not fail the deploy.
+      - path: .env.core-tier
+        required: false
     expose:
       - "8000"
     environment:
@@ -58,7 +63,12 @@ services:
       context: ../../../
       dockerfile: services/edge/Dockerfile
     env_file:
-      - .env.core-tier
+      # Optional: present when following the CLI workflow (copy .env.core-tier.example
+      # -> .env.core-tier). Panel deployments (EasyPanel etc.) write a plain .env
+      # instead — compose auto-reads it for ${VAR} interpolation — so a missing
+      # tier file must not fail the deploy.
+      - path: .env.core-tier
+        required: false
     expose:
       - "3002"
     environment:

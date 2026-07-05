@@ -11,7 +11,12 @@ services:
   postgres:
     image: postgres:16-alpine
     env_file:
-      - .env.data-tier
+      # Optional: present when following the CLI workflow (copy .env.data-tier.example
+      # -> .env.data-tier). Panel deployments (EasyPanel etc.) write a plain .env
+      # instead — compose auto-reads it for ${VAR} interpolation — so a missing
+      # tier file must not fail the deploy.
+      - path: .env.data-tier
+        required: false
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
@@ -40,7 +45,12 @@ services:
     image: registry.supertokens.io/supertokens/supertokens-postgresql:latest
     profiles: ["supertokens"]
     env_file:
-      - .env.data-tier
+      # Optional: present when following the CLI workflow (copy .env.data-tier.example
+      # -> .env.data-tier). Panel deployments (EasyPanel etc.) write a plain .env
+      # instead — compose auto-reads it for ${VAR} interpolation — so a missing
+      # tier file must not fail the deploy.
+      - path: .env.data-tier
+        required: false
     ports:
       - "${SUPERTOKENS_PORT:-3567}:3567"
     environment:

@@ -20,7 +20,12 @@ services:
         VITE_SUPABASE_URL: "${VITE_SUPABASE_URL:-}"
         VITE_SUPABASE_ANON_KEY: "${VITE_SUPABASE_ANON_KEY:-}"
     env_file:
-      - .env.static-tier
+      # Optional: present when following the CLI workflow (copy .env.static-tier.example
+      # -> .env.static-tier). Panel deployments (EasyPanel etc.) write a plain .env
+      # instead — compose auto-reads it for ${VAR} interpolation — so a missing
+      # tier file must not fail the deploy.
+      - path: .env.static-tier
+        required: false
     ports:
       - "${FRONTEND_PORT:-80}:80"
     volumes:

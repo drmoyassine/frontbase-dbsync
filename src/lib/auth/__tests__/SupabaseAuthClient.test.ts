@@ -138,11 +138,13 @@ describe('SupabaseAuthClient', () => {
         error: null,
       });
 
-      // Mock the master-admin probe (POST /api/auth/login) — returns a
-      // non-master user so login() falls through to Supabase.
+      // Mock the master-admin probe (POST /api/auth/login) — a tenant user
+      // gets 501 ("Supabase login is handled client-side"), so the probe is
+      // non-OK and login() falls through to Supabase.
       (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ user: { is_master: false } }),
+        ok: false,
+        status: 501,
+        json: async () => ({ detail: 'Supabase login is handled client-side' }),
       });
 
       // Mock tenant data fetch

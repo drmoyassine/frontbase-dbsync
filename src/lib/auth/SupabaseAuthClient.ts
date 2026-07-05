@@ -75,9 +75,13 @@ export class SupabaseAuthClient implements AuthClient {
       });
       if (res.ok) {
         const body = await res.json();
-        if (body.user?.is_master) {
+        // A 200 from /api/auth/login in Supabase mode IS the master admin —
+        // tenant users get 501 ("Supabase login is handled client-side"). The
+        // backend's UserResponse doesn't set is_master on this path (it defaults
+        // false), so we can't gate on body.user.is_master; mark it explicitly.
+        if (body.user) {
           this.sessionCache = {
-            user: body.user,
+            user: { ...body.user, is_master: true, role: body.user.role || 'master' },
             tenant: body.tenant || null,
             token: null, // cookie session, no JWT
             isAuthenticated: true,

@@ -67,9 +67,20 @@ Custom Domains** → add `app.yourdomain.com`.
 
 ## 5. Verify
 
+The backend health route is `/health` (NOT under `/api`). The `/api/*` prefix
+is the SPA's application routes, proxied to the backend.
+
 ```bash
-curl https://api.yourdomain.com/api/health     # gateway direct (TLS)
-curl https://app.yourdomain.com/api/health     # via Worker proxy — same JSON
+# Gateway direct (TLS): backend liveness
+curl https://api.yourdomain.com/health          # → {"status":"healthy",...}
+
+# Proxied /api route reaching the backend (401 = correct when unauthenticated,
+# and proves the /api/* → backend path works end to end):
+curl https://api.yourdomain.com/api/auth/me      # → {"detail":"Not authenticated"}
+
+# Same two through the Worker (once deployed):
+curl https://app.yourdomain.com/health
+curl https://app.yourdomain.com/api/auth/me
 ```
 
 Open `https://app.yourdomain.com` → it redirects to `/admin/` → sign up →

@@ -1,0 +1,3 @@
+# wrangler dev/build scratch — never commit
+.wrangler/
+node_modules/

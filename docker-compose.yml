@@ -33,6 +33,11 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ENVIRONMENT=${ENVIRONMENT:-production}
+      # System key for backend->edge management traffic (x-system-key). The
+      # backend injects this into the Local Edge engine's config; the edge
+      # container gets the SAME value below. Shared internal default —
+      # override via FRONTBASE_SYSTEM_KEY to harden (both sides pick it up).
+      - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
     volumes:
       - backend_data:/app/data
     networks:
@@ -81,8 +86,11 @@ services:
       - BACKEND_URL=${EDGE_BACKEND_URL:-http://backend:8000}
       # Webhook API keys (comma-separated)
       - API_KEYS=${API_KEYS:-}
-      # System key for local backend-to-edge management traffic
-      - FRONTBASE_API_KEYS={"systemKey":"fb_sys_local_dev_key"}
+      # System key for local backend-to-edge management traffic (x-system-key
+      # auth + local-vault encryption). MUST match the backend's
+      # FRONTBASE_SYSTEM_KEY above — both interpolate from the same var.
+      - FRONTBASE_API_KEYS={"systemKey":"${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}"}
+      - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
       # Public URL for preview links (set PRIMARY_DOMAIN or leave empty for auto-detect)
       - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
     volumes:

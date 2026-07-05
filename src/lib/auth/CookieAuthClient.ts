@@ -56,27 +56,46 @@ export class CookieAuthClient implements AuthClient {
   // ---------------------------------------------------------
 
   async login(credentials: LoginCredentials): Promise<AuthResult> {
+    // Fetch directly — MUST NOT delegate to useAuthStore.login(): the store's
+    // login() itself constructs an auth client and calls client.login(), so
+    // delegating from here recurses infinitely (Maximum call stack size
+    // exceeded, surfaced to the user as "Network error during login").
     try {
-      const result = await useAuthStore.getState().login(
-        credentials.email,
-        credentials.password,
-        credentials.website,
-        credentials.turnstileToken
-      );
+      const response = await fetch(`${this.config.apiBaseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: credentials.email,
+          password: credentials.password,
+          website: credentials.website,
+          turnstile_token: credentials.turnstileToken,
+        }),
+      });
 
-      if (result.success) {
-        const session = await this.getSession();
-        this.notifyStateChange(session);
-        return {
-          success: true,
-          user: session.user,
-          tenant: session.tenant,
-        };
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({} as any));
+        const detail = typeof data.detail === 'string' ? data.detail : 'Login failed';
+        return { success: false, error: detail };
       }
 
+      const data = await response.json();
+
+      // Sync the global Zustand store (the UI's source of truth).
+      useAuthStore.setState({
+        user: data.user || null,
+        tenant: data.tenant || null,
+        token: null,
+        isAuthenticated: true,
+        error: null,
+      });
+
+      const session = await this.getSession();
+      this.notifyStateChange(session);
       return {
-        success: false,
-        error: result.error || 'Login failed',
+        success: true,
+        user: session.user,
+        tenant: session.tenant,
       };
     } catch (error) {
       throw new AuthError(
@@ -120,16 +139,27 @@ export class CookieAuthClient implements AuthClient {
   }
 
   async logout(): Promise<void> {
+    // Fetch directly — MUST NOT delegate to useAuthStore.logout(): the store's
+    // logout() constructs an auth client and calls client.logout(), so
+    // delegating from here recurses infinitely (same cycle as login()).
     try {
-      await useAuthStore.getState().logout();
-      this.notifyStateChange({
+      await fetch(`${this.config.apiBaseUrl}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // Logout should never fail — clear local state regardless
+    } finally {
+      useAuthStore.setState({
         user: null,
         tenant: null,
         token: null,
         isAuthenticated: false,
+        error: null,
+        isImpersonating: false,
+        _realUser: null,
+        _realTenant: null,
       });
-    } catch (error) {
-      // Logout should never fail - clear local state regardless
       this.notifyStateChange({
         user: null,
         tenant: null,

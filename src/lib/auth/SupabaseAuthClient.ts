@@ -117,7 +117,17 @@ export class SupabaseAuthClient implements AuthClient {
       }
 
       // Get tenant claims from backend
-      const tenantData = await this.getTenantData(data.user.id);
+      let tenantData = await this.getTenantData(data.user.id);
+
+      // Deferred provisioning: if the user confirmed their email and is logging
+      // in for the first time, they have an auth account but no tenant yet
+      // (signup stashed workspace_name + slug in user_metadata). Provision now.
+      if (!tenantData?.tenant_id) {
+        tenantData = await this.provisionTenantFromMetadata(
+          data.user,
+          data.session.access_token,
+        );
+      }
 
       // Update session cache
       this.sessionCache = {
@@ -186,10 +196,29 @@ export class SupabaseAuthClient implements AuthClient {
         };
       }
 
-      if (!data.user || !data.session) {
+      if (!data.user) {
         return {
           success: false,
-          error: 'Invalid response from Supabase',
+          error: 'Signup failed — no user returned by Supabase',
+        };
+      }
+
+      // Email confirmation enabled: the auth user is created (visible in the
+      // Supabase users table) but no session is returned until they confirm via
+      // the email link. workspace_name + slug are already stashed in the user's
+      // metadata (above), so tenant provisioning is deferred to first login
+      // (see login() -> provisionTenantFromMetadata). Surface a success flag so
+      // the UI can show "check your email" instead of an error.
+      if (!data.session) {
+        return {
+          success: true,
+          requiresVerification: true,
+          user: {
+            id: data.user.id,
+            email: data.user.email || credentials.email,
+            created_at: data.user.created_at,
+            updated_at: data.user.updated_at,
+          },
         };
       }
 
@@ -1195,6 +1224,51 @@ export class SupabaseAuthClient implements AuthClient {
       if (this.config.debug) {
         console.error('[SupabaseAuthClient] Get tenant data error:', error);
       }
+      return null;
+    }
+  }
+
+  /**
+   * Provision a tenant for an auth user who has no tenant yet, using the
+   * workspace_name + slug stashed in their Supabase user_metadata at signup.
+   * Called on first login (after email confirmation) — the backend's
+   * /api/auth/signup is idempotent, so this is safe to retry.
+   */
+  private async provisionTenantFromMetadata(
+    user: { id: string; email?: string; user_metadata?: Record<string, any> },
+    accessToken: string,
+  ): Promise<{ tenant_id?: string; tenant_slug?: string; role?: string; tenant?: AuthTenant } | null> {
+    const meta = user.user_metadata || {};
+    try {
+      const response = await fetch(`${this.config.apiBaseUrl}/api/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          user_id: user.id,
+          email: user.email || '',
+          workspace_name: meta.workspace_name || meta.slug || 'My Workspace',
+          slug: meta.slug || (user.email ? user.email.split('@')[0] : undefined),
+        }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({} as any));
+        console.error('[SupabaseAuthClient] Deferred tenant provisioning failed:', errBody);
+        return null;
+      }
+      const data = await response.json();
+      return {
+        tenant_id: data.user?.tenant_id || data.tenant?.id,
+        tenant_slug: data.user?.tenant_slug || data.tenant?.slug,
+        role: data.user?.role || 'owner',
+        tenant: data.tenant || undefined,
+      };
+    } catch (error) {
+      console.error('[SupabaseAuthClient] Deferred tenant provisioning error:', error);
       return null;
     }
   }

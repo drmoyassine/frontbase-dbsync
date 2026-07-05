@@ -36,6 +36,7 @@ export default function SignupPage() {
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [verificationSent, setVerificationSent] = useState(false);
 
   const { signup, isLoading, error, clearError, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -106,7 +107,14 @@ export default function SignupPage() {
       slug,
     });
     if (result.success) {
-      navigate('/dashboard', { replace: true });
+      // Email confirmation enabled: Supabase created the user but defers the
+      // session until they confirm. Show a "check your email" state instead of
+      // navigating to the dashboard (they can't log in until confirmed).
+      if (result.requiresVerification) {
+        setVerificationSent(true);
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
     }
   };
 
@@ -122,6 +130,27 @@ export default function SignupPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {verificationSent ? (
+            <div className="space-y-4">
+              <Alert className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-none">
+                <AlertDescription>
+                  We sent a confirmation link to <strong>{email}</strong>. Click the
+                  link in the email to activate your account, then{' '}
+                  <Link to="/login" className="underline font-medium">sign in</Link>.
+                </AlertDescription>
+              </Alert>
+              <p className="text-xs text-muted-foreground">
+                Didn&apos;t get the email? Check your spam folder, or{' '}
+                <button
+                  type="button"
+                  className="text-primary underline font-medium"
+                  onClick={() => setVerificationSent(false)}
+                >
+                  try again with a different address
+                </button>.
+              </p>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {formError && (
               <Alert variant="destructive">
@@ -223,6 +252,7 @@ export default function SignupPage() {
               </Link>
             </p>
           </form>
+          )}
         </CardContent>
       </Card>
     </div>

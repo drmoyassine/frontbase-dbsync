@@ -353,7 +353,7 @@ describe('SupabaseAuthClient', () => {
       expect(result.error).toContain('Workspace creation failed');
     });
 
-    it('should handle signup without session (email confirmation required)', async () => {
+    it('should fail when signUp returns no user at all', async () => {
       mockSignUp.mockResolvedValue({
         data: { user: null, session: null },
         error: null,
@@ -369,7 +369,38 @@ describe('SupabaseAuthClient', () => {
       const result: AuthResult = await client.signup(credentials);
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Invalid response from Supabase');
+      expect(result.error).toContain('no user returned');
+    });
+
+    it('should return requiresVerification when signUp returns a user but no session (email confirmation)', async () => {
+      mockSignUp.mockResolvedValue({
+        data: {
+          user: {
+            id: 'user-confirm',
+            email: 'confirm@example.com',
+            created_at: '2024-01-01',
+            updated_at: '2024-01-01',
+          },
+          session: null, // email confirmation enabled — no session until confirmed
+        },
+        error: null,
+      });
+
+      const credentials: SignupCredentials = {
+        email: 'confirm@example.com',
+        password: 'password123',
+        workspaceName: 'Confirm Workspace',
+        slug: 'confirm-tenant',
+      };
+
+      const result: AuthResult = await client.signup(credentials);
+
+      // User created (visible in Supabase users table); workspace_name + slug
+      // stashed in metadata; provisioning deferred to first login. UI shows
+      // "check your email" — NOT an error.
+      expect(result.success).toBe(true);
+      expect(result.requiresVerification).toBe(true);
+      expect(result.user?.email).toBe('confirm@example.com');
     });
   });
 

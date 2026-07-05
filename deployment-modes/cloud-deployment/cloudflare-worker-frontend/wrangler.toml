@@ -1,0 +1,26 @@
+# Cloudflare Worker — Frontbase Admin SPA + API proxy.
+# Deploy from the REPO ROOT so ./dist (the Vite build output) is in range:
+#   npx wrangler deploy -c deployment-modes/cloud-deployment/cloudflare-worker-frontend/wrangler.toml
+name = "frontbase-frontend"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+# Static assets = the Vite build output. Path is relative to this config file's
+# directory, so climb back to the repo root's dist/.
+#   - run_worker_first: the Worker intercepts EVERY request (so /api proxying,
+#     the /admin prefix strip, the / redirect, and real 404s all work). Without
+#     it, CF serves assets first and the Worker only runs on an asset 404.
+#   - not_found_handling "none": env.ASSETS.fetch returns a real 404 for a
+#     missing file, which the Worker turns into SPA fallback (for routes) or a
+#     genuine 404 (for missing hashed assets). "single-page-application" here
+#     would make EVERY miss return index.html, breaking that distinction.
+[assets]
+directory = "../../../dist"
+binding = "ASSETS"
+not_found_handling = "none"
+run_worker_first = true
+
+[vars]
+# The VPS core-tier api-gateway, behind TLS (your EasyPanel-assigned domain).
+# The SPA's same-origin /api/* calls are forwarded here.
+GATEWAY_ORIGIN = "https://api.yourdomain.com"

@@ -210,7 +210,13 @@ export function getApiKeysConfig(): ApiKeysConfig {
         // Backward compat: also check FRONTBASE_AUTH for pre-migration engines
         const legacyAuth = getAuthConfig();
         _apiKeys = {
-            systemKey: fresh.systemKey || legacyAuth.systemKey,
+            // Resolution order: FRONTBASE_API_KEYS.systemKey (control-plane JSON)
+            // → legacy FRONTBASE_AUTH.systemKey → plain FRONTBASE_SYSTEM_KEY.
+            // The plain var is what the user-facing env examples
+            // (.env.standalone / .env.edge-tier / docker-compose.edge.yml) tell
+            // operators to set — without this fallback those engines fail
+            // closed on management auth and boot with the local vault disabled.
+            systemKey: fresh.systemKey || legacyAuth.systemKey || process.env.FRONTBASE_SYSTEM_KEY || undefined,
             apiKeyHashes: fresh.apiKeyHashes || legacyAuth.apiKeyHashes,
         };
     }

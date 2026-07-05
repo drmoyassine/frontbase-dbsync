@@ -221,9 +221,10 @@ def _ensure_local_edge():
                 sys_engine.edge_vector_id = desired_vector_id  # type: ignore[assignment]
                 changed = True
                 
-            # Ensure engine_config has a system_key
-            # The local edge container expects this specific key (set in docker-compose.yml)
-            new_config = inject_system_key(str(sys_engine.engine_config) if str(sys_engine.engine_config) != "None" and str(sys_engine.engine_config) else None, force_key="fb_sys_local_dev_key")
+            # Ensure engine_config has a system_key matching the in-cluster edge.
+            # FRONTBASE_SYSTEM_KEY overrides (compose passes the same value to the
+            # edge container); default is the internal dev key both sides share.
+            new_config = inject_system_key(str(sys_engine.engine_config) if str(sys_engine.engine_config) != "None" and str(sys_engine.engine_config) else None, force_key=os.getenv("FRONTBASE_SYSTEM_KEY") or "fb_sys_local_dev_key")
             if new_config != str(sys_engine.engine_config):
                 sys_engine.engine_config = new_config  # type: ignore[assignment]
                 changed = True
@@ -243,7 +244,7 @@ def _ensure_local_edge():
                 edge_cache_id=sys_cache.id,
                 edge_queue_id=sys_queue.id,
                 edge_vector_id=sys_vector.id if sys_vector else None,
-                engine_config=inject_system_key(None, force_key="fb_sys_local_dev_key"),
+                engine_config=inject_system_key(None, force_key=os.getenv("FRONTBASE_SYSTEM_KEY") or "fb_sys_local_dev_key"),
                 is_active=True,
                 is_system=True,
                 created_at=now,

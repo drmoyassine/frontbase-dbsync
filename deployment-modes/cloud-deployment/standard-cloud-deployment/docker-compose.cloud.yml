@@ -78,6 +78,11 @@ services:
       # Where the backend reaches the core. Default = the local supertokens service;
       # override to use an external/managed core (then omit the local profile).
       - SUPERTOKENS_URI=${SUPERTOKENS_URI:-http://supertokens:3567}
+      # System key for backend->edge management traffic (x-system-key). The
+      # backend injects this into the Local Edge engine's config; the edge
+      # container gets the SAME value below. Shared internal default —
+      # override to harden (both sides pick it up on recreate).
+      - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
     volumes:
       - backend_data:/app/data
     restart: unless-stopped
@@ -134,11 +139,13 @@ services:
       - BACKEND_URL=${EDGE_BACKEND_URL:-http://backend:8000}
       # Webhook API keys (comma-separated)
       - API_KEYS=${API_KEYS:-}
-      # System key for local backend-to-edge management traffic. MUST match the
-      # backend's hardcoded system key (fastapi-backend/main.py inject_system_key
-      # force_key). This is internal plumbing for the in-cluster system edge, not
-      # a user-facing secret — user-deployed Edge nodes use FRONTBASE_SYSTEM_KEY.
-      - FRONTBASE_API_KEYS={"systemKey":"fb_sys_local_dev_key"}
+      # System key for local backend-to-edge management traffic (x-system-key
+      # auth + local-vault encryption). MUST match what the backend injects into
+      # the Local Edge engine config (fastapi-backend/main.py reads the same
+      # FRONTBASE_SYSTEM_KEY). Shared internal default = zero-config; override
+      # via FRONTBASE_SYSTEM_KEY to harden — BOTH containers pick it up.
+      - FRONTBASE_API_KEYS={"systemKey":"${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}"}
+      - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
       # Public URL for preview links (set PRIMARY_DOMAIN or leave empty for auto-detect)
       - PUBLIC_URL=${PRIMARY_DOMAIN:+https://${PRIMARY_DOMAIN}}
       # Observability — Sentry error tracking (optional; unset = off)

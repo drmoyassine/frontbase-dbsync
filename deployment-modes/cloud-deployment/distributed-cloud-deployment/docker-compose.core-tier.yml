@@ -48,6 +48,9 @@ services:
       # '-' and '=' ONLY — underscores crash the core at boot).
       - SUPERTOKENS_URI=${SUPERTOKENS_URI:-}
       - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY:-}
+      # System key injected into the Local Edge engine config — MUST match the
+      # edge service's key below (same var, same default).
+      - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
     volumes:
       - backend_data:/app/data
     restart: unless-stopped
@@ -80,6 +83,13 @@ services:
       - FRONTBASE_STATE_DB={"provider":"sqlite"}
       - PAGES_DB_URL=${PAGES_DB_URL:-file:/app/data/pages.db}
       - BACKEND_URL=http://backend:8000
+      # System key for backend->edge management traffic (x-system-key auth +
+      # local-vault encryption). The backend injects the SAME value into the
+      # Local Edge engine config. NODE_ENV=production makes the edge FAIL
+      # CLOSED on management endpoints when this is missing — it must be set.
+      # Shared internal default = zero-config; override to harden.
+      - FRONTBASE_API_KEYS={"systemKey":"${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}"}
+      - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
     volumes:
       - edge_data:/app/data
     depends_on:

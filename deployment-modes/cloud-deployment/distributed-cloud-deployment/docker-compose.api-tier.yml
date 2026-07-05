@@ -46,6 +46,11 @@ services:
       # '-' and '=' ONLY — underscores crash the core at boot).
       - SUPERTOKENS_URI=${SUPERTOKENS_URI:-}
       - SUPERTOKENS_API_KEY=${SUPERTOKENS_API_KEY:-}
+      # System key for backend->edge management traffic. MUST equal the
+      # FRONTBASE_SYSTEM_KEY set on the edge tier (Machine C, .env.edge-tier) —
+      # the backend injects it into the system engine record it seeds for
+      # EDGE_URL. A mismatch = every management call to the edge 401s.
+      - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
     volumes:
       - backend_data:/app/data
     networks:

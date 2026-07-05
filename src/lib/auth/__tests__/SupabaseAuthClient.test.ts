@@ -138,6 +138,13 @@ describe('SupabaseAuthClient', () => {
         error: null,
       });
 
+      // Mock the master-admin probe (POST /api/auth/login) — returns a
+      // non-master user so login() falls through to Supabase.
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user: { is_master: false } }),
+      });
+
       // Mock tenant data fetch
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,

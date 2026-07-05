@@ -56,6 +56,41 @@ export class SupabaseAuthClient implements AuthClient {
   async login(credentials: LoginCredentials): Promise<AuthResult> {
     await this.ensureInitialized();
 
+    // ── Master admin path (env-var, NOT a Supabase user) ────────────────
+    // The backend checks the env-var master admin FIRST in /api/auth/login and
+    // returns a cookie session. Supabase mode must try this before GoTrue,
+    // otherwise the master admin (who has no Supabase account) can never log in.
+    // A 401 here just means "not the master admin" → fall through to Supabase.
+    try {
+      const res = await fetch(`${this.config.apiBaseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          email: credentials.email,
+          password: credentials.password,
+          website: credentials.website,
+          turnstile_token: credentials.turnstileToken,
+        }),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        if (body.user?.is_master) {
+          this.sessionCache = {
+            user: body.user,
+            tenant: body.tenant || null,
+            token: null, // cookie session, no JWT
+            isAuthenticated: true,
+          };
+          this.notifyStateChange(this.sessionCache);
+          return { success: true, user: body.user, tenant: body.tenant };
+        }
+      }
+      // Non-master or non-OK → fall through to Supabase below.
+    } catch {
+      // Network error on the master-admin probe is non-fatal; try Supabase.
+    }
+
     try {
       // Authenticate with Supabase
       const { data, error } = await supabaseClient.auth.signInWithPassword({
@@ -353,6 +388,30 @@ export class SupabaseAuthClient implements AuthClient {
       }
     }
 
+    // No Supabase session — check for a master-admin cookie session (env-var
+    // admin, set by /api/auth/login). This keeps the master admin logged in
+    // across refreshes in Supabase mode.
+    try {
+      const meRes = await fetch(`${this.config.apiBaseUrl}/api/auth/me`, {
+        credentials: 'include',
+      });
+      if (meRes.ok) {
+        const body = await meRes.json();
+        if (body.user?.is_master) {
+          const session: AuthSession = {
+            user: body.user,
+            tenant: body.tenant || null,
+            token: null,
+            isAuthenticated: true,
+          };
+          this.sessionCache = session;
+          return session;
+        }
+      }
+    } catch {
+      // Ignore — no cookie session either.
+    }
+
     // Return cached session if available
     if (this.sessionCache) {
       return this.sessionCache;
@@ -438,6 +497,27 @@ export class SupabaseAuthClient implements AuthClient {
         const { data } = await supabaseClient.auth.getSession();
 
         if (!data.session) {
+          // No Supabase session — check for a master-admin cookie session
+          // before giving up (env-var admin has no Supabase account).
+          try {
+            const meRes = await fetch(`${this.config.apiBaseUrl}/api/auth/me`, {
+              credentials: 'include',
+            });
+            if (meRes.ok) {
+              const body = await meRes.json();
+              if (body.user?.is_master) {
+                this.sessionCache = {
+                  user: body.user,
+                  tenant: body.tenant || null,
+                  token: null,
+                  isAuthenticated: true,
+                };
+                return true;
+              }
+            }
+          } catch {
+            // fall through
+          }
           this.sessionCache = null;
           return false;
         }

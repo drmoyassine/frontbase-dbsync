@@ -12,8 +12,10 @@ export interface Plan {
     infra_mode: 'managed' | 'byo';
     price_display?: string | null;
     price_period?: string | null;
+    price_cents?: number;
     limits: PlanLimits;
     features: string[];
+    gateway_metadata?: Record<string, string>;
     is_public: boolean;
     is_active: boolean;
     is_default: boolean;

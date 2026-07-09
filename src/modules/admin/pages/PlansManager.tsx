@@ -16,7 +16,7 @@ const UNLIMITED = -1;
 
 const emptyDraft = (): PlanWritePayload => ({
     slug: '', name: '', description: '', infra_mode: 'byo', price_display: '', price_period: '',
-    limits: {}, features: [], is_public: false, is_active: true, is_default: false,
+    price_cents: 0, limits: {}, features: [], is_public: false, is_active: true, is_default: false,
     highlighted: false, badge: '', sort_order: 0,
 });
 
@@ -106,6 +106,7 @@ export function PlansManager() {
         setDraft({
             slug: p.slug, name: p.name, description: p.description ?? '', infra_mode: p.infra_mode,
             price_display: p.price_display ?? '', price_period: p.price_period ?? '',
+            price_cents: p.price_cents ?? 0,
             limits: { ...p.limits }, features: [...p.features], is_public: p.is_public,
             is_active: p.is_active, is_default: p.is_default, highlighted: p.highlighted,
             badge: p.badge ?? '', sort_order: p.sort_order,
@@ -209,6 +210,7 @@ function PlanCard({ plan, registry, onEdit, onDelete }: {
                 {plan.is_public ? <Pill tone="bg-blue-500/10 text-blue-500">Public</Pill> : <Pill tone="bg-slate-500/10 text-slate-400">Hidden</Pill>}
                 {!plan.is_active && <Pill tone="bg-red-500/10 text-red-500">Inactive</Pill>}
                 {plan.highlighted && <Pill tone="bg-primary-500/10 text-primary-500"><Star className="w-3 h-3" />{plan.badge || 'Featured'}</Pill>}
+                {plan.gateway_metadata?.stripe_price_id && <Pill tone="bg-emerald-500/10 text-emerald-500">Stripe synced ✓</Pill>}
                 <Pill tone="bg-slate-500/10 text-slate-400">{plan.tenant_count ?? 0} tenants</Pill>
             </div>
             <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-1">
@@ -248,6 +250,7 @@ function PlanEditor({ draft, setDraft, registry, isEdit, saving, onClose, onSave
                         <Field label="Slug"><input value={draft.slug || ''} disabled={isEdit} onChange={e => set({ slug: e.target.value })} className={`${inputCls} font-mono disabled:opacity-50`} placeholder="pro" /></Field>
                         <Field label="Price (display)"><input value={draft.price_display || ''} onChange={e => set({ price_display: e.target.value })} className={inputCls} placeholder="$29" /></Field>
                         <Field label="Period"><input value={draft.price_period || ''} onChange={e => set({ price_period: e.target.value })} className={inputCls} placeholder="/month" /></Field>
+                        <Field label="Price (cents for Stripe)"><input type="number" value={draft.price_cents ?? ''} onChange={e => set({ price_cents: e.target.value ? Number(e.target.value) : undefined })} className={inputCls} placeholder="2900" /></Field>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <Field label="Infrastructure">

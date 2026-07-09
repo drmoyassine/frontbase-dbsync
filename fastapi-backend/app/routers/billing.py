@@ -1,19 +1,19 @@
 """Billing Router — Checkout, Portal, and Webhooks for Platform Billing.
 
-Registered only in cloud mode, mounted at ``/api/billing`` and ``/api/webhooks/stripe``.
+Registered only in cloud mode, mounted at ``/api/billing`` and ``/api/webhooks/{provider}``.
 """
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+import os
 
 from app.database.utils import get_db
 from app.models.models import Tenant, Plan
 from app.middleware.tenant_context import TenantContext, require_tenant_context
-from app.services.stripe_provider import StripeProvider
+from app.services.billing_gateway import BillingGateway, get_billing_gateway
 
 router = APIRouter()
-stripe_provider = StripeProvider()
 
 # ---------------------------------------------------------------------------
 # Schemas
@@ -40,7 +40,8 @@ class PortalRequestBody(BaseModel):
 async def create_checkout(
     body: CheckoutRequestBody,
     db: Session = Depends(get_db),
-    ctx: TenantContext = Depends(require_tenant_context)
+    ctx: TenantContext = Depends(require_tenant_context),
+    gateway: BillingGateway = Depends(get_billing_gateway)
 ):
     """Generate a checkout session URL for upgrading/purchasing a plan."""
     if ctx.is_master or not ctx.tenant_id:
@@ -57,20 +58,29 @@ async def create_checkout(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
-    url = stripe_provider.create_checkout_session(
-        tenant=tenant,
-        plan=plan,
-        add_ons=body.add_ons,
-        success_url=body.success_url,
-        cancel_url=body.cancel_url
-    )
-    return {"checkout_url": url}
+    if not bool(plan.is_active):
+        raise HTTPException(status_code=400, detail="Plan is not active")
+
+    try:
+        url = gateway.create_checkout_session(
+            tenant=tenant,
+            plan=plan,
+            add_ons=body.add_ons,
+            success_url=body.success_url,
+            cancel_url=body.cancel_url
+        )
+        return {"url": url}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/portal")
 async def create_portal(
     body: PortalRequestBody,
     db: Session = Depends(get_db),
-    ctx: TenantContext = Depends(require_tenant_context)
+    ctx: TenantContext = Depends(require_tenant_context),
+    gateway: BillingGateway = Depends(get_billing_gateway)
 ):
     """Generate a customer portal session URL for managing subscriptions."""
     if ctx.is_master or not ctx.tenant_id:
@@ -83,23 +93,36 @@ async def create_portal(
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
-    url = stripe_provider.create_customer_portal_session(
-        tenant=tenant,
-        return_url=body.return_url
-    )
-    return {"portal_url": url}
+    try:
+        url = gateway.create_customer_portal_session(
+            tenant=tenant,
+            return_url=body.return_url
+        )
+        return {"url": url}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/webhooks/stripe")
-async def stripe_webhook(
+@router.post("/webhooks/{provider}")
+async def handle_webhook(
+    provider: str,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    gateway: BillingGateway = Depends(get_billing_gateway)
 ):
-    """Receive and process Stripe webhooks."""
-    payload = await request.body()
-    signature = request.headers.get("Stripe-Signature")
+    """Handle incoming webhooks from billing providers."""
+    configured_provider = os.getenv("BILLING_PROVIDER", "stripe").lower()
     
-    if not signature:
-        raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
+    if provider.lower() != configured_provider:
+        # Acknowledge but ignore webhooks for non-active providers
+        return {"status": "ignored"}
 
-    stripe_provider.handle_webhook(db, payload, signature)
-    return {"success": True}
+    payload = await request.body()
+    signature = request.headers.get("stripe-signature") if provider.lower() == "stripe" else request.headers.get(f"{provider.lower()}-signature")
+
+    if not signature:
+        raise HTTPException(status_code=400, detail="Missing signature")
+
+    gateway.handle_webhook(db, payload, signature)
+    return {"status": "success"}

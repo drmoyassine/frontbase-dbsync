@@ -251,6 +251,12 @@ def serialize_plan(plan: Plan) -> dict[str, Any]:
         features = json.loads(str(plan.features)) if plan.features is not None else []
     except (json.JSONDecodeError, TypeError):
         features = []
+        
+    try:
+        gateway_metadata = json.loads(str(plan.gateway_metadata)) if plan.gateway_metadata is not None else {}
+    except (json.JSONDecodeError, TypeError):
+        gateway_metadata = {}
+        
     return {
         "id": str(plan.id),
         "slug": str(plan.slug),
@@ -259,8 +265,10 @@ def serialize_plan(plan: Plan) -> dict[str, Any]:
         "infra_mode": str(plan.infra_mode) if plan.infra_mode is not None else "byo",
         "price_display": plan.price_display,
         "price_period": plan.price_period,
+        "price_cents": int(plan.price_cents) if plan.price_cents is not None else 0,
         "limits": plan_limits(plan),
         "features": features,
+        "gateway_metadata": gateway_metadata,
         "is_public": bool(plan.is_public),
         "is_active": bool(plan.is_active),
         "is_default": bool(plan.is_default),
@@ -270,7 +278,6 @@ def serialize_plan(plan: Plan) -> dict[str, Any]:
         "created_at": str(plan.created_at),
         "updated_at": str(plan.updated_at),
     }
-
 
 def plan_to_pricing_card(plan: Plan) -> dict[str, Any]:
     """Map a plan into the ``PricingPlan`` shape the SSR ``Pricing`` component expects.

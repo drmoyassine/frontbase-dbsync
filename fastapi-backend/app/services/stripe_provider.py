@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.models.models import Tenant, Plan, TenantAddon
 from app.services.billing_gateway import BillingGateway
-from app.services.plan_limits import apply_plan
+from app.services.plan_limits import apply_plan, MANAGED_ADDON_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,83 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 class StripeProvider(BillingGateway):
+    def __init__(self):
+        self._addon_price_cache: dict[str, str] = {}
+
+    def sync_plan(self, plan: Plan, price_cents: int) -> dict:
+        if not stripe.api_key:
+            return {}
+        
+        try:
+            gateway_data = json.loads(str(plan.gateway_metadata)) if plan.gateway_metadata is not None else {}
+        except Exception:
+            gateway_data = {}
+
+        stripe_product_id = gateway_data.get("stripe_product_id")
+        stripe_price_id = gateway_data.get("stripe_price_id")
+
+        try:
+            if not stripe_product_id:
+                product = stripe.Product.create(name=plan.name, metadata={"frontbase_slug": plan.slug})
+                stripe_product_id = product.id
+
+            if not stripe_price_id:
+                price = stripe.Price.create(
+                    product=stripe_product_id,
+                    unit_amount=price_cents,
+                    currency="usd",
+                    recurring={"interval": "month"}
+                )
+                stripe_price_id = price.id
+            else:
+                # Retrieve the existing price to see if the amount changed. If so, we must create a new one.
+                existing_price = stripe.Price.retrieve(stripe_price_id)
+                if existing_price.unit_amount != price_cents:
+                    # Archive old price
+                    stripe.Price.modify(stripe_price_id, active=False)
+                    # Create new price
+                    price = stripe.Price.create(
+                        product=stripe_product_id,
+                        unit_amount=price_cents,
+                        currency="usd",
+                        recurring={"interval": "month"}
+                    )
+                    stripe_price_id = price.id
+
+            return {"stripe_product_id": stripe_product_id, "stripe_price_id": stripe_price_id}
+        except Exception as e:
+            logger.error(f"Failed to sync plan {plan.slug} to Stripe: {e}")
+            raise HTTPException(status_code=502, detail=f"Failed to sync with Stripe: {e}")
+
+    def sync_addon(self, addon_type: str, display_name: str, price_cents: int) -> str:
+        if not stripe.api_key:
+            return ""
+            
+        if addon_type in self._addon_price_cache:
+            return self._addon_price_cache[addon_type]
+
+        try:
+            prices = stripe.Price.list(lookup_keys=[addon_type], limit=1)
+            if prices.data:
+                self._addon_price_cache[addon_type] = prices.data[0].id
+                return prices.data[0].id
+
+            # Create product and price
+            product = stripe.Product.create(name=display_name)
+            price = stripe.Price.create(
+                product=product.id,
+                unit_amount=price_cents,
+                currency="usd",
+                recurring={"interval": "month"},
+                lookup_key=addon_type,
+                transfer_lookup_key=True
+            )
+            self._addon_price_cache[addon_type] = price.id
+            return price.id
+        except Exception as e:
+            logger.error(f"Failed to sync addon {addon_type} to Stripe: {e}")
+            return ""
+
     def create_checkout_session(
         self,
         tenant: Tenant,
@@ -50,21 +127,31 @@ class StripeProvider(BillingGateway):
 
         # Append add-ons to line items if any
         if add_ons:
+            # Default fallback prices if created dynamically (in cents)
+            ADDON_DEFAULT_PRICES = {
+                "managed_edge_db": 500,
+                "managed_cache": 200,
+                "managed_queue": 200,
+                "managed_domain": 100
+            }
+            
             for addon in add_ons:
                 # addon can be a Pydantic model or dict
                 addon_type = getattr(addon, "addon_type", None) or (addon.get("addon_type") if isinstance(addon, dict) else None)
                 quantity = getattr(addon, "quantity", 1) if not isinstance(addon, dict) else addon.get("quantity", 1)
                 
-                if not addon_type:
+                if not addon_type or addon_type not in MANAGED_ADDON_TYPES:
                     continue
 
-                env_key = f"STRIPE_PRICE_{addon_type.upper()}"
-                addon_price_id = os.getenv(env_key)
+                display_name = addon_type.replace("_", " ").title()
+                price_cents = ADDON_DEFAULT_PRICES.get(addon_type, 500)
+                
+                addon_price_id = self.sync_addon(addon_type, display_name, price_cents)
                 
                 if addon_price_id:
                     line_items.append({"price": addon_price_id, "quantity": quantity})
                 else:
-                    logger.warning(f"No Stripe price ID found in environment for addon: {addon_type}")
+                    logger.warning(f"Could not resolve Stripe price ID for addon: {addon_type}")
 
         # Try to find existing Stripe Customer ID in tenant settings
         customer_id = None

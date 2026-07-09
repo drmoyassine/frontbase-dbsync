@@ -22,6 +22,7 @@ from app.services.plan_limits import (
     serialize_plan,
     validate_limits,
 )
+from app.services.billing_gateway import BillingGateway, get_billing_gateway
 
 router = APIRouter()
 
@@ -41,6 +42,7 @@ class PlanWriteRequest(BaseModel):
     infra_mode: Optional[str] = None  # managed | byo
     price_display: Optional[str] = None
     price_period: Optional[str] = None
+    price_cents: Optional[int] = None
     limits: Optional[dict] = None
     features: Optional[List[str]] = None
     is_public: Optional[bool] = None
@@ -86,6 +88,7 @@ async def create_plan(
     body: PlanWriteRequest,
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ):
     import json
     slug = (body.slug or "").lower().strip()
@@ -115,10 +118,16 @@ async def create_plan(
         highlighted=bool(body.highlighted),
         badge=body.badge,
         sort_order=body.sort_order or 0,
+        price_cents=body.price_cents or 0,
         created_at=now,
         updated_at=now,
     )
     db.add(plan)
+    if body.price_cents is not None and body.price_cents > 0:
+        gateway_data = gateway.sync_plan(plan, body.price_cents)
+        if gateway_data:
+            plan.gateway_metadata = json.dumps(gateway_data) # type: ignore[assignment]
+            
     db.commit()
     return {"plan": serialize_plan(plan)}
 
@@ -129,6 +138,7 @@ async def update_plan(
     body: PlanWriteRequest,
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
+    gateway: BillingGateway = Depends(get_billing_gateway),
 ):
     import json
     plan = db.query(Plan).filter(Plan.id == plan_id).first()
@@ -162,6 +172,13 @@ async def update_plan(
     if body.is_default:
         db.query(Plan).filter(Plan.id != plan_id).update({Plan.is_default: False})
         plan.is_default = True  # type: ignore[assignment]
+        
+    if body.price_cents is not None:
+        plan.price_cents = body.price_cents  # type: ignore[assignment]
+        if body.price_cents > 0:
+            gateway_data = gateway.sync_plan(plan, body.price_cents)
+            if gateway_data:
+                plan.gateway_metadata = json.dumps(gateway_data)  # type: ignore[assignment]
 
     plan.updated_at = _now()  # type: ignore[assignment]
     db.commit()
@@ -191,7 +208,28 @@ async def delete_plan(
     return {"success": True, "message": f"Plan '{plan.slug}' deactivated"}
 
 
-
+@router.post("/billing/sync-addons")
+async def sync_billing_addons(
+    _admin: dict = Depends(require_master_admin),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+):
+    """Force synchronization of all managed add-ons to the billing gateway."""
+    ADDON_DEFAULT_PRICES = {
+        "managed_edge_db": 500,
+        "managed_cache": 200,
+        "managed_queue": 200,
+        "managed_domain": 100
+    }
+    
+    synced = []
+    for addon_type in MANAGED_ADDON_TYPES:
+        display_name = addon_type.replace("_", " ").title()
+        price_cents = ADDON_DEFAULT_PRICES.get(addon_type, 500)
+        price_id = gateway.sync_addon(addon_type, display_name, price_cents)
+        if price_id:
+            synced.append(addon_type)
+            
+    return {"success": True, "synced_addons": synced}
 
 
 # ---------------------------------------------------------------------------

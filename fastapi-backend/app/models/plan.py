@@ -26,9 +26,12 @@ class Plan(Base):
     # costs the tenant, so runtime is not metered.
     infra_mode = Column(String(20), default='byo')            # managed | byo
 
-    # Display-only pricing (no billing engine yet)
+    # Display-only pricing
     price_display = Column(String(50), nullable=True)         # "$29", "Custom", "Free"
     price_period = Column(String(50), nullable=True)          # "/month"
+    
+    # Machine-readable price (in cents) for billing gateway sync
+    price_cents = Column(Integer, default=0)
 
     # Limits map (JSON): { "executions_monthly": 1000, "private_pages": false, ... }
     limits = Column(Text, nullable=True)

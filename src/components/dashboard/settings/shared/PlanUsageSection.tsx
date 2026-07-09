@@ -1,9 +1,6 @@
 /**
- * PlanUsageSection — tenant-facing plan / subscription / limits view.
- *
- * Shows the current plan, limits vs live usage, and lets owners/admins request
- * an upgrade or downgrade (no payment gateway — master admin approves the
- * request). Cloud-only; the parent gates rendering with isCloud().
+ * Renders the tenant's current plan usage, limits, and an upgrade/downgrade UI.
+ * Integrates with Stripe Checkout for paid plans or automatically provisions free/default plans.
  */
 
 import React, { useState } from 'react';

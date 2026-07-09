@@ -1,4 +1,4 @@
-import { api } from './api';
+import api from './api-service';
 
 export const billingApi = {
     createCheckoutSession: async (plan_slug: string, add_ons?: Array<{ addon_type: string, quantity: number }>): Promise<{ url: string }> => {

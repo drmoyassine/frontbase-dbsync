@@ -4,9 +4,13 @@ Registered only in cloud mode, mounted at ``/api/admin``.  All endpoints require
 master admin (reuses ``require_master_admin`` from ``tenant_admin``).
 """
 
+import os
 import uuid
+import logging
 from datetime import datetime, timezone
 from typing import Optional, List
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -123,8 +127,11 @@ async def create_plan(
         updated_at=now,
     )
     db.add(plan)
+    logger.info("[billing-diag] CREATE plan=%s price_cents=%s stripe_key_set=%s",
+                slug, body.price_cents, bool(os.getenv("STRIPE_SECRET_KEY")))
     if body.price_cents is not None and body.price_cents > 0:
         gateway_data = gateway.sync_plan(plan, body.price_cents)
+        logger.info("[billing-diag] sync_plan returned: %s", gateway_data)
         if gateway_data:
             plan.gateway_metadata = json.dumps(gateway_data) # type: ignore[assignment]
             
@@ -173,10 +180,13 @@ async def update_plan(
         db.query(Plan).filter(Plan.id != plan_id).update({Plan.is_default: False})
         plan.is_default = True  # type: ignore[assignment]
         
+    logger.info("[billing-diag] UPDATE plan=%s price_cents=%s stripe_key_set=%s",
+                plan.slug, body.price_cents, bool(os.getenv("STRIPE_SECRET_KEY")))
     if body.price_cents is not None:
         plan.price_cents = body.price_cents  # type: ignore[assignment]
         if body.price_cents > 0:
             gateway_data = gateway.sync_plan(plan, body.price_cents)
+            logger.info("[billing-diag] sync_plan returned: %s", gateway_data)
             if gateway_data:
                 plan.gateway_metadata = json.dumps(gateway_data)  # type: ignore[assignment]
 

@@ -4,6 +4,9 @@ import { RendererProps } from '../types';
 import { useQuery } from '@tanstack/react-query';
 import { STALE } from '@/lib/queryCache';
 import { tenantPlanApi, PublicPricingPlan } from '@/services/tenantPlanApi';
+import { billingApi } from '@/services/billingApi';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
 
 export const PricingRenderer: React.FC<RendererProps> = ({
     effectiveProps,
@@ -21,6 +24,27 @@ export const PricingRenderer: React.FC<RendererProps> = ({
         hideOnMobile = false,
         hideOnDesktop = false
     } = effectiveProps;
+
+    const [subscribingTo, setSubscribingTo] = React.useState<string | null>(null);
+
+    const handleSubscribe = async (e: React.MouseEvent, plan: PublicPricingPlan) => {
+        if (!isFrontbasePlans || !plan.slug) return;
+        e.preventDefault();
+        
+        setSubscribingTo(plan.slug);
+        try {
+            const { url } = await billingApi.createCheckoutSession(plan.slug);
+            window.location.href = url;
+        } catch (err: any) {
+            if (err.response?.status === 401) {
+                sessionStorage.setItem('pending_checkout_plan', plan.slug);
+                window.location.href = '/auth/signup';
+            } else {
+                toast.error(err.response?.data?.detail || 'Checkout failed');
+                setSubscribingTo(null);
+            }
+        }
+    };
 
     // Fetch Frontbase plans if source is frontbase_plans
     const isFrontbasePlans = source === 'frontbase_plans';
@@ -135,14 +159,16 @@ export const PricingRenderer: React.FC<RendererProps> = ({
                                     </ul>
                                     <a
                                         href={plan.ctaLink || '#'}
-                                        onClick={(e) => e.preventDefault()}
+                                        onClick={(e) => isFrontbasePlans ? handleSubscribe(e, plan) : e.preventDefault()}
                                         className={cn(
-                                            "inline-flex items-center justify-center w-full px-6 py-3 rounded-lg font-medium transition-colors cursor-default",
+                                            "inline-flex items-center justify-center w-full px-6 py-3 rounded-lg font-medium transition-colors",
+                                            isFrontbasePlans ? 'cursor-pointer' : 'cursor-default',
                                             plan.highlighted
                                                 ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                                                 : 'border border-input bg-background hover:bg-accent hover:text-accent-foreground'
                                         )}
                                     >
+                                        {subscribingTo === plan.slug && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                                         {createEditableText && !isFrontbasePlans
                                             ? createEditableText(plan.ctaText || 'Get Started', `plans.${index}.ctaText`, '')
                                             : (plan.ctaText || 'Get Started')}

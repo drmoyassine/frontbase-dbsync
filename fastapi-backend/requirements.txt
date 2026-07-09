@@ -84,3 +84,4 @@ pytest-asyncio>=0.24
 sentry-sdk[fastapi]>=2.0.0
 supabase>=2.3.4
 PyJWT>=2.8.0
+stripe>=8.0.0

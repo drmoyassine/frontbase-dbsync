@@ -5,7 +5,7 @@ import {
     ArrowUpCircle, ArrowDownCircle, RefreshCw, Bot, Cpu, Zap,
 } from 'lucide-react';
 import {
-    adminPlansApi, Plan, LimitDef, PlanWritePayload, PlanChangeRequestAdmin,
+    adminPlansApi, Plan, LimitDef, PlanWritePayload,
 } from '@/services/adminPlansApi';
 import { adminAgentsApi, AgentProvider, AgentGlobalConfig } from '@/services/adminAgentsApi';
 import { WorkspaceProfileEditor } from '@/modules/admin/components/WorkspaceProfileEditor';
@@ -29,7 +29,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export function PlansManager() {
     const queryClient = useQueryClient();
-    const [tab, setTab] = useState<'plans' | 'requests' | 'llm'>('plans');
+    const [tab, setTab] = useState<'plans' | 'llm'>('plans');
     const [isEditorOpen, setEditorOpen] = useState(false);
     const [editing, setEditing] = useState<Plan | null>(null);
     const [draft, setDraft] = useState<PlanWritePayload>(emptyDraft());
@@ -38,34 +38,37 @@ export function PlansManager() {
         queryKey: ['admin-plans'],
         queryFn: () => adminPlansApi.listPlans(),
         staleTime: STALE.DEFAULT,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
     const { data: registryData } = useQuery({
         queryKey: ['admin-plan-limit-registry'],
         queryFn: () => adminPlansApi.getLimitRegistry(),
         staleTime: STALE.IMMUTABLE,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
-    const { data: requestsData, isLoading: requestsLoading } = useQuery({
-        queryKey: ['admin-plan-requests'],
-        queryFn: () => adminPlansApi.listRequests('pending'),
-        enabled: tab === 'requests',
-        staleTime: 15_000, // custom TTL (not a STALE tier)
-    });
+
     const { data: llmConfigData, isLoading: llmLoading } = useQuery({
         queryKey: ['admin-llm-config'],
         queryFn: () => adminAgentsApi.getConfig(),
         enabled: tab === 'llm',
         staleTime: STALE.DEFAULT,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
     const { data: providersData } = useQuery({
         queryKey: ['admin-llm-providers'],
         queryFn: () => adminAgentsApi.listProviders(),
         enabled: tab === 'llm',
         staleTime: STALE.STANDARD,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 
     const plans = plansData?.plans ?? [];
     const registry = registryData?.limits ?? [];
-    const requests = requestsData?.requests ?? [];
+
 
     const invalidatePlans = () => queryClient.invalidateQueries({ queryKey: ['admin-plans'] });
 
@@ -85,16 +88,7 @@ export function PlansManager() {
         onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to delete plan'),
     });
 
-    const reviewMutation = useMutation({
-        mutationFn: ({ id, action, note }: { id: string; action: 'approve' | 'reject'; note?: string }) =>
-            action === 'approve' ? adminPlansApi.approveRequest(id, note) : adminPlansApi.rejectRequest(id, note),
-        onSuccess: (_d, v) => {
-            toast.success(v.action === 'approve' ? 'Request approved' : 'Request rejected');
-            queryClient.invalidateQueries({ queryKey: ['admin-plan-requests'] });
-            queryClient.invalidateQueries({ queryKey: ['admin-tenants'] });
-        },
-        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to review request'),
-    });
+
 
     const setDefaultProviderMutation = useMutation({
         mutationFn: (providerId: string) => adminAgentsApi.setDefaultProvider(providerId),
@@ -138,15 +132,12 @@ export function PlansManager() {
 
             {/* Tabs */}
             <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
-                {([['plans', 'Plans', Layers], ['llm', 'Workspace Agent LLM', Bot], ['requests', 'Change Requests', Inbox]] as const).map(([key, label, Icon]) => (
+                {([['plans', 'Plans', Layers], ['llm', 'Workspace Agent LLM', Bot]] as const).map(([key, label, Icon]) => (
                     <button key={key} onClick={() => setTab(key)}
                         className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                             tab === key ? 'border-primary-500 text-primary-600 dark:text-primary-400'
                                 : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
                         <Icon className="w-4 h-4" />{label}
-                        {key === 'requests' && requests.length > 0 && (
-                            <span className="ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/15 text-amber-500">{requests.length}</span>
-                        )}
                     </button>
                 ))}
             </div>
@@ -166,14 +157,10 @@ export function PlansManager() {
                         {plans.length === 0 && <p className="text-slate-500 text-sm">No plans yet. Create one to get started.</p>}
                     </div>
                 )
-            ) : tab === 'llm' ? (
+            ) : (
                 <div className="space-y-8">
                     <WorkspaceProfileEditor providers={providersData?.providers ?? []} />
                 </div>
-            ) : (
-                <RequestsQueue requests={requests} loading={requestsLoading}
-                    onReview={(id, action, note) => reviewMutation.mutate({ id, action, note })}
-                    onRefresh={() => queryClient.invalidateQueries({ queryKey: ['admin-plan-requests'] })} />
             )}
 
             {isEditorOpen && (
@@ -342,48 +329,6 @@ function LimitIntInput({ value, unit, onChange }: { value: number; unit: string 
     );
 }
 
-function RequestsQueue({ requests, loading, onReview, onRefresh }: {
-    requests: PlanChangeRequestAdmin[]; loading: boolean;
-    onReview: (id: string, action: 'approve' | 'reject', note?: string) => void; onRefresh: () => void;
-}) {
-    if (loading) return <Centered><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></Centered>;
-    if (requests.length === 0) {
-        return (
-            <div className="p-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-850 text-center space-y-3">
-                <Inbox className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
-                <h3 className="text-lg font-bold">No pending requests</h3>
-                <button onClick={onRefresh} className="text-sm text-primary-500 inline-flex items-center gap-1.5"><RefreshCw className="w-4 h-4" />Refresh</button>
-            </div>
-        );
-    }
-    return (
-        <div className="space-y-3">
-            {requests.map(r => (
-                <div key={r.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        {r.direction === 'upgrade'
-                            ? <ArrowUpCircle className="w-8 h-8 text-emerald-500 shrink-0" />
-                            : <ArrowDownCircle className="w-8 h-8 text-amber-500 shrink-0" />}
-                        <div>
-                            <p className="font-semibold text-slate-900 dark:text-white">{r.tenant_name || r.tenant_id}</p>
-                            <p className="text-sm text-slate-500">
-                                <span className="font-mono">{r.from_plan}</span> → <span className="font-mono font-semibold">{r.to_plan}</span>
-                                <span className="ml-2 text-xs uppercase">{r.direction}</span>
-                            </p>
-                            {r.note && <p className="text-xs text-slate-400 mt-1 italic">“{r.note}”</p>}
-                        </div>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                        <button onClick={() => onReview(r.id, 'reject', prompt('Reason (optional):') || undefined)}
-                            className="px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-500/10 rounded-lg">Reject</button>
-                        <button onClick={() => onReview(r.id, 'approve')}
-                            className="px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1.5"><Check className="w-4 h-4" />Approve</button>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-}
 
 const inputCls = 'w-full text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all';
 

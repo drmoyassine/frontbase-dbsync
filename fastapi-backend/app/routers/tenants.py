@@ -15,7 +15,7 @@ from datetime import datetime, timezone, timedelta, UTC
 
 from app.database.config import SessionLocal
 from app.models.models import (
-    Tenant, Plan, PlanChangeRequest, Project, Page, AutomationDraft, TenantMember, TenantInvite,
+    Tenant, Plan, Project, Page, AutomationDraft, TenantMember, TenantInvite,
 )
 from app.middleware.tenant_context import TenantContext, require_tenant_context
 from app.services.plan_limits import get_plan, plan_limits, serialize_plan, check_quota, UNLIMITED
@@ -32,9 +32,7 @@ class TenantUpdateRequest(BaseModel):
     settings: Optional[dict] = None
 
 
-class PlanChangeRequestBody(BaseModel):
-    to_plan: str
-    note: Optional[str] = None
+
 
 
 class InviteCreateBody(BaseModel):
@@ -163,18 +161,7 @@ def _tenant_usage(db, tenant_id: str) -> dict:
     }
 
 
-def _serialize_my_request(r: PlanChangeRequest) -> dict:
-    return {
-        "id": str(r.id),
-        "from_plan": str(r.from_plan),
-        "to_plan": str(r.to_plan),
-        "direction": str(r.direction),
-        "status": str(r.status),
-        "note": r.note,
-        "admin_note": r.admin_note,
-        "created_at": str(r.created_at),
-        "reviewed_at": str(r.reviewed_at) if r.reviewed_at is not None else None,
-    }
+
 
 
 @router.get("/me/plan")
@@ -190,19 +177,10 @@ async def get_my_plan(ctx: TenantContext = Depends(require_tenant_context)):
             raise HTTPException(status_code=404, detail="Tenant not found")
 
         plan = get_plan(db, str(tenant.plan) if tenant.plan is not None else None)
-        pending = (
-            db.query(PlanChangeRequest)
-            .filter(
-                PlanChangeRequest.tenant_id == ctx.tenant_id,
-                PlanChangeRequest.status == "pending",
-            )
-            .first()
-        )
         return {
             "plan": serialize_plan(plan) if plan else None,
             "limits": plan_limits(plan),
             "usage": _tenant_usage(db, str(ctx.tenant_id)),
-            "pending_request": _serialize_my_request(pending) if pending else None,
         }
     finally:
         db.close()
@@ -221,97 +199,7 @@ async def get_my_addons(ctx: TenantContext = Depends(require_tenant_context)):
         db.close()
 
 
-@router.post("/me/plan-request", status_code=201)
-async def request_plan_change(
-    body: PlanChangeRequestBody,
-    ctx: TenantContext = Depends(require_tenant_context),
-):
-    """Submit an upgrade/downgrade request (master admin reviews it)."""
-    if ctx.is_master or not ctx.tenant_id:
-        raise HTTPException(status_code=404, detail="No tenant associated with this user")
-    if ctx.role not in ("owner", "admin"):
-        raise HTTPException(status_code=403, detail="Only owners/admins can request a plan change")
 
-    db = SessionLocal()
-    try:
-        tenant = db.query(Tenant).filter(Tenant.id == ctx.tenant_id).first()
-        if not tenant:
-            raise HTTPException(status_code=404, detail="Tenant not found")
-
-        current_slug = str(tenant.plan) if tenant.plan is not None else None
-        if body.to_plan == current_slug:
-            raise HTTPException(status_code=400, detail="Already on this plan")
-
-        target = db.query(Plan).filter(
-            Plan.slug == body.to_plan,
-            Plan.is_public == True,  # noqa: E712
-            Plan.is_active == True,  # noqa: E712
-        ).first()
-        if not target:
-            raise HTTPException(status_code=404, detail="Plan not available")
-
-        existing = (
-            db.query(PlanChangeRequest)
-            .filter(
-                PlanChangeRequest.tenant_id == ctx.tenant_id,
-                PlanChangeRequest.status == "pending",
-            )
-            .first()
-        )
-        if existing:
-            raise HTTPException(status_code=409, detail="You already have a pending plan request")
-
-        current = get_plan(db, current_slug)
-        cur_order = (int(current.sort_order) if current is not None and current.sort_order is not None else 0)  # type: ignore[arg-type]
-        tgt_order = int(target.sort_order) if target.sort_order is not None else 0  # type: ignore[arg-type]
-        direction = "upgrade" if tgt_order >= cur_order else "downgrade"
-
-        req = PlanChangeRequest(
-            id=str(uuid.uuid4()),
-            tenant_id=str(ctx.tenant_id),
-            from_plan=current_slug or "",
-            to_plan=body.to_plan,
-            direction=direction,
-            status="pending",
-            note=body.note,
-            requested_by=ctx.user_id,
-            created_at=datetime.now(timezone.utc).isoformat(),
-        )
-        db.add(req)
-        db.commit()
-        return {"success": True, "request": _serialize_my_request(req)}
-    finally:
-        db.close()
-
-
-@router.delete("/me/plan-request/{request_id}")
-async def cancel_plan_request(
-    request_id: str,
-    ctx: TenantContext = Depends(require_tenant_context),
-):
-    """Cancel the tenant's own pending request."""
-    if ctx.is_master or not ctx.tenant_id:
-        raise HTTPException(status_code=404, detail="No tenant associated with this user")
-
-    db = SessionLocal()
-    try:
-        req = (
-            db.query(PlanChangeRequest)
-            .filter(
-                PlanChangeRequest.id == request_id,
-                PlanChangeRequest.tenant_id == ctx.tenant_id,
-            )
-            .first()
-        )
-        if not req:
-            raise HTTPException(status_code=404, detail="Request not found")
-        if str(req.status) != "pending":
-            raise HTTPException(status_code=409, detail=f"Request already {req.status}")
-        req.status = "cancelled"  # type: ignore[assignment]
-        db.commit()
-        return {"success": True}
-    finally:
-        db.close()
 
 
 def _serialize_invite(inv: TenantInvite) -> dict:

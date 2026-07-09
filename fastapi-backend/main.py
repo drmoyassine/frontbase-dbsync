@@ -1214,6 +1214,7 @@ class TrailingSlashMiddleware:
         "/api/auth",
         "/api/actions",
         "/api/storage",
+        "/api/billing",
         "/api/edge-engines",
         "/api/edge-providers",
         "/api/edge-caches",
@@ -1294,6 +1295,11 @@ if is_cloud():
         app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
     except ImportError:
         pass  # Projects router not yet available
+    try:
+        from app.routers import billing
+        app.include_router(billing.router, prefix="/api/billing", tags=["Billing"])
+    except ImportError:
+        pass  # Billing router not yet available
 app.include_router(auth.router)  # Auth (login, logout, /me) — works for both modes
 # Supabase tenant provisioning (logic consolidated to /api/auth/signup)
 app.include_router(workflows.router, prefix="/api/workflows", tags=["Workflows"])  # Email send endpoint (A3) — works for both modes

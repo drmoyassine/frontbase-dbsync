@@ -7,8 +7,19 @@ import { DatabasePanel } from '@/components/dashboard/DatabasePanel';
 import { UsersPanel } from '@/components/dashboard/UsersPanel';
 import { StoragePanel } from '@/components/dashboard/StoragePanel';
 import { SettingsPanel } from '@/components/dashboard/SettingsPanel';
+import { billingApi } from '@/services/billingApi';
+import { toast } from 'sonner';
 
 const Dashboard: React.FC = () => {
+  React.useEffect(() => {
+    const pendingPlan = sessionStorage.getItem('pending_checkout_plan');
+    if (pendingPlan) {
+      sessionStorage.removeItem('pending_checkout_plan');
+      billingApi.createCheckoutSession(pendingPlan)
+        .then(({ url }) => { window.location.href = url; })
+        .catch((e) => toast.error(e.response?.data?.detail || 'Failed to resume checkout'));
+    }
+  }, []);
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full max-w-full overflow-hidden">

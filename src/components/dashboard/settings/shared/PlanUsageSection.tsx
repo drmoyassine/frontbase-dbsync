@@ -11,8 +11,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, ArrowUpCircle, ArrowDownCircle, Check, Clock, X, Bot } from 'lucide-react';
+import { Loader2, ArrowUpCircle, ArrowDownCircle, Check, X, Bot, ExternalLink } from 'lucide-react';
 import { tenantPlanApi } from '@/services/tenantPlanApi';
+import { billingApi } from '@/services/billingApi';
 import { STALE } from '@/lib/queryCache';
 import type { Plan } from '@/services/adminPlansApi';
 import { isCloud } from '@/lib/edition';
@@ -29,41 +30,61 @@ function fmtLimit(v: number | boolean): string {
 export const PlanUsageSection: React.FC = () => {
     const queryClient = useQueryClient();
     const [pickerOpen, setPickerOpen] = useState(false);
+    const [selectedAddons, setSelectedAddons] = useState<Record<string, number>>({});
+
+    const handleAddonChange = (type: string, delta: number) => {
+        setSelectedAddons(prev => {
+            const current = prev[type] || 0;
+            const next = Math.max(0, current + delta);
+            if (next === 0) {
+                const copy = { ...prev };
+                delete copy[type];
+                return copy;
+            }
+            return { ...prev, [type]: next };
+        });
+    };
 
     const { data, isLoading } = useQuery({
         queryKey: ['my-plan'],
         queryFn: () => tenantPlanApi.getMyPlan(),
         staleTime: STALE.DEFAULT,
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
     const { data: addonsData } = useQuery({
         queryKey: ['my-addons'],
         queryFn: () => tenantPlanApi.getMyAddons(),
         staleTime: 60_000, // custom TTL (not a STALE tier)
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
     const { data: publicData } = useQuery({
         queryKey: ['public-plans'],
         queryFn: () => tenantPlanApi.listPublicPlans(),
         enabled: pickerOpen,
         staleTime: 60_000, // custom TTL (not a STALE tier)
+        retry: 1,
+        refetchOnWindowFocus: false,
     });
 
-    const requestMutation = useMutation({
-        mutationFn: ({ slug, note }: { slug: string; note?: string }) => tenantPlanApi.requestChange(slug, note),
-        onSuccess: () => {
-            toast.success('Plan change requested — an admin will review it shortly');
-            setPickerOpen(false);
-            queryClient.invalidateQueries({ queryKey: ['my-plan'] });
+    const checkoutMutation = useMutation({
+        mutationFn: (slug: string) => {
+            const addonsPayload = Object.entries(selectedAddons).map(([type, qty]) => ({ addon_type: type, quantity: qty }));
+            return billingApi.createCheckoutSession(slug, addonsPayload.length > 0 ? addonsPayload : undefined);
         },
-        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to submit request'),
+        onSuccess: (data) => {
+            window.location.href = data.url;
+        },
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to initiate checkout'),
     });
 
-    const cancelMutation = useMutation({
-        mutationFn: (id: string) => tenantPlanApi.cancelRequest(id),
-        onSuccess: () => {
-            toast.success('Request cancelled');
-            queryClient.invalidateQueries({ queryKey: ['my-plan'] });
+    const portalMutation = useMutation({
+        mutationFn: () => billingApi.createPortalSession(),
+        onSuccess: (data) => {
+            window.location.href = data.url;
         },
-        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to cancel'),
+        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to open billing portal'),
     });
 
     if (isLoading) {
@@ -124,19 +145,16 @@ export const PlanUsageSection: React.FC = () => {
                         })}
                     </div>
 
-                    {pending_request ? (
-                        <div className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-                            <div className="flex items-center gap-2 text-sm">
-                                <Clock className="w-4 h-4 text-amber-500" />
-                                <span>Pending {pending_request.direction} to <strong>{pending_request.to_plan}</strong> — awaiting admin approval.</span>
-                            </div>
-                            <Button variant="ghost" size="sm" onClick={() => cancelMutation.mutate(pending_request.id)} disabled={cancelMutation.isPending}>
-                                <X className="w-4 h-4 mr-1" />Cancel
-                            </Button>
-                        </div>
-                    ) : (
-                        <Button onClick={() => setPickerOpen(true)}>Change plan</Button>
-                    )}
+                    <div className="pt-2 flex gap-3">
+                        <Button onClick={() => setPickerOpen(true)} variant="outline">Change plan</Button>
+                        <Button 
+                            onClick={() => portalMutation.mutate()} 
+                            disabled={portalMutation.isPending}
+                        >
+                            {portalMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            Manage Billing <ExternalLink className="w-4 h-4 ml-2" />
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -178,7 +196,10 @@ export const PlanUsageSection: React.FC = () => {
             {pickerOpen && (
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle>Choose a plan</CardTitle>
+                        <div>
+                            <CardTitle>Choose a plan</CardTitle>
+                            <CardDescription>Select a base plan and optional managed add-ons</CardDescription>
+                        </div>
                         <Button variant="ghost" size="sm" onClick={() => setPickerOpen(false)}><X className="w-4 h-4" /></Button>
                     </CardHeader>
                     <CardContent>
@@ -201,17 +222,45 @@ export const PlanUsageSection: React.FC = () => {
                                                     <li key={i} className="flex items-center gap-1.5"><Check className="w-3 h-3 text-primary shrink-0" />{f}</li>
                                                 ))}
                                             </ul>
-                                            <Button size="sm" disabled={current || requestMutation.isPending}
+                                            <Button size="sm" disabled={current || checkoutMutation.isPending}
                                                 variant={upgrade ? 'default' : 'outline'}
-                                                onClick={() => requestMutation.mutate({ slug: p.slug })}>
+                                                onClick={() => checkoutMutation.mutate(p.slug)}>
                                                 {current ? 'Current plan' : (
-                                                    <>{upgrade ? <ArrowUpCircle className="w-4 h-4 mr-1" /> : <ArrowDownCircle className="w-4 h-4 mr-1" />}
-                                                        Request {upgrade ? 'upgrade' : 'downgrade'}</>
+                                                    <>{checkoutMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                                        {upgrade ? 'Upgrade' : 'Downgrade'}</>
                                                 )}
                                             </Button>
                                         </div>
                                     );
                                 })}
+                            </div>
+                        )}
+                        
+                        {publicData && (
+                            <div className="mt-8 border-t pt-6">
+                                <h4 className="font-semibold mb-4">Optional Add-ons</h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {[
+                                        { type: 'managed_edge_db', label: 'Managed Edge DB' },
+                                        { type: 'managed_cache', label: 'Managed Cache' },
+                                        { type: 'managed_queue', label: 'Managed Queue' },
+                                        { type: 'managed_domain', label: 'Custom Domain' },
+                                    ].map(addon => (
+                                        <div key={addon.type} className="flex items-center justify-between p-3 border rounded-lg">
+                                            <span className="text-sm font-medium">{addon.label}</span>
+                                            <div className="flex items-center gap-2">
+                                                <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => handleAddonChange(addon.type, -1)} disabled={!selectedAddons[addon.type]}>-</Button>
+                                                <span className="text-sm w-4 text-center">{selectedAddons[addon.type] || 0}</span>
+                                                <Button size="icon" variant="outline" className="h-6 w-6" onClick={() => handleAddonChange(addon.type, 1)}>+</Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                {Object.keys(selectedAddons).length > 0 && (
+                                    <p className="text-xs text-muted-foreground mt-4">
+                                        Add-ons will be included in the checkout session.
+                                    </p>
+                                )}
                             </div>
                         )}
                     </CardContent>

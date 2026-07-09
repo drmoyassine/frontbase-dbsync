@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database.utils import get_db
-from app.models.models import Plan, PlanChangeRequest, Tenant, TenantAddon
+from app.models.models import Plan, Tenant, TenantAddon
 from app.routers.tenant_admin import require_master_admin
 from app.services.plan_limits import (
     LIMIT_REGISTRY,
@@ -51,8 +51,7 @@ class PlanWriteRequest(BaseModel):
     sort_order: Optional[int] = None
 
 
-class ReviewRequest(BaseModel):
-    admin_note: Optional[str] = None
+
 
 
 # ---------------------------------------------------------------------------
@@ -192,81 +191,7 @@ async def delete_plan(
     return {"success": True, "message": f"Plan '{plan.slug}' deactivated"}
 
 
-# ---------------------------------------------------------------------------
-# Change-request queue
-# ---------------------------------------------------------------------------
 
-def _serialize_request(db: Session, r: PlanChangeRequest) -> dict:
-    tenant = db.query(Tenant).filter(Tenant.id == r.tenant_id).first()
-    return {
-        "id": str(r.id),
-        "tenant_id": str(r.tenant_id),
-        "tenant_name": str(tenant.name) if tenant else None,
-        "tenant_slug": str(tenant.slug) if tenant else None,
-        "from_plan": str(r.from_plan),
-        "to_plan": str(r.to_plan),
-        "direction": str(r.direction),
-        "status": str(r.status),
-        "note": r.note,
-        "admin_note": r.admin_note,
-        "created_at": str(r.created_at),
-        "reviewed_at": str(r.reviewed_at) if r.reviewed_at is not None else None,
-    }
-
-
-@router.get("/plan-requests")
-async def list_plan_requests(
-    status: str = "pending",
-    db: Session = Depends(get_db),
-    _admin: dict = Depends(require_master_admin),
-):
-    q = db.query(PlanChangeRequest)
-    if status and status != "all":
-        q = q.filter(PlanChangeRequest.status == status)
-    rows = q.order_by(PlanChangeRequest.created_at.desc()).all()
-    return {"requests": [_serialize_request(db, r) for r in rows]}
-
-
-@router.post("/plan-requests/{request_id}/approve")
-async def approve_plan_request(
-    request_id: str,
-    body: ReviewRequest,
-    db: Session = Depends(get_db),
-    admin: dict = Depends(require_master_admin),
-):
-    r = db.query(PlanChangeRequest).filter(PlanChangeRequest.id == request_id).first()
-    if not r:
-        raise HTTPException(status_code=404, detail="Request not found")
-    if str(r.status) != "pending":
-        raise HTTPException(status_code=409, detail=f"Request already {r.status}")
-
-    apply_plan(db, str(r.tenant_id), str(r.to_plan))  # the single apply seam
-    r.status = "approved"  # type: ignore[assignment]
-    r.admin_note = body.admin_note  # type: ignore[assignment]
-    r.reviewed_by = admin.get("email")  # type: ignore[assignment]
-    r.reviewed_at = _now()  # type: ignore[assignment]
-    db.commit()
-    return {"success": True, "request": _serialize_request(db, r)}
-
-
-@router.post("/plan-requests/{request_id}/reject")
-async def reject_plan_request(
-    request_id: str,
-    body: ReviewRequest,
-    db: Session = Depends(get_db),
-    admin: dict = Depends(require_master_admin),
-):
-    r = db.query(PlanChangeRequest).filter(PlanChangeRequest.id == request_id).first()
-    if not r:
-        raise HTTPException(status_code=404, detail="Request not found")
-    if str(r.status) != "pending":
-        raise HTTPException(status_code=409, detail=f"Request already {r.status}")
-    r.status = "rejected"  # type: ignore[assignment]
-    r.admin_note = body.admin_note  # type: ignore[assignment]
-    r.reviewed_by = admin.get("email")  # type: ignore[assignment]
-    r.reviewed_at = _now()  # type: ignore[assignment]
-    db.commit()
-    return {"success": True, "request": _serialize_request(db, r)}
 
 
 # ---------------------------------------------------------------------------

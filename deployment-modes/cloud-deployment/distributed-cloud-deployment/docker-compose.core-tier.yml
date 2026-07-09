@@ -51,6 +51,9 @@ services:
       # System key injected into the Local Edge engine config — MUST match the
       # edge service's key below (same var, same default).
       - FRONTBASE_SYSTEM_KEY=${FRONTBASE_SYSTEM_KEY:-fb_sys_local_dev_key}
+      # Billing
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
     volumes:
       - backend_data:/app/data
     restart: unless-stopped

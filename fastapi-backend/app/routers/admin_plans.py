@@ -127,11 +127,10 @@ async def create_plan(
         updated_at=now,
     )
     db.add(plan)
-    logger.info("[billing-diag] CREATE plan=%s price_cents=%s stripe_key_set=%s",
-                slug, body.price_cents, bool(os.getenv("STRIPE_SECRET_KEY")))
+    print(f"[billing-diag] CREATE plan={slug} price_cents={body.price_cents} stripe_key_set={bool(os.getenv('STRIPE_SECRET_KEY'))}", flush=True)
     if body.price_cents is not None and body.price_cents > 0:
         gateway_data = gateway.sync_plan(plan, body.price_cents)
-        logger.info("[billing-diag] sync_plan returned: %s", gateway_data)
+        print(f"[billing-diag] sync_plan returned: {gateway_data}", flush=True)
         if gateway_data:
             plan.gateway_metadata = json.dumps(gateway_data) # type: ignore[assignment]
             
@@ -180,13 +179,12 @@ async def update_plan(
         db.query(Plan).filter(Plan.id != plan_id).update({Plan.is_default: False})
         plan.is_default = True  # type: ignore[assignment]
         
-    logger.info("[billing-diag] UPDATE plan=%s price_cents=%s stripe_key_set=%s",
-                plan.slug, body.price_cents, bool(os.getenv("STRIPE_SECRET_KEY")))
+    print(f"[billing-diag] UPDATE plan={plan.slug} price_cents={body.price_cents} stripe_key_set={bool(os.getenv('STRIPE_SECRET_KEY'))}", flush=True)
     if body.price_cents is not None:
         plan.price_cents = body.price_cents  # type: ignore[assignment]
         if body.price_cents > 0:
             gateway_data = gateway.sync_plan(plan, body.price_cents)
-            logger.info("[billing-diag] sync_plan returned: %s", gateway_data)
+            print(f"[billing-diag] sync_plan returned: {gateway_data}", flush=True)
             if gateway_data:
                 plan.gateway_metadata = json.dumps(gateway_data)  # type: ignore[assignment]
 

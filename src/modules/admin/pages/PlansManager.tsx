@@ -32,6 +32,7 @@ export function PlansManager() {
     const [tab, setTab] = useState<'plans' | 'llm'>('plans');
     const [isEditorOpen, setEditorOpen] = useState(false);
     const [editing, setEditing] = useState<Plan | null>(null);
+    const [deletingPlan, setDeletingPlan] = useState<Plan | null>(null);
     const [draft, setDraft] = useState<PlanWritePayload>(emptyDraft());
 
     const { data: plansData, isLoading } = useQuery({
@@ -87,7 +88,7 @@ export function PlansManager() {
 
     const deleteMutation = useMutation({
         mutationFn: (id: string) => adminPlansApi.deletePlan(id),
-        onSuccess: () => { toast.success('Plan deactivated'); invalidatePlans(); },
+        onSuccess: () => { toast.success('Plan deleted'); invalidatePlans(); setDeletingPlan(null); },
         onError: (e: any) => {
             const detail = e.response?.data?.detail;
             toast.error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0]?.msg : 'Failed to delete plan'));
@@ -160,9 +161,7 @@ export function PlansManager() {
                         {plans.map(p => (
                             <PlanCard key={p.id} plan={p} registry={registry}
                                 onEdit={() => openEdit(p)}
-                                onDelete={() => {
-                                    if (confirm(`Deactivate plan '${p.name}'?`)) deleteMutation.mutate(p.id);
-                                }} />
+                                onDelete={() => setDeletingPlan(p)} />
                         ))}
                         {plans.length === 0 && <p className="text-slate-500 text-sm">No plans yet. Create one to get started.</p>}
                     </div>
@@ -179,6 +178,34 @@ export function PlansManager() {
                     saving={saveMutation.isPending}
                     onClose={() => { setEditorOpen(false); setEditing(null); }}
                     onSave={() => saveMutation.mutate(draft)} />
+            )}
+
+            {deletingPlan && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+                        <div className="p-6 space-y-4">
+                            <div className="flex items-center gap-3 text-red-500">
+                                <div className="p-2 bg-red-50 dark:bg-red-500/10 rounded-full">
+                                    <Trash2 className="w-6 h-6" />
+                                </div>
+                                <h3 className="font-bold text-lg text-slate-900 dark:text-white">Delete Plan</h3>
+                            </div>
+                            <p className="text-sm text-slate-600 dark:text-slate-400">
+                                Are you sure you want to permanently delete the <span className="font-semibold text-slate-900 dark:text-white">{deletingPlan.name}</span> plan? This action cannot be undone.
+                            </p>
+                            <p className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                                Note: You cannot delete a plan if any active tenants are still assigned to it.
+                            </p>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-950 p-5 border-t border-slate-100 dark:border-slate-850 flex justify-end gap-2">
+                            <button onClick={() => setDeletingPlan(null)} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800 rounded-lg transition-colors">Cancel</button>
+                            <button onClick={() => deleteMutation.mutate(deletingPlan.id)} disabled={deleteMutation.isPending}
+                                className="px-5 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors">
+                                {deleteMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Delete Plan
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
@@ -208,7 +235,7 @@ function PlanCard({ plan, registry, onEdit, onDelete }: {
                 </div>
                 <div className="flex gap-1">
                     <button onClick={onEdit} title="Edit" className="p-1.5 text-slate-400 hover:text-primary-500 hover:bg-primary-500/10 rounded-lg"><Pencil className="w-4 h-4" /></button>
-                    <button onClick={onDelete} title="Deactivate" className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={onDelete} title="Delete" className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
                 </div>
             </div>
             <div className="flex flex-wrap gap-1.5">

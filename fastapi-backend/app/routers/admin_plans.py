@@ -210,8 +210,7 @@ async def delete_plan(
             status_code=409,
             detail=f"{in_use} tenant(s) are on this plan. Reassign them before deleting.",
         )
-    plan.is_active = False  # type: ignore[assignment]
-    plan.updated_at = _now()  # type: ignore[assignment]
+    db.delete(plan)
     db.commit()
     return {"success": True, "message": f"Plan '{plan.slug}' deactivated"}
 

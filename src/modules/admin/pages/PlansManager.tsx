@@ -88,7 +88,7 @@ export function PlansManager() {
 
     const deleteMutation = useMutation({
         mutationFn: (id: string) => adminPlansApi.deletePlan(id),
-        onSuccess: () => { toast.success('Plan deleted'); invalidatePlans(); setDeletingPlan(null); },
+        onSuccess: (data: any) => { toast.success(data?.message || 'Plan deleted'); invalidatePlans(); setDeletingPlan(null); },
         onError: (e: any) => {
             const detail = e.response?.data?.detail;
             toast.error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0]?.msg : 'Failed to delete plan'));
@@ -184,24 +184,32 @@ export function PlansManager() {
                 <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
                         <div className="p-6 space-y-4">
-                            <div className="flex items-center gap-3 text-red-500">
-                                <div className="p-2 bg-red-50 dark:bg-red-500/10 rounded-full">
+                            <div className={`flex items-center gap-3 ${deletingPlan.is_active ? 'text-amber-500' : 'text-red-500'}`}>
+                                <div className={`p-2 rounded-full ${deletingPlan.is_active ? 'bg-amber-50 dark:bg-amber-500/10' : 'bg-red-50 dark:bg-red-500/10'}`}>
                                     <Trash2 className="w-6 h-6" />
                                 </div>
-                                <h3 className="font-bold text-lg text-slate-900 dark:text-white">Delete Plan</h3>
+                                <h3 className="font-bold text-lg text-slate-900 dark:text-white">
+                                    {deletingPlan.is_active ? 'Deactivate Plan' : 'Permanently Delete Plan'}
+                                </h3>
                             </div>
                             <p className="text-sm text-slate-600 dark:text-slate-400">
-                                Are you sure you want to permanently delete the <span className="font-semibold text-slate-900 dark:text-white">{deletingPlan.name}</span> plan? This action cannot be undone.
+                                {deletingPlan.is_active
+                                    ? <>Are you sure you want to deactivate the <span className="font-semibold text-slate-900 dark:text-white">{deletingPlan.name}</span> plan? This will hide it from new signups, but existing tenants will remain on it.</>
+                                    : <>Are you sure you want to permanently delete the <span className="font-semibold text-slate-900 dark:text-white">{deletingPlan.name}</span> plan? This action cannot be undone.</>}
                             </p>
-                            <p className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                                Note: You cannot delete a plan if any active tenants are still assigned to it.
-                            </p>
+                            {!deletingPlan.is_active && (
+                                <p className="text-xs text-slate-500 bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                                    Note: You cannot permanently delete a plan if any active tenants are still assigned to it.
+                                </p>
+                            )}
                         </div>
                         <div className="bg-slate-50 dark:bg-slate-950 p-5 border-t border-slate-100 dark:border-slate-850 flex justify-end gap-2">
                             <button onClick={() => setDeletingPlan(null)} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800 rounded-lg transition-colors">Cancel</button>
                             <button onClick={() => deleteMutation.mutate(deletingPlan.id)} disabled={deleteMutation.isPending}
-                                className="px-5 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors">
-                                {deleteMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Delete Plan
+                                className={`px-5 py-2 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50
+                                    ${deletingPlan.is_active ? 'bg-amber-500 hover:bg-amber-600' : 'bg-red-500 hover:bg-red-600'}`}>
+                                {deleteMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                                {deletingPlan.is_active ? 'Deactivate' : 'Delete'}
                             </button>
                         </div>
                     </div>

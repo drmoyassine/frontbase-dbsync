@@ -204,6 +204,12 @@ async def delete_plan(
         raise HTTPException(status_code=404, detail="Plan not found")
     if bool(plan.is_default):
         raise HTTPException(status_code=400, detail="Cannot delete the default plan")
+    if bool(plan.is_active):
+        plan.is_active = False  # type: ignore[assignment]
+        plan.updated_at = _now()  # type: ignore[assignment]
+        db.commit()
+        return {"success": True, "message": f"Plan '{plan.slug}' deactivated"}
+
     in_use = db.query(Tenant).filter(Tenant.plan == plan.slug).count()
     if in_use:
         raise HTTPException(
@@ -212,7 +218,7 @@ async def delete_plan(
         )
     db.delete(plan)
     db.commit()
-    return {"success": True, "message": f"Plan '{plan.slug}' deactivated"}
+    return {"success": True, "message": f"Plan '{plan.slug}' permanently deleted"}
 
 
 @router.post("/billing/sync-addons")

@@ -79,13 +79,19 @@ export function PlansManager() {
             toast.success(editing ? 'Plan updated' : 'Plan created');
             setEditorOpen(false); setEditing(null); invalidatePlans();
         },
-        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to save plan'),
+        onError: (e: any) => {
+            const detail = e.response?.data?.detail;
+            toast.error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0]?.msg : 'Failed to save plan'));
+        },
     });
 
     const deleteMutation = useMutation({
         mutationFn: (id: string) => adminPlansApi.deletePlan(id),
         onSuccess: () => { toast.success('Plan deactivated'); invalidatePlans(); },
-        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to delete plan'),
+        onError: (e: any) => {
+            const detail = e.response?.data?.detail;
+            toast.error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0]?.msg : 'Failed to delete plan'));
+        },
     });
 
 
@@ -97,7 +103,10 @@ export function PlansManager() {
             queryClient.invalidateQueries({ queryKey: ['admin-llm-config'] });
             queryClient.invalidateQueries({ queryKey: ['admin-llm-providers'] });
         },
-        onError: (e: any) => toast.error(e.response?.data?.detail || 'Failed to set default provider'),
+        onError: (e: any) => {
+            const detail = e.response?.data?.detail;
+            toast.error(typeof detail === 'string' ? detail : (Array.isArray(detail) ? detail[0]?.msg : 'Failed to set default provider'));
+        },
     });
 
     const openCreate = () => { setEditing(null); setDraft(emptyDraft()); setEditorOpen(true); };
@@ -250,7 +259,7 @@ function PlanEditor({ draft, setDraft, registry, isEdit, saving, onClose, onSave
                         <Field label="Slug"><input value={draft.slug || ''} disabled={isEdit} onChange={e => set({ slug: e.target.value })} className={`${inputCls} font-mono disabled:opacity-50`} placeholder="pro" /></Field>
                         <Field label="Price (display)"><input value={draft.price_display || ''} onChange={e => set({ price_display: e.target.value })} className={inputCls} placeholder="$29" /></Field>
                         <Field label="Period"><input value={draft.price_period || ''} onChange={e => set({ price_period: e.target.value })} className={inputCls} placeholder="/month" /></Field>
-                        <Field label="Price (cents for Stripe)"><input type="number" value={draft.price_cents ?? ''} onChange={e => set({ price_cents: e.target.value ? Number(e.target.value) : undefined })} className={inputCls} placeholder="2900" /></Field>
+                        <Field label="Price (cents for Stripe)"><input type="number" value={draft.price_cents ?? ''} onChange={e => set({ price_cents: e.target.value ? Math.round(Number(e.target.value)) : undefined })} className={inputCls} placeholder="199 for $1.99" /></Field>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <Field label="Infrastructure">

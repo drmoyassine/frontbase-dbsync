@@ -146,6 +146,13 @@ async def publish_to_target(
         engine = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id).first()
         if not engine:
             raise HTTPException(status_code=404, detail=f"Engine not found: {engine_id}")
+
+        if bool(engine.is_shared) or bool(engine.is_system):
+            if page.project and not bool(page.project.is_default):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Secondary projects cannot be published to the shared community engine. Please assign a dedicated Edge Engine to this project."
+                )
         
         # Force load ALL attributes before detaching
         _ = page.layout_data
@@ -364,6 +371,14 @@ async def publish_to_targets_batch(
         ).all()
         if not engines:
             raise HTTPException(status_code=404, detail="No engines found for the given IDs")
+
+        for eng in engines:
+            if bool(eng.is_shared) or bool(eng.is_system):
+                if page.project and not bool(page.project.is_default):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Secondary projects cannot be published to the shared community engine. Please assign a dedicated Edge Engine to this project."
+                    )
 
         # Build lookup: id → url/name, and pre-compute auth headers while session is open
         engine_map: dict[str, dict[str, Any]] = {}

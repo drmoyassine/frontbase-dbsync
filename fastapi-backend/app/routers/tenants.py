@@ -18,7 +18,7 @@ from app.models.models import (
     Tenant, Plan, Project, Page, AutomationDraft, TenantMember, TenantInvite,
 )
 from app.middleware.tenant_context import TenantContext, require_tenant_context
-from app.services.plan_limits import get_plan, plan_limits, serialize_plan, check_quota, UNLIMITED
+from app.services.plan_limits import get_plan, plan_limits, serialize_plan, check_quota, UNLIMITED, tenant_limits
 
 router = APIRouter()
 
@@ -179,7 +179,7 @@ async def get_my_plan(ctx: TenantContext = Depends(require_tenant_context)):
         plan = get_plan(db, str(tenant.plan) if tenant.plan is not None else None)
         return {
             "plan": serialize_plan(plan) if plan else None,
-            "limits": plan_limits(plan),
+            "limits": tenant_limits(db, ctx),
             "usage": _tenant_usage(db, str(ctx.tenant_id)),
         }
     finally:

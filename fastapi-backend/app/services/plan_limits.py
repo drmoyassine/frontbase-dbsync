@@ -338,7 +338,22 @@ def tenant_limits(db: Session, ctx: Any) -> dict[str, Any]:
     """Resolved limits for the tenant behind ``ctx``."""
     tenant = db.query(Tenant).filter(Tenant.id == getattr(ctx, "tenant_id", None)).first()
     slug = str(tenant.plan) if tenant is not None and tenant.plan is not None else None
-    return plan_limits(get_plan(db, slug))
+    limits = plan_limits(get_plan(db, slug))
+
+    if tenant is not None:
+        addons = db.query(TenantAddon).filter(
+            TenantAddon.tenant_id == tenant.id,
+            TenantAddon.status == "active"
+        ).all()
+        for addon in addons:
+            qty = addon.quantity if addon.quantity is not None else 1
+            if addon.addon_type == "edge_engine":
+                limits["edge_engines"] = limits.get("edge_engines", 0) + qty
+                limits["projects"] = limits.get("projects", 0) + qty
+            elif addon.addon_type in limits:
+                if limits[addon.addon_type] != UNLIMITED:
+                    limits[addon.addon_type] = limits[addon.addon_type] + qty
+    return limits
 
 
 def limit_value(db: Session, ctx: Any, key: str) -> Any:
@@ -427,7 +442,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
         "infra_mode": "managed", "price_display": "$1.99", "price_period": "/mo",
         "is_public": True, "highlighted": True, "badge": "Best value", "sort_order": 1,
         "limits": {
-            "projects": 3,
+            "projects": 1,
             "pages": 50, "workflows": 25, "datasources": 3, "connected_accounts": 3,
             "edge_engines": 1, "team_members": 3,
             "deploys_monthly": 500, "log_retention_hours": 2160, "shared_worker_executions_monthly": 10000,

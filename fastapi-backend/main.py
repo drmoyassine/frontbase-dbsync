@@ -1235,6 +1235,10 @@ class TrailingSlashMiddleware:
         "/api/admin/plans",
         "/api/admin/plan-requests",
         "/api/admin/agents",
+        "/api/admin/addons",
+        "/api/admin/tenant-addons",
+        "/api/admin/managed",
+        "/api/admin/billing",
         "/api/mcp-servers",
     ]
     

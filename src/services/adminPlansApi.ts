@@ -82,6 +82,10 @@ export const adminPlansApi = {
         const res = await api.put(`/api/admin/addons/${addonId}`, payload);
         return res.data;
     },
+    syncAddons: async (): Promise<{ success: boolean; synced_addons: string[] }> => {
+        const res = await api.post('/api/admin/billing/sync-addons');
+        return res.data;
+    },
 };
 
 export interface AddonConfig {

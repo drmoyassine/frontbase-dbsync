@@ -525,17 +525,42 @@ function AddonsManager() {
         queryClient.invalidateQueries({ queryKey: ['admin', 'addons'] });
     };
 
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const handleSync = async () => {
+        setIsSyncing(true);
+        try {
+            await adminPlansApi.syncAddons();
+            queryClient.invalidateQueries({ queryKey: ['admin', 'addons'] });
+            alert("Add-ons synchronized with Stripe successfully!");
+        } catch (error: any) {
+            alert(`Failed to sync add-ons: ${error.message}`);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     if (isLoading) {
         return <div className="p-8 text-center text-slate-500">Loading add-ons...</div>;
     }
 
     return (
         <div className="space-y-6 relative">
-            <div>
-                <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Managed Infrastructure Add-ons</h2>
-                <p className="text-sm text-slate-500 dark:text-gray-400 mt-1">
-                    Review premium managed resources available for purchase. Add-ons scale base-plan capacities on a per-tenant basis.
-                </p>
+            <div className="flex items-start justify-between">
+                <div>
+                    <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Managed Infrastructure Add-ons</h2>
+                    <p className="text-sm text-slate-500 dark:text-gray-400 mt-1">
+                        Review premium managed resources available for purchase. Add-ons scale base-plan capacities on a per-tenant basis.
+                    </p>
+                </div>
+                <button
+                    onClick={handleSync}
+                    disabled={isSyncing}
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-lg hover:bg-slate-800 dark:hover:bg-gray-100 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                    <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                    {isSyncing ? 'Syncing...' : 'Sync with Stripe'}
+                </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

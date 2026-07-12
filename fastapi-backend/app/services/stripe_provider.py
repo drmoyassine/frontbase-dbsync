@@ -89,7 +89,7 @@ class StripeProvider(BillingGateway):
                     self._addon_price_cache[addon_type] = existing_price.id
                     return existing_price.id
                 # Price changed, we will create a new price and transfer the lookup key
-                product_id = existing_price.product
+                product_id = str(existing_price.product)
                 stripe.Price.modify(existing_price.id, active=False)
             else:
                 # Create product if it doesn't exist

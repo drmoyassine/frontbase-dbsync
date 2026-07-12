@@ -17,7 +17,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database.utils import get_db
-from app.models.models import Plan, Tenant, TenantAddon
+from app.models.models import Plan, Tenant, TenantAddon, AddonConfig
+from app.models.schemas import AddonConfigResponse, AddonConfigUpdateRequest
 from app.routers.tenant_admin import require_master_admin
 from app.services.plan_limits import (
     LIMIT_REGISTRY,
@@ -223,24 +224,21 @@ async def delete_plan(
 
 @router.post("/billing/sync-addons")
 async def sync_billing_addons(
+    db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
     gateway: BillingGateway = Depends(get_billing_gateway),
 ):
     """Force synchronization of all managed add-ons to the billing gateway."""
-    ADDON_DEFAULT_PRICES = {
-        "edge_engine": 1000,
-        "managed_edge_db": 500,
-        "managed_cache": 200,
-        "managed_queue": 200,
-        "managed_vector": 300,
-        "managed_storage": 200,
-        "managed_domain": 100
-    }
-    
+    addons = db.query(AddonConfig).all()
     synced = []
-    for addon_type in MANAGED_ADDON_TYPES:
-        display_name = addon_type.replace("_", " ").title()
-        price_cents = ADDON_DEFAULT_PRICES.get(addon_type, 500)
+    
+    for addon in addons:
+        addon_type = str(addon.id)
+        if addon_type not in MANAGED_ADDON_TYPES:
+            continue
+            
+        display_name = str(addon.name)
+        price_cents = int(str(addon.price_cents))
         price_id = gateway.sync_addon(addon_type, display_name, price_cents)
         if price_id:
             synced.append(addon_type)
@@ -426,3 +424,52 @@ async def _deprovision_for_addon(db: Session, tenant_id: str, addon_type: str) -
         # Deprovision failures must not block add-on revocation; log and continue.
         import logging
         logging.getLogger(__name__).warning("[managed] deprovision for %s failed: %s", addon_type, e)
+
+
+# ---------------------------------------------------------------------------
+# Addon Configs (Pricing and Marketing Display)
+# ---------------------------------------------------------------------------
+
+@router.get("/addons", response_model=List[AddonConfigResponse])
+async def list_addons(
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_master_admin),
+):
+    """List all managed add-on configurations."""
+    addons = db.query(AddonConfig).all()
+    return addons
+
+@router.put("/addons/{addon_id}", response_model=AddonConfigResponse)
+async def update_addon(
+    addon_id: str,
+    body: AddonConfigUpdateRequest,
+    db: Session = Depends(get_db),
+    _admin: dict = Depends(require_master_admin),
+    gateway: BillingGateway = Depends(get_billing_gateway),
+):
+    """Update a managed add-on configuration and sync price to Stripe."""
+    addon = db.query(AddonConfig).filter(AddonConfig.id == addon_id).first()
+    if not addon:
+        raise HTTPException(status_code=404, detail="Add-on configuration not found")
+
+    if body.name is not None:
+        addon.name = body.name  # type: ignore[assignment]
+    if body.description is not None:
+        addon.description = body.description  # type: ignore[assignment]
+    if body.quota_display is not None:
+        addon.quota_display = body.quota_display  # type: ignore[assignment]
+    if body.is_active is not None:
+        addon.is_active = body.is_active  # type: ignore[assignment]
+
+    price_changed = False
+    if body.price_cents is not None and body.price_cents != addon.price_cents:
+        addon.price_cents = body.price_cents  # type: ignore[assignment]
+        price_changed = True
+
+    db.commit()
+
+    if price_changed:
+        gateway.sync_addon(addon_id, str(addon.name), int(str(addon.price_cents)))
+
+    db.refresh(addon)
+    return addon

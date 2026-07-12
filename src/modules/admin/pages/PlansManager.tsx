@@ -1,12 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Layers, Plus, X, Loader2, Pencil, Trash2, Check, Star, Globe, Inbox,
     ArrowUpCircle, ArrowDownCircle, RefreshCw, Bot, Cpu, Zap, PackagePlus,
-    HardDrive, Sparkles, Database,
+    HardDrive, Sparkles, Database, Settings2
 } from 'lucide-react';
 import {
-    adminPlansApi, Plan, LimitDef, PlanWritePayload,
+    adminPlansApi, Plan, LimitDef, PlanWritePayload, AddonConfig
 } from '@/services/adminPlansApi';
 import { adminAgentsApi, AgentProvider, AgentGlobalConfig } from '@/services/adminAgentsApi';
 import { WorkspaceProfileEditor } from '@/modules/admin/components/WorkspaceProfileEditor';
@@ -406,75 +406,131 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 
 // LLMConfigurationPanel was removed because providers are now mapped per-profile.
 
-function AddonsManager() {
-    const addons = [
-        {
-            id: 'edge_engine',
-            name: 'Edge Compute Engine',
-            icon: Cpu,
-            price: '$10.00',
-            quota: '+1 Engine & Project Slot',
-            description: 'Deploy standalone backend workflows and HTML apps close to users. Unlocks 1 project slot for separate environments.',
-            color: 'bg-blue-500/10 text-blue-500 border-blue-500/20 dark:bg-blue-500/5 dark:border-blue-500/10',
-        },
-        {
-            id: 'managed_edge_db',
-            name: 'Managed Edge Database',
-            icon: Database,
-            price: '$5.00',
-            quota: '+1 Managed DB',
-            description: 'Highly available, zero-config relational database (SQLite/Turso) running globally at the edge.',
-            color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 dark:bg-emerald-500/5 dark:border-emerald-500/10',
-        },
-        {
-            id: 'managed_cache',
-            name: 'Managed Edge Cache',
-            icon: Zap,
-            price: '$2.00',
-            quota: '+1 Managed Cache',
-            description: 'Supercharge database read speeds and key-value storage using low-latency Upstash Redis caches.',
-            color: 'bg-amber-500/10 text-amber-500 border-amber-500/20 dark:bg-amber-500/5 dark:border-amber-500/10',
-        },
-        {
-            id: 'managed_queue',
-            name: 'Managed Edge Queue',
-            icon: RefreshCw,
-            price: '$2.00',
-            quota: '+1 Managed Queue',
-            description: 'Guaranteed message delivery, rate-limiting, and async background job queues powered by QStash.',
-            color: 'bg-purple-500/10 text-purple-500 border-purple-500/20 dark:bg-purple-500/5 dark:border-purple-500/10',
-        },
-        {
-            id: 'managed_vector',
-            name: 'Managed Vector Database',
-            icon: Sparkles,
-            price: '$3.00',
-            quota: '+1 Managed Vector DB',
-            description: 'Store embeddings and run semantic vector search queries for AI-powered retrieval-augmented apps.',
-            color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20 dark:bg-indigo-500/5 dark:border-indigo-500/10',
-        },
-        {
-            id: 'managed_storage',
-            name: 'Managed Storage Bucket',
-            icon: HardDrive,
-            price: '$2.00',
-            quota: '+1 Storage Provider',
-            description: 'Highly durable S3-compatible object storage buckets for user uploads, static assets, and media.',
-            color: 'bg-pink-500/10 text-pink-500 border-pink-500/20 dark:bg-pink-500/5 dark:border-pink-500/10',
-        },
-        {
-            id: 'managed_domain',
-            name: 'Custom Domain SSL',
-            icon: Globe,
-            price: '$1.00',
-            quota: 'Custom Domains Enabled',
-            description: 'Bind your own domains to edge apps with automated Let\'s Encrypt SSL certificate generation.',
-            color: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20 dark:bg-cyan-500/5 dark:border-cyan-500/10',
-        },
-    ];
+// --- AddonsManager ---
+
+function EditAddonModal({
+    addon,
+    onClose,
+    onSave,
+}: {
+    addon: AddonConfig | null;
+    onClose: () => void;
+    onSave: (id: string, data: Partial<AddonConfig>) => Promise<void>;
+}) {
+    const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
+    const [quota, setQuota] = useState('');
+    const [price, setPrice] = useState(0);
+    const [isActive, setIsActive] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        if (addon) {
+            setName(addon.name);
+            setDescription(addon.description || '');
+            setQuota(addon.quota_display || '');
+            setPrice(addon.price_cents / 100);
+            setIsActive(addon.is_active);
+        }
+    }, [addon]);
+
+    if (!addon) return null;
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        try {
+            await onSave(addon.id, {
+                name,
+                description,
+                quota_display: quota,
+                price_cents: Math.round(price * 100),
+                is_active: isActive,
+            });
+            onClose();
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     return (
-        <div className="space-y-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between p-4 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">Edit Add-on: {addon.id}</h3>
+                    <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                <div className="p-4 space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Display Name</label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
+                        <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Quota Display (Badge)</label>
+                            <input type="text" value={quota} onChange={e => setQuota(e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Monthly Price (USD)</label>
+                            <input type="number" step="0.01" min="0" value={price} onChange={e => setPrice(parseFloat(e.target.value))} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white" />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                            <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="w-4 h-4 accent-primary-600" />
+                            Active (Available for purchase)
+                        </label>
+                    </div>
+                </div>
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/50 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
+                    <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">Cancel</button>
+                    <button onClick={handleSave} disabled={isSaving} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg disabled:opacity-50">
+                        {isSaving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const ADDON_META: Record<string, { icon: any, color: string }> = {
+    'edge_engine': { icon: Cpu, color: 'bg-blue-500/10 text-blue-500 border-blue-500/20 dark:bg-blue-500/5 dark:border-blue-500/10' },
+    'managed_edge_db': { icon: Database, color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 dark:bg-emerald-500/5 dark:border-emerald-500/10' },
+    'managed_cache': { icon: Zap, color: 'bg-amber-500/10 text-amber-500 border-amber-500/20 dark:bg-amber-500/5 dark:border-amber-500/10' },
+    'managed_queue': { icon: RefreshCw, color: 'bg-purple-500/10 text-purple-500 border-purple-500/20 dark:bg-purple-500/5 dark:border-purple-500/10' },
+    'managed_vector': { icon: Sparkles, color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20 dark:bg-indigo-500/5 dark:border-indigo-500/10' },
+    'managed_storage': { icon: HardDrive, color: 'bg-pink-500/10 text-pink-500 border-pink-500/20 dark:bg-pink-500/5 dark:border-pink-500/10' },
+    'managed_domain': { icon: Globe, color: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20 dark:bg-cyan-500/5 dark:border-cyan-500/10' },
+};
+
+function AddonsManager() {
+    const queryClient = useQueryClient();
+    const { data: addons = [], isLoading } = useQuery({
+        queryKey: ['admin', 'addons'],
+        queryFn: adminPlansApi.listAddons,
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+        refetchOnWindowFocus: false,
+    });
+
+    const [editingAddon, setEditingAddon] = useState<AddonConfig | null>(null);
+
+    const handleSave = async (id: string, data: Partial<AddonConfig>) => {
+        await adminPlansApi.updateAddon(id, data);
+        queryClient.invalidateQueries({ queryKey: ['admin', 'addons'] });
+    };
+
+    if (isLoading) {
+        return <div className="p-8 text-center text-slate-500">Loading add-ons...</div>;
+    }
+
+    return (
+        <div className="space-y-6 relative">
             <div>
                 <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Managed Infrastructure Add-ons</h2>
                 <p className="text-sm text-slate-500 dark:text-gray-400 mt-1">
@@ -484,31 +540,40 @@ function AddonsManager() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {addons.map((addon) => {
-                    const Icon = addon.icon;
+                    const meta = ADDON_META[addon.id] || { icon: PackagePlus, color: 'bg-slate-500/10 text-slate-500 border-slate-500/20' };
+                    const Icon = meta.icon;
                     return (
                         <div
                             key={addon.id}
-                            className="group relative flex flex-col justify-between p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-primary-500 dark:hover:border-primary-500/50 shadow-sm hover:shadow-md transition-all duration-200"
+                            className={`group relative flex flex-col justify-between p-6 bg-white dark:bg-slate-900 rounded-2xl border ${addon.is_active ? 'border-slate-200 dark:border-slate-800' : 'border-slate-200/50 dark:border-slate-800/50 opacity-60'} hover:border-primary-500 dark:hover:border-primary-500/50 shadow-sm hover:shadow-md transition-all duration-200`}
                         >
+                            <button
+                                onClick={() => setEditingAddon(addon)}
+                                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-primary-500 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-50 dark:bg-slate-800 rounded-lg"
+                                title="Edit Add-on"
+                            >
+                                <Settings2 className="w-4 h-4" />
+                            </button>
+
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <div className={`p-2.5 rounded-xl border ${addon.color}`}>
+                                    <div className={`p-2.5 rounded-xl border ${meta.color}`}>
                                         <Icon className="w-5 h-5" />
                                     </div>
-                                    <div className="flex flex-col items-end">
-                                        <span className="text-lg font-bold text-slate-900 dark:text-white">{addon.price}</span>
+                                    <div className="flex flex-col items-end pr-8">
+                                        <span className="text-lg font-bold text-slate-900 dark:text-white">${(addon.price_cents / 100).toFixed(2)}</span>
                                         <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Per Month</span>
                                     </div>
                                 </div>
 
                                 <div className="space-y-1.5">
                                     <h3 className="font-semibold text-base text-slate-900 dark:text-white group-hover:text-primary-500 transition-colors">
-                                        {addon.name}
+                                        {addon.name} {!addon.is_active && <span className="text-xs text-red-500 font-normal ml-2">(Inactive)</span>}
                                     </h3>
                                     <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-primary-50 dark:bg-primary-950/30 text-primary-600 dark:text-primary-400 border border-primary-100 dark:border-primary-900/30">
-                                        {addon.quota}
+                                        {addon.quota_display}
                                     </div>
-                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed pt-1">
+                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed pt-1 line-clamp-3">
                                         {addon.description}
                                     </p>
                                 </div>
@@ -522,6 +587,12 @@ function AddonsManager() {
                     );
                 })}
             </div>
+            
+            <EditAddonModal 
+                addon={editingAddon} 
+                onClose={() => setEditingAddon(null)} 
+                onSave={handleSave} 
+            />
         </div>
     );
 }

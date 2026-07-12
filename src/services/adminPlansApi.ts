@@ -73,7 +73,25 @@ export const adminPlansApi = {
         const res = await api.delete(`/api/admin/tenant-addons/${addonId}`);
         return res.data;
     },
+
+    listAddons: async (): Promise<AddonConfig[]> => {
+        const res = await api.get('/api/admin/addons');
+        return res.data;
+    },
+    updateAddon: async (addonId: string, payload: Partial<AddonConfig>): Promise<AddonConfig> => {
+        const res = await api.put(`/api/admin/addons/${addonId}`, payload);
+        return res.data;
+    },
 };
+
+export interface AddonConfig {
+    id: string;
+    name: string;
+    description: string | null;
+    quota_display: string | null;
+    price_cents: number;
+    is_active: boolean;
+}
 
 export interface TenantAddonEntry {
     id: string;

@@ -15,6 +15,7 @@ class BillingGateway(ABC):
     @abstractmethod
     def create_checkout_session(
         self,
+        db: Session,
         tenant: Tenant,
         plan: Plan,
         add_ons: Optional[List[Any]] = None,

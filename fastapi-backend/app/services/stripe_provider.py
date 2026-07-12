@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.models.models import Tenant, Plan, TenantAddon
+from app.models.models import Tenant, Plan, TenantAddon, AddonConfig
 from app.services.billing_gateway import BillingGateway
 from app.services.plan_limits import apply_plan, MANAGED_ADDON_TYPES
 
@@ -104,6 +104,7 @@ class StripeProvider(BillingGateway):
 
     def create_checkout_session(
         self,
+        db: Session,
         tenant: Tenant,
         plan: Plan,
         add_ons: Optional[List[Any]] = None,
@@ -127,17 +128,6 @@ class StripeProvider(BillingGateway):
 
         # Append add-ons to line items if any
         if add_ons:
-            # Default fallback prices if created dynamically (in cents)
-            ADDON_DEFAULT_PRICES = {
-                "edge_engine": 1000,
-                "managed_edge_db": 500,
-                "managed_cache": 200,
-                "managed_queue": 200,
-                "managed_vector": 300,
-                "managed_storage": 200,
-                "managed_domain": 100
-            }
-            
             for addon in add_ons:
                 # addon can be a Pydantic model or dict
                 addon_type = getattr(addon, "addon_type", None) or (addon.get("addon_type") if isinstance(addon, dict) else None)
@@ -146,8 +136,14 @@ class StripeProvider(BillingGateway):
                 if not addon_type or addon_type not in MANAGED_ADDON_TYPES:
                     continue
 
-                display_name = addon_type.replace("_", " ").title()
-                price_cents = ADDON_DEFAULT_PRICES.get(addon_type, 500)
+                addon_config = db.query(AddonConfig).filter(AddonConfig.id == addon_type).first()
+                if addon_config:
+                    display_name = str(addon_config.name)
+                    price_cents = int(str(addon_config.price_cents))
+                else:
+                    display_name = addon_type.replace("_", " ").title()
+                    price_cents = 500
+
                 
                 addon_price_id = self.sync_addon(addon_type, display_name, price_cents)
                 

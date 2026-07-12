@@ -194,3 +194,23 @@ class ZodObject(BaseModel):
     # Auto-generated from Zod schema
     # Original schema: ZodObject
     pass
+
+# Addon Config Models
+class AddonConfigResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    quota_display: Optional[str] = None
+    price_cents: int
+    is_active: bool
+
+    model_config = {
+        "from_attributes": True,
+    }
+
+class AddonConfigUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    quota_display: Optional[str] = None
+    price_cents: Optional[int] = None
+    is_active: Optional[bool] = None

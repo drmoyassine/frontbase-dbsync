@@ -23,6 +23,7 @@ from .tenant import (  # noqa: F401
 
 # Plans & subscriptions (cloud)
 from .plan import Plan  # noqa: F401
+from .addon import AddonConfig  # noqa: F401
 
 # Edge Infrastructure
 from .edge import (  # noqa: F401

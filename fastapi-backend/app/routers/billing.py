@@ -63,6 +63,7 @@ async def create_checkout(
 
     try:
         url = gateway.create_checkout_session(
+            db=db,
             tenant=tenant,
             plan=plan,
             add_ons=body.add_ons,

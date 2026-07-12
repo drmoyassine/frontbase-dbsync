@@ -40,10 +40,16 @@ class StripeProvider(BillingGateway):
         stripe_product_id = gateway_data.get("stripe_product_id")
         stripe_price_id = gateway_data.get("stripe_price_id")
 
+        frontend_url = os.environ.get("FRONTEND_URL", "https://admin.frontbase.dev").rstrip("/")
+        icon_url = f"{frontend_url}/icon.png"
+
         try:
             if not stripe_product_id:
-                product = stripe.Product.create(name=str(plan.name), metadata={"frontbase_slug": str(plan.slug)})
+                product = stripe.Product.create(name=str(plan.name), metadata={"frontbase_slug": str(plan.slug)}, images=[icon_url])
                 stripe_product_id = product.id
+            else:
+                # Keep product name and logo in sync
+                stripe.Product.modify(stripe_product_id, name=str(plan.name), images=[icon_url])
 
             if not stripe_price_id:
                 price = stripe.Price.create(
@@ -80,20 +86,24 @@ class StripeProvider(BillingGateway):
         if addon_type in self._addon_price_cache:
             return self._addon_price_cache[addon_type]
 
+        frontend_url = os.environ.get("FRONTEND_URL", "https://admin.frontbase.dev").rstrip("/")
+        icon_url = f"{frontend_url}/icon.png"
+
         try:
             product_id = None
             prices = stripe.Price.list(lookup_keys=[addon_type], limit=1)
             if prices.data:
                 existing_price = prices.data[0]
+                product_id = str(existing_price.product)
+                stripe.Product.modify(product_id, name=display_name, images=[icon_url])
                 if existing_price.unit_amount == price_cents:
                     self._addon_price_cache[addon_type] = existing_price.id
                     return existing_price.id
                 # Price changed, we will create a new price and transfer the lookup key
-                product_id = str(existing_price.product)
                 stripe.Price.modify(existing_price.id, active=False)
             else:
                 # Create product if it doesn't exist
-                product = stripe.Product.create(name=display_name)
+                product = stripe.Product.create(name=display_name, images=[icon_url])
                 product_id = product.id
 
             price = stripe.Price.create(

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Layers, Plus, X, Loader2, Pencil, Trash2, Check, Star, Globe, Inbox,
     ArrowUpCircle, ArrowDownCircle, RefreshCw, Bot, Cpu, Zap, PackagePlus,
-    HardDrive, Sparkles,
+    HardDrive, Sparkles, Database,
 } from 'lucide-react';
 import {
     adminPlansApi, Plan, LimitDef, PlanWritePayload,

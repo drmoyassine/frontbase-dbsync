@@ -33,13 +33,13 @@ def upgrade() -> None:
     # Seed initial data
     op.execute("""
     INSERT INTO addon_configs (id, name, description, quota_display, price_cents, is_active) VALUES
-    ('edge_engine', 'Edge Compute Engine', 'Deploy standalone backend workflows and HTML apps close to users. Unlocks 1 project slot for separate environments.', '+1 Engine & Project Slot', 1000, 1),
-    ('managed_edge_db', 'Managed Edge Database', 'Highly available, zero-config relational database (SQLite/Turso) running globally at the edge.', '+1 Managed DB', 500, 1),
-    ('managed_cache', 'Managed Edge Cache', 'Supercharge database read speeds and key-value storage using low-latency Upstash Redis caches.', '+1 Managed Cache', 200, 1),
-    ('managed_queue', 'Managed Edge Queue', 'Guaranteed message delivery, rate-limiting, and async background job queues powered by QStash.', '+1 Managed Queue', 200, 1),
-    ('managed_vector', 'Managed Vector Database', 'Store embeddings and run semantic vector search queries for AI-powered retrieval-augmented apps.', '+1 Managed Vector DB', 300, 1),
-    ('managed_storage', 'Managed Storage Bucket', 'Highly durable S3-compatible object storage buckets for user uploads, static assets, and media.', '+1 Storage Provider', 200, 1),
-    ('managed_domain', 'Custom Domain', 'Attach a custom domain to a Frontbase edge engine for white-labeled serving.', '+1 Custom Domain', 100, 1);
+    ('edge_engine', 'Edge Compute Engine', 'Deploy standalone backend workflows and HTML apps close to users. Unlocks 1 project slot for separate environments.', '+1 Engine & Project Slot', 1000, true),
+    ('managed_edge_db', 'Managed Edge Database', 'Highly available, zero-config relational database (SQLite/Turso) running globally at the edge.', '+1 Managed DB', 500, true),
+    ('managed_cache', 'Managed Edge Cache', 'Supercharge database read speeds and key-value storage using low-latency Upstash Redis caches.', '+1 Managed Cache', 200, true),
+    ('managed_queue', 'Managed Edge Queue', 'Guaranteed message delivery, rate-limiting, and async background job queues powered by QStash.', '+1 Managed Queue', 200, true),
+    ('managed_vector', 'Managed Vector Database', 'Store embeddings and run semantic vector search queries for AI-powered retrieval-augmented apps.', '+1 Managed Vector DB', 300, true),
+    ('managed_storage', 'Managed Storage Bucket', 'Highly durable S3-compatible object storage buckets for user uploads, static assets, and media.', '+1 Storage Provider', 200, true),
+    ('managed_domain', 'Custom Domain', 'Attach a custom domain to a Frontbase edge engine for white-labeled serving.', '+1 Custom Domain', 100, true);
     """)
 
 def downgrade() -> None:

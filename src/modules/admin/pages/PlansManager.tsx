@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     Layers, Plus, X, Loader2, Pencil, Trash2, Check, Star, Globe, Inbox,
-    ArrowUpCircle, ArrowDownCircle, RefreshCw, Bot, Cpu, Zap,
+    ArrowUpCircle, ArrowDownCircle, RefreshCw, Bot, Cpu, Zap, PackagePlus,
+    HardDrive, Sparkles,
 } from 'lucide-react';
 import {
     adminPlansApi, Plan, LimitDef, PlanWritePayload,
@@ -29,7 +30,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export function PlansManager() {
     const queryClient = useQueryClient();
-    const [tab, setTab] = useState<'plans' | 'llm'>('plans');
+    const [tab, setTab] = useState<'plans' | 'llm' | 'addons'>('plans');
     const [isEditorOpen, setEditorOpen] = useState(false);
     const [editing, setEditing] = useState<Plan | null>(null);
     const [deletingPlan, setDeletingPlan] = useState<Plan | null>(null);
@@ -143,7 +144,7 @@ export function PlansManager() {
 
             {/* Tabs */}
             <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
-                {([['plans', 'Plans', Layers], ['llm', 'Workspace Agent LLM', Bot]] as const).map(([key, label, Icon]) => (
+                {([['plans', 'Plans', Layers], ['addons', 'Add-ons', PackagePlus], ['llm', 'Workspace Agent LLM', Bot]] as const).map(([key, label, Icon]) => (
                     <button key={key} onClick={() => setTab(key)}
                         className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                             tab === key ? 'border-primary-500 text-primary-600 dark:text-primary-400'
@@ -153,7 +154,7 @@ export function PlansManager() {
                 ))}
             </div>
 
-            {tab === 'plans' ? (
+            {tab === 'plans' && (
                 isLoading ? (
                     <Centered><Loader2 className="w-8 h-8 animate-spin text-primary-500" /></Centered>
                 ) : (
@@ -166,10 +167,16 @@ export function PlansManager() {
                         {plans.length === 0 && <p className="text-slate-500 text-sm">No plans yet. Create one to get started.</p>}
                     </div>
                 )
-            ) : (
+            )}
+
+            {tab === 'llm' && (
                 <div className="space-y-8">
                     <WorkspaceProfileEditor providers={providersData?.providers ?? []} />
                 </div>
+            )}
+
+            {tab === 'addons' && (
+                <AddonsManager />
             )}
 
             {isEditorOpen && (
@@ -398,5 +405,125 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 // LLMConfigurationPanel was removed because providers are now mapped per-profile.
+
+function AddonsManager() {
+    const addons = [
+        {
+            id: 'edge_engine',
+            name: 'Edge Compute Engine',
+            icon: Cpu,
+            price: '$10.00',
+            quota: '+1 Engine & Project Slot',
+            description: 'Deploy standalone backend workflows and HTML apps close to users. Unlocks 1 project slot for separate environments.',
+            color: 'bg-blue-500/10 text-blue-500 border-blue-500/20 dark:bg-blue-500/5 dark:border-blue-500/10',
+        },
+        {
+            id: 'managed_edge_db',
+            name: 'Managed Edge Database',
+            icon: Database,
+            price: '$5.00',
+            quota: '+1 Managed DB',
+            description: 'Highly available, zero-config relational database (SQLite/Turso) running globally at the edge.',
+            color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 dark:bg-emerald-500/5 dark:border-emerald-500/10',
+        },
+        {
+            id: 'managed_cache',
+            name: 'Managed Edge Cache',
+            icon: Zap,
+            price: '$2.00',
+            quota: '+1 Managed Cache',
+            description: 'Supercharge database read speeds and key-value storage using low-latency Upstash Redis caches.',
+            color: 'bg-amber-500/10 text-amber-500 border-amber-500/20 dark:bg-amber-500/5 dark:border-amber-500/10',
+        },
+        {
+            id: 'managed_queue',
+            name: 'Managed Edge Queue',
+            icon: RefreshCw,
+            price: '$2.00',
+            quota: '+1 Managed Queue',
+            description: 'Guaranteed message delivery, rate-limiting, and async background job queues powered by QStash.',
+            color: 'bg-purple-500/10 text-purple-500 border-purple-500/20 dark:bg-purple-500/5 dark:border-purple-500/10',
+        },
+        {
+            id: 'managed_vector',
+            name: 'Managed Vector Database',
+            icon: Sparkles,
+            price: '$3.00',
+            quota: '+1 Managed Vector DB',
+            description: 'Store embeddings and run semantic vector search queries for AI-powered retrieval-augmented apps.',
+            color: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20 dark:bg-indigo-500/5 dark:border-indigo-500/10',
+        },
+        {
+            id: 'managed_storage',
+            name: 'Managed Storage Bucket',
+            icon: HardDrive,
+            price: '$2.00',
+            quota: '+1 Storage Provider',
+            description: 'Highly durable S3-compatible object storage buckets for user uploads, static assets, and media.',
+            color: 'bg-pink-500/10 text-pink-500 border-pink-500/20 dark:bg-pink-500/5 dark:border-pink-500/10',
+        },
+        {
+            id: 'managed_domain',
+            name: 'Custom Domain SSL',
+            icon: Globe,
+            price: '$1.00',
+            quota: 'Custom Domains Enabled',
+            description: 'Bind your own domains to edge apps with automated Let\'s Encrypt SSL certificate generation.',
+            color: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20 dark:bg-cyan-500/5 dark:border-cyan-500/10',
+        },
+    ];
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Managed Infrastructure Add-ons</h2>
+                <p className="text-sm text-slate-500 dark:text-gray-400 mt-1">
+                    Review premium managed resources available for purchase. Add-ons scale base-plan capacities on a per-tenant basis.
+                </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {addons.map((addon) => {
+                    const Icon = addon.icon;
+                    return (
+                        <div
+                            key={addon.id}
+                            className="group relative flex flex-col justify-between p-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 hover:border-primary-500 dark:hover:border-primary-500/50 shadow-sm hover:shadow-md transition-all duration-200"
+                        >
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className={`p-2.5 rounded-xl border ${addon.color}`}>
+                                        <Icon className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-lg font-bold text-slate-900 dark:text-white">{addon.price}</span>
+                                        <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Per Month</span>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <h3 className="font-semibold text-base text-slate-900 dark:text-white group-hover:text-primary-500 transition-colors">
+                                        {addon.name}
+                                    </h3>
+                                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-primary-50 dark:bg-primary-950/30 text-primary-600 dark:text-primary-400 border border-primary-100 dark:border-primary-900/30">
+                                        {addon.quota}
+                                    </div>
+                                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed pt-1">
+                                        {addon.description}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-xs text-slate-400 dark:text-slate-500">
+                                <span>Code: <code className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px] text-slate-600 dark:text-slate-400">{addon.id}</code></span>
+                                <span className="font-medium text-primary-500 dark:text-primary-400 group-hover:translate-x-0.5 transition-transform">Auto-provisioned</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
 
 export default PlansManager;

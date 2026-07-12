@@ -228,9 +228,12 @@ async def sync_billing_addons(
 ):
     """Force synchronization of all managed add-ons to the billing gateway."""
     ADDON_DEFAULT_PRICES = {
+        "edge_engine": 1000,
         "managed_edge_db": 500,
         "managed_cache": 200,
         "managed_queue": 200,
+        "managed_vector": 300,
+        "managed_storage": 200,
         "managed_domain": 100
     }
     

@@ -85,6 +85,9 @@ async def create_storage_provider(request: dict, ctx: TenantContext | None = Dep
             project = get_project(db, ctx)
             if project:
                 project_id = project.id
+                from app.services.plan_limits import check_quota
+                existing_storage = db.query(StorageProvider).filter(StorageProvider.project_id == project_id).count()
+                check_quota(db, ctx, "storage_providers", existing_storage)
 
         now = datetime.now(timezone.utc)
         sp = StorageProvider(
@@ -806,7 +809,7 @@ async def move_file_cross(
                 db.add(job)
                 db.commit()
                 db.refresh(job)
-                job_id = job.id
+                job_id = str(job.id)
             finally:
                 db.close()
 
@@ -850,17 +853,19 @@ async def get_move_status(job_id: str, ctx: TenantContext | None = Depends(get_t
                 raise HTTPException(404, "Move job not found")
             if ctx.tenant_id != job.tenant_id and not ctx.is_master:
                 raise HTTPException(404, "Move job not found")
-        progress = (job.bytes_transferred / job.bytes_total) if job.bytes_total else 0.0
+        bytes_total = getattr(job, "bytes_total", 0) or 0
+        bytes_transferred = getattr(job, "bytes_transferred", 0) or 0
+        progress = (bytes_transferred / bytes_total) if bytes_total else 0.0
         return {
             "success": True,
-            "job_id": job.id,
+            "job_id": str(job.id),
             "status": job.status,
             "phase": job.phase,
             "bytes_total": job.bytes_total,
             "bytes_transferred": job.bytes_transferred,
             "progress": round(progress, 4),
             "error": job.error_message,
-            "completed_at": job.completed_at.isoformat() if job.completed_at else None,
+            "completed_at": job.completed_at.isoformat() if getattr(job, "completed_at", None) else None, # type: ignore
         }
     finally:
         db.close()

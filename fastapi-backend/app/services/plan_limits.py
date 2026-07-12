@@ -74,6 +74,11 @@ LIMIT_REGISTRY: list[LimitDef] = [
     {"key": "connected_accounts", "label": "Connected accounts", "kind": "int", "category": "capacity", "scope": "tenant", "unit": None, "default": 1},
     {"key": "edge_engines", "label": "Edge engines", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 0},
     {"key": "team_members", "label": "Team members", "kind": "int", "category": "capacity", "scope": "tenant", "unit": None, "default": 1},
+    {"key": "edge_databases", "label": "Edge databases", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 0},
+    {"key": "edge_caches", "label": "Edge caches", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 0},
+    {"key": "edge_queues", "label": "Edge queues", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 0},
+    {"key": "edge_vectors", "label": "Edge vector databases", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 0},
+    {"key": "storage_providers", "label": "Storage providers", "kind": "int", "category": "capacity", "scope": "project", "unit": None, "default": 0},
     # (custom_domains is intentionally NOT here — it's a managed add-on on managed tiers / free BYO.
     #  See [TIERS] §4.4 + [FEATURE] multi-project-plan-gated.md §Custom domains.)
     # -- Operational (optional; dormant at launch, UNLIMITED = disabled) --
@@ -161,7 +166,7 @@ def apply_plan(db: Session, tenant_id: str, slug: str) -> Tenant:
 # ---------------------------------------------------------------------------
 
 MANAGED_ADDON_TYPES: tuple[str, ...] = (
-    "managed_edge_db", "managed_cache", "managed_queue", "managed_domain",
+    "edge_engine", "managed_edge_db", "managed_cache", "managed_queue", "managed_vector", "managed_storage", "managed_domain",
 )
 
 
@@ -265,7 +270,7 @@ def serialize_plan(plan: Plan) -> dict[str, Any]:
         "infra_mode": str(plan.infra_mode) if plan.infra_mode is not None else "byo",
         "price_display": plan.price_display,
         "price_period": plan.price_period,
-        "price_cents": int(plan.price_cents) if plan.price_cents is not None else 0,
+        "price_cents": int(str(plan.price_cents)) if getattr(plan, "price_cents", None) is not None else 0, # type: ignore
         "limits": plan_limits(plan),
         "features": features,
         "gateway_metadata": gateway_metadata,
@@ -334,6 +339,45 @@ def _bypasses(ctx: Any) -> bool:
     return ctx is None or bool(getattr(ctx, "is_master", False))
 
 
+# Configurable add-on definitions mapping addon types to their limit increases.
+ADDON_REGISTRY: dict[str, dict[str, dict[str, int]]] = {
+    "edge_engine": {
+        "limits": {
+            "edge_engines": 1,
+            "projects": 1
+        }
+    },
+    "managed_edge_db": {
+        "limits": {
+            "edge_databases": 1
+        }
+    },
+    "managed_cache": {
+        "limits": {
+            "edge_caches": 1
+        }
+    },
+    "managed_queue": {
+        "limits": {
+            "edge_queues": 1
+        }
+    },
+    "managed_vector": {
+        "limits": {
+            "edge_vectors": 1
+        }
+    },
+    "managed_storage": {
+        "limits": {
+            "storage_providers": 1
+        }
+    },
+    "managed_domain": {
+        "limits": {}
+    }
+}
+
+
 def tenant_limits(db: Session, ctx: Any) -> dict[str, Any]:
     """Resolved limits for the tenant behind ``ctx``."""
     tenant = db.query(Tenant).filter(Tenant.id == getattr(ctx, "tenant_id", None)).first()
@@ -347,12 +391,15 @@ def tenant_limits(db: Session, ctx: Any) -> dict[str, Any]:
         ).all()
         for addon in addons:
             qty = addon.quantity if addon.quantity is not None else 1
-            if addon.addon_type == "edge_engine":
-                limits["edge_engines"] = limits.get("edge_engines", 0) + qty
-                limits["projects"] = limits.get("projects", 0) + qty
-            elif addon.addon_type in limits:
-                if limits[addon.addon_type] != UNLIMITED:
-                    limits[addon.addon_type] = limits[addon.addon_type] + qty
+            addon_type = str(addon.addon_type)
+            if addon_type in ADDON_REGISTRY:
+                addon_cfg = ADDON_REGISTRY[addon_type]
+                for limit_key, val in addon_cfg.get("limits", {}).items():
+                    if limit_key in limits and limits[limit_key] != UNLIMITED:
+                        limits[limit_key] = limits.get(limit_key, 0) + (val * qty)
+            elif addon_type in limits:
+                if limits[addon_type] != UNLIMITED:
+                    limits[addon_type] = limits[addon_type] + qty
     return limits
 
 
@@ -431,6 +478,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "projects": 1,
             "pages": 10, "workflows": 5, "datasources": 1, "connected_accounts": 1,
             "edge_engines": 0, "team_members": 1,
+            "edge_databases": 0, "edge_caches": 0, "edge_queues": 0, "edge_vectors": 0, "storage_providers": 0,
             "deploys_monthly": 50, "log_retention_hours": 720, "shared_worker_executions_monthly": 1000,
             "agent_credits_daily": 5, "agent_credits_monthly": 0,
             "private_pages": False, "auth_providers": False, "remove_branding": False, "api_access": False,
@@ -445,6 +493,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "projects": 1,
             "pages": 50, "workflows": 25, "datasources": 3, "connected_accounts": 3,
             "edge_engines": 1, "team_members": 3,
+            "edge_databases": 1, "edge_caches": 0, "edge_queues": 0, "edge_vectors": 0, "storage_providers": 0,
             "deploys_monthly": 500, "log_retention_hours": 2160, "shared_worker_executions_monthly": 10000,
             "agent_credits_daily": 5, "agent_credits_monthly": 500,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
@@ -459,6 +508,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "projects": 3,
             "pages": 200, "workflows": 50, "datasources": 10, "connected_accounts": 10,
             "edge_engines": 3, "team_members": 10,
+            "edge_databases": 3, "edge_caches": 3, "edge_queues": 3, "edge_vectors": 3, "storage_providers": 3,
             "deploys_monthly": 5000, "log_retention_hours": 8760, "shared_worker_executions_monthly": _OFF,
             "agent_credits_daily": 20, "agent_credits_monthly": 2000,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,
@@ -473,6 +523,7 @@ _SEED_PLANS: list[dict[str, Any]] = [
             "projects": UNLIMITED,
             "pages": UNLIMITED, "workflows": UNLIMITED, "datasources": UNLIMITED, "connected_accounts": UNLIMITED,
             "edge_engines": UNLIMITED, "team_members": UNLIMITED,
+            "edge_databases": UNLIMITED, "edge_caches": UNLIMITED, "edge_queues": UNLIMITED, "edge_vectors": UNLIMITED, "storage_providers": UNLIMITED,
             "deploys_monthly": _OFF, "log_retention_hours": _OFF, "shared_worker_executions_monthly": _OFF,
             "agent_credits_daily": UNLIMITED, "agent_credits_monthly": UNLIMITED,
             "private_pages": True, "auth_providers": True, "remove_branding": True, "api_access": True,

@@ -42,7 +42,7 @@ class StripeProvider(BillingGateway):
 
         try:
             if not stripe_product_id:
-                product = stripe.Product.create(name=plan.name, metadata={"frontbase_slug": plan.slug})
+                product = stripe.Product.create(name=str(plan.name), metadata={"frontbase_slug": str(plan.slug)})
                 stripe_product_id = product.id
 
             if not stripe_price_id:
@@ -129,9 +129,12 @@ class StripeProvider(BillingGateway):
         if add_ons:
             # Default fallback prices if created dynamically (in cents)
             ADDON_DEFAULT_PRICES = {
+                "edge_engine": 1000,
                 "managed_edge_db": 500,
                 "managed_cache": 200,
                 "managed_queue": 200,
+                "managed_vector": 300,
+                "managed_storage": 200,
                 "managed_domain": 100
             }
             

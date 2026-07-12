@@ -186,6 +186,9 @@ async def create_edge_cache(payload: EdgeCacheCreate, ctx: TenantContext | None 
             project = get_project(db, ctx)
             if project:
                 project_id = project.id
+                from ..services.plan_limits import check_quota
+                existing_caches = db.query(EdgeCache).filter(EdgeCache.project_id == project_id).count()
+                check_quota(db, ctx, "edge_caches", existing_caches)
                 
         from ..core.security import encrypt_field
         cache = EdgeCache(

@@ -456,7 +456,10 @@ async def list_engines(
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
-            query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+            if bool(project.is_default):
+                query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+            else:
+                query = query.filter(EdgeEngine.project_id == project.id)
         else:
             return []
             
@@ -797,7 +800,7 @@ async def finalize_move(
     engine = _load_engine_for_owner(engine_id, db, ctx)
     if getattr(engine, "move_status", None) != MOVE_STATUS_MOVED_OUT:
         raise HTTPException(409, "Engine is not pending a move.")
-    if not engine.move_secret_hash:
+    if not str(engine.move_secret_hash or ""):
         raise HTTPException(409, "Engine has no pending move secret.")
 
     provided = hashlib.sha256(payload.confirm_secret.encode()).hexdigest()
@@ -860,7 +863,7 @@ async def move_engine_to_project_endpoint(
     # Master admin (tenant_id=None) and self-host (no tenant isolation) are unrestricted.
     # Mirrors the tenant-scope guard used in the datasource CRUD.
     if ctx and ctx.tenant_id and not getattr(ctx, "is_master", False):
-        if target.tenant_id != ctx.tenant_id:
+        if str(target.tenant_id) != str(ctx.tenant_id):
             raise HTTPException(403, "Destination project must belong to your tenant.")
 
     try:
@@ -1264,7 +1267,10 @@ async def list_active_engines_by_scope(
     if ctx and ctx.tenant_id:
         project = get_project(db, ctx)
         if project:
-            query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+            if bool(project.is_default):
+                query = query.filter(or_(EdgeEngine.project_id == project.id, EdgeEngine.is_shared == True))  # noqa: E712
+            else:
+                query = query.filter(EdgeEngine.project_id == project.id)
         else:
             return []
             
@@ -1282,6 +1288,7 @@ async def list_active_engines_by_scope(
             "adapter_type": str(e.adapter_type),
             "edge_db_id": str(e.edge_db_id) if str(e.edge_db_id or "") else None,
             "is_active": bool(e.is_active),
+            "is_shared": bool(e.is_shared),
         }
         for e in engines
     ]

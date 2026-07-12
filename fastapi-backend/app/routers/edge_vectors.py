@@ -57,7 +57,7 @@ def _ip_is_unsafe(ip: ipaddress._BaseAddress) -> bool:
         return True
     if any(ip in network for network in DEFAULT_BLOCKED_IP_RANGES):
         return True
-    return not ip.is_global
+    return not getattr(ip, "is_global", False)
 
 
 def _is_safe_url(url: str, ctx: Optional[object] = None, source_ip: Optional[str] = None) -> bool:
@@ -467,7 +467,7 @@ async def test_vector_connection_raw(
         try:
             from app.services.vector import get_vector_backend
             from app.services.vector.edge_proxy_backend import EdgeVectorProxyBackend
-            backend = get_vector_backend(provider_lower, db=db)
+            backend = get_vector_backend(provider_lower, db=db)  # type: ignore[arg-type]
             if not isinstance(backend, EdgeVectorProxyBackend):
                 return {"success": False, "message": "Failed to resolve Edge vector proxy backend.", "error_code": "INTERNAL_ERROR"}
             
@@ -692,6 +692,9 @@ async def create_edge_vector(payload: EdgeVectorCreate, ctx: TenantContext | Non
             project = get_project(db, ctx)
             if project:
                 project_id = project.id
+                from ..services.plan_limits import check_quota
+                existing_vectors = db.query(EdgeVector).filter(EdgeVector.project_id == project_id).count()
+                check_quota(db, ctx, "edge_vectors", existing_vectors)
 
         # Store only truthy, user-supplied config values. Server-side keys
         # (cf_account_id, scoped tokens, …) are added later by lifecycle hooks.
@@ -772,7 +775,7 @@ async def update_edge_vector(vector_id: str, payload: EdgeVectorUpdate, ctx: Ten
             # Truthy values set/update a key; empty values clear it.
             # An empty dict {} explicitly clears all user-visible config keys.
             existing_cfg: Dict[str, Any] = {}
-            if vector.provider_config:
+            if str(vector.provider_config):
                 try:
                     existing_cfg = json.loads(str(vector.provider_config)) or {}
                 except (json.JSONDecodeError, TypeError):
@@ -828,6 +831,7 @@ async def delete_edge_vector(vector_id: str, delete_remote: bool = False, ctx: T
     db = SessionLocal()
     try:
         query = db.query(EdgeVector).filter(EdgeVector.id == vector_id)
+        project = None
         if ctx and ctx.tenant_id:
             project = get_project(db, ctx)
             if project:

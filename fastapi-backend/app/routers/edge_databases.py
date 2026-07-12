@@ -163,6 +163,9 @@ async def create_edge_database(payload: EdgeDatabaseCreate, ctx: TenantContext |
             project = get_project(db, ctx)
             if project:
                 project_id = project.id
+                from ..services.plan_limits import check_quota
+                existing_dbs = db.query(EdgeDatabase).filter(EdgeDatabase.project_id == project_id).count()
+                check_quota(db, ctx, "edge_databases", existing_dbs)
 
         from ..core.security import encrypt_field
         edge_db = EdgeDatabase(

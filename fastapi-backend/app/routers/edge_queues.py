@@ -226,7 +226,11 @@ async def create_edge_queue(payload: EdgeQueueCreate, ctx: TenantContext | None 
         project_id_val = None
         if ctx and ctx.tenant_id:
             proj = get_project(db, ctx)
-            if proj: project_id_val = proj.id
+            if proj:
+                project_id_val = proj.id
+                from ..services.plan_limits import check_quota
+                existing_queues = db.query(EdgeQueue).filter(EdgeQueue.project_id == project_id_val).count()
+                check_quota(db, ctx, "edge_queues", existing_queues)
 
         queue = EdgeQueue(
             id=str(uuid.uuid4()),

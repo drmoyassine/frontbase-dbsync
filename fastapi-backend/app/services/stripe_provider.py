@@ -250,6 +250,8 @@ class StripeProvider(BillingGateway):
             self._handle_checkout_completed(db, data_object) # type: ignore
         elif event_type == 'customer.subscription.deleted':
             self._handle_subscription_deleted(db, data_object) # type: ignore
+        elif event_type == 'customer.subscription.updated':
+            self._handle_subscription_updated(db, data_object) # type: ignore
 
     def _handle_checkout_completed(self, db: Session, session_obj: dict) -> None:
         tenant_id = session_obj.get("client_reference_id")
@@ -348,5 +350,57 @@ class StripeProvider(BillingGateway):
         try:
             apply_plan(db, str(tenant_to_downgrade.id), "free")
             logger.info(f"Downgraded tenant {tenant_to_downgrade.id} to free after subscription deletion")
+            
+            # Suspend all addons since the entire subscription is deleted
+            tenant_addons = db.query(TenantAddon).filter(TenantAddon.tenant_id == str(tenant_to_downgrade.id)).all()
+            now = datetime.now(timezone.utc).isoformat()
+            for addon in tenant_addons:
+                if str(addon.status) == "active":
+                    addon.status = "suspended" # type: ignore[assignment]
+                    addon.updated_at = now # type: ignore[assignment]
+            db.commit()
+            
         except Exception as e:
             logger.error(f"Failed to downgrade tenant {tenant_to_downgrade.id}: {e}")
+
+    def _handle_subscription_updated(self, db: Session, subscription_obj: dict) -> None:
+        customer_id = subscription_obj.get("customer")
+        if not customer_id:
+            return
+            
+        search_term = f'%"gateway_customer_id": "{customer_id}"%'
+        tenant_to_update = db.query(Tenant).filter(Tenant.settings.like(search_term)).first()
+        
+        if not tenant_to_update:
+            logger.warning(f"Could not find tenant for Stripe Customer {customer_id} on subscription updated")
+            return
+            
+        # Extract active add-on types from subscription items
+        active_addon_types = set()
+        items = subscription_obj.get("items", {}).get("data", [])
+        for item in items:
+            price = item.get("price", {})
+            lookup_key = price.get("lookup_key")
+            if lookup_key:
+                active_addon_types.add(lookup_key)
+                
+        # Fetch all existing add-ons for the tenant
+        tenant_addons = db.query(TenantAddon).filter(TenantAddon.tenant_id == str(tenant_to_update.id)).all()
+        now = datetime.now(timezone.utc).isoformat()
+        
+        for addon in tenant_addons:
+            addon_type = str(addon.addon_type)
+            if addon_type in active_addon_types:
+                if str(addon.status) != "active":
+                    addon.status = "active" # type: ignore[assignment]
+                    addon.updated_at = now # type: ignore[assignment]
+            else:
+                if str(addon.status) == "active":
+                    addon.status = "suspended" # type: ignore[assignment]
+                    addon.updated_at = now # type: ignore[assignment]
+                    
+        try:
+            db.commit()
+            logger.info(f"Synced add-on statuses for tenant {tenant_to_update.id} after subscription update")
+        except Exception as e:
+            logger.error(f"Failed to sync add-on statuses for tenant {tenant_to_update.id}: {e}")

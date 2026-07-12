@@ -257,3 +257,46 @@ async def deprovision_kv(db: Session, cache_id: str) -> None:
 #    account (re-use engine_provisioner._cf_pre_deploy + secrets_builder, re-targeted to the
 #    operator EdgeProviderAccount). Records an is_managed EdgeEngine. This is the base
 #    managed_edge_db resource and the core of the managed tier.
+
+async def cleanup_suspended_addons(db: Session) -> None:
+    """Hard-deletes managed resources for add-ons that have been suspended for over 30 days.
+    
+    This is called by a daily cron job to enforce the grace period on expired subscriptions.
+    """
+    from datetime import timedelta
+    from app.models.models import TenantAddon, Project, EdgeDatabase, EdgeCache
+
+    thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    
+    expired_addons = (
+        db.query(TenantAddon)
+        .filter(TenantAddon.status == "suspended")
+        .filter(TenantAddon.updated_at < thirty_days_ago)
+        .all()
+    )
+    
+    for addon in expired_addons:
+        tenant_id = str(addon.tenant_id)
+        addon_type = str(addon.addon_type)
+        
+        try:
+            if addon_type == "managed_edge_db":
+                dbs = db.query(EdgeDatabase).join(Project).filter(Project.tenant_id == tenant_id, EdgeDatabase.is_managed == True).all()
+                for d in dbs:
+                    await deprovision_d1(db, str(d.id))
+            elif addon_type == "managed_cache":
+                caches = db.query(EdgeCache).join(Project).filter(Project.tenant_id == tenant_id, EdgeCache.is_managed == True).all()
+                for c in caches:
+                    await deprovision_kv(db, str(c.id))
+            
+            # Future: add queues, storage, vector, domains here once deprovision methods are implemented for them.
+            
+            # Finally, mark the addon as revoked
+            addon.status = "revoked" # type: ignore[assignment]
+            addon.updated_at = datetime.now(timezone.utc).isoformat() # type: ignore[assignment]
+            db.commit()
+            logger.info(f"Successfully cleaned up expired addon {addon_type} for tenant {tenant_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to cleanup expired addon {addon_type} for tenant {tenant_id}: {e}")
+            db.rollback()

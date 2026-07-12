@@ -46,6 +46,11 @@ celery_app.conf.update(
             "task": "app.services.engine_move.prune_stale_moves",
             "schedule": crontab(minute=30, hour=3),
         },
+        # Hard-delete managed resources for suspended add-ons past the 30-day grace period.
+        "cleanup-suspended-addons": {
+            "task": "app.services.managed_provisioner.cleanup_suspended_addons",
+            "schedule": crontab(minute=0, hour=4),
+        },
     },
 )
 
@@ -102,3 +107,16 @@ def reset_all_daily_credits_task() -> int:
     finally:
         db.close()
 
+
+@celery_app.task(name="app.services.managed_provisioner.cleanup_suspended_addons")
+def cleanup_suspended_addons_task() -> None:
+    """Hard-deletes managed resources for suspended add-ons past the 30-day grace period."""
+    import asyncio
+    from app.database.config import SessionLocal
+    from app.services.managed_provisioner import cleanup_suspended_addons
+
+    db = SessionLocal()
+    try:
+        asyncio.run(cleanup_suspended_addons(db))
+    finally:
+        db.close()

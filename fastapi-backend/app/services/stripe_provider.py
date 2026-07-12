@@ -81,15 +81,23 @@ class StripeProvider(BillingGateway):
             return self._addon_price_cache[addon_type]
 
         try:
+            product_id = None
             prices = stripe.Price.list(lookup_keys=[addon_type], limit=1)
             if prices.data:
-                self._addon_price_cache[addon_type] = prices.data[0].id
-                return prices.data[0].id
+                existing_price = prices.data[0]
+                if existing_price.unit_amount == price_cents:
+                    self._addon_price_cache[addon_type] = existing_price.id
+                    return existing_price.id
+                # Price changed, we will create a new price and transfer the lookup key
+                product_id = existing_price.product
+                stripe.Price.modify(existing_price.id, active=False)
+            else:
+                # Create product if it doesn't exist
+                product = stripe.Product.create(name=display_name)
+                product_id = product.id
 
-            # Create product and price
-            product = stripe.Product.create(name=display_name)
             price = stripe.Price.create(
-                product=product.id,
+                product=product_id,
                 unit_amount=price_cents,
                 currency="usd",
                 recurring={"interval": "month"},

@@ -461,15 +461,13 @@ async def update_addon(
     if body.is_active is not None:
         addon.is_active = body.is_active  # type: ignore[assignment]
 
-    price_changed = False
     if body.price_cents is not None and body.price_cents != addon.price_cents:
         addon.price_cents = body.price_cents  # type: ignore[assignment]
-        price_changed = True
 
     db.commit()
 
-    if price_changed:
-        gateway.sync_addon(addon_id, str(addon.name), int(str(addon.price_cents)))
+    # Always attempt to sync to ensure the addon exists in Stripe (StripeProvider is idempotent)
+    gateway.sync_addon(addon_id, str(addon.name), int(str(addon.price_cents)))
 
     db.refresh(addon)
     return addon

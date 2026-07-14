@@ -2358,6 +2358,8 @@ export const zAuthResponse = z.object({
  * ValidationError
  */
 export const zValidationError = z.object({
+    ctx: z.record(z.unknown()).optional(),
+    input: z.unknown().optional(),
     loc: z.array(z.union([z.string(), z.number().int()])),
     msg: z.string(),
     type: z.string()

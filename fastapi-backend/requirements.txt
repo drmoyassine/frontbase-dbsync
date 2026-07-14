@@ -19,7 +19,7 @@ cryptography==46.0.3
 dnspython==2.8.0
 ecdsa==0.19.1
 email-validator==2.3.0
-fastapi>=0.135.0
+fastapi==0.139.0
 # pydantic-ai-slim, not the full `pydantic-ai` meta-package: the meta-package pulls
 # EVERY provider extra (temporal/bedrock/cohere/huggingface/...), which both bloats
 # the install and fails on Windows long-path installs (e.g. temporalio's deep .proto

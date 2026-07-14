@@ -7,7 +7,7 @@ one or more EdgeEngines (one-to-many).
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime, UTC
 import uuid
 
@@ -275,7 +275,7 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate, ctx: Tenant
         db.close()
 
 
-@router.delete("/{cache_id}")
+@router.delete("/{cache_id}", response_model=dict[str, Any])
 async def delete_edge_cache(cache_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge cache connection.
     
@@ -360,17 +360,17 @@ class BatchDeleteCacheRequest(BaseModel):
     delete_remote: bool = False
 
 
-class BatchResult(BaseModel):
+class CacheBatchResult(BaseModel):
     success: List[str] = []
     failed: List[dict] = []
     total: int = 0
 
 
-@router.post("/batch/delete", response_model=BatchResult)
+@router.post("/batch/delete", response_model=CacheBatchResult)
 async def batch_delete_caches(payload: BatchDeleteCacheRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Batch delete caches. Optionally delete remote resources in parallel."""
     import asyncio
-    result = BatchResult(total=len(payload.ids))
+    result = CacheBatchResult(total=len(payload.ids))
     db = SessionLocal()
     try:
         records_to_delete: list[EdgeCache] = []

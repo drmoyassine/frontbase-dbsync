@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -119,7 +120,7 @@ async def update_project_endpoint(
         return JSONResponse(content=resp)
 
     return response_data
-@router.post("/assets/upload/")
+@router.post("/assets/upload/", response_model=dict[str, Any])
 async def upload_branding_asset(
     file: UploadFile = File(...),
     asset_type: str = Form(default="favicon"),
@@ -180,7 +181,7 @@ async def upload_branding_asset(
     })
 
 
-@router.get("/internal/creds/", include_in_schema=False)
+@router.get("/internal/creds/", include_in_schema=False, response_model=dict[str, Any])
 async def get_internal_creds(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),

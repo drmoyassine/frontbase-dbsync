@@ -7,7 +7,7 @@ one or more EdgeEngines (one-to-many).
 """
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime, UTC
 import uuid
 import httpx
@@ -320,7 +320,7 @@ async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate, ctx: Tenant
         db.close()
 
 
-@router.delete("/{queue_id}")
+@router.delete("/{queue_id}", response_model=dict[str, Any])
 async def delete_edge_queue(queue_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge queue connection.
     
@@ -394,17 +394,17 @@ class BatchDeleteQueueRequest(BaseModel):
     delete_remote: bool = False
 
 
-class BatchResult(BaseModel):
+class QueueBatchResult(BaseModel):
     success: List[str] = []
     failed: List[dict] = []
     total: int = 0
 
 
-@router.post("/batch/delete", response_model=BatchResult)
+@router.post("/batch/delete", response_model=QueueBatchResult)
 async def batch_delete_queues(payload: BatchDeleteQueueRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Batch delete queues. Optionally delete remote resources in parallel."""
     import asyncio
-    result = BatchResult(total=len(payload.ids))
+    result = QueueBatchResult(total=len(payload.ids))
     db = SessionLocal()
     try:
         records_to_delete: list[EdgeQueue] = []

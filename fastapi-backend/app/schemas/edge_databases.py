@@ -71,7 +71,7 @@ class BatchDeleteDatabaseRequest(BaseModel):
     delete_remote: bool = False
 
 
-class BatchResult(BaseModel):
+class DatabaseBatchResult(BaseModel):
     success: List[str] = []
     failed: List[dict] = []
     total: int = 0

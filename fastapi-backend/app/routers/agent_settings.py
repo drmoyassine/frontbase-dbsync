@@ -21,7 +21,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -96,7 +96,7 @@ async def get_agent_settings(
     )
 
 
-@router.put("")
+@router.put("", response_model=dict[str, Any])
 async def update_agent_settings(
     payload: SettingsUpdate,
     request: Request,
@@ -146,7 +146,7 @@ async def update_agent_settings(
     return {"message": "Settings saved", "scope": payload.scope}
 
 
-@router.delete("")
+@router.delete("", response_model=dict[str, Any])
 async def reset_agent_settings(
     request: Request,
     scope: str = "user",

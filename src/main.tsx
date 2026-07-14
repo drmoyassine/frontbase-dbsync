@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import "./lib/api-client"; // configure the generated API client before any SDK call
 import { initSuperTokens } from "./lib/supertokens";
 import { initAnalytics } from "./lib/analytics";
 

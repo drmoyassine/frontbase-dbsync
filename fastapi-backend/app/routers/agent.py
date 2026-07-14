@@ -246,7 +246,7 @@ def _stream_headers() -> dict[str, str]:
     }
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=dict[str, Any])
 async def agent_chat(
     request: Request,
     ctx: TenantContext | None = Depends(get_tenant_context),
@@ -255,7 +255,7 @@ async def agent_chat(
     return await _agent_chat_impl(request, ctx, "workspace-agent")
 
 
-@router.post("/chat/{profile_slug}")
+@router.post("/chat/{profile_slug}", response_model=dict[str, Any])
 async def agent_chat_with_profile(
     profile_slug: str,
     request: Request,
@@ -265,7 +265,7 @@ async def agent_chat_with_profile(
     return await _agent_chat_impl(request, ctx, profile_slug or "workspace-agent")
 
 
-@router.get("/credits")
+@router.get("/credits", response_model=dict[str, Any])
 async def agent_credits(ctx: TenantContext | None = Depends(get_tenant_context)):
     """Current Workspace Agent credit balance for the caller.
 

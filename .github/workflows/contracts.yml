@@ -1,0 +1,57 @@
+name: contracts
+
+# CF-22 P0: the contract is a committed, generated artifact. These gates fail
+# the build when the committed OpenAPI spec or the generated API client drifts
+# from the source of truth (the FastAPI routers).
+#
+# - backend-contracts: regenerate the spec from the routers; fail if the
+#   committed contracts/ differ (staleness), or if any route is untyped /
+#   has a duplicate operationId / missing edition tag (hygiene).
+# - frontend-client: regenerate src/client from the committed spec; fail if
+#   the committed client differs, then typecheck it.
+#
+# Between the two, a router change that forgets to regenerate the spec OR the
+# client is always caught.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend-contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fastapi-backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: fastapi-backend/requirements.txt
+      - name: Install backend deps
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+      - name: Spec staleness gate (regenerate vs committed)
+        run: python scripts/export_openapi.py --check
+      - name: Hygiene gate (typed / unique op-ids / tagged)
+        run: python scripts/openapi_check.py
+
+  frontend-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install frontend deps
+        run: npm ci
+      - name: Regenerate API client from committed spec
+        run: npm run client:generate
+      - name: Client staleness gate (regenerated vs committed)
+        run: git diff --exit-code --stat -- src/client
+      - name: Typecheck (incl. generated client)
+        run: npx tsc --noEmit

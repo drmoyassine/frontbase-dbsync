@@ -11,7 +11,7 @@ first (env-var), then falls through to SuperTokens (cloud only).
 from fastapi import APIRouter, HTTPException, Response, Request, Depends, BackgroundTasks
 from pydantic import BaseModel, EmailStr
 from app.middleware.tenant_context import TenantContext, get_tenant_context
-from typing import Optional, Literal, cast
+from typing import Optional, Literal, cast, Any
 import os
 import json
 import hashlib
@@ -25,6 +25,12 @@ from app.config.edition import is_cloud
 from app.database.config import get_db, SessionLocal
 from app.models.models import IPBlocklist, AuditLog
 from sqlalchemy.orm import Session
+from ..schemas.auth_api import (
+    UserPayload, InviteInfo, SlugCheck,
+    ForgotPasswordResponse, SuccessMessageResponse,
+    BlocklistEntry, BotProtectionMetrics, WafStatus, WafUpdateResponse, AuditLogEntry,
+)
+from ..models.schemas import MessageResponse
 
 logger = logging.getLogger(__name__)
 
@@ -634,13 +640,13 @@ def _set_session_cookie(response: Response, token: str) -> None:
 # CORS Preflight
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.options("/login")
+@router.options("/login", response_model=dict[str, Any])
 async def login_options():
     """Handle CORS preflight for login."""
     return Response(status_code=200)
 
 
-@router.options("/signup")
+@router.options("/signup", response_model=dict[str, Any])
 async def signup_options():
     """Handle CORS preflight for signup."""
     return Response(status_code=200)
@@ -821,7 +827,7 @@ async def login(request: Request, body: LoginRequest, response: Response):
 # POST /api/auth/signup — Self-Service Tenant Signup (Cloud Only)
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.post("/signup")
+@router.post("/signup", response_model=UserPayload)
 async def signup(request: Request, body: SignupRequest, response: Response):
     """Register a new tenant user with workspace.
 
@@ -1069,7 +1075,7 @@ def _load_valid_invite(db, token: str):
     return inv
 
 
-@router.get("/invite/{token}")
+@router.get("/invite/{token}", response_model=InviteInfo)
 async def get_invite(token: str):
     """Public — return invite details for the accept page."""
     if not is_cloud():
@@ -1092,7 +1098,7 @@ async def get_invite(token: str):
         db.close()
 
 
-@router.post("/accept-invite")
+@router.post("/accept-invite", response_model=UserPayload)
 async def accept_invite(request: Request, body: AcceptInviteRequest, response: Response):
     """Public — create an account for the invited email and join the tenant."""
     if not is_cloud():
@@ -1202,7 +1208,7 @@ async def accept_invite(request: Request, body: AcceptInviteRequest, response: R
 # GET /api/auth/check-slug/{slug} — Public Slug Availability Check
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.get("/check-slug/{slug}")
+@router.get("/check-slug/{slug}", response_model=SlugCheck)
 async def check_slug(slug: str):
     """Check if a workspace slug is available. Public endpoint."""
     if not is_cloud():
@@ -1232,7 +1238,7 @@ async def check_slug(slug: str):
 # GET /api/auth/me — Current User (Dual-Path)
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.get("/me")
+@router.get("/me", response_model=UserPayload)
 async def get_me(request: Request):
     """Get current authenticated user with tenant context.
 
@@ -1286,7 +1292,7 @@ async def get_me(request: Request):
 # POST /api/auth/logout — Dual-Path Logout
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.post("/logout")
+@router.post("/logout", response_model=MessageResponse)
 async def logout(request: Request, response: Response):
     """Logout — revokes provider session and/or master admin cookie."""
     # ── Revoke provider session if present ───────────────────────────
@@ -1314,7 +1320,7 @@ async def logout(request: Request, response: Response):
 # Password Reset Endpoints (Self-Hosted Only)
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
 async def forgot_password(request: Request, body: ForgotPasswordRequest):
     """Request a password reset link (Self-hosted only)."""
     if is_cloud():
@@ -1409,7 +1415,7 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest):
     }
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", response_model=SuccessMessageResponse)
 async def reset_password(request: Request, body: ResetPasswordRequest):
     """Reset password using the reset token (Self-hosted only)."""
     if is_cloud():
@@ -1552,7 +1558,7 @@ async def push_security_to_edges(tenant_id: str | None = None, tenant_slug: str 
                 print(f"[SecuritySync] Edge security sync failed for {eng['url']}: {e}")
 
 
-@router.get("/security/blocklist")
+@router.get("/security/blocklist", response_model=list[BlocklistEntry])
 async def get_blocklist(
     request: Request,
     db: Session = Depends(get_db),
@@ -1572,7 +1578,7 @@ async def get_blocklist(
     return [{"id": ban.id, "ip_or_range": ban.ip_or_range, "reason": ban.reason, "created_at": ban.created_at} for ban in bans]
 
 
-@router.post("/security/blocklist")
+@router.post("/security/blocklist", response_model=SuccessMessageResponse)
 async def add_ip_ban(
     body: IPBlockRequest,
     request: Request,
@@ -1643,7 +1649,7 @@ async def add_ip_ban(
     return {"success": True, "message": f"Successfully blocked {ip_str}"}
 
 
-@router.delete("/security/blocklist/{ban_id}")
+@router.delete("/security/blocklist/{ban_id}", response_model=SuccessMessageResponse)
 async def delete_ip_ban(
     ban_id: str,
     request: Request,
@@ -1740,7 +1746,7 @@ async def get_bot_protection_settings(
     )
 
 
-@router.post("/security/bot-protection")
+@router.post("/security/bot-protection", response_model=SuccessMessageResponse)
 async def update_bot_protection_settings(
     body: BotProtectionUpdateRequest,
     request: Request,
@@ -1805,7 +1811,7 @@ async def update_bot_protection_settings(
     return {"success": True}
 
 
-@router.get("/security/bot-protection/metrics")
+@router.get("/security/bot-protection/metrics", response_model=BotProtectionMetrics)
 async def get_bot_protection_metrics(
     request: Request,
     db: Session = Depends(get_db),
@@ -1845,7 +1851,7 @@ async def get_bot_protection_metrics(
     }
 
 
-@router.get("/security/waf")
+@router.get("/security/waf", response_model=WafStatus)
 async def get_waf_settings(
     request: Request
 ):
@@ -1860,7 +1866,7 @@ async def get_waf_settings(
     return {"enabled": enabled}
 
 
-@router.post("/security/waf")
+@router.post("/security/waf", response_model=WafUpdateResponse)
 async def update_waf_settings(
     body: WafUpdateRequest,
     request: Request,
@@ -1896,7 +1902,7 @@ async def update_waf_settings(
     return {"success": True, "enabled": body.enabled}
 
 
-@router.get("/security/audit-logs")
+@router.get("/security/audit-logs", response_model=list[AuditLogEntry])
 async def get_audit_logs(
     request: Request,
     db: Session = Depends(get_db),

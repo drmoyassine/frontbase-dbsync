@@ -2,7 +2,7 @@
 
 Registered only in cloud mode, mounted at ``/api/billing`` and ``/api/webhooks/{provider}``.
 """
-from typing import Optional, List
+from typing import Optional, List, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -36,7 +36,7 @@ class PortalRequestBody(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/checkout")
+@router.post("/checkout", response_model=dict[str, Any])
 async def create_checkout(
     body: CheckoutRequestBody,
     db: Session = Depends(get_db),
@@ -76,7 +76,7 @@ async def create_checkout(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/portal")
+@router.post("/portal", response_model=dict[str, Any])
 async def create_portal(
     body: PortalRequestBody,
     db: Session = Depends(get_db),
@@ -105,7 +105,7 @@ async def create_portal(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/webhooks/{provider}")
+@router.post("/webhooks/{provider}", response_model=dict[str, Any])
 async def handle_webhook(
     provider: str,
     request: Request,

@@ -10,7 +10,7 @@ import secrets
 import json
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, EmailStr
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Any
 from datetime import datetime, timezone, timedelta, UTC
 
 from app.database.config import SessionLocal
@@ -52,7 +52,7 @@ def _app_base_url() -> str:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/me")
+@router.get("/me", response_model=dict[str, Any])
 async def get_my_tenant(ctx: TenantContext = Depends(require_tenant_context)):
     """Get the current user's tenant details."""
     if ctx.is_master:
@@ -83,7 +83,7 @@ async def get_my_tenant(ctx: TenantContext = Depends(require_tenant_context)):
         db.close()
 
 
-@router.put("/me")
+@router.put("/me", response_model=dict[str, Any])
 async def update_my_tenant(
     body: TenantUpdateRequest,
     ctx: TenantContext = Depends(require_tenant_context),
@@ -164,7 +164,7 @@ def _tenant_usage(db, tenant_id: str) -> dict:
 
 
 
-@router.get("/me/plan")
+@router.get("/me/plan", response_model=dict[str, Any])
 async def get_my_plan(ctx: TenantContext = Depends(require_tenant_context)):
     """Current plan, resolved limits, live usage, and any open change request."""
     if ctx.is_master or not ctx.tenant_id:
@@ -186,7 +186,7 @@ async def get_my_plan(ctx: TenantContext = Depends(require_tenant_context)):
         db.close()
 
 
-@router.get("/me/addons")
+@router.get("/me/addons", response_model=dict[str, Any])
 async def get_my_addons(ctx: TenantContext = Depends(require_tenant_context)):
     """Active managed add-ons for the current tenant (managed-infra entitlements)."""
     if ctx.is_master or not ctx.tenant_id:
@@ -227,7 +227,7 @@ def _pending_invite_count(db, tenant_id: str) -> int:
     )
 
 
-@router.get("/me/invites")
+@router.get("/me/invites", response_model=dict[str, Any])
 async def list_invites(ctx: TenantContext = Depends(require_tenant_context)):
     """List pending invites for the current tenant."""
     if ctx.is_master or not ctx.tenant_id:
@@ -245,7 +245,7 @@ async def list_invites(ctx: TenantContext = Depends(require_tenant_context)):
         db.close()
 
 
-@router.post("/me/invites", status_code=201)
+@router.post("/me/invites", status_code=201, response_model=dict[str, Any])
 async def create_invite(
     body: InviteCreateBody,
     ctx: TenantContext = Depends(require_tenant_context),
@@ -336,7 +336,7 @@ async def create_invite(
         db.close()
 
 
-@router.delete("/me/invites/{invite_id}")
+@router.delete("/me/invites/{invite_id}", response_model=dict[str, Any])
 async def revoke_invite(
     invite_id: str,
     ctx: TenantContext = Depends(require_tenant_context),
@@ -364,7 +364,7 @@ async def revoke_invite(
         db.close()
 
 
-@router.get("/check-slug/{slug}")
+@router.get("/check-slug/{slug}", response_model=dict[str, Any])
 async def check_slug(slug: str):
     """Check if a tenant slug is available (public, no auth required)."""
     slug = slug.lower().strip()

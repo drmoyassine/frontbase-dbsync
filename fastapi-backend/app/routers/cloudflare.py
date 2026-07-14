@@ -20,7 +20,7 @@ import json
 import uuid
 import asyncio
 from datetime import datetime, UTC
-from typing import Optional
+from typing import Optional, Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Depends
@@ -43,7 +43,7 @@ router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 # Endpoints
 # =============================================================================
 
-@router.post("/connect")
+@router.post("/connect", response_model=dict[str, Any])
 async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """
     List existing workers using saved credentials from EdgeProviderAccount.
@@ -120,7 +120,7 @@ async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_
         raise HTTPException(500, f"Connection failed: {str(e)}")
 
 
-@router.post("/deploy")
+@router.post("/deploy", response_model=dict[str, Any])
 async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """One-click deploy the Edge Engine to Cloudflare Workers."""
     try:
@@ -344,7 +344,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
         raise HTTPException(500, f"Deploy failed: {str(e) or 'Unknown error'}")
 
 
-@router.post("/status")
+@router.post("/status", response_model=dict[str, Any])
 async def cloudflare_status(payload: StatusRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Check if a Worker is deployed and get its details."""
     try:
@@ -393,7 +393,7 @@ async def cloudflare_status(payload: StatusRequest, db: Session = Depends(get_db
         raise HTTPException(500, str(e))
 
 
-@router.post("/teardown")
+@router.post("/teardown", response_model=dict[str, Any])
 async def teardown_cloudflare(payload: TeardownRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Remove a Worker and deactivate its edge engine target."""
     try:

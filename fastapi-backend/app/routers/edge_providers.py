@@ -63,7 +63,7 @@ def _provider_response(provider: EdgeProviderAccount) -> dict:
 # Workspace Agent — Stateless JWT Hydration
 # =============================================================================
 
-@router.get("/workspace-agent-token")
+@router.get("/workspace-agent-token", response_model=dict[str, Any])
 def get_workspace_agent_token(db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Generate a stateless JWT for the Workspace Agent using the active GPU provider."""
     from jose import jwt
@@ -116,7 +116,7 @@ from pydantic import BaseModel
 class SetWorkspaceDefaultRequest(BaseModel):
     provider_id: str
 
-@router.post("/workspace-agent-token")
+@router.post("/workspace-agent-token", response_model=dict[str, Any])
 def set_workspace_agent_token(payload: SetWorkspaceDefaultRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Set a specific provider as the default Workspace Agent provider and generate token."""
     import json
@@ -160,7 +160,7 @@ async def list_providers(db: Session = Depends(get_db), ctx: TenantContext | Non
     return [_provider_response(p) for p in providers]
 
 
-@router.get("/{provider_id}")
+@router.get("/{provider_id}", response_model=EdgeProviderAccountResponse)
 async def get_provider(provider_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Get a specific edge provider account."""
     provider = _scoped_provider_query(db, ctx).filter(EdgeProviderAccount.id == provider_id).first()
@@ -169,7 +169,7 @@ async def get_provider(provider_id: str, db: Session = Depends(get_db), ctx: Ten
     return _provider_response(provider)
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, response_model=EdgeProviderAccountResponse)
 async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create and connect a new edge provider account.
     
@@ -356,7 +356,7 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
 
 
 
-@router.put("/{provider_id}")
+@router.put("/{provider_id}", response_model=EdgeProviderAccountResponse)
 async def update_provider(provider_id: str, payload: EdgeProviderAccountUpdate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update a provider account. Credentials are re-encrypted on change."""
     import json
@@ -416,7 +416,7 @@ async def delete_provider(provider_id: str, db: Session = Depends(get_db), ctx: 
 # Re-test — validate STORED credentials by provider ID (server-side decrypt)
 # =============================================================================
 
-@router.post("/retest/{provider_id}")
+@router.post("/retest/{provider_id}", response_model=dict[str, Any])
 async def retest_provider(provider_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Re-validate an existing provider's credentials.
 
@@ -439,7 +439,7 @@ async def retest_provider(provider_id: str, db: Session = Depends(get_db), ctx: 
 # Credentials — internal endpoint for cross-service credential resolution
 # =============================================================================
 
-@router.get("/{provider_id}/credentials")
+@router.get("/{provider_id}/credentials", response_model=dict[str, Any])
 def get_credentials(provider_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Return decrypted credentials for a provider account.
 
@@ -464,7 +464,7 @@ def get_credentials(provider_id: str, db: Session = Depends(get_db), ctx: Tenant
 # Test Connection — validate credentials against provider API before saving
 # =============================================================================
 
-@router.post("/test-connection")
+@router.post("/test-connection", response_model=dict[str, Any])
 async def test_connection(payload: TestConnectionRequest):
     """Validate provider credentials by making a lightweight API call.
 
@@ -478,7 +478,7 @@ async def test_connection(payload: TestConnectionRequest):
 # Discover — list resources for a provider after token validation
 # =============================================================================
 
-@router.post("/discover-by-account/{account_id}")
+@router.post("/discover-by-account/{account_id}", response_model=dict[str, Any])
 async def discover_by_account(account_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Discover resources using stored credentials from a Connected Account.
     
@@ -520,7 +520,7 @@ async def discover_by_account(account_id: str, db: Session = Depends(get_db), ct
     return await _discover_resources(str(provider_row.provider), creds)
 
 
-@router.post("/discover")
+@router.post("/discover", response_model=dict[str, Any])
 async def discover_resources_endpoint(payload: DiscoverRequest):
     """Discover resources (projects, databases, sites) available with the given credentials.
 
@@ -533,7 +533,7 @@ async def discover_resources_endpoint(payload: DiscoverRequest):
 # Create Resource — create a new resource via provider management API
 # =============================================================================
 
-@router.post("/create-resource-by-account/{account_id}")
+@router.post("/create-resource-by-account/{account_id}", response_model=dict[str, Any])
 async def create_resource_by_account(
     account_id: str,
     payload: CreateResourceRequest,
@@ -560,7 +560,7 @@ async def create_resource_by_account(
 # Turso — Manual Database Registry (CRUD within a Turso provider account)
 # =============================================================================
 
-@router.post("/{account_id}/turso-databases")
+@router.post("/{account_id}/turso-databases", response_model=dict[str, Any])
 async def add_turso_database(
     account_id: str,
     payload: TursoDatabaseEntry,
@@ -609,7 +609,7 @@ async def add_turso_database(
     return {"success": True, "database": {k: v for k, v in new_entry.items() if k != "token"}}
 
 
-@router.delete("/{account_id}/turso-databases/{db_id}")
+@router.delete("/{account_id}/turso-databases/{db_id}", response_model=dict[str, Any])
 async def remove_turso_database(
     account_id: str,
     db_id: str,
@@ -643,7 +643,7 @@ async def remove_turso_database(
     return {"success": True, "detail": "Database removed"}
 
 
-@router.post("/{account_id}/turso-databases/{db_id}/test")
+@router.post("/{account_id}/turso-databases/{db_id}/test", response_model=dict[str, Any])
 async def test_turso_database(
     account_id: str,
     db_id: str,
@@ -714,7 +714,7 @@ async def test_turso_database(
 # Table Discovery — list database tables from a connected account
 # =============================================================================
 
-@router.get("/accounts/{account_id}/tables")
+@router.get("/accounts/{account_id}/tables", response_model=dict[str, Any])
 async def list_account_tables(account_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List database tables from a connected account's credentials.
 
@@ -748,7 +748,7 @@ async def list_account_tables(account_id: str, db: Session = Depends(get_db), ct
 # List Engines — generic multi-provider engine listing
 # =============================================================================
 
-@router.post("/{account_id}/list-engines")
+@router.post("/{account_id}/list-engines", response_model=dict[str, Any])
 async def list_engines_for_provider(account_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List engines/functions/apps from a connected edge provider.
 

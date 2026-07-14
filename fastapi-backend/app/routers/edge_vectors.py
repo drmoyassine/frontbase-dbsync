@@ -543,12 +543,12 @@ class BatchDeleteVectorRequest(BaseModel):
     ids: List[str]
     delete_remote: bool = False
 
-class BatchResult(BaseModel):
+class VectorBatchResult(BaseModel):
     success: List[str] = []
     failed: List[dict] = []
     total: int = 0
 
-class TestConnectionRequest(BaseModel):
+class VectorTestConnectionRequest(BaseModel):
     provider: str
     vector_url: str
     vector_token: Optional[str] = None
@@ -821,7 +821,7 @@ async def update_edge_vector(vector_id: str, payload: EdgeVectorUpdate, ctx: Ten
         db.close()
 
 
-@router.delete("/{vector_id}")
+@router.delete("/{vector_id}", response_model=dict[str, Any])
 async def delete_edge_vector(vector_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge vector store connection.
 
@@ -886,7 +886,7 @@ async def delete_edge_vector(vector_id: str, delete_remote: bool = False, ctx: T
         db.close()
 
 
-@router.post("/{vector_id}/test")
+@router.post("/{vector_id}/test", response_model=dict[str, Any])
 async def test_edge_vector_connection(vector_id: str, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test connection to an existing edge vector store."""
     db = SessionLocal()
@@ -924,8 +924,8 @@ async def test_edge_vector_connection(vector_id: str, ctx: TenantContext | None 
         db.close()
 
 
-@router.post("/test-connection")
-async def test_connection_inline(payload: TestConnectionRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
+@router.post("/test-connection", response_model=dict[str, Any])
+async def test_connection_inline(payload: VectorTestConnectionRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test connection using raw fields (pre-save)."""
     db = SessionLocal()
     try:
@@ -943,7 +943,7 @@ async def test_connection_inline(payload: TestConnectionRequest, ctx: TenantCont
         db.close()
 
 
-@router.post("/batch/delete", response_model=BatchResult)
+@router.post("/batch/delete", response_model=VectorBatchResult)
 async def batch_delete_vectors(payload: BatchDeleteVectorRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Batch delete multiple edge vector stores."""
     import asyncio
@@ -1007,6 +1007,6 @@ async def batch_delete_vectors(payload: BatchDeleteVectorRequest, ctx: TenantCon
                 failed.append({"id": rid, "error": str(e)})
 
         db.commit()
-        return BatchResult(success=success, failed=failed, total=len(payload.ids))
+        return VectorBatchResult(success=success, failed=failed, total=len(payload.ids))
     finally:
         db.close()

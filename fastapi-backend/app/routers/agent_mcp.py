@@ -44,7 +44,7 @@ def _resolve_profile(db, profile_slug: str) -> EdgeAgentProfile:
     return profile
 
 
-def _auth_profile(request: Request, profile: EdgeAgentProfile) -> None:
+async def _auth_profile(db, request: Request, profile: EdgeAgentProfile) -> None:
     """Verify the caller has access to this profile.
 
     For cloud mode: validates JWT tenant owns the profile's project.
@@ -52,7 +52,7 @@ def _auth_profile(request: Request, profile: EdgeAgentProfile) -> None:
     """
     if is_cloud():
         # Cloud mode: verify tenant ownership via X-Project-Id header
-        ctx = get_tenant_context(request)
+        ctx = await get_tenant_context(request)
         if not ctx or not ctx.tenant_id:
             raise HTTPException(status_code=401, detail="Authentication required")
 
@@ -86,7 +86,7 @@ def _tool_to_mcp_schema(tool_def: dict) -> dict:
     }
 
 
-@router.get("/{profile_slug}")
+@router.get("/{profile_slug}", response_model=dict[str, Any])
 async def mcp_root(profile_slug: str, request: Request):
     """MCP server discovery endpoint.
 
@@ -98,7 +98,7 @@ async def mcp_root(profile_slug: str, request: Request):
     db = SessionLocal()
     try:
         profile = _resolve_profile(db, profile_slug)
-        _auth_profile(request, profile)
+        await _auth_profile(db, request, profile)
 
         return {
             "name": f"Frontbase Workspace Agent - {profile.name}",
@@ -116,7 +116,7 @@ async def mcp_root(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/tools/list")
+@router.post("/{profile_slug}/tools/list", response_model=dict[str, Any])
 async def list_tools(profile_slug: str, request: Request):
     """List all tools available on this agent profile.
 
@@ -130,7 +130,7 @@ async def list_tools(profile_slug: str, request: Request):
     db = SessionLocal()
     try:
         profile = _resolve_profile(db, profile_slug)
-        _auth_profile(request, profile)
+        await _auth_profile(db, request, profile)
 
         # Get the ToolContext for this profile
         from ..services.agent_permissions import ToolContext, default_workspace_permissions, default_support_permissions
@@ -143,10 +143,10 @@ async def list_tools(profile_slug: str, request: Request):
             tenant_id=None,  # Already validated by _auth_profile
             project_id=str(profile.project_id),
             is_master=False,
-            profile_slug=profile.slug,
+            profile_slug=str(profile.slug),
             permissions=perms,
-            excluded_tools=set(json.loads(profile.excluded_tools) if profile.excluded_tools else []),
-            max_auto_tools=profile.max_auto_tools or 50,
+            excluded_tools=set(json.loads(str(profile.excluded_tools))) if profile.excluded_tools is not None and str(profile.excluded_tools) else set(),
+            max_auto_tools=int(str(profile.max_auto_tools)) if profile.max_auto_tools is not None else 50,
         )
 
         # Register and get all tools for this context
@@ -174,7 +174,7 @@ async def list_tools(profile_slug: str, request: Request):
                 }))
 
         # 2. Add auto-registered API tools (if enabled)
-        if profile.mcp_enabled:
+        if profile.mcp_enabled is not None and bool(profile.mcp_enabled):
             auto_tools = discover_api_tools(None, ctx, curated_names=set())
             for tool_def in auto_tools:
                 tools.append(_tool_to_mcp_schema(tool_def))
@@ -186,7 +186,7 @@ async def list_tools(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/tools/call")
+@router.post("/{profile_slug}/tools/call", response_model=str)
 async def call_tool(profile_slug: str, request: Request):
     """Execute a tool and return the result.
 
@@ -201,7 +201,7 @@ async def call_tool(profile_slug: str, request: Request):
     db = SessionLocal()
     try:
         profile = _resolve_profile(db, profile_slug)
-        _auth_profile(request, profile)
+        await _auth_profile(db, request, profile)
 
         body = await request.json()
         tool_name = body.get("name")
@@ -221,10 +221,10 @@ async def call_tool(profile_slug: str, request: Request):
             tenant_id=None,
             project_id=str(profile.project_id),
             is_master=False,
-            profile_slug=profile.slug,
+            profile_slug=str(profile.slug),
             permissions=perms,
-            excluded_tools=set(json.loads(profile.excluded_tools) if profile.excluded_tools else []),
-            max_auto_tools=profile.max_auto_tools or 50,
+            excluded_tools=set(json.loads(str(profile.excluded_tools))) if profile.excluded_tools is not None and str(profile.excluded_tools) else set(),
+            max_auto_tools=int(str(profile.max_auto_tools)) if profile.max_auto_tools is not None else 50,
         )
 
         # Construct a simple message that asks the agent to use the specific tool
@@ -246,10 +246,9 @@ async def call_tool(profile_slug: str, request: Request):
                     project_id=str(profile.project_id),
                     user_id=None,
                     is_master=False,
-                    profile_slug=profile.slug,
+                    profile_slug=str(profile.slug),
                     messages=messages,
                     use_type=use_type,
-                    request=request,
                 ):
                     yield chunk
             except Exception as e:
@@ -269,7 +268,7 @@ async def call_tool(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/resources/list")
+@router.post("/{profile_slug}/resources/list", response_model=dict[str, Any])
 async def list_resources(profile_slug: str, request: Request):
     """List available MCP resources.
 
@@ -281,7 +280,7 @@ async def list_resources(profile_slug: str, request: Request):
     db = SessionLocal()
     try:
         profile = _resolve_profile(db, profile_slug)
-        _auth_profile(request, profile)
+        await _auth_profile(db, request, profile)
 
         # Return basic resources
         resources = [
@@ -300,7 +299,7 @@ async def list_resources(profile_slug: str, request: Request):
         ]
 
         # Add pages as resources if the profile has pages permission
-        from ..services.agent_permissions import has_permission, default_workspace_permissions
+        from ..services.agent_permissions import has_permission, default_workspace_permissions, default_support_permissions
 
         use_type = "workspace" if "workspace" in profile.slug.lower() else "support"
         perms = default_workspace_permissions() if use_type == "workspace" else default_support_permissions()
@@ -313,10 +312,11 @@ async def list_resources(profile_slug: str, request: Request):
             ).limit(100).all()
 
             for page in pages:
+                name_str = str(page.title) if page.title is not None and str(page.title) else str(page.slug)
                 resources.append({
                     "uri": f"page://{page.id}",
-                    "name": page.title or page.slug,
-                    "description": f"Page: {page.slug}",
+                    "name": name_str,
+                    "description": f"Page: {str(page.slug)}",
                     "mimeType": "text/html",
                 })
 
@@ -325,13 +325,13 @@ async def list_resources(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/prompts/list")
+@router.post("/{profile_slug}/prompts/list", response_model=dict[str, Any])
 async def list_prompts(profile_slug: str, request: Request):
     """List available prompts (system prompts)."""
     db = SessionLocal()
     try:
         profile = _resolve_profile(db, profile_slug)
-        _auth_profile(request, profile)
+        await _auth_profile(db, request, profile)
 
         prompts = [
             {
@@ -352,20 +352,22 @@ async def list_prompts(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/prompts/get")
+@router.post("/{profile_slug}/prompts/get", response_model=dict[str, Any])
 async def get_prompt(profile_slug: str, request: Request):
     """Get a specific prompt by name."""
     db = SessionLocal()
     try:
         profile = _resolve_profile(db, profile_slug)
-        _auth_profile(request, profile)
+        await _auth_profile(db, request, profile)
 
         body = await request.json()
         name = body.get("name", "default")
         arguments = body.get("arguments", {})
 
         if name == "default":
-            system_prompt = arguments.get("system_prompt") or profile.system_prompt or ""
+            system_prompt = arguments.get("system_prompt")
+            if not system_prompt and profile.system_prompt is not None and str(profile.system_prompt):
+                system_prompt = str(profile.system_prompt)
             if not system_prompt:
                 # Use built-in default
                 system_prompt = (

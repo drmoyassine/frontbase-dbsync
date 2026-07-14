@@ -219,7 +219,7 @@ async def _sync_embeddable_forms_to_edge(tenant_slug: str | None = None, tenant_
 # CRUD Endpoints
 # =============================================================================
 
-@router.get("/")
+@router.get("/", response_model=dict[str, Any])
 async def list_auth_forms(
     db: Session = Depends(get_db),
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
@@ -247,7 +247,7 @@ async def list_auth_forms(
         return {"success": False, "error": str(e)}
 
 
-@router.get("/{form_id}/")
+@router.get("/{form_id}/", response_model=dict[str, Any])
 async def get_auth_form(
     form_id: str,
     db: Session = Depends(get_db),
@@ -275,7 +275,7 @@ async def get_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=dict[str, Any])
 async def create_auth_form(
     form: AuthFormCreate,
     db: Session = Depends(get_db),
@@ -355,7 +355,7 @@ async def create_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.put("/{form_id}/")
+@router.put("/{form_id}/", response_model=dict[str, Any])
 async def update_auth_form(
     form_id: str,
     form: AuthFormUpdate,
@@ -449,7 +449,7 @@ async def update_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.delete("/{form_id}/")
+@router.delete("/{form_id}/", response_model=dict[str, Any])
 async def delete_auth_form(
     form_id: str,
     db: Session = Depends(get_db),
@@ -500,7 +500,7 @@ async def delete_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.get("/primary/")
+@router.get("/primary/", response_model=dict[str, Any])
 async def get_primary_auth_form(
     db: Session = Depends(get_db),
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
@@ -541,7 +541,7 @@ async def get_primary_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.put("/{form_id}/set-primary/")
+@router.put("/{form_id}/set-primary/", response_model=dict[str, Any])
 async def set_primary_auth_form(
     form_id: str,
     db: Session = Depends(get_db),

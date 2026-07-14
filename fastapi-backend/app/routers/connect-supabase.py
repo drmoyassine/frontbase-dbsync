@@ -8,7 +8,7 @@ router = APIRouter(prefix="/connect-supabase", tags=["connect-supabase"])
 # This endpoint was automatically generated from Express.js
 # Original schema: connect-supabase
 
-@router.post("/connect-supabase")
+@router.post("/connect-supabase", response_model=dict[str, Any])
 async def post_connect_supabase(
     request: Any = None,
     db = Depends(get_db)

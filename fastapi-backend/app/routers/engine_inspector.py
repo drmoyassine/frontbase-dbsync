@@ -1,3 +1,4 @@
+from typing import Any
 """
 Engine Inspector Router — Multi-provider inspect endpoints.
 
@@ -265,7 +266,7 @@ def _cf_inspect_settings(api_token: str, account_id: str, worker_name: str) -> d
 # Endpoints
 # =============================================================================
 
-@router.get("/{engine_id}/inspect/source")
+@router.get("/{engine_id}/inspect/source", response_model=dict[str, Any])
 async def inspect_engine_source(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch deployed source code from provider API."""
     engine, provider, ctx, cfg = _resolve_engine(engine_id, db, tenant_ctx)
@@ -299,7 +300,7 @@ async def inspect_engine_source(engine_id: str, db: Session = Depends(get_db), t
     return result
 
 
-@router.get("/{engine_id}/inspect/settings")
+@router.get("/{engine_id}/inspect/settings", response_model=dict[str, Any])
 async def inspect_engine_settings(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch deployed engine settings/config from provider API."""
     engine, provider, ctx, cfg = _resolve_engine(engine_id, db, tenant_ctx)
@@ -335,7 +336,7 @@ async def inspect_engine_settings(engine_id: str, db: Session = Depends(get_db),
     return result
 
 
-@router.get("/{engine_id}/inspect/secrets")
+@router.get("/{engine_id}/inspect/secrets", response_model=dict[str, Any])
 async def inspect_engine_secrets(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch deployed secrets/env vars from provider API."""
     engine, provider, ctx, cfg = _resolve_engine(engine_id, db, tenant_ctx)
@@ -542,7 +543,7 @@ class _AddDomainBody(_BaseModel):
     domain: str
 
 
-@router.get("/{engine_id}/inspect/domains")
+@router.get("/{engine_id}/inspect/domains", response_model=dict[str, Any])
 async def inspect_engine_domains(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """List custom domains for this engine."""
     from ..services import domain_manager as dm
@@ -552,7 +553,7 @@ async def inspect_engine_domains(engine_id: str, db: Session = Depends(get_db), 
     return result.to_dict()
 
 
-@router.post("/{engine_id}/inspect/domains")
+@router.post("/{engine_id}/inspect/domains", response_model=dict[str, Any])
 async def add_engine_domain(engine_id: str, body: _AddDomainBody, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Add a custom domain to this engine.
 
@@ -568,7 +569,7 @@ async def add_engine_domain(engine_id: str, body: _AddDomainBody, db: Session = 
     return result.to_dict()
 
 
-@router.delete("/{engine_id}/inspect/domains/{domain_id}")
+@router.delete("/{engine_id}/inspect/domains/{domain_id}", response_model=dict[str, Any])
 async def delete_engine_domain(engine_id: str, domain_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Remove a custom domain from this engine."""
     from ..services import domain_manager as dm
@@ -578,7 +579,7 @@ async def delete_engine_domain(engine_id: str, domain_id: str, db: Session = Dep
     return result.to_dict()
 
 
-@router.post("/{engine_id}/inspect/domains/{domain_id}/verify")
+@router.post("/{engine_id}/inspect/domains/{domain_id}/verify", response_model=dict[str, Any])
 async def verify_engine_domain(engine_id: str, domain_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Trigger DNS verification for a custom domain."""
     from ..services import domain_manager as dm
@@ -592,7 +593,7 @@ async def verify_engine_domain(engine_id: str, domain_id: str, db: Session = Dep
 # Health Check — proxy to edge engine /api/health with system key
 # =============================================================================
 
-@router.get("/{engine_id}/health-check")
+@router.get("/{engine_id}/health-check", response_model=dict[str, Any])
 async def health_check(engine_id: str, db: Session = Depends(get_db), tenant_ctx: TenantContext | None = Depends(get_tenant_context)):
     """Proxy health check to the edge engine with FRONTBASE_SYSTEM_KEY.
 

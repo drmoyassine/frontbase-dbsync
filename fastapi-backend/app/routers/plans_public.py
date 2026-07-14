@@ -1,3 +1,4 @@
+from typing import Any
 """Public Plans Router — read-only pricing data (no auth, cloud-only).
 
 Consumed by the SSR ``Pricing`` builder element (via the publish serializer)
@@ -15,7 +16,7 @@ from app.services.plan_limits import plan_to_pricing_card, serialize_plan
 router = APIRouter()
 
 
-@router.get("/public")
+@router.get("/public", response_model=dict[str, Any])
 async def list_public_plans(db: Session = Depends(get_db)):
     """Public, active plans ordered for a pricing table."""
     plans = (

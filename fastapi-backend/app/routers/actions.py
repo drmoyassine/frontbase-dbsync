@@ -7,7 +7,7 @@ Handles CRUD for workflow drafts and publishing to the Actions Runtime.
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime, timezone
 from pydantic import BaseModel
 import httpx
@@ -313,13 +313,13 @@ async def delete_draft(
     return None
 
 
-class BulkDeleteRequest(BaseModel):
+class ActionBulkDeleteRequest(BaseModel):
     ids: List[str]
 
 
-@router.post("/drafts/bulk-delete", status_code=status.HTTP_200_OK)
+@router.post("/drafts/bulk-delete", status_code=status.HTTP_200_OK, response_model=dict[str, Any])
 async def bulk_delete_drafts(
-    request: BulkDeleteRequest,
+    request: ActionBulkDeleteRequest,
     db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
 ):
     """Delete multiple workflow drafts at once"""
@@ -344,7 +344,7 @@ class ToggleActiveRequest(BaseModel):
     is_active: bool
 
 
-@router.patch("/drafts/{draft_id}/active")
+@router.patch("/drafts/{draft_id}/active", response_model=dict[str, Any])
 async def toggle_draft_active(
     draft_id: str,
     request: ToggleActiveRequest,
@@ -572,7 +572,7 @@ class WorkflowBatchPublishRequest(BaseModel):
     engine_ids: List[str]
 
 
-@router.post("/drafts/{draft_id}/publish-batch/")
+@router.post("/drafts/{draft_id}/publish-batch/", response_model=dict[str, Any])
 async def publish_draft_batch(
     draft_id: str,
     request: WorkflowBatchPublishRequest,
@@ -694,7 +694,7 @@ async def publish_draft_batch(
     }
 
 
-@router.post("/drafts/{draft_id}/publish/{engine_id}/toggle")
+@router.post("/drafts/{draft_id}/publish/{engine_id}/toggle", response_model=dict[str, Any])
 async def toggle_target_active(
     draft_id: str,
     engine_id: str,
@@ -969,7 +969,7 @@ async def test_node(
 
 # ============ Execution Result ============
 
-@router.get("/execution/{execution_id}")
+@router.get("/execution/{execution_id}", response_model=dict[str, Any])
 async def get_execution_result(execution_id: str):
     """Get detailed execution result from Edge Engine"""
     try:
@@ -1151,7 +1151,7 @@ async def _pull_from_edges(db: Session, params: dict, ctx: TenantContext | None 
     return all_executions
 
 
-@router.get("/executions")
+@router.get("/executions", response_model=dict[str, Any])
 async def list_all_executions(
     limit: int = 100,
     status: Optional[str] = None,
@@ -1247,7 +1247,7 @@ async def list_all_executions(
 
 # ── Execution Detail (lazy-load on row expand) ────────────────────────────────
 
-@router.get("/executions/detail/{execution_id}")
+@router.get("/executions/detail/{execution_id}", response_model=dict[str, Any])
 async def get_execution_detail(execution_id: str, engine_url: Optional[str] = None):
     """Fetch full execution detail (nodeExecutions, triggerPayload) from the
     correct Edge engine.  The global log strips these fields for payload size;
@@ -1285,7 +1285,7 @@ async def get_execution_detail(execution_id: str, engine_url: Optional[str] = No
 
 # ── CSV Export ────────────────────────────────────────────────────────────────
 
-@router.get("/executions/export")
+@router.get("/executions/export", response_model=str)
 async def export_executions_csv(
     engine_ids: Optional[str] = None,
     workflow_ids: Optional[str] = None,
@@ -1414,7 +1414,7 @@ async def export_executions_csv(
     )
 
 
-@router.get("/executions/{draft_id}")
+@router.get("/executions/{draft_id}", response_model=dict[str, Any] | list[dict[str, Any]])
 async def get_draft_executions(
     draft_id: str,
     limit: int = 20,
@@ -1488,7 +1488,7 @@ async def get_draft_executions(
     return {"executions": all_logs[:limit], "total": len(all_logs)}
 
 
-@router.get("/executions/{draft_id}/production/{engine_id}")
+@router.get("/executions/{draft_id}/production/{engine_id}", response_model=dict[str, Any])
 async def get_production_executions(
     draft_id: str,
     engine_id: str,
@@ -1525,7 +1525,7 @@ async def get_production_executions(
         return {"executions": [], "total": 0, "error": f"Engine '{engine_name}' not reachable"}
 
 
-@router.get("/execution-stats")
+@router.get("/execution-stats", response_model=dict[str, Any])
 async def get_execution_stats():
     """Get execution run counts for all workflows"""
     try:
@@ -1645,7 +1645,7 @@ def create_automation_version_snapshot(db: Session, draft: AutomationDraft, crea
     return version
 
 
-@router.get("/drafts/{draft_id}/versions/")
+@router.get("/drafts/{draft_id}/versions/", response_model=dict[str, Any])
 async def list_automation_versions(
     draft_id: str,
     db: Session = Depends(get_db),
@@ -1664,7 +1664,7 @@ async def list_automation_versions(
     }
 
 
-@router.get("/drafts/{draft_id}/versions/{version_id}/")
+@router.get("/drafts/{draft_id}/versions/{version_id}/", response_model=dict[str, Any])
 async def get_automation_version_detail(
     draft_id: str,
     version_id: str,
@@ -1688,7 +1688,7 @@ async def get_automation_version_detail(
     }
 
 
-@router.post("/drafts/{draft_id}/versions/")
+@router.post("/drafts/{draft_id}/versions/", response_model=dict[str, Any])
 async def create_manual_automation_version(
     draft_id: str,
     request: AutomationVersionLabelRequest,
@@ -1726,7 +1726,7 @@ async def create_manual_automation_version(
     }
 
 
-@router.post("/drafts/{draft_id}/rollback/")
+@router.post("/drafts/{draft_id}/rollback/", response_model=dict[str, Any])
 async def rollback_automation_to_version(
     draft_id: str,
     request: AutomationRollbackRequest,

@@ -29,6 +29,7 @@ from app.middleware.tenant_context import TenantContext, get_tenant_context
 
 
 router = APIRouter()
+from ...schemas.pages_api import PublishResult, BatchPublishResult
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +86,7 @@ async def _sync_settings_to_engine(
 
 
 
-@router.post("/{page_id}/publish/{engine_id}/")
+@router.post("/{page_id}/publish/{engine_id}/", response_model=PublishResult)
 async def publish_to_target(
     page_id: str,
     engine_id: str,
@@ -308,7 +309,7 @@ class BatchPublishRequest(BaseModel):
     engine_ids: List[str]
 
 
-@router.post("/{page_id}/publish-batch/")
+@router.post("/{page_id}/publish-batch/", response_model=BatchPublishResult)
 async def publish_to_targets_batch(
     page_id: str,
     body: BatchPublishRequest,

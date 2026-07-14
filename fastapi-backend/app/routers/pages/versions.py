@@ -37,6 +37,7 @@ def check_page_ownership(db: Session, page_id: str, ctx: TenantContext | None):
 
 
 router = APIRouter()
+from ...schemas.pages_api import PageVersionEnvelope, PageVersionListEnvelope, RollbackEnvelope
 
 
 # ---------- Schemas ----------
@@ -94,7 +95,7 @@ def create_version_snapshot(db: Session, page: Page) -> PageVersion:
 
 # ---------- Endpoints ----------
 
-@router.get("/{page_id}/versions/")
+@router.get("/{page_id}/versions/", response_model=PageVersionListEnvelope)
 async def list_versions(
     page_id: str,
     db: Session = Depends(get_db),
@@ -116,7 +117,7 @@ async def list_versions(
     }
 
 
-@router.get("/{page_id}/versions/{version_id}/")
+@router.get("/{page_id}/versions/{version_id}/", response_model=PageVersionEnvelope)
 async def get_version_detail(
     page_id: str,
     version_id: str,
@@ -147,7 +148,7 @@ async def get_version_detail(
     }
 
 
-@router.post("/{page_id}/versions/")
+@router.post("/{page_id}/versions/", response_model=PageVersionEnvelope)
 async def create_manual_version(
     page_id: str,
     request: VersionLabelRequest,
@@ -174,7 +175,7 @@ async def create_manual_version(
     }
 
 
-@router.post("/{page_id}/rollback/")
+@router.post("/{page_id}/rollback/", response_model=RollbackEnvelope)
 async def rollback_to_version(
     page_id: str,
     request: RollbackRequest,

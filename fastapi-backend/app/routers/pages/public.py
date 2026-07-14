@@ -14,9 +14,10 @@ from ...database.utils import get_db
 
 
 router = APIRouter()
+from ...schemas.pages_api import PageEnvelope
 
 
-@router.get("/public/{slug}/")
+@router.get("/public/{slug}/", response_model=PageEnvelope)
 async def get_public_page(slug: str, db: Session = Depends(get_db)):
     """
     Get a public page by slug for SSR.
@@ -77,7 +78,7 @@ async def get_public_page(slug: str, db: Session = Depends(get_db)):
         }
 
 
-@router.get("/homepage/")
+@router.get("/homepage/", response_model=PageEnvelope)
 async def get_homepage(db: Session = Depends(get_db)):
     """
     Get the homepage for Edge pull-publish.

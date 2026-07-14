@@ -8,7 +8,7 @@ router = APIRouter(prefix="/connections", tags=["connections"])
 # This endpoint was automatically generated from Express.js
 # Original schema: connections
 
-@router.get("/connections/")
+@router.get("/connections/", response_model=dict[str, Any])
 async def get_connections(
     request: Any = None,
     db = Depends(get_db)

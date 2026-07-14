@@ -8,7 +8,7 @@ authentication (ADMIN_EMAIL cookie session).
 import uuid
 import hashlib
 from datetime import datetime, UTC
-from typing import Optional, List
+from typing import Optional, List, Any
 
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, EmailStr
@@ -181,7 +181,7 @@ async def get_tenant_supabase_user_count(db: Session, tenant_id: str) -> int:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/")
+@router.get("/", response_model=dict[str, Any])
 async def list_tenants(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
@@ -248,7 +248,7 @@ async def list_tenants(
     return {"tenants": [r.model_dump() for r in result]}
 
 
-@router.get("/{tenant_id}")
+@router.get("/{tenant_id}", response_model=dict[str, Any])
 async def get_tenant(
     tenant_id: str,
     db: Session = Depends(get_db),
@@ -334,7 +334,7 @@ async def get_tenant(
     }
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, response_model=dict[str, Any])
 async def create_tenant(
     body: CreateTenantRequest,
     db: Session = Depends(get_db),
@@ -401,7 +401,7 @@ async def create_tenant(
     }
 
 
-@router.post("/{tenant_id}/users", status_code=201)
+@router.post("/{tenant_id}/users", status_code=201, response_model=dict[str, Any])
 async def create_tenant_user(
     tenant_id: str,
     body: CreateTenantUserRequest,
@@ -487,7 +487,7 @@ async def create_tenant_user(
     }
 
 
-@router.put("/{tenant_id}")
+@router.put("/{tenant_id}", response_model=dict[str, Any])
 async def update_tenant(
     tenant_id: str,
     body: UpdateTenantRequest,
@@ -518,7 +518,7 @@ async def update_tenant(
     }}
 
 
-@router.delete("/{tenant_id}")
+@router.delete("/{tenant_id}", response_model=dict[str, Any])
 
 async def delete_tenant(
     tenant_id: str,

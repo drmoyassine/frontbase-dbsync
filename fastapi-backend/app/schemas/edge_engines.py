@@ -126,7 +126,7 @@ class BatchToggleRequest(BatchRequest):
     is_active: bool
 
 
-class BatchResult(BaseModel):
+class EngineBatchResult(BaseModel):
     """Result of a batch operation."""
     success: List[str] = []  # IDs that succeeded
     failed: List[dict] = []  # [{ id, error }]

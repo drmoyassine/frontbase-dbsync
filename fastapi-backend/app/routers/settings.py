@@ -411,7 +411,12 @@ class TelemetryData(BaseModel):
     storage_providers: list[str]
     email_providers: list[str]
 
-@router.post("/telemetry")
+class TelemetryAck(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post("/telemetry", response_model=TelemetryAck)
 async def collect_telemetry(data: TelemetryData):
     """
     Collects anonymized telemetry from self-hosted editions.

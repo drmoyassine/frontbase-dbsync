@@ -1,3 +1,4 @@
+from typing import Any
 """
 Edge Agent Profiles router — CRUD for AI Agent Personas.
 """
@@ -73,7 +74,7 @@ def _serialize(profile: EdgeAgentProfile) -> dict:
     }
 
 
-@router.get("")
+@router.get("", response_model=dict[str, Any])
 def list_profiles(engine_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     engine_query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
     project_id = None
@@ -97,7 +98,7 @@ def list_profiles(engine_id: str, db: Session = Depends(get_db), ctx: TenantCont
     return {"profiles": result, "total": len(result)}
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=dict[str, Any])
 def create_profile(
     engine_id: str,
     payload: EdgeAgentProfileCreate,
@@ -157,7 +158,7 @@ def create_profile(
     return _serialize(profile)
 
 
-@router.put("/{profile_id}")
+@router.put("/{profile_id}", response_model=dict[str, Any])
 def update_profile(
     engine_id: str,
     profile_id: str,

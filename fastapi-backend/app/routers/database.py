@@ -2,6 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from ..models.schemas import DatabaseConnectionRequest, DatabaseConnectionResponse, SuccessResponse, ErrorResponse
+from ..schemas.database_api import (
+    TablesEnvelope, TableSchemaEnvelope, TableDataEnvelope,
+    DistinctValuesEnvelope, AdvancedQueryEnvelope,
+)
 from ..database.config import get_db, SessionLocal
 from ..database.utils import get_project_settings, update_project_settings, decrypt_data, encrypt_data
 from ..core.credential_resolver import get_supabase_context, is_supabase_connected
@@ -123,7 +127,7 @@ async def test_supabase(request: DatabaseConnectionRequest):
 
 # Duplicate function removed
 
-@router.get("/table-data/{table_name}/")
+@router.get("/table-data/{table_name}/", response_model=TableDataEnvelope)
 async def get_table_data(
     table_name: str,
     request: Request,
@@ -252,7 +256,7 @@ async def get_table_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/distinct-values/")
+@router.post("/distinct-values/", response_model=DistinctValuesEnvelope)
 async def get_distinct_values(request: dict):
     """Get distinct values for a column.
     Optimized: Releases DB connection before external API calls.
@@ -321,7 +325,7 @@ async def get_distinct_values(request: dict):
         print(f"Distinct values error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/advanced-query/")
+@router.post("/advanced-query/", response_model=AdvancedQueryEnvelope)
 async def advanced_query(request: dict):
     """Execute advanced query.
     Optimized: Releases DB connection before external API calls.
@@ -428,7 +432,7 @@ async def get_manual_schema_info(ctx):
         }
     }
 
-@router.get("/supabase-tables/")
+@router.get("/supabase-tables/", response_model=TablesEnvelope)
 async def get_supabase_tables():
     """Get database tables.
     Optimized: Releases DB connection before external API calls.
@@ -487,12 +491,12 @@ async def get_supabase_tables():
         print(f"Get tables error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/tables/")
+@router.get("/tables/", response_model=TablesEnvelope)
 async def get_tables():
     """Get database tables (aliased to supabase-tables)"""
     return await get_supabase_tables()
 
-@router.get("/table-schema/{table_name}/")
+@router.get("/table-schema/{table_name}/", response_model=TableSchemaEnvelope)
 async def get_table_schema(table_name: str):
     """Get table schema with foreign key information.
     Optimized: Releases DB connection before external API calls.

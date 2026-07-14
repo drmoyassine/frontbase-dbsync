@@ -11,7 +11,7 @@ Cloud-gated + tenant-scoped.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -64,7 +64,7 @@ def _backend(provider: str, dsn: Optional[str], db, tenant_id: Optional[str] = N
         raise HTTPException(400, str(e))
 
 
-@router.post("/search")
+@router.post("/search", response_model=dict[str, Any])
 async def vector_search(
     params: VectorSearchParams,
     db: Session = Depends(get_db),
@@ -99,7 +99,7 @@ async def vector_search(
     return {"success": True, "results": results}
 
 
-@router.post("/upsert")
+@router.post("/upsert", response_model=dict[str, Any])
 async def vector_upsert(
     params: VectorUpsertParams,
     db: Session = Depends(get_db),

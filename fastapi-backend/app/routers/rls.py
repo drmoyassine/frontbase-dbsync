@@ -6,6 +6,10 @@ import httpx
 import json
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
+from ..schemas.rls_api import (
+    RlsListEnvelope, RlsMessageEnvelope, RlsDataEnvelope,
+    RlsMetadataSaveEnvelope, RlsVerifyEnvelope,
+)
 
 router = APIRouter(prefix="/api/database/rls", tags=["rls"])
 
@@ -98,7 +102,7 @@ async def call_rls_function(function_name: str, params: dict, ctx: dict):
 # RLS POLICY ROUTES
 # ============================================================
 
-@router.get("/policies/")
+@router.get("/policies/", response_model=RlsListEnvelope)
 async def list_policies(
     schema: str = Query("public"), 
     db: Session = Depends(get_db),
@@ -129,7 +133,7 @@ async def list_policies(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/tables/")
+@router.get("/tables/", response_model=RlsListEnvelope)
 async def get_tables_rls_status(
     schema: str = Query("public"), 
     db: Session = Depends(get_db),
@@ -160,7 +164,7 @@ async def get_tables_rls_status(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/policies/{table_name}")
+@router.get("/policies/{table_name}", response_model=RlsListEnvelope)
 async def get_table_policies(
     table_name: str, 
     schema: str = Query("public"), 
@@ -194,7 +198,7 @@ async def get_table_policies(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/policies/")
+@router.post("/policies/", response_model=RlsMessageEnvelope)
 async def create_policy(request: CreatePolicyRequest, db: Session = Depends(get_db),
     tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
@@ -262,7 +266,7 @@ async def create_policy(request: CreatePolicyRequest, db: Session = Depends(get_
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/policies/{table_name}/{policy_name}")
+@router.put("/policies/{table_name}/{policy_name}", response_model=RlsMessageEnvelope)
 async def update_policy(
     table_name: str,
     policy_name: str,
@@ -300,7 +304,7 @@ async def update_policy(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/policies/{table_name}/{policy_name}")
+@router.delete("/policies/{table_name}/{policy_name}", response_model=RlsMessageEnvelope)
 async def delete_policy(
     table_name: str,
     policy_name: str,
@@ -331,7 +335,7 @@ async def delete_policy(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/tables/{table_name}/toggle/")
+@router.post("/tables/{table_name}/toggle/", response_model=RlsMessageEnvelope)
 async def toggle_table_rls(
     table_name: str,
     request: ToggleRLSRequest,
@@ -366,7 +370,7 @@ async def toggle_table_rls(
 # BATCH POLICY CREATION
 # ============================================================
 
-@router.post("/batch/")
+@router.post("/batch/", response_model=RlsMessageEnvelope)
 async def create_batch_policies(request: CreateBatchPolicyRequest, db: Session = Depends(get_db),
     tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
@@ -424,12 +428,12 @@ async def create_batch_policies(request: CreateBatchPolicyRequest, db: Session =
 # BULK DELETE POLICIES (from Supabase)
 # ============================================================
 
-class BulkDeleteRequest(BaseModel):
+class RlsBulkDeleteRequest(BaseModel):
     policies: List[dict]  # List of {tableName, policyName}
 
 
-@router.post("/bulk-delete/")
-async def bulk_delete_policies(request: BulkDeleteRequest, db: Session = Depends(get_db),
+@router.post("/bulk-delete/", response_model=RlsMessageEnvelope)
+async def bulk_delete_policies(request: RlsBulkDeleteRequest, db: Session = Depends(get_db),
     tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
     """Delete multiple RLS policies from Supabase in bulk"""
@@ -545,7 +549,7 @@ def ensure_rls_metadata_table(db: Session):
     db.commit()
 
 
-@router.get("/metadata/")
+@router.get("/metadata/", response_model=RlsDataEnvelope)
 async def get_all_rls_metadata(db: Session = Depends(get_db),
     tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
@@ -578,7 +582,7 @@ async def get_all_rls_metadata(db: Session = Depends(get_db),
         }
 
 
-@router.get("/metadata/{table_name}/{policy_name}")
+@router.get("/metadata/{table_name}/{policy_name}", response_model=RlsDataEnvelope)
 async def get_rls_metadata(
     table_name: str,
     policy_name: str,
@@ -619,7 +623,7 @@ async def get_rls_metadata(
         }
 
 
-@router.post("/metadata/")
+@router.post("/metadata/", response_model=RlsMetadataSaveEnvelope)
 async def save_rls_metadata(request: RLSMetadataRequest, db: Session = Depends(get_db),
     tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):
@@ -672,7 +676,7 @@ async def save_rls_metadata(request: RLSMetadataRequest, db: Session = Depends(g
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/metadata/{table_name}/{policy_name}")
+@router.delete("/metadata/{table_name}/{policy_name}", response_model=RlsMessageEnvelope)
 async def delete_rls_metadata(
     table_name: str,
     policy_name: str,
@@ -697,7 +701,7 @@ async def delete_rls_metadata(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/metadata/verify/")
+@router.post("/metadata/verify/", response_model=RlsVerifyEnvelope)
 async def verify_rls_metadata(request: VerifyRLSRequest, db: Session = Depends(get_db),
     tenant_ctx: Optional[TenantContext] = Depends(get_tenant_context)
 ):

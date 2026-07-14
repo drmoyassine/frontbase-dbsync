@@ -8,7 +8,7 @@ router = APIRouter(prefix="/advanced-query", tags=["advanced-query"])
 # This endpoint was automatically generated from Express.js
 # Original schema: advanced-query
 
-@router.post("/advanced-query")
+@router.post("/advanced-query", response_model=dict[str, Any])
 async def post_advanced_query(
     request: Any = None,
     db = Depends(get_db)

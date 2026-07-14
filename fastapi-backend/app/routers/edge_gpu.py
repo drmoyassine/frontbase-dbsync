@@ -10,7 +10,7 @@ import json
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -112,7 +112,7 @@ def _serialize(model: EdgeGPUModel) -> dict:
 # Catalog — provider-agnostic model discovery
 # =============================================================================
 
-@router.get("/catalog")
+@router.get("/catalog", response_model=dict[str, Any])
 async def get_catalog(
     provider_id: str,
     provider: str = "workers_ai",
@@ -178,7 +178,7 @@ async def get_catalog(
     }
 
 
-@router.get("/schemas")
+@router.get("/schemas", response_model=dict[str, Any])
 async def get_schemas():
     """Return all available I/O schemas by task type."""
     return {"schemas": IO_SCHEMAS, "providers": available_providers()}
@@ -188,7 +188,7 @@ async def get_schemas():
 # CRUD
 # =============================================================================
 
-@router.get("/")
+@router.get("/", response_model=list[dict[str, Any]])
 async def list_gpu_models(db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all deployed GPU models."""
     query = db.query(EdgeGPUModel).join(EdgeEngine, EdgeGPUModel.edge_engine_id == EdgeEngine.id)
@@ -202,7 +202,7 @@ async def list_gpu_models(db: Session = Depends(get_db), ctx: TenantContext | No
     return [_serialize(m) for m in models]
 
 
-@router.post("/")
+@router.post("/", response_model=dict[str, Any])
 async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context), skip_redeploy: bool = Query(False)):
     """Deploy a new GPU model to an edge engine.
 
@@ -278,7 +278,7 @@ async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db
     return result
 
 
-@router.put("/{model_id}")
+@router.put("/{model_id}", response_model=dict[str, Any])
 async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update a GPU model's configuration."""
     query = db.query(EdgeGPUModel).join(EdgeEngine, EdgeGPUModel.edge_engine_id == EdgeEngine.id).filter(EdgeGPUModel.id == model_id)
@@ -312,7 +312,7 @@ async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session =
     return _serialize(model)
 
 
-@router.delete("/{model_id}")
+@router.delete("/{model_id}", response_model=dict[str, Any])
 async def delete_gpu_model(model_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context), skip_redeploy: bool = Query(False)):
     """Delete a GPU model.
 
@@ -355,7 +355,7 @@ async def delete_gpu_model(model_id: str, db: Session = Depends(get_db), ctx: Te
 # Test Inference
 # =============================================================================
 
-@router.post("/{model_id}/test")
+@router.post("/{model_id}/test", response_model=dict[str, Any])
 async def test_gpu_model(model_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test a deployed GPU model by running a sample inference."""
     query = db.query(EdgeGPUModel).join(EdgeEngine, EdgeGPUModel.edge_engine_id == EdgeEngine.id).filter(EdgeGPUModel.id == model_id)

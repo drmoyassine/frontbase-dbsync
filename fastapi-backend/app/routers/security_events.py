@@ -13,7 +13,7 @@ A tenant can therefore never read another tenant's audit trail.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -29,7 +29,7 @@ _VALID_SEVERITIES = {"low", "medium", "high", "critical"}
 _MAX_LIMIT = 500
 
 
-@router.get("/")
+@router.get("/", response_model=dict[str, Any])
 async def list_security_events(
     event_type: Optional[str] = Query(None, description="Filter by event type (e.g. ssrf_attempt_blocked)"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
@@ -103,7 +103,7 @@ async def list_security_events(
         db.close()
 
 
-@router.get("/summary")
+@router.get("/summary", response_model=dict[str, Any])
 async def security_events_summary(
     ctx: Optional[TenantContext] = Depends(get_tenant_context),
 ):

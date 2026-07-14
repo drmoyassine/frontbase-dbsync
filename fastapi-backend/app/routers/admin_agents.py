@@ -88,7 +88,7 @@ class AgentProfileConfigUpdate(BaseModel):
     excluded_tools: Optional[list[str]] = None
 
 
-@router.get("/config")
+@router.get("/config", response_model=dict[str, Any])
 async def get_agent_config(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
@@ -113,7 +113,7 @@ async def get_agent_config(
     }
 
 
-@router.put("/config")
+@router.put("/config", response_model=dict[str, Any])
 async def update_agent_config(
     body: AgentConfigUpdate,
     db: Session = Depends(get_db),
@@ -130,7 +130,7 @@ async def update_agent_config(
 # Per-profile configuration (workspace | support)
 # ---------------------------------------------------------------------------
 
-@router.get("/profiles")
+@router.get("/profiles", response_model=dict[str, Any])
 async def get_profile_configs(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
@@ -144,7 +144,7 @@ async def get_profile_configs(
     }
 
 
-@router.put("/profiles/{use_type}")
+@router.put("/profiles/{use_type}", response_model=dict[str, Any])
 async def update_profile_config(
     use_type: str,
     body: AgentProfileConfigUpdate,
@@ -162,7 +162,7 @@ async def update_profile_config(
 # Shared LLM provider
 # ---------------------------------------------------------------------------
 
-@router.get("/providers")
+@router.get("/providers", response_model=dict[str, Any])
 async def list_agent_providers(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
@@ -183,7 +183,7 @@ async def list_agent_providers(
     return {"providers": [_provider_view(p) for p in providers]}
 
 
-@router.post("/providers/{provider_id}/set-default")
+@router.post("/providers/{provider_id}/set-default", response_model=dict[str, Any])
 async def set_default_agent_provider(
     provider_id: str,
     db: Session = Depends(get_db),
@@ -252,7 +252,7 @@ def _balance_view(db: Session, balance: AgentCreditBalance, include_usage: bool 
     return view
 
 
-@router.get("/quota/balances")
+@router.get("/quota/balances", response_model=dict[str, Any])
 async def list_balances(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
@@ -261,7 +261,7 @@ async def list_balances(
     return {"balances": [_balance_view(db, b, include_usage=True) for b in balances]}
 
 
-@router.post("/quota/{tenant_id}/grant")
+@router.post("/quota/{tenant_id}/grant", response_model=dict[str, Any])
 async def grant_credits(
     tenant_id: str,
     body: GrantRequest,
@@ -285,7 +285,7 @@ async def grant_credits(
     return {"balance": out}
 
 
-@router.post("/quota/{tenant_id}/reset-daily")
+@router.post("/quota/{tenant_id}/reset-daily", response_model=dict[str, Any])
 async def reset_tenant_daily(
     tenant_id: str,
     db: Session = Depends(get_db),
@@ -300,7 +300,7 @@ async def reset_tenant_daily(
     return {"balance": balance}
 
 
-@router.post("/quota/reset-daily")
+@router.post("/quota/reset-daily", response_model=dict[str, Any])
 async def reset_all_daily(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
@@ -317,7 +317,7 @@ async def reset_all_daily(
 _PERIOD_DAYS = {"7d": 7, "30d": 30, "90d": 90}
 
 
-@router.get("/analytics")
+@router.get("/analytics", response_model=dict[str, Any])
 async def get_analytics(
     period: str = Query("30d"),
     db: Session = Depends(get_db),

@@ -18,6 +18,7 @@ from ...models.models import Page, PageDeployment, EdgeEngine, Project
 from app.services.page_hash import compute_page_hash
 from app.services.edge_client import get_edge_headers, resolve_engine_url
 from app.middleware.tenant_context import TenantContext, get_tenant_context
+from ...schemas.pages_api import PageEnvelope, PageListEnvelope
 from .versions import create_version_snapshot
 from sqlalchemy.orm import joinedload
 import asyncio
@@ -179,7 +180,7 @@ async def unpublish_from_single_target(slug: str, page_id: str, engine_id: str, 
     return {"success": True, "message": f"Page unpublished from {engine.name}"}
 
 
-@router.get("/")
+@router.get("/", response_model=PageListEnvelope)
 async def get_pages(
     includeDeleted: bool = False,
     db: Session = Depends(get_db),
@@ -220,7 +221,7 @@ async def get_pages(
         }
 
 
-@router.get("/{page_id}/")
+@router.get("/{page_id}/", response_model=PageEnvelope)
 async def get_page(
     page_id: str,
     db: Session = Depends(get_db),
@@ -265,7 +266,7 @@ async def get_page(
         }
 
 
-@router.post("/", status_code=201)
+@router.post("/", status_code=201, response_model=PageEnvelope)
 async def create_page_endpoint(
     request: PageCreateRequest,
     db: Session = Depends(get_db),
@@ -334,7 +335,7 @@ async def create_page_endpoint(
         }
 
 
-@router.put("/{page_id}/")
+@router.put("/{page_id}/", response_model=PageEnvelope)
 async def update_page_endpoint(
     page_id: str,
     request: PageUpdateRequest,
@@ -398,7 +399,7 @@ async def update_page_endpoint(
         }
 
 
-@router.put("/{page_id}/layout/")
+@router.put("/{page_id}/layout/", response_model=PageEnvelope)
 async def update_page_layout(
     page_id: str,
     request: dict,
@@ -458,7 +459,7 @@ async def update_page_layout(
         }
 
 
-@router.delete("/{page_id}/")
+@router.delete("/{page_id}/", response_model=PageEnvelope)
 async def delete_page(
     page_id: str,
     db: Session = Depends(get_db),
@@ -528,7 +529,7 @@ async def delete_page(
         }
 
 
-@router.post("/{page_id}/restore/")
+@router.post("/{page_id}/restore/", response_model=PageEnvelope)
 async def restore_page(
     page_id: str,
     db: Session = Depends(get_db),
@@ -591,7 +592,7 @@ async def restore_page(
         }
 
 
-@router.delete("/{page_id}/permanent/")
+@router.delete("/{page_id}/permanent/", response_model=PageEnvelope)
 async def permanent_delete_page(
     page_id: str,
     db: Session = Depends(get_db),
@@ -652,7 +653,7 @@ async def permanent_delete_page(
         }
 
 
-@router.post("/{page_id}/unpublish/{engine_id}/")
+@router.post("/{page_id}/unpublish/{engine_id}/", response_model=PageEnvelope)
 async def unpublish_page_from_target(
     page_id: str,
     engine_id: str,

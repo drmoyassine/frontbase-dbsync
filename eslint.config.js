@@ -23,4 +23,27 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    // CF-22 P0/W2: raw axios is being phased out in favor of the generated,
+    // contract-typed client (src/client + lib/api-client). New code must not
+    // import axios directly; the legacy instance (services/api-service) and
+    // the generated client runtime are the only sanctioned users. Escalate
+    // "warn" -> "error" once the service migration completes.
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/client/**", "src/services/api-service.ts", "src/lib/api-client.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "warn",
+        {
+          paths: [
+            {
+              name: "axios",
+              message:
+                "Use the generated API client (@/client, configured in @/lib/api-client) instead of raw axios.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

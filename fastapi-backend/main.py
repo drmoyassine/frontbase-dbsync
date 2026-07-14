@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import uvicorn
 import os
 from app.routers import pages, project, variables, database, rls, actions, auth_forms, auth, settings, storage, edge_providers, edge_engines, cloudflare, cloudflare_inspector, engine_inspector, edge_databases, edge_caches, edge_queues, edge_gpu, edge_api_keys, edge_agent_profiles, deno, themes, agent, agent_mcp, agent_settings, workflows, edge_vectors, security_events
@@ -873,11 +874,25 @@ if is_supertokens_enabled():
     from app.auth.supertokens import init_supertokens
     init_supertokens()
 
+def _generate_operation_id(route) -> str:
+    """Stable, codegen-friendly operationIds: `<first_tag>_<handler_name>`.
+
+    Client generators (@hey-api/openapi-ts) derive method names from operationId,
+    so these must be unique and human-readable. Uniqueness across all routers is
+    enforced by scripts/openapi_check.py; collisions are fixed by renaming the
+    handler function, never by hand-writing operation_id on the route.
+    """
+    tag = str(route.tags[0]) if route.tags else route.path_format.strip("/").split("/")[0] or "root"
+    slug = "".join(ch if ch.isalnum() else "_" for ch in tag.lower()).strip("_")
+    return f"{slug}_{route.name}"
+
+
 app = FastAPI(
     title="Frontbase-DBSync API",
     description="Unified API for Frontbase and DB-Sync functionality",
     version="1.0.0",
     lifespan=lifespan,
+    generate_unique_id_function=_generate_operation_id,
 )
 
 if is_supertokens_enabled():
@@ -1195,68 +1210,14 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])  # type: ignore[
 # This prevents 307 redirects by normalizing paths before routing
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-class TrailingSlashMiddleware:
-    """
-    Middleware that adds trailing slash to paths internally.
-    
-    Prevents 307 redirect loops: the excluded routers define routes
-    WITHOUT trailing slashes, so the middleware must not add one.
-    Non-excluded routes get a trailing slash added to match their
-    route definitions, preventing a 307 from FastAPI.
-    
-    Note: some excluded routes may still produce a single benign 307
-    redirect (e.g., /api/edge-engines → /api/edge-engines/). This is
-    harmless — the client follows it once.
-    """
-    EXCLUDE_PREFIXES = [
-        "/health",
-        "/api/test-route",
-        "/api/auth",
-        "/api/actions",
-        "/api/storage",
-        "/api/billing",
-        "/api/edge-engines",
-        "/api/edge-providers",
-        "/api/edge-caches",
-        "/api/edge-databases",
-        "/api/edge-queues",
-        "/api/edge-vectors",
-        "/api/edge-gpu",
-        "/api/edge-api-keys",
-        "/api/cloudflare",
-        "/api/deno",
-        "/api/settings",
-        "/api/agent",
-        "/api/agent-catalogue",
-        "/api/agent-profiles",
-        "/api/agent-skills",
-        "/api/tenants",
-        "/api/admin/tenants",
-        "/api/admin/plans",
-        "/api/admin/plan-requests",
-        "/api/admin/agents",
-        "/api/admin/addons",
-        "/api/admin/tenant-addons",
-        "/api/admin/managed",
-        "/api/admin/billing",
-        "/api/mcp-servers",
-    ]
-    
-    def __init__(self, app: ASGIApp):
-        self.app = app
-    
-    async def __call__(self, scope: Scope, receive: Receive, send: Send):
-        if scope["type"] == "http":
-            path = scope["path"]
-            should_skip = any(
-                path == prefix or path.startswith(f"{prefix}/") 
-                for prefix in self.EXCLUDE_PREFIXES
-            )
-            if not should_skip and not path.endswith("/") and "." not in path.split("/")[-1]:
-                scope["path"] = path + "/"
-        await self.app(scope, receive, send)
+# --- Trailing-slash normalization: intentionally NOT applied ----------------
+# A previous custom TrailingSlashMiddleware added a trailing slash to non-excluded
+# paths, which fought Starlette's `redirect_slashes` and caused infinite 307 loops
+# on the 256 routes registered WITHOUT a trailing slash (e.g. /api/queue/health,
+# /api/security-events/summary). Relying on the default `redirect_slashes` emits a
+# single, loop-free 307 instead — standard behavior every client follows.
 
-app.add_middleware(TrailingSlashMiddleware)
+
 
 # Add test mode middleware
 app.add_middleware(TestModeMiddleware, test_mode=True)
@@ -1354,16 +1315,35 @@ ASSETS_DIR = Path(__file__).parent / "static" / "assets"
 ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static/assets", StaticFiles(directory=str(ASSETS_DIR)), name="assets")
 
-@app.get("/")
+class RootStatus(BaseModel):
+    message: str
+    test_mode: bool
+
+
+class HealthStatus(BaseModel):
+    status: str
+    message: str
+    test_mode: bool
+
+
+@app.get("/", tags=["Meta"], response_model=RootStatus)
 async def root():
     return {"message": "Frontbase-DBSync API is running", "test_mode": True}
 
-@app.get("/health")
-@app.get("/health/")
+@app.get("/health", tags=["Meta"], response_model=HealthStatus)
+@app.get("/health/", include_in_schema=False)
 async def health_check():
     return {"status": "healthy", "message": "API is operational", "test_mode": True}
 
-@app.get("/api/queue/health")
+class QueueHealth(BaseModel):
+    status: str
+    active_workers: bool | None = None
+    active: dict | None = None
+    registered: dict | None = None
+    error: str | None = None
+
+
+@app.get("/api/queue/health", tags=["Meta"], response_model=QueueHealth)
 async def queue_health():
     from app.services.task_queue import celery_app
     i = celery_app.control.inspect()
@@ -1373,10 +1353,6 @@ async def queue_health():
         return {"status": "healthy", "active_workers": active is not None, "active": active, "registered": registered}
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
-
-@app.get("/api/test-route")
-async def test_route():
-    return {"test": True}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, proxy_headers=True, forwarded_allow_ips="*")# trigger reload

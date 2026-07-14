@@ -7,7 +7,7 @@ These replace the old global Turso settings in settings.json.
 Each EdgeDatabase can be attached to one or more DeploymentTargets.
 """
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime, UTC
 import uuid
 import httpx
@@ -25,7 +25,7 @@ from ..schemas.edge_databases import (
     CreateSchemaRequest,
     ResetRolePasswordRequest,
     BatchDeleteDatabaseRequest,
-    BatchResult,
+    DatabaseBatchResult,
 )
 from ..schemas.edge_engines import TestConnectionResult
 
@@ -274,7 +274,7 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate, ctx: Ten
         db.close()
 
 
-@router.delete("/{db_id}")
+@router.delete("/{db_id}", response_model=dict[str, Any])
 async def delete_edge_database(db_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge database connection.
     
@@ -388,11 +388,11 @@ async def delete_edge_database(db_id: str, delete_remote: bool = False, ctx: Ten
         db.close()
 
 
-@router.post("/batch/delete", response_model=BatchResult)
+@router.post("/batch/delete", response_model=DatabaseBatchResult)
 async def batch_delete_databases(payload: BatchDeleteDatabaseRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Batch delete databases. Optionally delete remote resources in parallel."""
     import asyncio
-    result = BatchResult(total=len(payload.ids))
+    result = DatabaseBatchResult(total=len(payload.ids))
     db = SessionLocal()
     try:
         # Phase 1: collect records
@@ -508,7 +508,7 @@ async def test_connection_inline(payload: EdgeDatabaseCreate, ctx: TenantContext
     return await test_db_connection(payload.provider, payload.db_url, payload.db_token, payload.provider_account_id)
 
 
-@router.post("/discover-schemas")
+@router.post("/discover-schemas", response_model=dict[str, Any])
 async def discover_schemas(payload: DiscoverSchemasRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Discover existing frontbase_edge* schemas in a PG database.
     
@@ -539,7 +539,7 @@ async def discover_schemas(payload: DiscoverSchemasRequest, ctx: TenantContext |
     return result
 
 
-@router.post("/create-schema")
+@router.post("/create-schema", response_model=dict[str, Any])
 async def create_schema(payload: CreateSchemaRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new frontbase_edge_<suffix> schema in a PG database.
     
@@ -569,7 +569,7 @@ async def create_schema(payload: CreateSchemaRequest, ctx: TenantContext | None 
     return result
 
 
-@router.post("/reset-role-password")
+@router.post("/reset-role-password", response_model=dict[str, Any])
 async def reset_role_password(payload: ResetRolePasswordRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Reset the scoped role password for an existing Supabase schema.
 

@@ -125,7 +125,7 @@ def _mcp_view(m: McpServer) -> dict[str, Any]:
     }
 
 
-@router.get("/mcp-servers")
+@router.get("/mcp-servers", response_model=dict[str, Any])
 def list_mcp_servers(
     profile_slug: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -161,7 +161,7 @@ def list_mcp_servers(
     return {"mcpServers": [_mcp_view(m) for m in rows], "total": len(rows)}
 
 
-@router.post("/mcp-servers", status_code=201)
+@router.post("/mcp-servers", status_code=201, response_model=dict[str, Any])
 def create_mcp_server(
     body: McpServerCreate,
     db: Session = Depends(get_db),
@@ -194,7 +194,7 @@ def create_mcp_server(
     return _mcp_view(m)
 
 
-@router.get("/mcp-servers/{server_id}")
+@router.get("/mcp-servers/{server_id}", response_model=dict[str, Any])
 def get_mcp_server(
     server_id: str,
     db: Session = Depends(get_db),
@@ -204,7 +204,7 @@ def get_mcp_server(
     return _mcp_view(m)
 
 
-@router.put("/mcp-servers/{server_id}")
+@router.put("/mcp-servers/{server_id}", response_model=dict[str, Any])
 def update_mcp_server(
     server_id: str,
     body: McpServerUpdate,
@@ -241,7 +241,7 @@ def delete_mcp_server(
     db.commit()
 
 
-@router.get("/mcp-servers/{server_id}/tools")
+@router.get("/mcp-servers/{server_id}/tools", response_model=dict[str, Any])
 def list_mcp_server_tools(
     server_id: str,
     db: Session = Depends(get_db),
@@ -262,7 +262,7 @@ def list_mcp_server_tools(
     return {"tools": tools, "total": len(tools)}
 
 
-@router.post("/mcp-servers/{server_id}/test")
+@router.post("/mcp-servers/{server_id}/test", response_model=dict[str, Any])
 def test_mcp_server(
     server_id: str,
     db: Session = Depends(get_db),
@@ -337,7 +337,7 @@ def _skill_view(s: AgentSkill) -> dict[str, Any]:
     }
 
 
-@router.get("/agent-skills")
+@router.get("/agent-skills", response_model=dict[str, Any])
 def list_skills(
     profile_slug: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -378,7 +378,7 @@ def list_skills(
     return {"skills": [_skill_view(s) for s in rows], "total": len(rows)}
 
 
-@router.post("/agent-skills", status_code=201)
+@router.post("/agent-skills", status_code=201, response_model=dict[str, Any])
 def create_skill(
     body: SkillCreate,
     db: Session = Depends(get_db),
@@ -408,7 +408,7 @@ def create_skill(
     return _skill_view(s)
 
 
-@router.put("/agent-skills/{skill_id}")
+@router.put("/agent-skills/{skill_id}", response_model=dict[str, Any])
 def update_skill(
     skill_id: str,
     body: SkillUpdate,
@@ -479,7 +479,7 @@ class SkillInstall(BaseModel):
     config_overrides: Optional[dict[str, Any]] = None
 
 
-@router.get("/agent-profiles/{profile_id}/skills")
+@router.get("/agent-profiles/{profile_id}/skills", response_model=dict[str, Any])
 def list_profile_skills(
     profile_id: str,
     db: Session = Depends(get_db),
@@ -499,7 +499,7 @@ def list_profile_skills(
     return {"skills": out, "total": len(out)}
 
 
-@router.post("/agent-profiles/{profile_id}/skills", status_code=201)
+@router.post("/agent-profiles/{profile_id}/skills", status_code=201, response_model=dict[str, Any])
 def install_skill(
     profile_id: str,
     body: SkillInstall,
@@ -547,7 +547,7 @@ def uninstall_skill(
 # Agent Catalogue (for Settings Modal)
 # ---------------------------------------------------------------------------
 
-@router.get("/agent-catalogue")
+@router.get("/agent-catalogue", response_model=dict[str, Any])
 def get_agent_catalogue(
     profile_slug: str = "workspace",
     db: Session = Depends(get_db),

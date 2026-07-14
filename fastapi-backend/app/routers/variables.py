@@ -4,7 +4,7 @@ from typing import List
 from ..database.utils import get_db, create_variable, get_all_variables
 from ..models.schemas import (
     VariableCreateRequest, VariableUpdateRequest, VariableResponse,
-    SuccessResponse, ErrorResponse
+    SuccessResponse, ErrorResponse, MessageResponse
 )
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 
@@ -75,7 +75,7 @@ async def update_variable_endpoint(variable_id: str, request: VariableUpdateRequ
     db.refresh(variable)
     return variable
 
-@router.delete("/{variable_id}/")
+@router.delete("/{variable_id}/", response_model=MessageResponse)
 async def delete_variable(variable_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete a variable"""
     from ..models.models import AppVariable

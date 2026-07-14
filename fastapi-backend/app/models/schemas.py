@@ -186,6 +186,10 @@ class SuccessResponse(BaseModel):
     message: str
     data: Optional[Any] = None
 
+class MessageResponse(BaseModel):
+    """Bare `{"message": ...}` acknowledgement (deletes and simple actions)."""
+    message: str
+
 class ErrorResponse(BaseModel):
     success: bool = False
     message: str

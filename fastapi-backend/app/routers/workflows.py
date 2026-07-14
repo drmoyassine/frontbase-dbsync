@@ -40,7 +40,12 @@ class WorkflowEmailRequest(BaseModel):
     reply_to: Optional[str] = None
 
 
-@router.post("/send-email")
+class WorkflowEmailResult(BaseModel):
+    success: bool
+    message_id: Optional[str] = None
+
+
+@router.post("/send-email", response_model=WorkflowEmailResult)
 async def send_workflow_email(
     request: WorkflowEmailRequest,
     provider_account_id: Optional[str] = Query(None),

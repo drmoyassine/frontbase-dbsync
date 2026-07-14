@@ -18,7 +18,7 @@ from datetime import datetime, UTC
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any
 from sqlalchemy.orm import Session
 
 from ..database.config import get_db
@@ -228,7 +228,7 @@ def _build_key_secrets(engine: EdgeEngine, db: Session) -> dict:
 # CRUD
 # =============================================================================
 
-@router.get("")
+@router.get("", response_model=dict[str, Any])
 def list_api_keys(
     engine_id: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -261,7 +261,7 @@ def list_api_keys(
     return {"keys": result, "total": len(result)}
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=dict[str, Any])
 def create_api_key(
     payload: APIKeyCreate,
     background_tasks: BackgroundTasks,
@@ -331,7 +331,7 @@ def create_api_key(
     return response
 
 
-@router.put("/{key_id}")
+@router.put("/{key_id}", response_model=dict[str, Any])
 def update_api_key(
     key_id: str,
     payload: APIKeyUpdate,
@@ -429,7 +429,7 @@ def delete_api_key(
     background_tasks.add_task(_sync_keys_to_engines, edge_engine_id)
 
 
-@router.get("/{key_id}/reveal")
+@router.get("/{key_id}/reveal", response_model=dict[str, Any])
 def reveal_api_key(key_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Reveal the full API key (only works for Fernet-encrypted keys)."""
     query = db.query(EdgeAPIKey)

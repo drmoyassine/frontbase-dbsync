@@ -1,3 +1,4 @@
+from typing import Any
 """
 Cloudflare Inspector Router.
 
@@ -132,7 +133,7 @@ def _inspect_settings_sync(api_token: str, account_id: str, worker_name: str) ->
 # Endpoints
 # =============================================================================
 
-@router.post("/inspect/content")
+@router.post("/inspect/content", response_model=dict[str, Any])
 async def inspect_worker_content(payload: InspectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch the deployed worker's script source code."""
     try:
@@ -165,7 +166,7 @@ async def inspect_worker_content(payload: InspectRequest, db: Session = Depends(
         raise HTTPException(500, str(e))
 
 
-@router.post("/inspect/settings")
+@router.post("/inspect/settings", response_model=dict[str, Any])
 async def inspect_worker_settings(payload: InspectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch a worker's settings: bindings, compatibility, routes, crons."""
     try:
@@ -200,7 +201,7 @@ async def inspect_worker_settings(payload: InspectRequest, db: Session = Depends
         raise HTTPException(500, str(e))
 
 
-@router.post("/inspect/secrets")
+@router.post("/inspect/secrets", response_model=dict[str, Any])
 async def inspect_worker_secrets(payload: InspectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List secret names deployed to a worker (values are never returned by CF)."""
     try:

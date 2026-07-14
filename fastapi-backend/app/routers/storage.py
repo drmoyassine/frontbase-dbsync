@@ -6,7 +6,11 @@ Provider CRUD endpoints manage the StorageProvider records.
 """
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Query, Depends, BackgroundTasks
-from typing import Optional, List
+from typing import Optional, List, Any
+from ..schemas.storage_api import (
+    StorageMessageAck, StorageBucketResult, StorageFilesResult,
+    StorageSignedUrlResult, StorageResultEnvelope,
+)
 from datetime import datetime, timezone
 import uuid
 import json
@@ -39,7 +43,7 @@ def _scoped_storage_provider_query(db: Session, ctx: TenantContext | None):
 # StorageProvider CRUD
 # ============================================================================
 
-@router.get("/providers/")
+@router.get("/providers/", response_model=list[dict[str, Any]])
 async def list_storage_providers(ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all explicitly-added storage providers."""
     db = SessionLocal()
@@ -67,7 +71,7 @@ async def list_storage_providers(ctx: TenantContext | None = Depends(get_tenant_
         db.close()
 
 
-@router.post("/providers/")
+@router.post("/providers/", response_model=dict[str, Any])
 async def create_storage_provider(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new storage provider linking to a connected account."""
     db = SessionLocal()
@@ -124,7 +128,7 @@ async def create_storage_provider(request: dict, ctx: TenantContext | None = Dep
         db.close()
 
 
-@router.delete("/providers/{provider_id}")
+@router.delete("/providers/{provider_id}", response_model=StorageMessageAck)
 async def delete_storage_provider(provider_id: str, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Remove a storage provider."""
     db = SessionLocal()
@@ -145,7 +149,7 @@ async def delete_storage_provider(provider_id: str, ctx: TenantContext | None = 
         db.close()
 
 
-@router.get("/netlify-sites")
+@router.get("/netlify-sites", response_model=list[dict[str, Any]])
 async def list_netlify_sites(account_id: str = Query(..., description="EdgeProviderAccount ID")):
     """List Netlify sites for a connected account (used by the site-picker in Add Storage)."""
     import httpx
@@ -181,7 +185,7 @@ async def list_netlify_sites(account_id: str = Query(..., description="EdgeProvi
     ]
 
 
-@router.post("/netlify-sites")
+@router.post("/netlify-sites", response_model=dict[str, Any])
 async def create_netlify_site(request: dict):
     """Create a new Netlify site for storage (reuses netlify_deploy_api.create_site).
 
@@ -247,7 +251,7 @@ async def create_netlify_site(request: dict):
 
 # ── Vercel Project Picker ───────────────────────────────────────────────
 
-@router.get("/vercel-projects")
+@router.get("/vercel-projects", response_model=list[dict[str, Any]])
 async def list_vercel_projects(account_id: str = Query(..., description="EdgeProviderAccount ID")):
     """List Vercel projects for a connected account (used by project-picker in Create Bucket)."""
     from app.core.credential_resolver import get_provider_context_by_id
@@ -274,7 +278,7 @@ async def list_vercel_projects(account_id: str = Query(..., description="EdgePro
     ]
 
 
-@router.post("/vercel-projects")
+@router.post("/vercel-projects", response_model=dict[str, Any])
 async def create_vercel_project(request: dict):
     """Create a new Vercel project for blob storage connection."""
     from app.core.credential_resolver import get_provider_context_by_id
@@ -343,7 +347,7 @@ def _resolve_adapter(provider_id: str, ctx: TenantContext | None = None):
 # Bucket Operations (all scoped by provider_id)
 # ============================================================================
 
-@router.get("/buckets")
+@router.get("/buckets", response_model=dict[str, Any])
 async def list_buckets(provider_id: str = Query(..., description="StorageProvider ID"), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all buckets for a storage provider (fast — no size computation)."""
     try:
@@ -379,7 +383,7 @@ async def list_buckets(provider_id: str = Query(..., description="StorageProvide
         raise HTTPException(500, str(e))
 
 
-@router.get("/compute-size")
+@router.get("/compute-size", response_model=StorageBucketResult)
 async def compute_size(
     bucket: str = Query(..., description="Bucket name"),
     provider_id: str = Query(..., description="StorageProvider ID"),
@@ -414,7 +418,7 @@ async def compute_size(
         raise HTTPException(500, str(e))
 
 
-@router.post("/buckets")
+@router.post("/buckets", response_model=StorageBucketResult)
 async def create_bucket(
     request: dict,
     provider_id: str = Query(..., description="StorageProvider ID"),
@@ -447,7 +451,7 @@ async def create_bucket(
         raise HTTPException(500, str(e))
 
 
-@router.get("/buckets/{bucket_id}")
+@router.get("/buckets/{bucket_id}", response_model=StorageBucketResult)
 async def get_bucket(
     bucket_id: str,
     provider_id: str = Query(..., description="StorageProvider ID"),
@@ -464,7 +468,7 @@ async def get_bucket(
         raise HTTPException(500, str(e))
 
 
-@router.put("/buckets/{bucket_id}")
+@router.put("/buckets/{bucket_id}", response_model=StorageBucketResult)
 async def update_bucket(
     bucket_id: str,
     request: dict,
@@ -487,7 +491,7 @@ async def update_bucket(
         raise HTTPException(500, str(e))
 
 
-@router.post("/buckets/{bucket_id}/empty")
+@router.post("/buckets/{bucket_id}/empty", response_model=StorageMessageAck)
 async def empty_bucket(
     bucket_id: str,
     provider_id: str = Query(..., description="StorageProvider ID"),
@@ -507,7 +511,7 @@ async def empty_bucket(
         raise HTTPException(500, str(e))
 
 
-@router.delete("/buckets/{bucket_id}")
+@router.delete("/buckets/{bucket_id}", response_model=StorageMessageAck)
 async def delete_bucket(
     bucket_id: str,
     provider_id: str = Query(..., description="StorageProvider ID"),
@@ -531,7 +535,7 @@ async def delete_bucket(
 # File Operations (all scoped by provider_id)
 # ============================================================================
 
-@router.get("/list")
+@router.get("/list", response_model=StorageFilesResult)
 async def list_files(
     bucket: str,
     provider_id: str = Query(..., description="StorageProvider ID"),
@@ -625,7 +629,7 @@ async def list_files(
         raise HTTPException(500, str(e))
 
 
-@router.post("/upload")
+@router.post("/upload", response_model=StorageResultEnvelope)
 async def upload_file(
     file: UploadFile = File(...),
     bucket: str = Form(...),
@@ -652,7 +656,7 @@ async def upload_file(
         raise HTTPException(500, str(e))
 
 
-@router.post("/create-folder")
+@router.post("/create-folder", response_model=StorageMessageAck)
 async def create_folder(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a folder."""
     provider_id = request.get("provider_id")
@@ -671,7 +675,7 @@ async def create_folder(request: dict, ctx: TenantContext | None = Depends(get_t
         raise HTTPException(500, str(e))
 
 
-@router.delete("/delete")
+@router.delete("/delete", response_model=StorageMessageAck)
 async def delete_files(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete files from a bucket."""
     provider_id = request.get("provider_id")
@@ -694,7 +698,7 @@ async def delete_files(request: dict, ctx: TenantContext | None = Depends(get_te
         raise HTTPException(500, str(e))
 
 
-@router.get("/signed-url")
+@router.get("/signed-url", response_model=StorageSignedUrlResult)
 async def get_signed_url(
     bucket: str,
     path: str,
@@ -713,7 +717,7 @@ async def get_signed_url(
         raise HTTPException(500, str(e))
 
 
-@router.get("/public-url")
+@router.get("/public-url", response_model=StorageSignedUrlResult)
 async def get_public_url(
     bucket: str,
     path: str,
@@ -731,7 +735,7 @@ async def get_public_url(
         raise HTTPException(500, str(e))
 
 
-@router.post("/move")
+@router.post("/move", response_model=StorageMessageAck)
 async def move_file(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Move or rename a file."""
     provider_id = request.get("provider_id")
@@ -751,7 +755,7 @@ async def move_file(request: dict, ctx: TenantContext | None = Depends(get_tenan
         raise HTTPException(500, str(e))
 
 
-@router.post("/move-cross")
+@router.post("/move-cross", response_model=StorageResultEnvelope)
 async def move_file_cross(
     request: dict,
     background_tasks: BackgroundTasks,
@@ -833,7 +837,7 @@ async def move_file_cross(
         raise HTTPException(500, str(e))
 
 
-@router.get("/move-status/{job_id}")
+@router.get("/move-status/{job_id}", response_model=StorageResultEnvelope)
 async def get_move_status(job_id: str, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Poll the status of a background cross-bucket move (Post-sprint 2.2)."""
     from app.models.file_move_job import FileMoveJob

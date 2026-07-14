@@ -1,3 +1,4 @@
+from typing import Any
 """
 Deno Deploy Router — Thin Router.
 
@@ -27,7 +28,7 @@ class DenoConnectRequest(BaseModel):
     provider_id: str
 
 
-@router.post("/connect")
+@router.post("/connect", response_model=dict[str, Any])
 async def connect_deno(payload: DenoConnectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Auto-detect Deno org info using the personal (ddp_) token.
     ...

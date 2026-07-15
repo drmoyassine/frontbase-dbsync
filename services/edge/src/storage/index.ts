@@ -93,7 +93,13 @@ function createInitialProvider(): IStateProvider {
         default:
             // Legacy auto-detect fallback
             if (isCloudRuntime()) {
-                console.log('☁️ Using TursoHttpProvider (auto-detect)');
+                if (!getStateDbConfig().url && !getStateDbConfig().cfAccountId) {
+                    throw new Error(
+                        `Edge Engine is deployed in the cloud but no remote State Database was configured. ` +
+                        `Please attach a cloud database (Turso, Supabase, Neon, or D1) to this Edge Engine in the Frontbase dashboard and redeploy.`
+                    );
+                }
+                console.log('☁️ Using TursoHttpProvider (auto-detect fallback)');
                 return new TursoHttpProvider();
             }
             console.log('💾 Using LocalSqliteProvider');

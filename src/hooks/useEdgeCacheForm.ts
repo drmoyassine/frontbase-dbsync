@@ -17,7 +17,7 @@ const API_BASE = '';
 /** Re-export from centralized registry for backward compatibility */
 export const CACHE_PROVIDER_OPTIONS = EDGE_CACHE_PROVIDERS;
 
-export function useEdgeCacheForm() {
+export function useEdgeCacheForm(options?: { onSaveSuccess?: (cache: any) => void }) {
     const queryClient = useQueryClient();
     const { data: caches = [], isLoading } = useEdgeCaches();
     const [error, setError] = useState<string | null>(null);
@@ -97,6 +97,9 @@ export function useEdgeCacheForm() {
             setDialogOpen(false);
             resetForm();
             refetchCaches();
+            if (options?.onSaveSuccess) {
+                options.onSaveSuccess(data);
+            }
             if (data.warning) {
                 toast.warning(data.warning);
             }

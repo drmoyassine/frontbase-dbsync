@@ -68,7 +68,23 @@ seoRoute.get('/sitemap.xml', async (c) => {
     const urls = pages.map((page) => {
         const loc = page.isHomepage ? baseUrl + '/' : `${baseUrl}/${page.slug}`;
         const priority = page.isHomepage ? '1.0' : '0.8';
-        const lastmod = page.updatedAt ? page.updatedAt.split('T')[0] : new Date().toISOString().split('T')[0];
+        let lastmod = new Date().toISOString().split('T')[0];
+        if (page.updatedAt) {
+            try {
+                const d = new Date(page.updatedAt);
+                if (!isNaN(d.getTime())) {
+                    lastmod = d.toISOString().split('T')[0];
+                } else if (typeof page.updatedAt === 'string') {
+                    const parts = page.updatedAt.split(/[\sT]/);
+                    if (parts[0]) lastmod = parts[0];
+                }
+            } catch {
+                if (typeof page.updatedAt === 'string') {
+                    const parts = page.updatedAt.split(/[\sT]/);
+                    if (parts[0]) lastmod = parts[0];
+                }
+            }
+        }
 
         return `  <url>\n    <loc>${escapeXml(loc)}</loc>\n    <lastmod>${lastmod}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>${priority}</priority>\n  </url>`;
     }).join('\n');

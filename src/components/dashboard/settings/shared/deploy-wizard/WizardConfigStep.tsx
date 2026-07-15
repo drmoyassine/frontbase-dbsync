@@ -10,15 +10,20 @@
  * NOTE: Engine type selection (Lite/Full) was removed 2026-03-24 — always deploys full.
  */
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PROVIDER_RESOURCE_LABELS, PROVIDER_CONFIGS } from '../edgeConstants';
-import { ConnectProviderDialog } from '../ConnectProviderDialog';
+import { PROVIDER_RESOURCE_LABELS } from '../edgeConstants';
+import { useEdgeDatabaseForm } from '@/hooks/useEdgeDatabaseForm';
+import { useEdgeCacheForm } from '@/hooks/useEdgeCacheForm';
+import { useEdgeQueueForm } from '@/hooks/useEdgeQueueForm';
+import { EdgeDatabaseDialog } from '../EdgeDatabaseDialog';
+import { EdgeCacheDialog } from '../EdgeCacheDialog';
+import { EdgeQueueDialog } from '../EdgeQueueDialog';
 import type { DeployWizardState } from './useDeployWizard';
 
 const CONNECT_NEW_VALUE = '__connect_new__';
@@ -34,22 +39,29 @@ export function WizardConfigStep({
 }: DeployWizardState) {
     const queryClient = useQueryClient();
 
-    // Connect New dialog state — tracks which resource type is being connected
-    const [connectOpen, setConnectOpen] = useState(false);
-    const [connectingFor, setConnectingFor] = useState<'database' | 'cache' | 'queue' | null>(null);
+    // Database hook
+    const dbForm = useEdgeDatabaseForm({
+        onSaveSuccess: (db) => {
+            setSelectedDbId(db.id);
+            queryClient.invalidateQueries({ queryKey: ['edge-databases'] });
+        }
+    });
 
-    // Filtered providers for Connect New dialog based on capability
-    const connectAllowedProviders = useMemo(() => {
-        if (!connectingFor) return [];
-        return Object.entries(PROVIDER_CONFIGS)
-            .filter(([, config]) => config.capabilities.includes(connectingFor))
-            .map(([key]) => key);
-    }, [connectingFor]);
+    // Cache hook
+    const cacheForm = useEdgeCacheForm({
+        onSaveSuccess: (cache) => {
+            setSelectedCacheId(cache.id);
+            queryClient.invalidateQueries({ queryKey: ['edge-caches'] });
+        }
+    });
 
-    const handleConnectNew = (type: 'database' | 'cache' | 'queue') => {
-        setConnectingFor(type);
-        setConnectOpen(true);
-    };
+    // Queue hook
+    const queueForm = useEdgeQueueForm({
+        onSaveSuccess: (queue) => {
+            setSelectedQueueId(queue.id);
+            queryClient.invalidateQueries({ queryKey: ['edge-queues'] });
+        }
+    });
 
     // Filter out local/system resources — cloud engines can't reach localhost
     const cloudDbs = edgeDbs.filter((db: any) => !db.is_system);
@@ -98,7 +110,7 @@ export function WizardConfigStep({
             <div className="space-y-2">
                 <Label>Edge Database</Label>
                 <Select value={selectedDbId} onValueChange={v => {
-                    if (v === CONNECT_NEW_VALUE) { handleConnectNew('database'); return; }
+                    if (v === CONNECT_NEW_VALUE) { dbForm.openCreate(); return; }
                     setSelectedDbId(v);
                 }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -121,7 +133,7 @@ export function WizardConfigStep({
             <div className="space-y-2">
                 <Label>Edge Cache</Label>
                 <Select value={selectedCacheId} onValueChange={v => {
-                    if (v === CONNECT_NEW_VALUE) { handleConnectNew('cache'); return; }
+                    if (v === CONNECT_NEW_VALUE) { cacheForm.openCreate(); return; }
                     setSelectedCacheId(v);
                 }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -143,7 +155,7 @@ export function WizardConfigStep({
             <div className="space-y-2">
                 <Label>Edge Queue</Label>
                 <Select value={selectedQueueId} onValueChange={v => {
-                    if (v === CONNECT_NEW_VALUE) { handleConnectNew('queue'); return; }
+                    if (v === CONNECT_NEW_VALUE) { queueForm.openCreate(); return; }
                     setSelectedQueueId(v);
                 }}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -161,46 +173,10 @@ export function WizardConfigStep({
                 <p className="text-xs text-muted-foreground">Optional message queue (QStash) for durable workflow execution.</p>
             </div>
 
-            {/* Connect Provider dialog — filtered by resource capability */}
-            <ConnectProviderDialog
-                open={connectOpen}
-                onOpenChange={setConnectOpen}
-                allowedProviders={connectAllowedProviders}
-                onConnected={async (accountId) => {
-                    // Auto-register edge resources from the newly connected account
-                    // so they appear in the wizard dropdown immediately.
-                    try {
-                        if (connectingFor === 'database') {
-                            const disc = await fetch(`/api/edge-providers/discover-by-account/${accountId}`).then(r => r.json());
-                            const dbs = disc?.resources?.filter((r: any) => r.type === 'turso_db') || [];
-                            for (const db of dbs) {
-                                await fetch(`/api/edge-databases/`, {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        name: db.name || 'Database',
-                                        provider: 'turso',
-                                        db_url: db.db_url,
-                                        db_token: db.token,
-                                        provider_account_id: accountId,
-                                        is_default: false,
-                                    }),
-                                });
-                            }
-                        }
-                        // TODO: similar for cache/queue when those providers support discovery
-                    } catch (e) {
-                        console.warn('[Wizard] Auto-register edge resource failed:', e);
-                    }
-
-                    // Invalidate queries so new entries appear
-                    const queryKeyMap = { database: 'edge-databases', cache: 'edge-caches', queue: 'edge-queues' };
-                    if (connectingFor) queryClient.invalidateQueries({ queryKey: [queryKeyMap[connectingFor]] });
-                    queryClient.invalidateQueries({ queryKey: ['edge-providers'] });
-                    setConnectOpen(false);
-                    setConnectingFor(null);
-                }}
-            />
+            {/* Edge resource connection modals */}
+            <EdgeDatabaseDialog {...dbForm} databases={edgeDbs} trigger={<span className="hidden" />} />
+            <EdgeCacheDialog {...cacheForm} caches={edgeCaches} trigger={<span className="hidden" />} />
+            <EdgeQueueDialog {...queueForm} queues={edgeQueues} trigger={<span className="hidden" />} />
         </div>
     );
 }

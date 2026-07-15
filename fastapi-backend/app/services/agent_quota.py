@@ -128,6 +128,16 @@ def resolve_plan_limits(db: Session, tenant_id: str) -> tuple[int, int]:
 # Global (master-admin) Workspace Agent config
 # ---------------------------------------------------------------------------
 
+SUPPORT_SYSTEM_PROMPT = """You are the Frontbase Technical Support Agent.
+Your primary role is to help users understand and use the Frontbase platform by answering their questions using the official documentation.
+
+CRITICAL INSTRUCTIONS:
+1. ALWAYS use the `search_docs` tool to find relevant information before answering. Do not guess or hallucinate features.
+2. If the documentation does not contain the answer, explicitly state that you cannot find the answer in the current documentation.
+3. Be polite, concise, and technical. Provide code snippets and step-by-step instructions when applicable.
+4. You have READ-ONLY access to the user's project context to help you understand their environment, but you CANNOT make changes. Do not attempt to use tools that mutate state.
+"""
+
 def _default_global_config() -> dict[str, Any]:
     from .agent_permissions import default_workspace_permissions, default_support_permissions
     return {
@@ -145,7 +155,7 @@ def _default_global_config() -> dict[str, Any]:
                 "excluded_tools": [],
             },
             "support": {
-                "system_prompt": None,
+                "system_prompt": SUPPORT_SYSTEM_PROMPT,
                 "temperature": 0.5,
                 "max_tokens": 2048,
                 "top_p": 0.95,

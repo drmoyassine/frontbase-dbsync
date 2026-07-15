@@ -23,6 +23,9 @@ Tools are registered on a PydanticAI Agent via ``register_workspace_tools()``.
 import json
 import logging
 import uuid
+import os
+import time
+import httpx
 from datetime import datetime, timezone
 from typing import Any
 
@@ -56,6 +59,72 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Helpers
 # =============================================================================
+
+_DOCS_CACHE = {"data": None, "timestamp": 0.0}
+_DOCS_TTL_SECONDS = 3600  # 1 hour
+
+def _fetch_docs_json() -> dict[str, Any] | None:
+    now = time.time()
+    if _DOCS_CACHE["data"] and now - _DOCS_CACHE["timestamp"] < _DOCS_TTL_SECONDS:
+        return _DOCS_CACHE["data"]
+
+    url = os.environ.get("FRONTBASE_DOCS_URL")
+    if not url:
+        return None
+
+    try:
+        manifest_url = url.rstrip("/") + "/documentation.json"
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(manifest_url)
+            resp.raise_for_status()
+            data = resp.json()
+            _DOCS_CACHE["data"] = data
+            _DOCS_CACHE["timestamp"] = now
+            return data
+    except Exception as e:
+        logger.error(f"Failed to fetch documentation.json: {e}")
+        return None
+
+def _search_docs_impl(query: str) -> dict[str, Any]:
+    docs = _fetch_docs_json()
+    if not docs:
+        return _err("Documentation system unavailable or FRONTBASE_DOCS_URL not configured.")
+    
+    chunks = docs.get("chunks", [])
+    query_tokens = set(query.lower().split())
+    if not query_tokens:
+        return _ok("Please provide a search query.")
+        
+    scored_chunks = []
+    for chunk in chunks:
+        score = 0
+        content_lower = chunk.get("content", "").lower()
+        title_lower = chunk.get("title", "").lower()
+        keywords = set(chunk.get("keywords", []))
+        
+        for token in query_tokens:
+            if token in title_lower:
+                score += 5
+            if token in keywords:
+                score += 3
+            if token in content_lower:
+                score += 1
+                
+        if score > 0:
+            scored_chunks.append((score, chunk))
+            
+    scored_chunks.sort(key=lambda x: x[0], reverse=True)
+    top_results = [
+        {
+            "title": c.get("title"),
+            "path": c.get("path"),
+            "section": c.get("section"),
+            "content": c.get("content", "")[:2000],  # Cap at 2000 chars to save context window
+        }
+        for _, c in scored_chunks[:5]
+    ]
+    
+    return _ok(f"Found {len(top_results)} relevant documentation sections.", results=top_results)
 
 def _with_db(fn):
     """Execute a function with a fresh DB session and return the result."""
@@ -626,7 +695,7 @@ def _workflow_view(w: AutomationDraft) -> dict[str, Any]:
         "triggerType": str(w.trigger_type),
         "isPublished": bool(w.is_published),
         "isActive": bool(getattr(w, "is_active", True)),
-        "description": str(w.description) if w.description else None,
+        "description": str(w.description) if w.description is not None else None,
     }
 
 
@@ -729,7 +798,7 @@ def _mcp_servers_list_impl(db: Session, ctx: ToolContext) -> dict[str, Any]:
                 "slug": str(m.slug),
                 "url": str(m.url),
                 "transport": str(m.transport),
-                "category": str(m.category) if m.category else None,
+                "category": str(m.category) if m.category is not None else None,
             }
             for m in rows
         ],
@@ -799,7 +868,7 @@ def _tools_list_impl(db: Session, ctx: ToolContext) -> dict[str, Any]:
             for t in tools_q.all()
         ],
         "skills": [
-            {"id": str(s.id), "name": str(s.name), "slug": str(s.slug), "category": str(s.category) if s.category else None, "isBuiltin": bool(s.is_builtin)}
+            {"id": str(s.id), "name": str(s.name), "slug": str(s.slug), "category": str(s.category) if s.category is not None else None, "isBuiltin": bool(s.is_builtin)}
             for s in skills_q.all()
         ],
     }
@@ -834,6 +903,17 @@ def register_workspace_tools(agent: Any, ctx: ToolContext | None = None) -> None
         ctx = ToolContext()  # unrestricted default — back-compat for any direct caller
 
     db = SessionLocal()
+
+    # ---- Help: Documentation -----------------------------------------------
+    if tool_allowed(ctx, "search_docs"):
+        @agent.tool_plain
+        def search_docs(query: str) -> str:
+            """Search the Frontbase official documentation.
+            
+            Args:
+                query: Search keywords (e.g. 'how to connect a database')
+            """
+            return json.dumps(_search_docs_impl(query))
 
     # ---- Content: Pages ----------------------------------------------------
     if tool_allowed(ctx, "pages_list"):

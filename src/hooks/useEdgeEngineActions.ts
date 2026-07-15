@@ -208,9 +208,37 @@ export function useEdgeEngineActions({ providers, refetchEngines }: UseEdgeEngin
 
 // ── Utilities ──────────────────────────────────────────────────────────
 
+export function parseSafeDate(dateInput: string | Date | null | undefined): Date | null {
+    if (!dateInput) return null;
+    if (dateInput instanceof Date) return dateInput;
+    if (typeof dateInput === 'string') {
+        let cleaned = dateInput.trim();
+        // Replace space with T to satisfy W3C/Safari parsing
+        if (cleaned.includes(' ') && !cleaned.includes('T')) {
+            cleaned = cleaned.replace(' ', 'T');
+        }
+        // Append Z if no timezone offset is present but time part exists
+        if (!cleaned.includes('Z') && !cleaned.includes('+') && !cleaned.includes('-') && cleaned.includes('T')) {
+            cleaned = cleaned + 'Z';
+        }
+        const d = new Date(cleaned);
+        if (!isNaN(d.getTime())) return d;
+    }
+    const d = new Date(dateInput);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+export function formatSafeDate(dateInput: string | Date | null | undefined): string {
+    const d = parseSafeDate(dateInput);
+    if (!d) return 'Invalid Date';
+    return d.toLocaleDateString();
+}
+
 export function timeAgo(iso: string | null | undefined): string {
     if (!iso) return 'Never';
-    const diff = Date.now() - new Date(iso).getTime();
+    const date = parseSafeDate(iso);
+    if (!date) return 'Never';
+    const diff = Date.now() - date.getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'Just now';
     if (mins < 60) return `${mins}m ago`;

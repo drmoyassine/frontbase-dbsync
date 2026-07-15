@@ -51,6 +51,7 @@ PERMISSION_RESOURCES: dict[str, list[str]] = {
     "Data": ["datasources.all"],
     "Automation": ["workflows.all"],
     "Infrastructure": ["edges.all", "engine.all", "providers.all"],
+    "Help": ["docs.all"],
     "Integrations": ["mcp_servers.all", "skills.all"],
     "Internal API": ["api.all"],
 }
@@ -105,6 +106,8 @@ TOOL_PERMISSION_MAP: dict[str, tuple[str, str]] = {
     "mcp_servers_test": ("mcp_servers.all", "read"),
     "tools_list": ("skills.all", "read"),
     "tools_configure": ("skills.all", "write"),
+    # Help (Support Profile)
+    "search_docs": ("docs.all", "read"),
 }
 
 
@@ -282,6 +285,7 @@ def default_workspace_permissions() -> dict[str, list[str]]:
         "providers.all": ["read", "write"],
         "mcp_servers.all": ["read", "write"],
         "skills.all": ["read"],
+        "docs.all": ["read"],
     }
 
 
@@ -292,6 +296,7 @@ def default_support_permissions() -> dict[str, list[str]]:
         "datasources.all": ["read"],
         "engine.all": ["read"],
         "providers.all": ["read"],
+        "docs.all": ["read"],
     }
 
 

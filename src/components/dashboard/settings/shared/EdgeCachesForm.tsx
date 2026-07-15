@@ -17,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useEdgeCacheForm } from '@/hooks/useEdgeCacheForm';
 import { EdgeCache } from '@/hooks/useEdgeInfrastructure';
 import { EdgeCacheDialog } from './EdgeCacheDialog';
+import { formatSafeDate } from '@/hooks/useEdgeEngineActions';
 import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResourceDialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
@@ -159,7 +160,7 @@ export const EdgeCachesForm: React.FC<EdgeCachesFormProps> = ({ withCard = false
                             </>}
                             metadata={<>
                                 <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                                    Created {new Date(cache.created_at).toLocaleDateString()}
+                                    Created {formatSafeDate(cache.created_at)}
                                 </span>
                                 {cache.engine_count > 0 && (
                                     <TooltipProvider>

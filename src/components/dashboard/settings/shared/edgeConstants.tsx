@@ -198,7 +198,7 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
         fields: [
             { key: 'access_token', label: 'Access Token', placeholder: 'sbp_...', type: 'password', required: true },
         ],
-        helpText: <><a href="https://supabase.com/dashboard/account/tokens?ref=frontbase.dev" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Generate access token →</a> One token discovers all your projects.</>,
+        helpText: <><a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Generate access token →</a> One token discovers all your projects.</>,
     },
     upstash: {
         label: 'Upstash',

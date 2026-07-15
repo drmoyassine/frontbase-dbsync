@@ -17,6 +17,7 @@ import { useEdgeVectorForm, EDGE_VECTOR_PROVIDERS } from '@/hooks/useEdgeVectorF
 import { EdgeVector } from '@/hooks/useEdgeInfrastructure';
 import { EdgeVectorDialog } from './EdgeVectorDialog';
 import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResourceDialog';
+import { formatSafeDate } from '@/hooks/useEdgeEngineActions';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { useQueryClient } from '@tanstack/react-query';
@@ -148,7 +149,7 @@ export const EdgeVectorsForm: React.FC<EdgeVectorsFormProps> = ({ withCard = fal
                             </>}
                             metadata={<>
                                 <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                                    Created {new Date(vector.created_at).toLocaleDateString()}
+                                    Created {formatSafeDate(vector.created_at)}
                                 </span>
                                 {vector.engine_count > 0 && (
                                     <TooltipProvider>

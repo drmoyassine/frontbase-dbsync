@@ -98,12 +98,14 @@ async def provision_d1(db: Session, *, tenant_id: str, project_id: str, name: st
     from app.models.models import EdgeDatabase
     result = await _cf("POST", "accounts/{account_id}/d1/database", json_body={"name": name})
     db_id = str(result.get("uuid") or "")
-    db_url = f"{result.get('hostname', '')}"  # D1 is accessed via binding, not a URL
+    # D1 is reached via the CF HTTP API (CfD1HttpProvider), keyed by the database
+    # UUID — store the canonical d1://<uuid> form and provider='cloudflare' so
+    # secrets_builder + the edge dispatch select CfD1HttpProvider (not Turso).
     row = EdgeDatabase(
         id=str(uuid.uuid4()),
         name=name,
-        provider="d1",
-        db_url=db_url or f"d1:{db_id}",
+        provider="cloudflare",
+        db_url=f"d1://{db_id}",
         db_token=None,
         project_id=project_id,
         is_managed=True,
@@ -227,7 +229,14 @@ async def deprovision_d1(db: Session, edge_db_id: str) -> None:
     row = db.query(EdgeDatabase).filter(EdgeDatabase.id == edge_db_id, EdgeDatabase.is_managed == True).first()  # noqa: E712
     if not row:
         return
-    cf_id = str(row.db_url).split(":", 1)[1] if str(row.db_url).startswith("d1:") else None
+    # Accepts both the new d1://<uuid> and the legacy d1:<uuid> record formats.
+    _raw = str(row.db_url)
+    if _raw.startswith("d1://"):
+        cf_id = _raw[len("d1://"):]
+    elif _raw.startswith("d1:"):
+        cf_id = _raw.split(":", 1)[1]
+    else:
+        cf_id = None
     if cf_id:
         try:
             await _cf("DELETE", f"accounts/{{account_id}}/d1/database/{cf_id}")

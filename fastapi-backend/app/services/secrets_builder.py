@@ -1017,10 +1017,40 @@ def build_engine_secrets(
                 if schema_name:
                     state_db['schema'] = str(schema_name)
 
-            elif db_provider == 'cloudflare':
-                state_db['url'] = str(edge_db.db_url)
+            elif db_provider in ('cloudflare', 'cloudflare_d1', 'd1'):
+                # Normalize every CF D1 provider spelling to 'cloudflare' so the
+                # edge dispatch (storage/index.ts) selects CfD1HttpProvider. The
+                # managed provisioner records provider='d1' and other call sites
+                # use 'cloudflare'/'cloudflare_d1'; without this the blob fell into
+                # the Turso branch below and the edge defaulted to TursoHttpProvider
+                # ("FRONTBASE_STATE_DB.url is required").
+                state_db['provider'] = 'cloudflare'
+
+                # Normalize db_url → d1://<uuid>. Accepts d1://<uuid>, d1:<uuid>,
+                # or a bare uuid (CfD1HttpProvider parses the d1:// prefix).
+                raw_url = str(edge_db.db_url or '')
+                if raw_url.startswith('d1://'):
+                    d1_id = raw_url[len('d1://'):]
+                elif raw_url.startswith('d1:'):
+                    d1_id = raw_url[len('d1:'):]
+                else:
+                    d1_id = raw_url
+                state_db['url'] = f"d1://{d1_id}" if d1_id else ''
+
                 # CF D1: embed CF credentials directly in state_db blob
                 cf_creds = _resolve_cf_credentials(db, edge_db)
+                # Managed D1s have no provider account/config — fall back to the
+                # operator's Cloudflare credentials (the account the DB lives in).
+                if getattr(edge_db, 'is_managed', False) and (
+                    not cf_creds.get('cfApiToken') or not cf_creds.get('cfAccountId')
+                ):
+                    try:
+                        from .managed_provisioner import operator_credentials
+                        acct, tok = operator_credentials()
+                        cf_creds.setdefault('cfAccountId', acct)
+                        cf_creds.setdefault('cfApiToken', tok)
+                    except Exception as e:
+                        print(f"[SecretsBuilder] Managed D1 {edge_db.id}: operator CF creds unavailable: {e}")
                 state_db.update(cf_creds)
 
             else:

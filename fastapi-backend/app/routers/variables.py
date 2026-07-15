@@ -164,6 +164,11 @@ TEMPLATE_FILTERS = [
 ]
 
 
+# NOTE: Both the slashless and trailing-slash paths are registered here, BEFORE
+# the `/{variable_id}` route below. Otherwise `GET /api/variables/registry`
+# greedily matches `/{variable_id}` (variable_id="registry") → 404 "Variable not
+# found" instead of the registry payload.
+@router.get("/registry", response_model=TemplateRegistryResponse, include_in_schema=False)
 @router.get("/registry/", response_model=TemplateRegistryResponse)
 async def get_template_registry(page_id: Optional[str] = None, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """

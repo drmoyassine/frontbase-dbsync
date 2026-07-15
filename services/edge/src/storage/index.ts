@@ -71,7 +71,8 @@ function createInitialProvider(): IStateProvider {
             return new LocalSqliteProvider();
 
         case 'cloudflare':
-        case 'cloudflare_d1': {
+        case 'cloudflare_d1':
+        case 'd1': {
             // Lazy import to avoid loading in non-CF builds
             const { CfD1HttpProvider } = require('./CfD1HttpProvider');
             console.log('🔶 Using CfD1HttpProvider (D1 via HTTP)');
@@ -121,8 +122,10 @@ export function getStateProvider(): IStateProvider {
         else if (_provider.constructor.name === 'SupabaseRestProvider') currentType = 'supabase';
         else if ((_provider as any)._isStub) currentType = 'stub';
 
-        // Map cloudflare_d1 to cloudflare for comparison
-        const targetType = (configProvider === 'cloudflare_d1') ? 'cloudflare' : (configProvider || 'local');
+        // Map all D1 spellings to 'cloudflare' for comparison
+        const targetType = (configProvider === 'cloudflare_d1' || configProvider === 'd1')
+            ? 'cloudflare'
+            : (configProvider || 'local');
 
         if (currentType !== targetType && targetType !== 'local') {
             console.log(`🔄 Env vars became available. Swapping provider from ${currentType} to ${targetType}`);

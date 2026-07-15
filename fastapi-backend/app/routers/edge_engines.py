@@ -1265,6 +1265,7 @@ async def list_active_engines_by_scope(
     """
     query = db.query(EdgeEngine).filter(EdgeEngine.is_active == True)  # noqa: E712
     if ctx and ctx.tenant_id:
+        query = query.filter(EdgeEngine.is_system == False)  # noqa: E712
         project = get_project(db, ctx)
         if project:
             if bool(project.is_default):
@@ -1289,6 +1290,7 @@ async def list_active_engines_by_scope(
             "edge_db_id": str(e.edge_db_id) if str(e.edge_db_id or "") else None,
             "is_active": bool(e.is_active),
             "is_shared": bool(e.is_shared),
+            "is_system": bool(e.is_system),
         }
         for e in engines
     ]

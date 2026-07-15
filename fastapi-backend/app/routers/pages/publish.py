@@ -148,6 +148,12 @@ async def publish_to_target(
         if not engine:
             raise HTTPException(status_code=404, detail=f"Engine not found: {engine_id}")
 
+        if bool(engine.is_system) and ctx and ctx.tenant_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Tenants cannot publish to the system local edge engine."
+            )
+
         if bool(engine.is_shared) or bool(engine.is_system):
             if page.project and not bool(page.project.is_default):
                 raise HTTPException(
@@ -374,6 +380,12 @@ async def publish_to_targets_batch(
             raise HTTPException(status_code=404, detail="No engines found for the given IDs")
 
         for eng in engines:
+            if bool(eng.is_system) and ctx and ctx.tenant_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Tenants cannot publish to the system local edge engine."
+                )
+
             if bool(eng.is_shared) or bool(eng.is_system):
                 if page.project and not bool(page.project.is_default):
                     raise HTTPException(

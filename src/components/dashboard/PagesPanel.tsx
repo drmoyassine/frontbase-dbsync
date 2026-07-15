@@ -31,6 +31,7 @@ import { PageExportEnvelope } from '@/types/page-export';
 import { toast } from 'sonner';
 import { resolvePreviewUrl } from '@/lib/edgeUtils';
 import { CreatePageDialog } from './CreatePageDialog';
+import { EdgePublishDialog } from './settings/shared/EdgePublishDialog';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
@@ -45,6 +46,7 @@ export const PagesPanel: React.FC = () => {
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkPublishing, setIsBulkPublishing] = useState(false);
+  const [showPublishDialog, setShowPublishDialog] = useState(false);
 
   // Load pages from database when component mounts or trash mode changes
   useEffect(() => {
@@ -292,37 +294,27 @@ export const PagesPanel: React.FC = () => {
     }
   };
 
-  const handleBulkPublish = async () => {
+  const handleBulkPublish = async (targetId: string) => {
     setIsBulkPublishing(true);
     try {
-      // Fetch active engines
-      const response = await fetch('/api/edge-engines/active/by-scope/full');
-      const engines = await response.json();
-      if (!Array.isArray(engines) || engines.length === 0) {
-        toast.error('No active deployment targets found');
-        setIsBulkPublishing(false);
-        return;
-      }
-
-      const engineIds = engines.map((eng: any) => eng.id);
       const pageIds = Array.from(selectedPages);
       let successCount = 0;
       let failCount = 0;
 
       for (const pageId of pageIds) {
         try {
-          const result = await publishPageToTargets(pageId, engineIds);
+          const result = await publishPageToTarget(pageId, targetId);
           if (result) {
-            const succeeded = result.results?.filter((r: any) => r.success) || [];
-            if (succeeded.length > 0) successCount++;
-            else failCount++;
+            successCount++;
+          } else {
+            failCount++;
           }
         } catch {
           failCount++;
         }
       }
 
-      if (successCount > 0) toast.success(`Published ${successCount} page(s) to all targets`);
+      if (successCount > 0) toast.success(`Published ${successCount} page(s) successfully`);
       if (failCount > 0) toast.error(`Failed to publish ${failCount} page(s)`);
       setSelectedPages(new Set());
       await loadPagesFromDatabase(false, true);
@@ -434,7 +426,7 @@ export const PagesPanel: React.FC = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={handleBulkPublish}
+                      onClick={() => setShowPublishDialog(true)}
                       disabled={isBulkPublishing}
                       className="gap-2"
                     >
@@ -738,6 +730,13 @@ export const PagesPanel: React.FC = () => {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onPageCreated={handlePageCreated}
+      />
+
+      <EdgePublishDialog
+        open={showPublishDialog}
+        onOpenChange={setShowPublishDialog}
+        pageIds={Array.from(selectedPages)}
+        onPublish={handleBulkPublish}
       />
     </div>
   );

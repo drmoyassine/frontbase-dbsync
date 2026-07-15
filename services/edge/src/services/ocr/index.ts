@@ -79,7 +79,10 @@ class OcrSpaceEngine implements OcrEngine {
             if (imageUrl) {
                 formData.append('url', imageUrl);
             } else {
-                formData.append('file', new Blob([imageBuffer]), 'image.png');
+                // Cast to BlobPart: a Uint8Array<ArrayBufferLike> isn't structurally
+                // assignable to BlobPart under lib.dom (which wants ArrayBuffer-backed
+                // views), but it's a valid BlobPart at runtime.
+                formData.append('file', new Blob([imageBuffer as BlobPart]), 'image.png');
             }
 
             formData.append('isTable', 'false');

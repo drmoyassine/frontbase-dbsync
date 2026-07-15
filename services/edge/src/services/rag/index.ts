@@ -35,7 +35,12 @@ export class RagService {
         context: { tenant_id?: string; project_id?: string },
         onProgress?: (job: RagIndexJob) => void
     ): Promise<RagIndexJob> {
-        return this.processor.processSource(config, context, onProgress);
+        // onProgress is a constructor-level option (ProcessorOptions), not a
+        // processSource() argument (whose 3rd param is the vector table name).
+        const processor = onProgress
+            ? new RagDocumentProcessor(undefined, { onProgress })
+            : this.processor;
+        return processor.processSource(config, context);
     }
 
     /**

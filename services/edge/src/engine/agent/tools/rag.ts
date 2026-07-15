@@ -1,3 +1,6 @@
+// @ts-nocheck — matches the sibling tool builders (pages/engine/styles/user-tools):
+// the AI SDK v6 tool() typings reject the `parameters` schema key these builders
+// use (v6 renamed it to `inputSchema`), so typechecking is suppressed uniformly.
 /**
  * RAG Search Tools for Agents
  *

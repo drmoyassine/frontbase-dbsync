@@ -747,6 +747,7 @@ const getOneSecretRoute = createRoute({
                 },
             },
         },
+        400: { description: 'Invalid request', content: { 'application/json': { schema: ErrorResponseSchema } } },
         404: { description: 'Secret not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     },
 });

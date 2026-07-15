@@ -294,13 +294,6 @@ export class LanceDbAdapter implements VectorAdapter {
     async upsert(tableName: string, vectors: VectorDocument[]): Promise<void> {
         const lancedb = await import('@lancedb/lancedb');
         const conn = await lancedb.connect({ uri: this.uri });
-        const table = await conn.openTable(tableName).catch(() => null);
-
-        if (!table) {
-            await this.ensureTable(tableName);
-        }
-
-        const actualTable = await conn.openTable(tableName);
 
         // LanceDB expects data in a specific format
         const records = vectors.map((v) => ({
@@ -310,7 +303,14 @@ export class LanceDbAdapter implements VectorAdapter {
             ...v.metadata,
         }));
 
-        await actualTable.add(records);
+        const existing = await conn.tableNames();
+        if (existing.includes(tableName)) {
+            const table = await conn.openTable(tableName);
+            await table.add(records);
+        } else {
+            // LanceDB infers the schema from the first batch of records.
+            await conn.createTable(tableName, records);
+        }
     }
 
     async search(
@@ -326,10 +326,14 @@ export class LanceDbAdapter implements VectorAdapter {
         let query = table.search(queryVector).limit(limit);
 
         if (filters && Object.keys(filters).length > 0) {
-            query = query.where(filters);
+            // LanceDB's where() takes an SQL predicate string, not an object.
+            const predicate = Object.entries(filters)
+                .map(([k, v]) => `${k} = '${String(v).replace(/'/g, "''")}'`)
+                .join(' AND ');
+            query = query.where(predicate);
         }
 
-        const results = await query.execute();
+        const results = await query.toArray();
 
         return results.map((row: any) => ({
             id: row.id,
@@ -347,18 +351,10 @@ export class LanceDbAdapter implements VectorAdapter {
         await table.delete(`id IN (${ids.map((id) => `'${id}'`).join(',')})`);
     }
 
-    async ensureTable(tableName: string): Promise<void> {
-        const lancedb = await import('@lancedb/lancedb');
-        const conn = await lancedb.connect({ uri: this.uri });
-
-        await conn.createTable({
-            name: tableName,
-            schema: {
-                id: lancedb.schema.string(),
-                vector: lancedb.schema.vector(1536), // OpenAI embedding dimension
-                text: lancedb.schema.string(),
-            },
-        });
+    async ensureTable(_tableName: string): Promise<void> {
+        // No-op: LanceDB infers the schema from the first batch of records, so the
+        // table is created lazily on the first upsert() via createTable(name, data).
+        // Creating an empty table here would require an explicit Arrow schema.
     }
 }
 
@@ -393,7 +389,7 @@ export class PgVectorAdapter implements VectorAdapter {
             );
         }
 
-        await client.end();
+        client.release();
     }
 
     async search(
@@ -435,7 +431,7 @@ export class PgVectorAdapter implements VectorAdapter {
             [vectorArray, limit, ...filterValues]
         );
 
-        await client.end();
+        client.release();
 
         return result.rows.map((row: any) => ({
             id: row.id,
@@ -453,7 +449,7 @@ export class PgVectorAdapter implements VectorAdapter {
             [ids]
         );
 
-        await client.end();
+        client.release();
     }
 
     async ensureTable(tableName: string): Promise<void> {
@@ -472,7 +468,7 @@ export class PgVectorAdapter implements VectorAdapter {
                 WITH (lists = 100);
         `);
 
-        await client.end();
+        client.release();
     }
 
     private async getClient() {

@@ -438,7 +438,7 @@ export class CloudflareR2Adapter implements StorageAdapter {
             );
 
             if (!response.ok) {
-                console.warn(`R2 delete failed for ${path}: ${response.statusText}`);
+                console.warn(`R2 delete failed for ${rawPath}: ${response.statusText}`);
             }
         }
     }

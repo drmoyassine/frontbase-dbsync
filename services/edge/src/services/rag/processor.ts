@@ -22,7 +22,7 @@ import {
 } from './config.js';
 import { getOcrService } from '../ocr/index.js';
 import { getEmbeddingService } from '../document-processor.js';
-import { getStorageAdapter, type StorageAdapter, type StorageFile } from './storage-adapter.js';
+import { getStorageAdapter, type StorageAdapter } from './storage-adapter.js';
 import { getVectorAdapter, validateBucketName, validateFilePath } from './vector-adapter.js';
 
 // =============================================================================

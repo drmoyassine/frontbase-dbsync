@@ -377,9 +377,8 @@ export class DocumentProcessor {
         vectorTableName: string = DEFAULT_VECTOR_TABLE
     ): Promise<ProcessingResult> {
         try {
-            // Get vector store (will be injected or imported)
-            const { upsertVectors } = await import('../routes/vector.js');
-
+            // Uses the module-level upsertVectors() helper (defined below), which
+            // posts to the vector route — routes/vector.js exports no such symbol.
             let totalEmbedded = 0;
 
             for (const doc of documents) {

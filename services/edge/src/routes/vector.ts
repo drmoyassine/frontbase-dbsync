@@ -50,7 +50,7 @@ interface VectorStore {
     test(): Promise<{ success: boolean; dataPath: string; version: string; tableCount: number }>;
     upsert(tableName: string, vectors: Array<{ id: string; vector: number[]; [key: string]: any }>): Promise<{ success: boolean; inserted: number; message: string }>;
     search(tableName: string, queryVector: number[], limit: number): Promise<{ results: any[]; count: number }>;
-    debug(): Promise<{ enabled: boolean; version: string; dataPath: string; tables: Array<{ name: string; count: number }>; totalVectors: number; diskUsageBytes: number; healthy: boolean }>;
+    debug(): Promise<{ enabled: boolean; version: string; dataPath: string; tables: Array<{ name: string; count: number | null; error?: string }>; totalVectors: number; diskUsageBytes: number; healthy: boolean }>;
     export(tableName: string): Promise<{ table: string; rows: any[]; count: number }>;
 }
 
@@ -67,7 +67,7 @@ class LibsqlVectorStore implements VectorStore {
     async test() {
         // Step 1: Verify basic database connectivity
         try {
-            await client.execute('SELECT 1', []);
+            await client.execute({ sql: 'SELECT 1', args: [] });
         } catch (err: any) {
             throw new Error(`Database connection failed: ${err.message}`);
         }
@@ -76,7 +76,7 @@ class LibsqlVectorStore implements VectorStore {
         // This confirms libSQL was compiled with vector support WITHOUT requiring any tables.
         let vectorReady = false;
         try {
-            await client.execute("SELECT typeof(cast('[1.0, 0.0]' as F32_BLOB))", []);
+            await client.execute({ sql: "SELECT typeof(cast('[1.0, 0.0]' as F32_BLOB))", args: [] });
             vectorReady = true;
         } catch {
             // Vector functions not available — libSQL build may lack vector support
@@ -120,16 +120,16 @@ class LibsqlVectorStore implements VectorStore {
         let inserted = 0;
         for (const row of metadata) {
             const vecArray = `[${row.vector.join(',')}]`;
-            await client.execute(
-                `
+            await client.execute({
+                sql: `
                     INSERT INTO ${this._quoteId(tableName)} (id, embedding, metadata)
                     VALUES (?, ${this._vectorCast(vecArray)}, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         embedding = ${this._vectorCast(vecArray)},
                         metadata = ?
                 `,
-                [row.id, row.metadata, row.metadata]
-            );
+                args: [row.id, row.metadata, row.metadata]
+            });
             inserted++;
         }
 
@@ -142,16 +142,16 @@ class LibsqlVectorStore implements VectorStore {
 
     async search(tableName: string, queryVector: number[], limit: number) {
         const vecArray = `[${queryVector.join(',')}]`;
-        const rows = await client.execute(
-            `
+        const rows = await client.execute({
+            sql: `
                 SELECT id, metadata,
                     (1 - vector_distance_cos(embedding, ${this._vectorCast(vecArray)})) AS _score
                 FROM ${this._quoteId(tableName)}
                 ORDER BY vector_distance_cos(embedding, ${this._vectorCast(vecArray)}) ASC
                 LIMIT ?
             `,
-            [limit]
-        );
+            args: [limit]
+        });
 
         const results = rows.rows.map(row => ({
             id: row.id as string,
@@ -185,10 +185,10 @@ class LibsqlVectorStore implements VectorStore {
     }
 
     async export(tableName: string) {
-        const rows = await client.execute(
-            `SELECT id, metadata FROM ${this._quoteId(tableName)}`,
-            []
-        );
+        const rows = await client.execute({
+            sql: `SELECT id, metadata FROM ${this._quoteId(tableName)}`,
+            args: []
+        });
 
         // For libSQL, we can't easily export the binary F32_BLOB data as a JSON array
         // The export is primarily for metadata/migration; vectors can be re-embedded
@@ -204,14 +204,14 @@ class LibsqlVectorStore implements VectorStore {
 
     private async _listTables(): Promise<string[]> {
         // Query sqlite_master for vector tables (those with an embedding column)
-        const rows = await client.execute(
-            `
+        const rows = await client.execute({
+            sql: `
                 SELECT name FROM sqlite_master
                 WHERE type='table' AND sql LIKE '%embedding F32_BLOB%'
                 ORDER BY name
             `,
-            []
-        );
+            args: []
+        });
         return rows.rows.map((r: any) => r.name as string);
     }
 
@@ -219,31 +219,31 @@ class LibsqlVectorStore implements VectorStore {
         const exists = await this._tableExists(tableName);
         if (exists) return;
 
-        await client.execute(
-            `
+        await client.execute({
+            sql: `
                 CREATE TABLE ${this._quoteId(tableName)} (
                     id TEXT PRIMARY KEY,
                     embedding F32_BLOB(${dims}) NOT NULL,
                     metadata TEXT
                 )
             `,
-            []
-        );
+            args: []
+        });
     }
 
     private async _tableExists(tableName: string): Promise<boolean> {
-        const rows = await client.execute(
-            'SELECT 1 FROM sqlite_master WHERE type=? AND name=?',
-            ['table', tableName]
-        );
+        const rows = await client.execute({
+            sql: 'SELECT 1 FROM sqlite_master WHERE type=? AND name=?',
+            args: ['table', tableName]
+        });
         return rows.rows.length > 0;
     }
 
     private async _countRows(tableName: string): Promise<number> {
-        const rows = await client.execute(
-            `SELECT COUNT(*) as count FROM ${this._quoteId(tableName)}`,
-            []
-        );
+        const rows = await client.execute({
+            sql: `SELECT COUNT(*) as count FROM ${this._quoteId(tableName)}`,
+            args: []
+        });
         return (rows.rows[0] as any)?.count || 0;
     }
 
@@ -512,9 +512,9 @@ vectorRoute.openapi(testRoute, async (c) => {
         const store = getStore();
         const result = await store.test();
         return c.json({
-            success: true,
             message: 'Vector store connection successful',
             ...result,
+            success: true,
         }, 200);
     } catch (err: any) {
         // Log full error for debugging
@@ -661,6 +661,7 @@ const exportRoute = createRoute({
                 count: z.number(),
             }) } },
         },
+        400: { description: 'Bad request', content: { 'application/json': { schema: ErrorSchema } } },
         404: { description: 'Table not found', content: { 'application/json': { schema: ErrorSchema } } },
         500: { description: 'Failed', content: { 'application/json': { schema: ErrorSchema } } },
         503: { description: 'Disabled', content: { 'application/json': { schema: ErrorSchema } } },

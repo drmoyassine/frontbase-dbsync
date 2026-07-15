@@ -26,8 +26,12 @@ export function objectSchema(properties: Record<string, any>, required?: string[
 
 /** Common property schemas */
 export const S = {
-    string: (desc: string) => ({ type: 'string' as const, description: desc }),
-    number: (desc: string) => ({ type: 'number' as const, description: desc }),
+    // The optional second arg marks the field as "optional" at the call site for
+    // readability. JSON-schema property objects don't carry required-ness (that
+    // lives in the parent's `required` array), so it's accepted but not encoded
+    // here — matching the existing runtime behavior.
+    string: (desc: string, _optional?: boolean) => ({ type: 'string' as const, description: desc }),
+    number: (desc: string, _optional?: boolean) => ({ type: 'number' as const, description: desc }),
     boolean: (desc: string) => ({ type: 'boolean' as const, description: desc }),
     record: (desc: string) => ({ type: 'object' as const, description: desc, additionalProperties: true }),
     array: (desc: string, items?: any) => ({ type: 'array' as const, description: desc, ...(items ? { items } : {}) }),

@@ -108,11 +108,26 @@ function createInitialProvider(): IStateProvider {
 }
 
 export function getStateProvider(): IStateProvider {
-    // Auto-upgrade: if the current provider is the inert stub from CF module
-    // eval, but env vars are now available (CF fetch() bridged them), swap to Turso.
-    if (_provider && (_provider as any)._isStub && isCloudRuntime()) {
-        console.log('🔄 Auto-upgrading from stub to TursoHttpProvider (env vars now available)');
-        _provider = new TursoHttpProvider();
+    const configProvider = getStateDbConfig().provider?.toLowerCase();
+    
+    // Auto-upgrade: If env vars were empty during module eval (CF Workers) 
+    // and are now available via polyfillEnv(), we must recreate the provider
+    // if it mismatched the actual config provider.
+    if (_provider) {
+        let currentType = 'local';
+        if (_provider instanceof TursoHttpProvider) currentType = 'turso';
+        else if (_provider.constructor.name === 'CfD1HttpProvider') currentType = 'cloudflare';
+        else if (_provider.constructor.name === 'NeonHttpProvider') currentType = 'neon';
+        else if (_provider.constructor.name === 'SupabaseRestProvider') currentType = 'supabase';
+        else if ((_provider as any)._isStub) currentType = 'stub';
+
+        // Map cloudflare_d1 to cloudflare for comparison
+        const targetType = (configProvider === 'cloudflare_d1') ? 'cloudflare' : (configProvider || 'local');
+
+        if (currentType !== targetType && targetType !== 'local') {
+            console.log(`🔄 Env vars became available. Swapping provider from ${currentType} to ${targetType}`);
+            _provider = createInitialProvider();
+        }
     }
 
     if (!_provider) {

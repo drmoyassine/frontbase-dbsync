@@ -173,9 +173,25 @@ let _ocr: OcrConfig | null = null;
 let _gpu: GpuModel[] | null = null;
 let _agentProfiles: AgentProfilesConfig | null = null;
 
+export function clearEnvSingletons(): void {
+    _authMap.clear();
+    _authSingle = null;
+    _apiKeys = null;
+    _cache = null;
+    _queue = null;
+    _vector = null;
+    _storage = null;
+    _ocr = null;
+    _gpu = null;
+    _agentProfiles = null;
+}
+
 /** State DB config (turso | supabase | cloudflare | neon | local) */
 export function getStateDbConfig(): StateDbConfig {
-    return (_stateDb ??= parseEnv<StateDbConfig>('FRONTBASE_STATE_DB', { provider: 'local' }));
+    // We cannot cache this (_stateDb ??= ...) because Cloudflare Workers
+    // populate process.env *after* module load during the first fetch().
+    // Caching it causes it to permanently cache the {provider: 'local'} fallback.
+    return parseEnv<StateDbConfig>('FRONTBASE_STATE_DB', { provider: 'local' });
 }
 
 /** Auth + users config (supabase | none) */

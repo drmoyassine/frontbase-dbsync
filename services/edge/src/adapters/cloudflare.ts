@@ -15,6 +15,7 @@ import { fullApp } from '../engine/full.js';
 import { runStartupSync } from '../startup/sync.js';
 import { setAIBinding } from '../routes/ai.js';
 import { setPlatform } from './shared.js';
+import { clearEnvSingletons } from '../config/env.js';
 
 // Cloudflare Workers types (inlined to avoid @cloudflare/workers-types dependency)
 interface CFExecutionContext {
@@ -33,6 +34,7 @@ export default {
                 (globalThis as any).process.env[key] = value;
             }
         }
+        clearEnvSingletons();
 
         setPlatform('cloudflare');                         // Shared
 

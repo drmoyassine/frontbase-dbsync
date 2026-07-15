@@ -1,85 +1,64 @@
-import api from './api-service';
+/**
+ * Pages API — on the generated, contract-typed client (CF-22 P0/W2).
+ *
+ * The generated SDK's response types come from the backend's response_model
+ * contracts (PageEnvelope/PageListEnvelope), which supersede the hand-written
+ * ApiContracts runtime validation this file previously carried: the contract
+ * is now enforced server-side (FastAPI response_model) and type-checked here.
+ * The `{success, data, error}` envelope unwrap + error-throw behavior is kept.
+ */
 import { Page } from '@/types/builder';
-import { ApiContracts, PageSchema, PageListSchema } from './api-contracts';
+import {
+  pagesGetPages, pagesCreatePageEndpoint, pagesUpdatePageEndpoint,
+  pagesUpdatePageLayout, pagesDeletePage, pagesRestorePage,
+  pagesPermanentDeletePage, pagesListVersions, pagesCreateManualVersion,
+  pagesRollbackToVersion,
+} from '@/client';
 
-// Pages API - Using Strict Contracts
+type Envelope = { success?: boolean; data?: unknown; error?: string | null; message?: string | null };
+
+/** Unwrap the `{success, data}` envelope; throw on `success: false`. */
+const unwrap = <T>(raw: unknown, endpointName: string): T => {
+  const env = raw as Envelope;
+  if (!env || env.success === false) {
+    throw new Error(`[${endpointName}] ${env?.error || env?.message || 'API returned success: false'}`);
+  }
+  return (env.data !== undefined ? env.data : env) as T;
+};
 
 export const getPages = async (includeDeleted: boolean = false): Promise<Page[]> => {
-  try {
-    const params = includeDeleted ? '?includeDeleted=true' : '';
-    const response = await api.get(`/api/pages/${params}`);
-    // Validate response structure
-    return ApiContracts.validate(PageListSchema, response.data, 'getPages') as unknown as Page[];
-  } catch (error) {
-    console.error('Error getting pages:', error);
-    throw error;
-  }
+  const { data } = await pagesGetPages({ query: { includeDeleted }, throwOnError: true });
+  return unwrap<Page[]>(data, 'getPages');
 };
 
 export const createPage = async (pageData: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>): Promise<Page> => {
-  try {
-    const response = await api.post('/api/pages/', pageData);
-    return ApiContracts.validate(PageSchema, response.data, 'createPage') as unknown as Page;
-  } catch (error) {
-    console.error('Error creating page:', error);
-    throw error;
-  }
+  const { data } = await pagesCreatePageEndpoint({ body: pageData as never, throwOnError: true });
+  return unwrap<Page>(data, 'createPage');
 };
 
 export const updatePage = async (pageId: string, pageData: Partial<Page>): Promise<Page> => {
-  try {
-    const response = await api.put(`/api/pages/${pageId}/`, pageData);
-    return ApiContracts.validate(PageSchema, response.data, 'updatePage') as unknown as Page;
-  } catch (error) {
-    console.error('Error updating page:', error);
-    throw error;
-  }
+  const { data } = await pagesUpdatePageEndpoint({ path: { page_id: pageId }, body: pageData as never, throwOnError: true });
+  return unwrap<Page>(data, 'updatePage');
 };
 
 export const updatePageLayout = async (pageId: string, layoutData: any): Promise<Page> => {
-  try {
-    const response = await api.put(`/api/pages/${pageId}/layout/`, { layoutData });
-    return ApiContracts.validate(PageSchema, response.data, 'updatePageLayout') as unknown as Page;
-  } catch (error) {
-    console.error('Error updating page layout:', error);
-    throw error;
-  }
+  const { data } = await pagesUpdatePageLayout({ path: { page_id: pageId }, body: { layoutData } as never, throwOnError: true });
+  return unwrap<Page>(data, 'updatePageLayout');
 };
 
 export const deletePage = async (pageId: string): Promise<void> => {
-  try {
-    const response = await api.delete(`/api/pages/${pageId}/`);
-    const result = response.data;
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to delete page');
-    }
-  } catch (error) {
-    console.error('Error deleting page:', error);
-    throw error;
-  }
+  const { data } = await pagesDeletePage({ path: { page_id: pageId }, throwOnError: true });
+  unwrap(data, 'deletePage');
 };
 
 export const restorePage = async (pageId: string): Promise<Page> => {
-  try {
-    const response = await api.post(`/api/pages/${pageId}/restore/`);
-    return ApiContracts.validate(PageSchema, response.data, 'restorePage') as unknown as Page;
-  } catch (error) {
-    console.error('Error restoring page:', error);
-    throw error;
-  }
+  const { data } = await pagesRestorePage({ path: { page_id: pageId }, throwOnError: true });
+  return unwrap<Page>(data, 'restorePage');
 };
 
 export const permanentDeletePage = async (pageId: string): Promise<void> => {
-  try {
-    const response = await api.delete(`/api/pages/${pageId}/permanent/`);
-    const result = response.data;
-    if (!result.success) {
-      throw new Error(result.error || 'Failed to permanently delete page');
-    }
-  } catch (error) {
-    console.error('Error permanently deleting page:', error);
-    throw error;
-  }
+  const { data } = await pagesPermanentDeletePage({ path: { page_id: pageId }, throwOnError: true });
+  unwrap(data, 'permanentDeletePage');
 };
 
 // Version History
@@ -95,34 +74,18 @@ export interface PageVersion {
 }
 
 export const getPageVersions = async (pageId: string): Promise<PageVersion[]> => {
-  try {
-    const response = await api.get(`/api/pages/${pageId}/versions/`);
-    if (!response.data?.success) throw new Error(response.data?.error || 'Failed to fetch versions');
-    return response.data.data;
-  } catch (error) {
-    console.error('Error getting page versions:', error);
-    throw error;
-  }
+  const { data } = await pagesListVersions({ path: { page_id: pageId }, throwOnError: true });
+  return unwrap<PageVersion[]>(data, 'getPageVersions');
 };
 
 export const createPageVersion = async (pageId: string, label?: string): Promise<PageVersion> => {
-  try {
-    const response = await api.post(`/api/pages/${pageId}/versions/`, { label });
-    if (!response.data?.success) throw new Error(response.data?.error || 'Failed to create version snapshot');
-    return response.data.data;
-  } catch (error) {
-    console.error('Error creating page version:', error);
-    throw error;
-  }
+  const { data } = await pagesCreateManualVersion({ path: { page_id: pageId }, body: { label } as never, throwOnError: true });
+  return unwrap<PageVersion>(data, 'createPageVersion');
 };
 
 export const rollbackPageToVersion = async (pageId: string, versionId: string): Promise<any> => {
-  try {
-    const response = await api.post(`/api/pages/${pageId}/rollback/`, { version_id: versionId });
-    if (!response.data?.success) throw new Error(response.data?.error || 'Failed to rollback page');
-    return response.data;
-  } catch (error) {
-    console.error('Error rolling back page:', error);
-    throw error;
-  }
+  const { data } = await pagesRollbackToVersion({ path: { page_id: pageId }, body: { version_id: versionId } as never, throwOnError: true });
+  const env = data as Envelope;
+  if (!env?.success) throw new Error(env?.error || 'Failed to rollback page');
+  return env;
 };

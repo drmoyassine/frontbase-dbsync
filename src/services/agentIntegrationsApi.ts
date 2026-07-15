@@ -1,4 +1,13 @@
-import api from './api-service';
+import {
+    agentIntegrationsListMcpServers, agentIntegrationsCreateMcpServer,
+    agentIntegrationsGetMcpServer, agentIntegrationsUpdateMcpServer,
+    agentIntegrationsDeleteMcpServer, agentIntegrationsListMcpServerTools,
+    agentIntegrationsTestMcpServer, agentIntegrationsListSkills,
+    agentIntegrationsCreateSkill, agentIntegrationsUpdateSkill,
+    agentIntegrationsDeleteSkill, agentIntegrationsGetAgentCatalogue,
+    agentIntegrationsListProfileSkills, agentIntegrationsInstallSkill,
+    agentIntegrationsUninstallSkill,
+} from '@/client';
 
 // =============================================================================
 // MCP Servers
@@ -152,37 +161,37 @@ export const agentIntegrationsApi = {
     // -------------------------------------------------------------------------
 
     listMcpServers: async (profileSlug?: string): Promise<McpServersListResult> => {
-        const res = await api.get('/api/mcp-servers', { params: { profile_slug: profileSlug } });
-        return res.data;
+        const { data } = await agentIntegrationsListMcpServers({ query: { profile_slug: profileSlug }, throwOnError: true });
+        return data as unknown as McpServersListResult;
     },
 
     createMcpServer: async (body: McpServerCreate): Promise<McpServer> => {
-        const res = await api.post('/api/mcp-servers', body);
-        return res.data;
+        const { data } = await agentIntegrationsCreateMcpServer({ body: body as never, throwOnError: true });
+        return data as unknown as McpServer;
     },
 
     getMcpServer: async (id: string): Promise<McpServer> => {
-        const res = await api.get(`/api/mcp-servers/${id}`);
-        return res.data;
+        const { data } = await agentIntegrationsGetMcpServer({ path: { server_id: id }, throwOnError: true });
+        return data as unknown as McpServer;
     },
 
     updateMcpServer: async (id: string, body: McpServerUpdate): Promise<McpServer> => {
-        const res = await api.put(`/api/mcp-servers/${id}`, body);
-        return res.data;
+        const { data } = await agentIntegrationsUpdateMcpServer({ path: { server_id: id }, body: body as never, throwOnError: true });
+        return data as unknown as McpServer;
     },
 
     deleteMcpServer: async (id: string): Promise<void> => {
-        await api.delete(`/api/mcp-servers/${id}`);
+        await agentIntegrationsDeleteMcpServer({ path: { server_id: id }, throwOnError: true });
     },
 
     listMcpServerTools: async (id: string): Promise<McpServerToolsResult> => {
-        const res = await api.get(`/api/mcp-servers/${id}/tools`);
-        return res.data;
+        const { data } = await agentIntegrationsListMcpServerTools({ path: { server_id: id }, throwOnError: true });
+        return data as unknown as McpServerToolsResult;
     },
 
     testMcpServer: async (id: string): Promise<McpServerTestResult> => {
-        const res = await api.post(`/api/mcp-servers/${id}/test`);
-        return res.data;
+        const { data } = await agentIntegrationsTestMcpServer({ path: { server_id: id }, throwOnError: true });
+        return data as unknown as McpServerTestResult;
     },
 
     // -------------------------------------------------------------------------
@@ -190,22 +199,22 @@ export const agentIntegrationsApi = {
     // -------------------------------------------------------------------------
 
     listSkills: async (profileSlug?: string): Promise<SkillsListResult> => {
-        const res = await api.get('/api/agent-skills', { params: { profile_slug: profileSlug } });
-        return res.data;
+        const { data } = await agentIntegrationsListSkills({ query: { profile_slug: profileSlug }, throwOnError: true });
+        return data as unknown as SkillsListResult;
     },
 
     createSkill: async (body: SkillCreate): Promise<AgentSkill> => {
-        const res = await api.post('/api/agent-skills', body);
-        return res.data;
+        const { data } = await agentIntegrationsCreateSkill({ body: body as never, throwOnError: true });
+        return data as unknown as AgentSkill;
     },
 
     updateSkill: async (id: string, body: SkillUpdate): Promise<AgentSkill> => {
-        const res = await api.put(`/api/agent-skills/${id}`, body);
-        return res.data;
+        const { data } = await agentIntegrationsUpdateSkill({ path: { skill_id: id }, body: body as never, throwOnError: true });
+        return data as unknown as AgentSkill;
     },
 
     deleteSkill: async (id: string): Promise<void> => {
-        await api.delete(`/api/agent-skills/${id}`);
+        await agentIntegrationsDeleteSkill({ path: { skill_id: id }, throwOnError: true });
     },
 
     // -------------------------------------------------------------------------
@@ -213,21 +222,21 @@ export const agentIntegrationsApi = {
     // -------------------------------------------------------------------------
 
     getAgentCatalogue: async (profileSlug?: string): Promise<AgentCatalogueResult> => {
-        const res = await api.get('/api/agent-catalogue', { params: { profile_slug: profileSlug } });
-        return res.data;
+        const { data } = await agentIntegrationsGetAgentCatalogue({ query: { profile_slug: profileSlug }, throwOnError: true });
+        return data as unknown as AgentCatalogueResult;
     },
 
     listProfileSkills: async (profileId: string): Promise<ProfileSkillsResult> => {
-        const res = await api.get(`/api/agent-profiles/${profileId}/skills`);
-        return res.data;
+        const { data } = await agentIntegrationsListProfileSkills({ path: { profile_id: profileId }, throwOnError: true });
+        return data as unknown as ProfileSkillsResult;
     },
 
     installSkill: async (profileId: string, body: SkillInstall): Promise<SkillInstallResult> => {
-        const res = await api.post(`/api/agent-profiles/${profileId}/skills`, body);
-        return res.data;
+        const { data } = await agentIntegrationsInstallSkill({ path: { profile_id: profileId }, body: body as never, throwOnError: true });
+        return data as unknown as SkillInstallResult;
     },
 
     uninstallSkill: async (profileId: string, installId: string): Promise<void> => {
-        await api.delete(`/api/agent-profiles/${profileId}/skills/${installId}`);
+        await agentIntegrationsUninstallSkill({ path: { profile_id: profileId, install_id: installId }, throwOnError: true });
     },
 };

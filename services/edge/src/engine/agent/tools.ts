@@ -57,7 +57,7 @@ export const buildAgentTools = async (
     // Data query tool (read-only SQL against connected datasources)
     tools.queryDatasource = tool({
         description: "Execute a read-only SQL SELECT query against a connected external Datasource. Use this to query live app data.",
-        parameters: objectSchema({
+        inputSchema: objectSchema({
             datasourceId: S.string("The UUID of the connected datasource to query."),
             sql: S.string("The raw SQL SELECT query to execute. Do not execute destructive commands like DROP or DELETE."),
         }),
@@ -96,7 +96,7 @@ export const buildAgentTools = async (
     if (workflowPerms.includes('trigger') || workflowPerms.includes('all')) {
         tools.triggerWorkflow = tool({
             description: "Trigger an Action Workflow deployed on this Edge Engine.",
-            parameters: objectSchema({
+            inputSchema: objectSchema({
                 workflowId: S.string("The ID of the workflow to trigger."),
                 payload: S.record("Optional JSON payload to send to the workflow."),
             }, ['workflowId']),

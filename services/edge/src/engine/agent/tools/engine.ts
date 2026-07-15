@@ -25,7 +25,7 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
 
     tools['engine_status'] = tool({
         description: 'Get the engine\'s current health status including state DB, cache, and queue binding status. Use this to understand what infrastructure is connected.',
-        parameters: objectSchema({
+        inputSchema: objectSchema({
             dummy: S.string('Not used, pass empty string'),
         }),
         execute: async ({ dummy }: any) => {
@@ -50,7 +50,7 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
 
     tools['engine_config'] = tool({
         description: 'Get a non-secret summary of the engine\'s configuration: which providers are configured for state DB, cache, queue, and how many GPU models are available.',
-        parameters: objectSchema({
+        inputSchema: objectSchema({
             dummy: S.string('Not used, pass empty string'),
         }),
         execute: async ({ dummy }: any) => {
@@ -85,7 +85,7 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
 
     tools['engine_workflows'] = tool({
         description: 'List all deployed workflows on this engine. Returns name, trigger type, active status, and version for each workflow.',
-        parameters: objectSchema({
+        inputSchema: objectSchema({
             dummy: S.string('Not used, pass empty string'),
         }),
         execute: async ({ dummy }: any) => {
@@ -111,7 +111,7 @@ export function buildEngineTools(profile: AgentProfile): Record<string, any> {
 
     tools['engine_logs'] = tool({
         description: 'Get recent edge engine logs. Useful for debugging issues or checking recent activity.',
-        parameters: objectSchema({
+        inputSchema: objectSchema({
             limit: S.number('Max number of log entries to return (default: 20, max: 100)'),
             level: S.string('Filter by log level: "info", "warn", "error"'),
         }, ['limit']),

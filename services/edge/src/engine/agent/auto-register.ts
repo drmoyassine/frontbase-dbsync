@@ -242,7 +242,7 @@ export async function buildAutoTools(
                     
                     tools[toolName] = tool({
                         description: desc,
-                        parameters: objectSchema(properties, required.length > 0 ? required : undefined),
+                        inputSchema: objectSchema(properties, required.length > 0 ? required : undefined),
                         execute: async (args: any) => {
                             let actualPath = path;
                             

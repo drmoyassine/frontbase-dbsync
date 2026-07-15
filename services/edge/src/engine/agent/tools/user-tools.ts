@@ -95,7 +95,7 @@ function buildWorkflowTool(
     return {
         [toolDef.name]: tool({
             description: toolDef.description || `Trigger workflow: ${toolDef.name}`,
-            parameters: schema,
+            inputSchema: schema,
             execute: async (args: Record<string, any>) => {
                 try {
                     const req = new Request(`http://localhost/api/execute/${config.workflowId}`, {
@@ -172,7 +172,7 @@ async function buildMcpClientTools(
                 // but providing the description helps the LLM
                 tools[`mcp_${toolDef.name}_${mTool.name}`] = tool({
                     description: `[From ${toolDef.name} MCP]: ${mTool.description || `Tool ${mTool.name}`}`,
-                    parameters: z.any(),
+                    inputSchema: z.any(),
                     execute: async (args: any) => {
                         try {
                             const result = await client.callTool({
@@ -206,7 +206,7 @@ async function buildMcpClientTools(
         // Graceful degradation: return a status/error tool so the LLM knows it failed
         tools[`mcp_${toolDef.name}_status`] = tool({
             description: `MCP Server '${toolDef.name}' is currently unreachable.`,
-            parameters: objectSchema({ dummy: S.string('Not used, pass empty string') }),
+            inputSchema: objectSchema({ dummy: S.string('Not used, pass empty string') }),
             execute: async ({ dummy }: any) => ({
                 error: `MCP Connection failed`,
                 message: err.message

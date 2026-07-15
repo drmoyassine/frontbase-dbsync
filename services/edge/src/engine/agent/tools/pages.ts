@@ -29,7 +29,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
     if (hasRead) {
         tools['pages_list'] = tool({
             description: 'List all published pages on this engine. Returns page name, slug, and version for each page.',
-            parameters: objectSchema({
+            inputSchema: objectSchema({
                 dummy: S.string('Unused, pass empty string'),
             }),
             execute: async ({ dummy }: any) => {
@@ -51,7 +51,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
 
         tools['pages_get'] = tool({
             description: 'Get the full structure of a published page by slug. Returns the page name, slug, version, component tree (types and IDs), and SEO metadata.',
-            parameters: objectSchema({
+            inputSchema: objectSchema({
                 slug: S.string('The page slug (URL path), e.g. "about" or "pricing"'),
             }),
             execute: async ({ slug }: any) => {
@@ -100,7 +100,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
     if (hasWrite) {
         tools['pages_updateComponent'] = tool({
             description: 'Update a single component\'s props on a published page. Changes are applied to the page in the state DB but NOT automatically published — use pages_updateAndPublish for atomic edit+publish.',
-            parameters: objectSchema({
+            inputSchema: objectSchema({
                 slug: S.string('The page slug'),
                 componentId: S.string('The ID of the component to update'),
                 props: S.record('The prop key-value pairs to merge into the component'),
@@ -145,7 +145,7 @@ export function buildPageTools(profile: AgentProfile): Record<string, any> {
 
         tools['pages_updateAndPublish'] = tool({
             description: 'Update a component\'s props on a page AND trigger a full publish cycle (CSS rebundle + cache flush). This is the recommended way to make visible changes. It is an atomic one-shot operation.',
-            parameters: objectSchema({
+            inputSchema: objectSchema({
                 slug: S.string('The page slug'),
                 componentId: S.string('The ID of the component to update'),
                 props: S.record('The prop key-value pairs to merge into the component'),

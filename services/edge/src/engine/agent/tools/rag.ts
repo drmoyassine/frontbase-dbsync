@@ -1,6 +1,3 @@
-// @ts-nocheck — matches the sibling tool builders (pages/engine/styles/user-tools):
-// the AI SDK v6 tool() typings reject the `parameters` schema key these builders
-// use (v6 renamed it to `inputSchema`), so typechecking is suppressed uniformly.
 /**
  * RAG Search Tools for Agents
  *
@@ -47,7 +44,7 @@ export function buildRagTools(profile: AgentProfile): Record<string, any> {
      */
     tools['rag_search'] = tool({
         description: 'Search documents using semantic similarity. Returns relevant text chunks with their sources. Use this to find information from uploaded documents, knowledge bases, or documentation. Results are automatically scoped to the current tenant and project.',
-        parameters: objectSchema({
+        inputSchema: objectSchema({
             query: S.string('The search query - what information you are looking for'),
             client_id: S.string('Optional: Filter to a specific client ID (e.g., "acme-corp", "user-123"). Leave empty to search across all clients.', true),
             limit: S.number('Maximum number of results to return (default: 5, max: 20)', true),
@@ -88,7 +85,7 @@ export function buildRagTools(profile: AgentProfile): Record<string, any> {
      */
     tools['rag_client_search'] = tool({
         description: 'Search documents for a specific client. Use this when the user asks about a particular client, customer, or user (e.g., "What did Acme Corp request?"). Automatically extracts client ID from common patterns like "client XYZ", "customer ABC", or "user-123".',
-        parameters: objectSchema({
+        inputSchema: objectSchema({
             query: S.string('The search query - what information you are looking for'),
             client_identifier: S.string('The client or customer identifier (e.g., "acme-corp", "user-123"). If not provided, will attempt to extract from the query.', true),
             limit: S.number('Maximum number of results to return (default: 5, max: 20)', true),
@@ -151,7 +148,7 @@ export function buildRagTools(profile: AgentProfile): Record<string, any> {
      */
     tools['rag_bucket_search'] = tool({
         description: 'Search documents within a specific storage bucket. Use this when you know the documents are in a particular bucket (e.g., "contracts", "invoices", "documentation").',
-        parameters: objectSchema({
+        inputSchema: objectSchema({
             query: S.string('The search query - what information you are looking for'),
             bucket: S.string('The bucket name to search within (e.g., "documents", "contracts")'),
             limit: S.number('Maximum number of results to return (default: 5, max: 20)', true),

@@ -40,7 +40,7 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
     if (hasRead) {
         tools['styles_get'] = tool({
             description: 'Get the current styles for a specific component on a page. Returns the style values (colors, spacing, typography, etc.) and any viewport overrides.',
-            parameters: objectSchema({
+            inputSchema: objectSchema({
                 slug: S.string('The page slug'),
                 componentId: S.string('The component ID to inspect'),
             }),
@@ -71,7 +71,7 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
     if (hasWrite) {
         tools['styles_update'] = tool({
             description: 'Update styles for a single component on a page. Merges the provided style values into the component\'s existing styles. Supports CSS properties like backgroundColor, fontSize, padding, margin, borderRadius, color, etc.',
-            parameters: objectSchema({
+            inputSchema: objectSchema({
                 slug: S.string('The page slug'),
                 componentId: S.string('The component ID to style'),
                 styles: S.record('Style key-value pairs to merge, e.g. { "backgroundColor": "#1a1a2e", "fontSize": "18px" }'),
@@ -112,7 +112,7 @@ export function buildStyleTools(profile: AgentProfile): Record<string, any> {
 
         tools['styles_batchUpdate'] = tool({
             description: 'Update styles for multiple components on a page in a single operation. Useful for applying a theme or making coordinated visual changes across several components at once.',
-            parameters: objectSchema({
+            inputSchema: objectSchema({
                 slug: S.string('The page slug'),
                 updates: S.array('Array of component style updates', {
                     type: 'object',

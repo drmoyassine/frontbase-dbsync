@@ -466,6 +466,8 @@ export const EDGE_DATABASE_PROVIDERS: EdgeResourceProvider[] = [
     { value: 'sqlite',     label: 'Local SQLite',          icon: HardDrive,                             accountProvider: null,         active: false, placeholder: 'file:local' },
 ];
 
+export const DB_PROVIDER_OPTIONS = EDGE_DATABASE_PROVIDERS;
+
 /**
  * Cache providers — derived from PROVIDER_CONFIGS capabilities.
  * Includes all providers with 'cache' capability.

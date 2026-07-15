@@ -469,7 +469,7 @@ async def convert_to_publish_schema(page: Page, datasources: list, tenant_slug: 
         datasources=datasources if datasources else None,
         cssBundle=css_bundle,  # Tree-shaken CSS for this page
         version=1,  # TODO: Increment on re-publish
-        publishedAt=datetime.now(UTC).isoformat() + "Z",
+        publishedAt=datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         contentHash=getattr(page, 'content_hash', None),
         isPublic=bool(page.is_public),
         isHomepage=bool(page.is_homepage),

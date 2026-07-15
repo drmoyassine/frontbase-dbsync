@@ -22,85 +22,6 @@ async def create_variable_endpoint(request: VariableCreateRequest, db: Session =
     variable = create_variable(db, request.model_dump(), ctx)
     return variable
 
-@router.get("/{variable_id}", response_model=VariableResponse)
-async def get_variable(variable_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
-    """Get a variable by ID"""
-    from ..models.models import AppVariable
-    from ..database.utils import get_project
-    
-    query = db.query(AppVariable).filter(AppVariable.id == variable_id)
-    if ctx and ctx.tenant_id:
-        project = get_project(db, ctx)
-        if project:
-            query = query.filter(AppVariable.project_id == project.id)
-        else:
-            raise HTTPException(status_code=404, detail="Variable not found")
-            
-    variable = query.first()
-    if not variable:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Variable not found"
-        )
-    
-    return variable
-
-@router.put("/{variable_id}/", response_model=VariableResponse)
-async def update_variable_endpoint(variable_id: str, request: VariableUpdateRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
-    """Update a variable"""
-    from ..models.models import AppVariable
-    from ..database.utils import get_current_timestamp, get_project
-    
-    query = db.query(AppVariable).filter(AppVariable.id == variable_id)
-    if ctx and ctx.tenant_id:
-        project = get_project(db, ctx)
-        if project:
-            query = query.filter(AppVariable.project_id == project.id)
-        else:
-            raise HTTPException(status_code=404, detail="Variable not found")
-            
-    variable = query.first()
-    if not variable:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Variable not found"
-        )
-    
-    # Update fields
-    update_data = request.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(variable, field, value)
-    
-    db.commit()
-    db.refresh(variable)
-    return variable
-
-@router.delete("/{variable_id}/", response_model=MessageResponse)
-async def delete_variable(variable_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
-    """Delete a variable"""
-    from ..models.models import AppVariable
-    from ..database.utils import get_project
-    
-    query = db.query(AppVariable).filter(AppVariable.id == variable_id)
-    if ctx and ctx.tenant_id:
-        project = get_project(db, ctx)
-        if project:
-            query = query.filter(AppVariable.project_id == project.id)
-        else:
-            raise HTTPException(status_code=404, detail="Variable not found")
-            
-    variable = query.first()
-    if not variable:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Variable not found"
-        )
-    
-    db.delete(variable)
-    db.commit()
-    
-    return {"message": "Variable deleted successfully"}
-
 
 # =============================================================================
 # Template Variables Registry (for Builder @ mention autocomplete)
@@ -430,3 +351,83 @@ def _map_column_type(pg_type: str) -> str:
     # Extract base type (handle cases like "character varying(255)")
     base_type = pg_type.lower().split('(')[0].strip()
     return type_mapping.get(base_type, 'any')
+
+@router.get("/{variable_id}", response_model=VariableResponse)
+async def get_variable(variable_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
+    """Get a variable by ID"""
+    from ..models.models import AppVariable
+    from ..database.utils import get_project
+    
+    query = db.query(AppVariable).filter(AppVariable.id == variable_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(AppVariable.project_id == project.id)
+        else:
+            raise HTTPException(status_code=404, detail="Variable not found")
+            
+    variable = query.first()
+    if not variable:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Variable not found"
+        )
+    
+    return variable
+
+@router.put("/{variable_id}/", response_model=VariableResponse)
+async def update_variable_endpoint(variable_id: str, request: VariableUpdateRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
+    """Update a variable"""
+    from ..models.models import AppVariable
+    from ..database.utils import get_current_timestamp, get_project
+    
+    query = db.query(AppVariable).filter(AppVariable.id == variable_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(AppVariable.project_id == project.id)
+        else:
+            raise HTTPException(status_code=404, detail="Variable not found")
+            
+    variable = query.first()
+    if not variable:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Variable not found"
+        )
+    
+    # Update fields
+    update_data = request.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(variable, field, value)
+    
+    db.commit()
+    db.refresh(variable)
+    return variable
+
+@router.delete("/{variable_id}/", response_model=MessageResponse)
+async def delete_variable(variable_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
+    """Delete a variable"""
+    from ..models.models import AppVariable
+    from ..database.utils import get_project
+    
+    query = db.query(AppVariable).filter(AppVariable.id == variable_id)
+    if ctx and ctx.tenant_id:
+        project = get_project(db, ctx)
+        if project:
+            query = query.filter(AppVariable.project_id == project.id)
+        else:
+            raise HTTPException(status_code=404, detail="Variable not found")
+            
+    variable = query.first()
+    if not variable:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Variable not found"
+        )
+    
+    db.delete(variable)
+    db.commit()
+    
+    return {"message": "Variable deleted successfully"}
+

@@ -75,11 +75,11 @@ export const useDashboardStore = create<DashboardState>()(
       reset: () => set(initialState),
 
       fetchConnections: async () => {
-        const requestKey = generateRequestKey('/api/database/connections/');
+        const requestKey = generateRequestKey('/api/database/connections');
 
         return requestDeduplicator.dedupe(requestKey, async () => {
           try {
-            const response = await api.get('/api/database/connections/');
+            const response = await api.get('/api/database/connections');
             const apiResponse = response.data;
 
             // Transform response to expected format

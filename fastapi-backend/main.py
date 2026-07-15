@@ -1208,16 +1208,8 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])  # type: ignore[
 
 # Custom middleware to internally add trailing slash to paths
 # This prevents 307 redirects by normalizing paths before routing
-from starlette.types import ASGIApp, Receive, Scope, Send
-
-# --- Trailing-slash normalization: intentionally NOT applied ----------------
-# A previous custom TrailingSlashMiddleware added a trailing slash to non-excluded
-# paths, which fought Starlette's `redirect_slashes` and caused infinite 307 loops
-# on the 256 routes registered WITHOUT a trailing slash (e.g. /api/queue/health,
-# /api/security-events/summary). Relying on the default `redirect_slashes` emits a
-# single, loop-free 307 instead — standard behavior every client follows.
-
-
+from app.middleware.slash_normalization import SlashNormalizationMiddleware
+app.add_middleware(SlashNormalizationMiddleware, fastapi_app=app)
 
 # Add test mode middleware
 app.add_middleware(TestModeMiddleware, test_mode=True)

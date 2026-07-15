@@ -1,4 +1,4 @@
-import api from './api-service';
+import { tenantsListInvites, tenantsCreateInvite, tenantsRevokeInvite } from '@/client';
 
 export interface TenantInvite {
     id: string;
@@ -11,21 +11,25 @@ export interface TenantInvite {
 
 export const tenantTeamApi = {
     listInvites: async (): Promise<{ invites: TenantInvite[] }> => {
-        const res = await api.get('/api/tenants/me/invites');
-        return res.data;
+        const { data } = await tenantsListInvites({ throwOnError: true });
+        return data as unknown as { invites: TenantInvite[] };
     },
     createInvite: async (
         email: string,
         role: 'admin' | 'editor' | 'viewer',
         projectIds?: string[],
     ): Promise<{ success: boolean; invite: TenantInvite; link: string }> => {
-        const res = await api.post('/api/tenants/me/invites', {
-            email, role, project_ids: projectIds ?? null,
+        const { data } = await tenantsCreateInvite({
+            body: { email, role, project_ids: projectIds ?? null },
+            throwOnError: true,
         });
-        return res.data;
+        return data as unknown as { success: boolean; invite: TenantInvite; link: string };
     },
     revokeInvite: async (inviteId: string): Promise<{ success: boolean }> => {
-        const res = await api.delete(`/api/tenants/me/invites/${inviteId}`);
-        return res.data;
+        const { data } = await tenantsRevokeInvite({
+            path: { invite_id: inviteId },
+            throwOnError: true,
+        });
+        return data as unknown as { success: boolean };
     },
 };

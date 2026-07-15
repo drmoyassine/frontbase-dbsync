@@ -1,4 +1,9 @@
-import api from './api-service';
+import {
+    projectsListProjects, projectsCreateProject, projectsUpdateProjectMeta, projectsDeleteProject,
+    projectsListProjectMembers, projectsAddProjectMember, projectsRemoveProjectMember,
+    projectsListProjectDatasources, projectsGrantDatasource, projectsRevokeDatasource,
+    projectsGrantConnectedAccount, projectsRevokeConnectedAccount,
+} from '@/client';
 
 export interface ProjectSummary {
     id: string;
@@ -12,53 +17,53 @@ export interface ProjectSummary {
 
 export const projectsApi = {
     list: async (): Promise<{ projects: ProjectSummary[] }> => {
-        const res = await api.get('/api/projects');
-        return res.data;
+        const { data } = await projectsListProjects({ throwOnError: true });
+        return data as unknown as { projects: ProjectSummary[] };
     },
     create: async (name: string, description?: string): Promise<{ project: ProjectSummary }> => {
-        const res = await api.post('/api/projects', { name, description });
-        return res.data;
+        const { data } = await projectsCreateProject({ body: { name, description }, throwOnError: true });
+        return data as unknown as { project: ProjectSummary };
     },
     update: async (id: string, patch: { name?: string; description?: string }): Promise<{ project: ProjectSummary }> => {
-        const res = await api.patch(`/api/projects/${id}`, patch);
-        return res.data;
+        const { data } = await projectsUpdateProjectMeta({ path: { project_id: id }, body: patch, throwOnError: true });
+        return data as unknown as { project: ProjectSummary };
     },
     delete: async (id: string): Promise<{ success: boolean }> => {
-        const res = await api.delete(`/api/projects/${id}`);
-        return res.data;
+        const { data } = await projectsDeleteProject({ path: { project_id: id }, throwOnError: true });
+        return data as unknown as { success: boolean };
     },
     listMembers: async (projectId: string): Promise<{ members: ProjectMemberEntry[] }> => {
-        const res = await api.get(`/api/projects/${projectId}/members`);
-        return res.data;
+        const { data } = await projectsListProjectMembers({ path: { project_id: projectId }, throwOnError: true });
+        return data as unknown as { members: ProjectMemberEntry[] };
     },
     addMember: async (projectId: string, userId: string, role: 'admin' | 'editor' | 'viewer'): Promise<{ success: boolean }> => {
-        const res = await api.post(`/api/projects/${projectId}/members`, { user_id: userId, role });
-        return res.data;
+        const { data } = await projectsAddProjectMember({ path: { project_id: projectId }, body: { user_id: userId, role }, throwOnError: true });
+        return data as unknown as { success: boolean };
     },
     removeMember: async (projectId: string, userId: string): Promise<{ success: boolean }> => {
-        const res = await api.delete(`/api/projects/${projectId}/members/${userId}`);
-        return res.data;
+        const { data } = await projectsRemoveProjectMember({ path: { project_id: projectId, user_id: userId }, throwOnError: true });
+        return data as unknown as { success: boolean };
     },
     // Shareable-resource grants (datasource / connected-account → project)
     listProjectDatasources: async (projectId: string): Promise<{ granted: { id: string; name: string }[]; available: { id: string; name: string }[] }> => {
-        const res = await api.get(`/api/projects/${projectId}/datasources`);
-        return res.data;
+        const { data } = await projectsListProjectDatasources({ path: { project_id: projectId }, throwOnError: true });
+        return data as unknown as { granted: { id: string; name: string }[]; available: { id: string; name: string }[] };
     },
     grantDatasource: async (projectId: string, datasourceId: string): Promise<{ success: boolean }> => {
-        const res = await api.post(`/api/projects/${projectId}/datasources`, { resource_id: datasourceId });
-        return res.data;
+        const { data } = await projectsGrantDatasource({ path: { project_id: projectId }, body: { resource_id: datasourceId }, throwOnError: true });
+        return data as unknown as { success: boolean };
     },
     revokeDatasource: async (projectId: string, datasourceId: string): Promise<{ success: boolean }> => {
-        const res = await api.delete(`/api/projects/${projectId}/datasources/${datasourceId}`);
-        return res.data;
+        const { data } = await projectsRevokeDatasource({ path: { project_id: projectId, datasource_id: datasourceId }, throwOnError: true });
+        return data as unknown as { success: boolean };
     },
     grantConnectedAccount: async (projectId: string, accountId: string): Promise<{ success: boolean }> => {
-        const res = await api.post(`/api/projects/${projectId}/connected-accounts`, { resource_id: accountId });
-        return res.data;
+        const { data } = await projectsGrantConnectedAccount({ path: { project_id: projectId }, body: { resource_id: accountId }, throwOnError: true });
+        return data as unknown as { success: boolean };
     },
     revokeConnectedAccount: async (projectId: string, accountId: string): Promise<{ success: boolean }> => {
-        const res = await api.delete(`/api/projects/${projectId}/connected-accounts/${accountId}`);
-        return res.data;
+        const { data } = await projectsRevokeConnectedAccount({ path: { project_id: projectId, account_id: accountId }, throwOnError: true });
+        return data as unknown as { success: boolean };
     },
 };
 

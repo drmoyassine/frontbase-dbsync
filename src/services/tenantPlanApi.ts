@@ -1,4 +1,4 @@
-import api from './api-service';
+import { tenantsGetMyPlan, tenantsGetMyAddons, plansListPublicPlans } from '@/client';
 import type { Plan, PlanLimits } from './adminPlansApi';
 
 export interface MyPlanRequest {
@@ -34,16 +34,16 @@ export interface PublicPricingPlan {
 
 export const tenantPlanApi = {
     getMyPlan: async (): Promise<MyPlanResponse> => {
-        const res = await api.get('/api/tenants/me/plan');
-        return res.data;
+        const { data } = await tenantsGetMyPlan({ throwOnError: true });
+        return data as unknown as MyPlanResponse;
     },
 
     getMyAddons: async (): Promise<{ addons: Record<string, number> }> => {
-        const res = await api.get('/api/tenants/me/addons');
-        return res.data;
+        const { data } = await tenantsGetMyAddons({ throwOnError: true });
+        return data as unknown as { addons: Record<string, number> };
     },
     listPublicPlans: async (): Promise<{ plans: PublicPricingPlan[]; detailed: Plan[] }> => {
-        const res = await api.get('/api/plans/public');
-        return res.data;
+        const { data } = await plansListPublicPlans({ throwOnError: true });
+        return data as unknown as { plans: PublicPricingPlan[]; detailed: Plan[] };
     },
 };

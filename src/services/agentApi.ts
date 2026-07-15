@@ -1,4 +1,4 @@
-import api from './api-service';
+import { agentAgentCredits } from '@/client';
 import type { AgentCreditBalance } from './adminAgentsApi';
 
 /** Tenant-facing Workspace Agent credits (GET /api/agent/credits). */
@@ -11,7 +11,7 @@ export interface MyAgentCredits extends Partial<AgentCreditBalance> {
 
 export const agentApi = {
     getMyCredits: async (): Promise<MyAgentCredits> => {
-        const res = await api.get('/api/agent/credits');
-        return res.data;
+        const { data } = await agentAgentCredits({ throwOnError: true });
+        return data as MyAgentCredits;
     },
 };

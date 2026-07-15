@@ -1,23 +1,13 @@
-import api from './api-service';
+import { projectGetProjectEndpoint, projectUpdateProjectEndpoint } from '@/client';
 import { ProjectConfig as Project } from '@/types/builder';
 
 // Project API
 export const getProject = async (): Promise<Project> => {
-  try {
-    const response = await api.get('/api/project/');
-    return response.data;
-  } catch (error) {
-    console.error('Error getting project:', error);
-    throw error;
-  }
+  const { data } = await projectGetProjectEndpoint({ throwOnError: true });
+  return data as unknown as Project;
 };
 
 export const updateProject = async (projectData: Partial<Project>): Promise<Project> => {
-  try {
-    const response = await api.put('/api/project/', projectData);
-    return response.data;
-  } catch (error) {
-    console.error('Error updating project:', error);
-    throw error;
-  }
+  const { data } = await projectUpdateProjectEndpoint({ body: projectData, throwOnError: true });
+  return data as unknown as Project;
 };

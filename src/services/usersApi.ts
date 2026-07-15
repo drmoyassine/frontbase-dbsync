@@ -5,6 +5,10 @@
  * These manage a tenant's *app users* (GoTrue), distinct from platform team
  * members (SuperTokens). All calls are tenant-scoped server-side.
  */
+// NOTE(contract-gap): /api/users* is NOT in the OpenAPI contract — no FastAPI
+// router or Express route serves it in this repo (likely a Supabase edge or
+// removed backend). Stays on the legacy axios instance until the backend for
+// it exists; then migrate to the generated client like the other services.
 import api from './api-service';
 
 export interface AppUser {

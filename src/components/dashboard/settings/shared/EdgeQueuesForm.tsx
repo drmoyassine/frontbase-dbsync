@@ -23,6 +23,7 @@ import { DeleteResourceDialog, BulkDeleteResourceDialog } from './DeleteResource
 import { formatSafeDate } from '@/hooks/useEdgeEngineActions';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
 import { EdgeResourceRow } from './EdgeResourceRow';
+import { EDGE_QUEUE_PROVIDERS, PROVIDER_ICONS, ProviderBadge } from './edgeConstants';
 
 const API_BASE = '';
 

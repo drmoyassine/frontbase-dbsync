@@ -1,4 +1,7 @@
-import api from './api-service';
+import {
+    tenantAdminListTenants, tenantAdminGetTenant, tenantAdminCreateTenant,
+    tenantAdminCreateTenantUser, tenantAdminUpdateTenant, tenantAdminDeleteTenant,
+} from '@/client';
 
 export interface TenantAdminUser {
     id: string;
@@ -55,32 +58,32 @@ export interface CreateTenantUserPayload {
 
 export const tenantAdminApi = {
     listTenants: async (): Promise<{ tenants: TenantAdminResponse[] }> => {
-        const response = await api.get('/api/admin/tenants/');
-        return response.data;
+        const { data } = await tenantAdminListTenants({ throwOnError: true });
+        return data as unknown as { tenants: TenantAdminResponse[] };
     },
 
     getTenant: async (tenantId: string): Promise<{ tenant: TenantAdminDetailResponse }> => {
-        const response = await api.get(`/api/admin/tenants/${tenantId}`);
-        return response.data;
+        const { data } = await tenantAdminGetTenant({ path: { tenant_id: tenantId }, throwOnError: true });
+        return data as unknown as { tenant: TenantAdminDetailResponse };
     },
 
     createTenant: async (payload: CreateTenantPayload): Promise<{ tenant: TenantAdminResponse & { project_id?: string } }> => {
-        const response = await api.post('/api/admin/tenants/', payload);
-        return response.data;
+        const { data } = await tenantAdminCreateTenant({ body: payload, throwOnError: true });
+        return data as unknown as { tenant: TenantAdminResponse & { project_id?: string } };
     },
 
     createTenantUser: async (tenantId: string, payload: CreateTenantUserPayload): Promise<{ user: any }> => {
-        const response = await api.post(`/api/admin/tenants/${tenantId}/users`, payload);
-        return response.data;
+        const { data } = await tenantAdminCreateTenantUser({ path: { tenant_id: tenantId }, body: payload, throwOnError: true });
+        return data as unknown as { user: any };
     },
 
     updateTenant: async (tenantId: string, payload: Partial<CreateTenantPayload> & { status?: string }): Promise<{ success: boolean; tenant: any }> => {
-        const response = await api.put(`/api/admin/tenants/${tenantId}`, payload);
-        return response.data;
+        const { data } = await tenantAdminUpdateTenant({ path: { tenant_id: tenantId }, body: payload, throwOnError: true });
+        return data as unknown as { success: boolean; tenant: any };
     },
 
     deleteTenant: async (tenantId: string): Promise<{ success: boolean; message: string }> => {
-        const response = await api.delete(`/api/admin/tenants/${tenantId}`);
-        return response.data;
+        const { data } = await tenantAdminDeleteTenant({ path: { tenant_id: tenantId }, throwOnError: true });
+        return data as unknown as { success: boolean; message: string };
     }
 };

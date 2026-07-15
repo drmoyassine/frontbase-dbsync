@@ -1,4 +1,9 @@
-import api from './api-service';
+import {
+    adminPlansListPlans, adminPlansGetLimitRegistry, adminPlansCreatePlan,
+    adminPlansUpdatePlan, adminPlansDeletePlan, adminPlansListTenantAddons,
+    adminPlansGrantTenantAddon, adminPlansRevokeTenantAddon,
+    adminPlansListAddons, adminPlansUpdateAddon,
+} from '@/client';
 
 export interface PlanLimits {
     [key: string]: number | boolean;
@@ -41,46 +46,46 @@ export type PlanWritePayload = Partial<Omit<Plan, 'id' | 'created_at' | 'updated
 
 export const adminPlansApi = {
     listPlans: async (): Promise<{ plans: Plan[] }> => {
-        const res = await api.get('/api/admin/plans');
-        return res.data;
+        const { data } = await adminPlansListPlans({ throwOnError: true });
+        return data as unknown as { plans: Plan[] };
     },
     getLimitRegistry: async (): Promise<{ limits: LimitDef[] }> => {
-        const res = await api.get('/api/admin/plans/limit-registry');
-        return res.data;
+        const { data } = await adminPlansGetLimitRegistry({ throwOnError: true });
+        return data as unknown as { limits: LimitDef[] };
     },
     createPlan: async (payload: PlanWritePayload): Promise<{ plan: Plan }> => {
-        const res = await api.post('/api/admin/plans', payload);
-        return res.data;
+        const { data } = await adminPlansCreatePlan({ body: payload as never, throwOnError: true });
+        return data as unknown as { plan: Plan };
     },
     updatePlan: async (planId: string, payload: PlanWritePayload): Promise<{ plan: Plan }> => {
-        const res = await api.put(`/api/admin/plans/${planId}`, payload);
-        return res.data;
+        const { data } = await adminPlansUpdatePlan({ path: { plan_id: planId }, body: payload as never, throwOnError: true });
+        return data as unknown as { plan: Plan };
     },
     deletePlan: async (planId: string): Promise<{ success: boolean; message: string }> => {
-        const res = await api.delete(`/api/admin/plans/${planId}`);
-        return res.data;
+        const { data } = await adminPlansDeletePlan({ path: { plan_id: planId }, throwOnError: true });
+        return data as unknown as { success: boolean; message: string };
     },
 
     listTenantAddons: async (tenantId: string): Promise<{ addons: TenantAddonEntry[] }> => {
-        const res = await api.get('/api/admin/tenant-addons', { params: { tenant_id: tenantId } });
-        return res.data;
+        const { data } = await adminPlansListTenantAddons({ query: { tenant_id: tenantId }, throwOnError: true });
+        return data as unknown as { addons: TenantAddonEntry[] };
     },
     grantTenantAddon: async (tenantId: string, addonType: string, quantity: number): Promise<{ addon: TenantAddonEntry }> => {
-        const res = await api.post('/api/admin/tenant-addons', { tenant_id: tenantId, addon_type: addonType, quantity });
-        return res.data;
+        const { data } = await adminPlansGrantTenantAddon({ body: { tenant_id: tenantId, addon_type: addonType, quantity }, throwOnError: true });
+        return data as unknown as { addon: TenantAddonEntry };
     },
     revokeTenantAddon: async (addonId: string): Promise<{ success: boolean }> => {
-        const res = await api.delete(`/api/admin/tenant-addons/${addonId}`);
-        return res.data;
+        const { data } = await adminPlansRevokeTenantAddon({ path: { addon_id: addonId }, throwOnError: true });
+        return data as unknown as { success: boolean };
     },
 
     listAddons: async (): Promise<AddonConfig[]> => {
-        const res = await api.get('/api/admin/addons');
-        return res.data;
+        const { data } = await adminPlansListAddons({ throwOnError: true });
+        return data as unknown as AddonConfig[];
     },
     updateAddon: async (addonId: string, payload: Partial<AddonConfig>): Promise<AddonConfig> => {
-        const res = await api.put(`/api/admin/addons/${addonId}`, payload);
-        return res.data;
+        const { data } = await adminPlansUpdateAddon({ path: { addon_id: addonId }, body: payload as never, throwOnError: true });
+        return data as unknown as AddonConfig;
     },
 };
 

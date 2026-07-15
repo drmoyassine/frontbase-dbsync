@@ -37,7 +37,7 @@ export const testDatabaseConnection = async (connectionData: { supabaseUrl: stri
 
 export const getDatabaseConnections = async (): Promise<any> => {
   try {
-    const response = await api.get('/api/database/connections');
+    const response = await api.get('/api/database/connections/');
     // Validate with strict contract
     return ApiContracts.validate(DbConnectionSchema, response.data, 'getDatabaseConnections');
   } catch (error) {
@@ -48,7 +48,7 @@ export const getDatabaseConnections = async (): Promise<any> => {
 
 export const connectSupabase = async (connectionData: { supabaseUrl: string; supabaseAnonKey: string; supabaseServiceKey?: string }) => {
   try {
-    const response = await api.post('/api/database/connect-supabase', {
+    const response = await api.post('/api/database/connect-supabase/', {
       url: connectionData.supabaseUrl,
       anonKey: connectionData.supabaseAnonKey,
       serviceKey: connectionData.supabaseServiceKey
@@ -62,7 +62,7 @@ export const connectSupabase = async (connectionData: { supabaseUrl: string; sup
 
 export const disconnectSupabase = async () => {
   try {
-    const response = await api.delete('/api/database/disconnect-supabase');
+    const response = await api.delete('/api/database/disconnect-supabase/');
     return response.data;
   } catch (error) {
     console.error('Error disconnecting from Supabase:', error);
@@ -72,7 +72,7 @@ export const disconnectSupabase = async () => {
 
 export const getDatabaseTables = async () => {
   try {
-    const response = await api.get('/api/database/tables');
+    const response = await api.get('/api/database/tables/');
     // Validate with strict contract
     return ApiContracts.validate(TablesListSchema, response.data, 'getDatabaseTables');
   } catch (error) {
@@ -83,7 +83,7 @@ export const getDatabaseTables = async () => {
 
 export const getTableSchema = async (tableName: string) => {
   try {
-    const response = await api.get(`/api/database/table-schema/${tableName}`);
+    const response = await api.get(`/api/database/table-schema/${tableName}/`);
     // Validate with strict contract
     return ApiContracts.validate(TableSchemaResponseSchema, response.data, 'getTableSchema');
   } catch (error) {
@@ -94,45 +94,45 @@ export const getTableSchema = async (tableName: string) => {
 
 export const databaseApi = {
   fetchTables: async (): Promise<{ tables: SupabaseTable[] }> => {
-    const response = await api.get('/api/database/tables');
+    const response = await api.get('/api/database/tables/');
     const data = ApiContracts.validate(TablesListSchema, response.data, 'fetchTables');
     return data as { tables: SupabaseTable[] };
   },
 
   fetchTableSchema: async (tableName: string): Promise<{ table_name: string; columns: any[] }> => {
-    const response = await api.get(`/api/database/table-schema/${encodeURIComponent(tableName)}`);
+    const response = await api.get(`/api/database/table-schema/${encodeURIComponent(tableName)}/`);
     const data = ApiContracts.validate(TableSchemaResponseSchema, response.data, 'fetchTableSchema');
     return data as { table_name: string; columns: any[] };
   },
 
   queryData: async (tableName: string, params: URLSearchParams): Promise<any> => {
-    const response = await api.get(`/api/database/table-data/${encodeURIComponent(tableName)}?${params}`);
+    const response = await api.get(`/api/database/table-data/${encodeURIComponent(tableName)}/?${params}`);
     // Table data uses a loose schema but we still validate the wrapper
     return response.data;
   },
 
   fetchDistinctValues: async (tableName: string, column: string): Promise<any> => {
-    const response = await api.post('/api/database/distinct-values', { tableName, column });
+    const response = await api.post('/api/database/distinct-values/', { tableName, column });
     return response.data;
   },
 
   insertRecord: async (tableName: string, data: Record<string, any>): Promise<any> => {
-    const response = await api.post(`/api/database/table-data/${encodeURIComponent(tableName)}`, data);
+    const response = await api.post(`/api/database/table-data/${encodeURIComponent(tableName)}/`, data);
     return response.data;
   },
 
   updateRecord: async (tableName: string, id: any, data: Record<string, any>): Promise<any> => {
-    const response = await api.put(`/api/database/table-data/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`, data);
+    const response = await api.put(`/api/database/table-data/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}/`, data);
     return response.data;
   },
 
   deleteRecord: async (tableName: string, id: any): Promise<any> => {
-    const response = await api.delete(`/api/database/table-data/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}`);
+    const response = await api.delete(`/api/database/table-data/${encodeURIComponent(tableName)}/${encodeURIComponent(id)}/`);
     return response.data;
   },
 
   advancedQuery: async (rpcName: string, params: object): Promise<any> => {
-    const response = await api.post('/api/database/advanced-query', { rpcName, params });
+    const response = await api.post('/api/database/advanced-query/', { rpcName, params });
     // For advanced query, we validate the presence of 'rows' matching our parity requirements
     const data = response.data;
     if (data.success && !data.rows && data.data) {

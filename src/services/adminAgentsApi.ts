@@ -1,4 +1,10 @@
-import api from './api-service';
+import {
+    adminAgentsGetAgentConfig, adminAgentsUpdateAgentConfig,
+    adminAgentsGetProfileConfigs, adminAgentsUpdateProfileConfig,
+    adminAgentsListAgentProviders, adminAgentsSetDefaultAgentProvider,
+    adminAgentsGetAnalytics, adminAgentsListBalances,
+    adminAgentsGrantCredits, adminAgentsResetTenantDaily, adminAgentsResetAllDaily,
+} from '@/client';
 
 /** Workspace Agent credit balance snapshot (admin / tenant views share this shape). */
 export interface AgentCreditBalance {
@@ -78,50 +84,50 @@ export type AnalyticsPeriod = '7d' | '30d' | '90d';
 
 export const adminAgentsApi = {
     getConfig: async (): Promise<AgentGlobalConfig> => {
-        const res = await api.get('/api/admin/agents/config');
-        return res.data;
+        const { data } = await adminAgentsGetAgentConfig({ throwOnError: true });
+        return data as unknown as AgentGlobalConfig;
     },
     updateConfig: async (payload: Partial<Pick<AgentGlobalConfig, 'enabled' | 'quota_exceeded_action'>>): Promise<{ config: AgentGlobalConfig }> => {
-        const res = await api.put('/api/admin/agents/config', payload);
-        return res.data;
+        const { data } = await adminAgentsUpdateAgentConfig({ body: payload as never, throwOnError: true });
+        return data as unknown as { config: AgentGlobalConfig };
     },
     getProfileConfigs: async (): Promise<{ profiles: Record<WorkspaceProfileName, AgentProfileConfig> }> => {
-        const res = await api.get('/api/admin/agents/profiles');
-        return res.data;
+        const { data } = await adminAgentsGetProfileConfigs({ throwOnError: true });
+        return data as unknown as { profiles: Record<WorkspaceProfileName, AgentProfileConfig> };
     },
     updateProfileConfig: async (
         useType: WorkspaceProfileName,
         payload: AgentProfileConfigUpdate,
     ): Promise<{ profile: AgentProfileConfig; use_type: WorkspaceProfileName }> => {
-        const res = await api.put(`/api/admin/agents/profiles/${useType}`, payload);
-        return res.data;
+        const { data } = await adminAgentsUpdateProfileConfig({ path: { use_type: useType }, body: payload as never, throwOnError: true });
+        return data as unknown as { profile: AgentProfileConfig; use_type: WorkspaceProfileName };
     },
     listProviders: async (): Promise<{ providers: AgentProvider[] }> => {
-        const res = await api.get('/api/admin/agents/providers');
-        return res.data;
+        const { data } = await adminAgentsListAgentProviders({ throwOnError: true });
+        return data as unknown as { providers: AgentProvider[] };
     },
     setDefaultProvider: async (providerId: string): Promise<{ provider: AgentProvider }> => {
-        const res = await api.post(`/api/admin/agents/providers/${providerId}/set-default`);
-        return res.data;
+        const { data } = await adminAgentsSetDefaultAgentProvider({ path: { provider_id: providerId }, throwOnError: true });
+        return data as unknown as { provider: AgentProvider };
     },
     getAnalytics: async (period: AnalyticsPeriod = '30d'): Promise<AgentAnalytics> => {
-        const res = await api.get('/api/admin/agents/analytics', { params: { period } });
-        return res.data;
+        const { data } = await adminAgentsGetAnalytics({ query: { period }, throwOnError: true });
+        return data as unknown as AgentAnalytics;
     },
     listBalances: async (): Promise<{ balances: AgentBalanceRow[] }> => {
-        const res = await api.get('/api/admin/agents/quota/balances');
-        return res.data;
+        const { data } = await adminAgentsListBalances({ throwOnError: true });
+        return data as unknown as { balances: AgentBalanceRow[] };
     },
     grantCredits: async (tenantId: string, daily: number, monthly: number): Promise<{ balance: AgentBalanceRow }> => {
-        const res = await api.post(`/api/admin/agents/quota/${tenantId}/grant`, { daily, monthly });
-        return res.data;
+        const { data } = await adminAgentsGrantCredits({ path: { tenant_id: tenantId }, body: { daily, monthly }, throwOnError: true });
+        return data as unknown as { balance: AgentBalanceRow };
     },
     resetTenantDaily: async (tenantId: string): Promise<{ balance: AgentBalanceRow }> => {
-        const res = await api.post(`/api/admin/agents/quota/${tenantId}/reset-daily`);
-        return res.data;
+        const { data } = await adminAgentsResetTenantDaily({ path: { tenant_id: tenantId }, throwOnError: true });
+        return data as unknown as { balance: AgentBalanceRow };
     },
     resetAllDaily: async (): Promise<{ reset_count: number }> => {
-        const res = await api.post('/api/admin/agents/quota/reset-daily');
-        return res.data;
+        const { data } = await adminAgentsResetAllDaily({ throwOnError: true });
+        return data as unknown as { reset_count: number };
     },
 };

@@ -125,6 +125,28 @@
         "title": "ActionBulkDeleteRequest",
         "type": "object"
       },
+      "AddTursoDatabaseResult": {
+        "properties": {
+          "database": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "AddTursoDatabaseResult",
+        "type": "object"
+      },
       "AddonCheckoutItem": {
         "properties": {
           "addon_type": {
@@ -1512,6 +1534,21 @@
         "title": "BotProtectionUpdateRequest",
         "type": "object"
       },
+      "BulkDeleteDraftsResult": {
+        "properties": {
+          "deleted": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted"
+          }
+        },
+        "title": "BulkDeleteDraftsResult",
+        "type": "object"
+      },
       "CacheBatchResult": {
         "properties": {
           "failed": {
@@ -1538,6 +1575,52 @@
           }
         },
         "title": "CacheBatchResult",
+        "type": "object"
+      },
+      "CancelMoveResult": {
+        "properties": {
+          "cancelled": {
+            "title": "Cancelled",
+            "type": "boolean"
+          },
+          "engine": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine"
+          }
+        },
+        "required": [
+          "cancelled"
+        ],
+        "title": "CancelMoveResult",
+        "type": "object"
+      },
+      "CheckSlugResult": {
+        "properties": {
+          "available": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available"
+          },
+          "error": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "title": "CheckSlugResult",
         "type": "object"
       },
       "CheckoutRequestBody": {
@@ -1587,6 +1670,46 @@
           "plan_slug"
         ],
         "title": "CheckoutRequestBody",
+        "type": "object"
+      },
+      "CloudflareStatusResult": {
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "deployed": {
+            "title": "Deployed",
+            "type": "boolean"
+          },
+          "url": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "worker_name": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Name"
+          }
+        },
+        "required": [
+          "deployed"
+        ],
+        "title": "CloudflareStatusResult",
         "type": "object"
       },
       "ColumnInfo": {
@@ -1808,6 +1931,73 @@
         "title": "ComponentThemeOut",
         "type": "object"
       },
+      "ConnectDenoResult": {
+        "properties": {
+          "account_name": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "auto_detected": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Detected"
+          },
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "org_slug": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Slug"
+          },
+          "org_uuid": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Org Uuid"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "user_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "ConnectDenoResult",
+        "type": "object"
+      },
       "ConnectRequest": {
         "description": "List existing workers for a provider account.",
         "properties": {
@@ -1893,6 +2083,100 @@
         "title": "CreateBatchPolicyRequest",
         "type": "object"
       },
+      "CreateCheckoutResult": {
+        "properties": {
+          "url": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "CreateCheckoutResult",
+        "type": "object"
+      },
+      "CreateInviteResult": {
+        "properties": {
+          "invite": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite"
+          },
+          "link": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Link"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "CreateInviteResult",
+        "type": "object"
+      },
+      "CreateNetlifySiteResult": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "url": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "CreateNetlifySiteResult",
+        "type": "object"
+      },
+      "CreatePlanResult": {
+        "properties": {
+          "plan": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          }
+        },
+        "title": "CreatePlanResult",
+        "type": "object"
+      },
       "CreatePolicyRequest": {
         "properties": {
           "checkExpression": {
@@ -1969,6 +2253,36 @@
         "title": "CreatePolicyRequest",
         "type": "object"
       },
+      "CreatePortalResult": {
+        "properties": {
+          "url": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "CreatePortalResult",
+        "type": "object"
+      },
+      "CreateProjectResult": {
+        "properties": {
+          "project": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          }
+        },
+        "title": "CreateProjectResult",
+        "type": "object"
+      },
       "CreateResourceRequest": {
         "properties": {
           "name": {
@@ -2035,6 +2349,82 @@
         "title": "CreateSchemaRequest",
         "type": "object"
       },
+      "CreateStorageProviderResult": {
+        "properties": {
+          "account_name": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Name"
+          },
+          "config": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config"
+          },
+          "created_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "provider": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "provider_account_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Account Id"
+          }
+        },
+        "required": [
+          "is_active"
+        ],
+        "title": "CreateStorageProviderResult",
+        "type": "object"
+      },
       "CreateTenantRequest": {
         "properties": {
           "name": {
@@ -2056,6 +2446,21 @@
           "name"
         ],
         "title": "CreateTenantRequest",
+        "type": "object"
+      },
+      "CreateTenantResult": {
+        "properties": {
+          "tenant": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "title": "CreateTenantResult",
         "type": "object"
       },
       "CreateTenantUserRequest": {
@@ -2096,6 +2501,45 @@
           "password"
         ],
         "title": "CreateTenantUserRequest",
+        "type": "object"
+      },
+      "CreateTenantUserResult": {
+        "properties": {
+          "user": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User"
+          }
+        },
+        "title": "CreateTenantUserResult",
+        "type": "object"
+      },
+      "CreateVercelProjectResult": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "CreateVercelProjectResult",
         "type": "object"
       },
       "DatabaseBatchResult": {
@@ -2192,6 +2636,46 @@
           "success"
         ],
         "title": "DatabaseConnectionResponse",
+        "type": "object"
+      },
+      "DeleteEdgeVectorResult": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "message": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "remote_deleted": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Deleted"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "DeleteEdgeVectorResult",
         "type": "object"
       },
       "DenoConnectRequest": {
@@ -2291,6 +2775,55 @@
           "provider_id"
         ],
         "title": "DeployRequest",
+        "type": "object"
+      },
+      "DeployToCloudflareResult": {
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "engine_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Id"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "url": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "worker_name": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Name"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "DeployToCloudflareResult",
         "type": "object"
       },
       "DiscoverRequest": {
@@ -4505,6 +5038,39 @@
         "title": "ExecutionStatus",
         "type": "string"
       },
+      "ExportEngineResult": {
+        "properties": {
+          "bundle": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bundle"
+          },
+          "engine_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Id"
+          },
+          "move_status": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move Status"
+          }
+        },
+        "title": "ExportEngineResult",
+        "type": "object"
+      },
       "ExportRequest": {
         "description": "Request body for ``POST /api/edge-engines/{engine_id}/export``.\n\nThe passphrase seals the bundle envelope and is its only transit protection for a\ncross-deployment move \u2014 treat it like a password. It is never stored.",
         "properties": {
@@ -4536,6 +5102,28 @@
           "confirm_secret"
         ],
         "title": "FinalizeMoveRequest",
+        "type": "object"
+      },
+      "FinalizeMoveResult": {
+        "properties": {
+          "engine_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Id"
+          },
+          "finalized": {
+            "title": "Finalized",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "finalized"
+        ],
+        "title": "FinalizeMoveResult",
         "type": "object"
       },
       "ForgotPasswordRequest": {
@@ -4915,6 +5503,517 @@
         "title": "GenericDeployRequest",
         "type": "object"
       },
+      "GetAgentCatalogueResult": {
+        "properties": {
+          "coreTools": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coretools"
+          },
+          "mcpServers": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcpservers"
+          },
+          "skills": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skills"
+          }
+        },
+        "title": "GetAgentCatalogueResult",
+        "type": "object"
+      },
+      "GetAgentConfigResult": {
+        "properties": {
+          "default_provider": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Provider"
+          },
+          "enabled": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "quota_exceeded_action": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Exceeded Action"
+          }
+        },
+        "title": "GetAgentConfigResult",
+        "type": "object"
+      },
+      "GetAnalyticsResult": {
+        "properties": {
+          "active_tenants": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Tenants"
+          },
+          "avg_credits_per_tenant": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Credits Per Tenant"
+          },
+          "daily_series": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Series"
+          },
+          "errors": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
+          },
+          "model_usage": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Usage"
+          },
+          "period": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period"
+          },
+          "provider_usage": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Usage"
+          },
+          "quota_exhausted": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quota Exhausted"
+          },
+          "top_tenants": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Tenants"
+          },
+          "total_consumed": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Consumed"
+          }
+        },
+        "title": "GetAnalyticsResult",
+        "type": "object"
+      },
+      "GetCatalogResult": {
+        "properties": {
+          "models_by_type": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Models By Type"
+          },
+          "provider": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "total": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "GetCatalogResult",
+        "type": "object"
+      },
+      "GetEngineLogsResult": {
+        "properties": {
+          "cached": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cached"
+          },
+          "logs": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logs"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "provider": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "title": "GetEngineLogsResult",
+        "type": "object"
+      },
+      "GetEngineSourceResult": {
+        "properties": {
+          "file_count": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Count"
+          },
+          "files": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "total_size": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Size"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "GetEngineSourceResult",
+        "type": "object"
+      },
+      "GetLimitRegistryResult": {
+        "properties": {
+          "limits": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limits"
+          }
+        },
+        "title": "GetLimitRegistryResult",
+        "type": "object"
+      },
+      "GetLogRetentionResult": {
+        "properties": {
+          "log_persistence": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Persistence"
+          },
+          "plan_tier": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Tier"
+          },
+          "prerequisites_met": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prerequisites Met"
+          },
+          "provider": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "retention_hours": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Hours"
+          }
+        },
+        "title": "GetLogRetentionResult",
+        "type": "object"
+      },
+      "GetMyAddonsResult": {
+        "properties": {
+          "addons": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addons"
+          }
+        },
+        "title": "GetMyAddonsResult",
+        "type": "object"
+      },
+      "GetMyPlanResult": {
+        "properties": {
+          "limits": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limits"
+          },
+          "plan": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          },
+          "usage": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          }
+        },
+        "title": "GetMyPlanResult",
+        "type": "object"
+      },
+      "GetMyTenantResult": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "tenant": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "title": "GetMyTenantResult",
+        "type": "object"
+      },
+      "GetProfileConfigsResult": {
+        "properties": {
+          "profiles": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profiles"
+          }
+        },
+        "title": "GetProfileConfigsResult",
+        "type": "object"
+      },
+      "GetPromptResult": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "messages": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messages"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "name"
+        ],
+        "title": "GetPromptResult",
+        "type": "object"
+      },
+      "GetSchemasResult": {
+        "properties": {
+          "providers": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          },
+          "schemas": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schemas"
+          }
+        },
+        "title": "GetSchemasResult",
+        "type": "object"
+      },
+      "GetTenantResult": {
+        "properties": {
+          "tenant": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "title": "GetTenantResult",
+        "type": "object"
+      },
+      "GetWorkspaceAgentTokenResult": {
+        "properties": {
+          "token": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token"
+          }
+        },
+        "title": "GetWorkspaceAgentTokenResult",
+        "type": "object"
+      },
       "GrantBody": {
         "properties": {
           "resource_id": {
@@ -4926,6 +6025,21 @@
           "resource_id"
         ],
         "title": "GrantBody",
+        "type": "object"
+      },
+      "GrantCreditsResult": {
+        "properties": {
+          "balance": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balance"
+          }
+        },
+        "title": "GrantCreditsResult",
         "type": "object"
       },
       "GrantRequest": {
@@ -4944,6 +6058,21 @@
         "title": "GrantRequest",
         "type": "object"
       },
+      "GrantTenantAddonResult": {
+        "properties": {
+          "addon": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addon"
+          }
+        },
+        "title": "GrantTenantAddonResult",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4955,6 +6084,19 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HandleWebhookResult": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "HandleWebhookResult",
         "type": "object"
       },
       "HealthStatus": {
@@ -5004,6 +6146,39 @@
         "title": "IPBlockRequest",
         "type": "object"
       },
+      "ImportEngineResult": {
+        "properties": {
+          "confirm_secret": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Secret"
+          },
+          "engine_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Id"
+          },
+          "summary": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          }
+        },
+        "title": "ImportEngineResult",
+        "type": "object"
+      },
       "ImportRequest": {
         "description": "Request body for ``POST /api/edge-engines/import``.\n\n``bundle`` is the ``FBENG1.\u2026`` string from an export; ``passphrase`` unseals it.\nOn success the response includes ``confirm_secret`` (S), which the caller pastes\nback into the source to finalize the move.",
         "properties": {
@@ -5046,6 +6221,81 @@
           "worker_name"
         ],
         "title": "InspectRequest",
+        "type": "object"
+      },
+      "InspectWorkerSecretsResult": {
+        "properties": {
+          "secrets": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secrets"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "InspectWorkerSecretsResult",
+        "type": "object"
+      },
+      "InspectWorkerSettingsResult": {
+        "properties": {
+          "settings": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "InspectWorkerSettingsResult",
+        "type": "object"
+      },
+      "InstallSkillResult": {
+        "properties": {
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "profileId": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profileid"
+          },
+          "skillId": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skillid"
+          }
+        },
+        "required": [
+          "installed"
+        ],
+        "title": "InstallSkillResult",
         "type": "object"
       },
       "InviteCreateBody": {
@@ -5175,6 +6425,436 @@
         "title": "LicenseValidationResponse",
         "type": "object"
       },
+      "ListAgentProvidersResult": {
+        "properties": {
+          "providers": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providers"
+          }
+        },
+        "title": "ListAgentProvidersResult",
+        "type": "object"
+      },
+      "ListApiKeysResult": {
+        "properties": {
+          "keys": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keys"
+          },
+          "total": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "ListApiKeysResult",
+        "type": "object"
+      },
+      "ListBalancesResult": {
+        "properties": {
+          "balances": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balances"
+          }
+        },
+        "title": "ListBalancesResult",
+        "type": "object"
+      },
+      "ListEnginesForProviderResult": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "engines": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engines"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "ListEnginesForProviderResult",
+        "type": "object"
+      },
+      "ListInvitesResult": {
+        "properties": {
+          "invites": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invites"
+          }
+        },
+        "title": "ListInvitesResult",
+        "type": "object"
+      },
+      "ListMcpServerToolsResult": {
+        "properties": {
+          "tools": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          },
+          "total": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "ListMcpServerToolsResult",
+        "type": "object"
+      },
+      "ListMcpServersResult": {
+        "properties": {
+          "mcpServers": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mcpservers"
+          },
+          "total": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "ListMcpServersResult",
+        "type": "object"
+      },
+      "ListPlansResult": {
+        "properties": {
+          "plans": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plans"
+          }
+        },
+        "title": "ListPlansResult",
+        "type": "object"
+      },
+      "ListProfileSkillsResult": {
+        "properties": {
+          "skills": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skills"
+          },
+          "total": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "ListProfileSkillsResult",
+        "type": "object"
+      },
+      "ListProfilesResult": {
+        "properties": {
+          "profiles": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profiles"
+          },
+          "total": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "ListProfilesResult",
+        "type": "object"
+      },
+      "ListProjectDatasourcesResult": {
+        "properties": {
+          "available": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Available"
+          },
+          "granted": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted"
+          }
+        },
+        "title": "ListProjectDatasourcesResult",
+        "type": "object"
+      },
+      "ListProjectMembersResult": {
+        "properties": {
+          "members": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Members"
+          }
+        },
+        "title": "ListProjectMembersResult",
+        "type": "object"
+      },
+      "ListProjectsResult": {
+        "properties": {
+          "projects": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projects"
+          }
+        },
+        "title": "ListProjectsResult",
+        "type": "object"
+      },
+      "ListPromptsResult": {
+        "properties": {
+          "prompts": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompts"
+          }
+        },
+        "title": "ListPromptsResult",
+        "type": "object"
+      },
+      "ListPublicPlansResult": {
+        "properties": {
+          "detailed": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detailed"
+          },
+          "plans": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plans"
+          }
+        },
+        "title": "ListPublicPlansResult",
+        "type": "object"
+      },
+      "ListResourcesResult": {
+        "properties": {
+          "resources": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resources"
+          }
+        },
+        "title": "ListResourcesResult",
+        "type": "object"
+      },
+      "ListSecurityEventsResult": {
+        "properties": {
+          "events": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Events"
+          },
+          "limit": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "offset": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Offset"
+          },
+          "total": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "ListSecurityEventsResult",
+        "type": "object"
+      },
+      "ListSkillsResult": {
+        "properties": {
+          "skills": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skills"
+          },
+          "total": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "ListSkillsResult",
+        "type": "object"
+      },
+      "ListTenantAddonsResult": {
+        "properties": {
+          "addons": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Addons"
+          }
+        },
+        "title": "ListTenantAddonsResult",
+        "type": "object"
+      },
+      "ListTenantsResult": {
+        "properties": {
+          "tenants": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenants"
+          }
+        },
+        "title": "ListTenantsResult",
+        "type": "object"
+      },
+      "ListToolsResult": {
+        "properties": {
+          "tools": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          }
+        },
+        "title": "ListToolsResult",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -5214,6 +6894,51 @@
           "password"
         ],
         "title": "LoginRequest",
+        "type": "object"
+      },
+      "McpRootResult": {
+        "properties": {
+          "capabilities": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "instructions": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instructions"
+          },
+          "name": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "protocolVersion": {
+            "title": "Protocolversion",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocolVersion",
+          "version"
+        ],
+        "title": "McpRootResult",
         "type": "object"
       },
       "McpServerCreate": {
@@ -5457,6 +7182,30 @@
           "message"
         ],
         "title": "MessageResponse",
+        "type": "object"
+      },
+      "MoveEngineToProjectEndpointResult": {
+        "properties": {
+          "engine_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Id"
+          },
+          "summary": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          }
+        },
+        "title": "MoveEngineToProjectEndpointResult",
         "type": "object"
       },
       "MoveToProjectRequest": {
@@ -7039,6 +8788,75 @@
         "title": "ProvisionBody",
         "type": "object"
       },
+      "PublishDraftBatchResult": {
+        "properties": {
+          "engineId": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engineid"
+          },
+          "error": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "message": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "name": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "results": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Results"
+          },
+          "success": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success"
+          },
+          "version": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "title": "PublishDraftBatchResult",
+        "type": "object"
+      },
       "PublishResponse": {
         "description": "Response from publishing a workflow",
         "properties": {
@@ -7408,6 +9226,106 @@
         "title": "RedisTestResult",
         "type": "object"
       },
+      "RemoteDeleteAck": {
+        "description": "Edge-resource delete: local ack + whether the remote resource was deleted.",
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "remote_deleted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Deleted"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "RemoteDeleteAck",
+        "type": "object"
+      },
+      "RemoveTursoDatabaseResult": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "detail",
+          "success"
+        ],
+        "title": "RemoveTursoDatabaseResult",
+        "type": "object"
+      },
+      "ResetAgentSettingsResult": {
+        "properties": {
+          "deleted": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "scope": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ResetAgentSettingsResult",
+        "type": "object"
+      },
+      "ResetAllDailyResult": {
+        "properties": {
+          "reset_count": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset Count"
+          }
+        },
+        "title": "ResetAllDailyResult",
+        "type": "object"
+      },
       "ResetPasswordRequest": {
         "properties": {
           "email": {
@@ -7475,6 +9393,36 @@
           "provider_account_id"
         ],
         "title": "ResetRolePasswordRequest",
+        "type": "object"
+      },
+      "ResetTenantDailyResult": {
+        "properties": {
+          "balance": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Balance"
+          }
+        },
+        "title": "ResetTenantDailyResult",
+        "type": "object"
+      },
+      "RevealApiKeyResult": {
+        "properties": {
+          "key": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          }
+        },
+        "title": "RevealApiKeyResult",
         "type": "object"
       },
       "RlsBulkDeleteRequest": {
@@ -7877,6 +9825,45 @@
         "title": "RotateSecretsKeyRequest",
         "type": "object"
       },
+      "RotationHistoryResult": {
+        "properties": {
+          "history": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History"
+          }
+        },
+        "title": "RotationHistoryResult",
+        "type": "object"
+      },
+      "SecurityEventsSummaryResult": {
+        "properties": {
+          "by_severity": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Severity"
+          },
+          "total": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "title": "SecurityEventsSummaryResult",
+        "type": "object"
+      },
       "SecuritySettings": {
         "description": "Security-log IP retention (Post-sprint 2.1 \u2014 configurable GDPR strict mode).\n\nControls how long security audit logs (`audit_logs`) keep the FULL client IP\nbefore it is purged to NULL (the anonymized /24 or /48 value is retained\nlong-term). Full IPs are needed short-term for new-IP login alerts.\n\nfull_ip_retention_days:\n  >0  = retain the full IP for this many days, then purge (default 30)\n   0  = anonymize immediately (strictest privacy; disables new-IP alerts)\n  -1  = retain indefinitely (legitimate-interest mode; never auto-purge)",
         "properties": {
@@ -7887,6 +9874,21 @@
           }
         },
         "title": "SecuritySettings",
+        "type": "object"
+      },
+      "SetDefaultAgentProviderResult": {
+        "properties": {
+          "provider": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "title": "SetDefaultAgentProviderResult",
         "type": "object"
       },
       "SetWorkspaceDefaultRequest": {
@@ -8383,6 +10385,90 @@
         "title": "StorageSignedUrlResult",
         "type": "object"
       },
+      "SuccessAck": {
+        "description": "Bare `{\"success\": bool}` acknowledgement.",
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "SuccessAck",
+        "type": "object"
+      },
+      "SuccessDataEnvelope": {
+        "description": "`{\"success\", \"data\"?, \"message\"?, \"error\"?}` envelope.",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "SuccessDataEnvelope",
+        "type": "object"
+      },
+      "SuccessMessageAck": {
+        "description": "`{\"success\", \"message\"?}` acknowledgement.",
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "SuccessMessageAck",
+        "type": "object"
+      },
       "SuccessMessageResponse": {
         "description": "`{\"success\": bool, \"message\"?: str}` \u2014 blocklist ops, reset, bot toggle.",
         "properties": {
@@ -8433,6 +10519,52 @@
           "message"
         ],
         "title": "SuccessResponse",
+        "type": "object"
+      },
+      "SyncBillingAddonsResult": {
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "synced_addons": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced Addons"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "SyncBillingAddonsResult",
+        "type": "object"
+      },
+      "SyncEngineLogsResult": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "synced": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synced"
+          }
+        },
+        "title": "SyncEngineLogsResult",
         "type": "object"
       },
       "TableDataEnvelope": {
@@ -8864,6 +10996,48 @@
         "title": "TemplateVariable",
         "type": "object"
       },
+      "TenantSecretsAuditLogsResult": {
+        "properties": {
+          "engine_id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Id"
+          },
+          "filters": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filters"
+          },
+          "is_shared": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Shared"
+          },
+          "logs": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logs"
+          }
+        },
+        "title": "TenantSecretsAuditLogsResult",
+        "type": "object"
+      },
       "TenantUpdateRequest": {
         "properties": {
           "name": {
@@ -9021,6 +11195,30 @@
         "title": "TestExecuteResponse",
         "type": "object"
       },
+      "TestMcpServerResult": {
+        "properties": {
+          "reachable": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reachable"
+          },
+          "serverId": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serverid"
+          }
+        },
+        "title": "TestMcpServerResult",
+        "type": "object"
+      },
       "TestQueueInline": {
         "properties": {
           "provider": {
@@ -9090,6 +11288,30 @@
         "title": "TestQueueResult",
         "type": "object"
       },
+      "TestTursoDatabaseResult": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "success": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success"
+          }
+        },
+        "title": "TestTursoDatabaseResult",
+        "type": "object"
+      },
       "ToggleActiveRequest": {
         "properties": {
           "is_active": {
@@ -9101,6 +11323,30 @@
           "is_active"
         ],
         "title": "ToggleActiveRequest",
+        "type": "object"
+      },
+      "ToggleDraftActiveResult": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_active": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "title": "ToggleDraftActiveResult",
         "type": "object"
       },
       "ToggleRLSRequest": {
@@ -9140,6 +11386,144 @@
           "token"
         ],
         "title": "TursoDatabaseEntry",
+        "type": "object"
+      },
+      "UpdateAgentConfigResult": {
+        "properties": {
+          "config": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config"
+          }
+        },
+        "title": "UpdateAgentConfigResult",
+        "type": "object"
+      },
+      "UpdateAgentSettingsResult": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "scope": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "UpdateAgentSettingsResult",
+        "type": "object"
+      },
+      "UpdateEngineSourceResult": {
+        "properties": {
+          "file_count": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Count"
+          },
+          "files_saved": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files Saved"
+          },
+          "is_forked": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Forked"
+          },
+          "modified_core_files": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified Core Files"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "UpdateEngineSourceResult",
+        "type": "object"
+      },
+      "UpdateLogConfigResult": {
+        "properties": {
+          "log_persistence": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Persistence"
+          }
+        },
+        "title": "UpdateLogConfigResult",
+        "type": "object"
+      },
+      "UpdateMyTenantResult": {
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "tenant": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "UpdateMyTenantResult",
+        "type": "object"
+      },
+      "UpdatePlanResult": {
+        "properties": {
+          "plan": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          }
+        },
+        "title": "UpdatePlanResult",
         "type": "object"
       },
       "UpdatePolicyRequest": {
@@ -9203,6 +11587,45 @@
         "title": "UpdatePolicyRequest",
         "type": "object"
       },
+      "UpdateProfileConfigResult": {
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "use_type": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Type"
+          }
+        },
+        "title": "UpdateProfileConfigResult",
+        "type": "object"
+      },
+      "UpdateProjectMetaResult": {
+        "properties": {
+          "project": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          }
+        },
+        "title": "UpdateProjectMetaResult",
+        "type": "object"
+      },
       "UpdateTenantRequest": {
         "properties": {
           "name": {
@@ -9240,6 +11663,28 @@
           }
         },
         "title": "UpdateTenantRequest",
+        "type": "object"
+      },
+      "UpdateTenantResult": {
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "tenant": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "UpdateTenantResult",
         "type": "object"
       },
       "UserPayload": {
@@ -9664,6 +12109,28 @@
         "title": "VectorSearchParams",
         "type": "object"
       },
+      "VectorSearchResult": {
+        "properties": {
+          "results": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Results"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "VectorSearchResult",
+        "type": "object"
+      },
       "VectorTestConnectionRequest": {
         "properties": {
           "provider": {
@@ -9789,6 +12256,28 @@
           "embedding"
         ],
         "title": "VectorUpsertParams",
+        "type": "object"
+      },
+      "VectorUpsertResult": {
+        "properties": {
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          },
+          "upserted": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upserted"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "title": "VectorUpsertResult",
         "type": "object"
       },
       "VerifyRLSRequest": {
@@ -10549,9 +13038,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Actions Bulk Delete Drafts",
-                  "type": "object"
+                  "$ref": "#/components/schemas/BulkDeleteDraftsResult"
                 }
               }
             },
@@ -10736,9 +13223,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Actions Toggle Draft Active",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ToggleDraftActiveResult"
                 }
               }
             },
@@ -10836,9 +13321,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Actions Publish Draft Batch",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PublishDraftBatchResult"
                 }
               }
             },
@@ -10954,9 +13437,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Actions Toggle Target Active",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessMessageAck"
                 }
               }
             },
@@ -11010,9 +13491,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Actions Rollback Automation To Version",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -11173,9 +13652,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Actions List Automation Versions",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -11227,9 +13704,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Actions Create Manual Automation Version",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -11282,9 +13757,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Actions Get Automation Version Detail",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -11896,9 +14369,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents Get Analytics",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetAnalyticsResult"
                 }
               }
             },
@@ -11930,9 +14401,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents Get Agent Config",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetAgentConfigResult"
                 }
               }
             },
@@ -11962,9 +14431,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents Update Agent Config",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateAgentConfigResult"
                 }
               }
             },
@@ -11997,9 +14464,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents Get Profile Configs",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetProfileConfigsResult"
                 }
               }
             },
@@ -12043,9 +14508,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents Update Profile Config",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateProfileConfigResult"
                 }
               }
             },
@@ -12078,9 +14541,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents List Agent Providers",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListAgentProvidersResult"
                 }
               }
             },
@@ -12114,9 +14575,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents Set Default Agent Provider",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SetDefaultAgentProviderResult"
                 }
               }
             },
@@ -12148,9 +14607,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents List Balances",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListBalancesResult"
                 }
               }
             },
@@ -12173,9 +14630,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents Reset All Daily",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ResetAllDailyResult"
                 }
               }
             },
@@ -12218,9 +14673,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents Grant Credits",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GrantCreditsResult"
                 }
               }
             },
@@ -12263,9 +14716,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Agents Reset Tenant Daily",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ResetTenantDailyResult"
                 }
               }
             },
@@ -12298,9 +14749,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Plans Sync Billing Addons",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SyncBillingAddonsResult"
                 }
               }
             },
@@ -12367,9 +14816,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Plans List Plans",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListPlansResult"
                 }
               }
             },
@@ -12399,9 +14846,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Plans Create Plan",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreatePlanResult"
                 }
               }
             },
@@ -12433,9 +14878,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Plans Get Limit Registry",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetLimitRegistryResult"
                 }
               }
             },
@@ -12468,9 +14911,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Plans Delete Plan",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessMessageAck"
                 }
               }
             },
@@ -12521,9 +14962,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Plans Update Plan",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdatePlanResult"
                 }
               }
             },
@@ -12566,9 +15005,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Plans List Tenant Addons",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListTenantAddonsResult"
                 }
               }
             },
@@ -12609,9 +15046,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Plans Grant Tenant Addon",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GrantTenantAddonResult"
                 }
               }
             },
@@ -12654,9 +15089,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Admin Plans Revoke Tenant Addon",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessAck"
                 }
               }
             },
@@ -12689,9 +15122,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenant Admin List Tenants",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListTenantsResult"
                 }
               }
             },
@@ -12722,9 +15153,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenant Admin Create Tenant",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreateTenantResult"
                 }
               }
             },
@@ -12768,9 +15197,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenant Admin Delete Tenant",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessMessageAck"
                 }
               }
             },
@@ -12812,9 +15239,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenant Admin Get Tenant",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetTenantResult"
                 }
               }
             },
@@ -12866,9 +15291,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenant Admin Update Tenant",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateTenantResult"
                 }
               }
             },
@@ -12922,9 +15345,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenant Admin Create Tenant User",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreateTenantUserResult"
                 }
               }
             },
@@ -12969,9 +15390,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Integrations Get Agent Catalogue",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetAgentCatalogueResult"
                 }
               }
             },
@@ -13014,9 +15433,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Integrations List Profile Skills",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListProfileSkillsResult"
                 }
               }
             },
@@ -13067,9 +15484,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Integrations Install Skill",
-                  "type": "object"
+                  "$ref": "#/components/schemas/InstallSkillResult"
                 }
               }
             },
@@ -13165,9 +15580,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Integrations List Skills",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListSkillsResult"
                 }
               }
             },
@@ -13438,9 +15851,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Mcp Mcp Root",
-                  "type": "object"
+                  "$ref": "#/components/schemas/McpRootResult"
                 }
               }
             },
@@ -13484,9 +15895,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Mcp Get Prompt",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetPromptResult"
                 }
               }
             },
@@ -13530,9 +15939,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Mcp List Prompts",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListPromptsResult"
                 }
               }
             },
@@ -13576,9 +15983,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Mcp List Resources",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListResourcesResult"
                 }
               }
             },
@@ -13667,9 +16072,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Mcp List Tools",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListToolsResult"
                 }
               }
             },
@@ -13714,9 +16117,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Settings Reset Agent Settings",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ResetAgentSettingsResult"
                 }
               }
             },
@@ -13778,9 +16179,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Settings Update Agent Settings",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateAgentSettingsResult"
                 }
               }
             },
@@ -13813,9 +16212,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Auth Forms List Auth Forms",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -13846,9 +16243,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Auth Forms Create Auth Form",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -13881,9 +16276,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Auth Forms Get Primary Auth Form",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -13917,9 +16310,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Auth Forms Delete Auth Form",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -13961,9 +16352,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Auth Forms Get Auth Form",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -14015,9 +16404,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Auth Forms Update Auth Form",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -14061,9 +16448,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Auth Forms Set Primary Auth Form",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessDataEnvelope"
                 }
               }
             },
@@ -14804,9 +17189,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Billing Create Checkout",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreateCheckoutResult"
                 }
               }
             },
@@ -14849,9 +17232,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Billing Create Portal",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreatePortalResult"
                 }
               }
             },
@@ -14895,9 +17276,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Billing Handle Webhook",
-                  "type": "object"
+                  "$ref": "#/components/schemas/HandleWebhookResult"
                 }
               }
             },
@@ -14985,9 +17364,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Cloudflare Deploy Deploy To Cloudflare",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DeployToCloudflareResult"
                 }
               }
             },
@@ -15075,9 +17452,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Cloudflare Inspector Inspect Worker Secrets",
-                  "type": "object"
+                  "$ref": "#/components/schemas/InspectWorkerSecretsResult"
                 }
               }
             },
@@ -15120,9 +17495,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Cloudflare Inspector Inspect Worker Settings",
-                  "type": "object"
+                  "$ref": "#/components/schemas/InspectWorkerSettingsResult"
                 }
               }
             },
@@ -15165,9 +17538,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Cloudflare Deploy Cloudflare Status",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CloudflareStatusResult"
                 }
               }
             },
@@ -15210,9 +17581,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Cloudflare Deploy Teardown Cloudflare",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessMessageAck"
                 }
               }
             },
@@ -16334,9 +18703,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Deno Deploy Connect Deno",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ConnectDenoResult"
                 }
               }
             },
@@ -16387,9 +18754,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Api Keys List Api Keys",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListApiKeysResult"
                 }
               }
             },
@@ -16567,9 +18932,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Api Keys Reveal Api Key",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RevealApiKeyResult"
                 }
               }
             },
@@ -16777,9 +19140,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Caches Delete Edge Cache",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RemoteDeleteAck"
                 }
               }
             },
@@ -17218,9 +19579,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Databases Delete Edge Database",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RemoteDeleteAck"
                 }
               }
             },
@@ -17790,9 +20149,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Import Engine",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ImportEngineResult"
                 }
               }
             },
@@ -17978,9 +20335,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Agent Profiles List Profiles",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListProfilesResult"
                 }
               }
             },
@@ -18250,9 +20605,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Tenant Secrets Audit Logs",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TenantSecretsAuditLogsResult"
                 }
               }
             },
@@ -18296,9 +20649,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Cancel Move",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CancelMoveResult"
                 }
               }
             },
@@ -18352,9 +20703,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Export Engine",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ExportEngineResult"
                 }
               }
             },
@@ -18408,9 +20757,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Finalize Move",
-                  "type": "object"
+                  "$ref": "#/components/schemas/FinalizeMoveResult"
                 }
               }
             },
@@ -18892,9 +21239,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Get Engine Logs",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetEngineLogsResult"
                 }
               }
             },
@@ -18950,9 +21295,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Update Log Config",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateLogConfigResult"
                 }
               }
             },
@@ -18996,9 +21339,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Get Log Retention",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetLogRetentionResult"
                 }
               }
             },
@@ -19042,9 +21383,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Sync Engine Logs",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SyncEngineLogsResult"
                 }
               }
             },
@@ -19098,9 +21437,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Move Engine To Project Endpoint",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MoveEngineToProjectEndpointResult"
                 }
               }
             },
@@ -19358,9 +21695,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Rotation History",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RotationHistoryResult"
                 }
               }
             },
@@ -19450,9 +21785,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Get Engine Source",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetEngineSourceResult"
                 }
               }
             },
@@ -19506,9 +21839,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Engines Update Engine Source",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateEngineSourceResult"
                 }
               }
             },
@@ -19735,9 +22066,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Gpu Get Catalog",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetCatalogResult"
                 }
               }
             },
@@ -19770,9 +22099,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Gpu Get Schemas",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetSchemasResult"
                 }
               }
             },
@@ -20303,9 +22630,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Providers Get Workspace Agent Token",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetWorkspaceAgentTokenResult"
                 }
               }
             },
@@ -20382,9 +22707,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Providers List Engines For Provider",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListEnginesForProviderResult"
                 }
               }
             },
@@ -20438,9 +22761,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Providers Add Turso Database",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AddTursoDatabaseResult"
                 }
               }
             },
@@ -20493,9 +22814,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Providers Remove Turso Database",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RemoveTursoDatabaseResult"
                 }
               }
             },
@@ -20548,9 +22867,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Providers Test Turso Database",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TestTursoDatabaseResult"
                 }
               }
             },
@@ -20935,9 +23252,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Queues Delete Edge Queue",
-                  "type": "object"
+                  "$ref": "#/components/schemas/RemoteDeleteAck"
                 }
               }
             },
@@ -21243,9 +23558,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Edge Vectors Delete Edge Vector",
-                  "type": "object"
+                  "$ref": "#/components/schemas/DeleteEdgeVectorResult"
                 }
               }
             },
@@ -21394,9 +23707,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Integrations List Mcp Servers",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListMcpServersResult"
                 }
               }
             },
@@ -21613,9 +23924,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Integrations Test Mcp Server",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TestMcpServerResult"
                 }
               }
             },
@@ -21658,9 +23967,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Agent Integrations List Mcp Server Tools",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListMcpServerToolsResult"
                 }
               }
             },
@@ -22491,9 +24798,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Plans List Public Plans",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListPublicPlansResult"
                 }
               }
             },
@@ -22625,9 +24930,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects List Projects",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListProjectsResult"
                 }
               }
             },
@@ -22658,9 +24961,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects Create Project",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreateProjectResult"
                 }
               }
             },
@@ -22704,9 +25005,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects Delete Project",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessAck"
                 }
               }
             },
@@ -22758,9 +25057,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects Update Project Meta",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateProjectMetaResult"
                 }
               }
             },
@@ -22813,9 +25110,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects Grant Connected Account",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessAck"
                 }
               }
             },
@@ -22867,9 +25162,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects Revoke Connected Account",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessAck"
                 }
               }
             },
@@ -22913,9 +25206,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects List Project Datasources",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListProjectDatasourcesResult"
                 }
               }
             },
@@ -22966,9 +25257,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects Grant Datasource",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessAck"
                 }
               }
             },
@@ -23020,9 +25309,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects Revoke Datasource",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessAck"
                 }
               }
             },
@@ -23066,9 +25353,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects List Project Members",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListProjectMembersResult"
                 }
               }
             },
@@ -23120,9 +25405,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects Add Project Member",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessAck"
                 }
               }
             },
@@ -23175,9 +25458,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Projects Remove Project Member",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessAck"
                 }
               }
             },
@@ -23329,9 +25610,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Security Events List Security Events",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListSecurityEventsResult"
                 }
               }
             },
@@ -23364,9 +25643,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Security Events Security Events Summary",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SecurityEventsSummaryResult"
                 }
               }
             },
@@ -24628,9 +26905,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Storage Create Netlify Site",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreateNetlifySiteResult"
                 }
               }
             },
@@ -24701,9 +26976,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Storage Create Storage Provider",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreateStorageProviderResult"
                 }
               }
             },
@@ -25022,9 +27295,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Storage Create Vercel Project",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreateVercelProjectResult"
                 }
               }
             },
@@ -25068,9 +27339,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenants Check Slug",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CheckSlugResult"
                 }
               }
             },
@@ -25103,9 +27372,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenants Get My Tenant",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetMyTenantResult"
                 }
               }
             },
@@ -25136,9 +27403,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenants Update My Tenant",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateMyTenantResult"
                 }
               }
             },
@@ -25171,9 +27436,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenants Get My Addons",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetMyAddonsResult"
                 }
               }
             },
@@ -25196,9 +27459,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenants List Invites",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ListInvitesResult"
                 }
               }
             },
@@ -25229,9 +27490,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenants Create Invite",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CreateInviteResult"
                 }
               }
             },
@@ -25275,9 +27534,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenants Revoke Invite",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SuccessAck"
                 }
               }
             },
@@ -25310,9 +27567,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Tenants Get My Plan",
-                  "type": "object"
+                  "$ref": "#/components/schemas/GetMyPlanResult"
                 }
               }
             },
@@ -25737,9 +27992,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Vector Vector Search",
-                  "type": "object"
+                  "$ref": "#/components/schemas/VectorSearchResult"
                 }
               }
             },
@@ -25782,9 +28035,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Vector Vector Upsert",
-                  "type": "object"
+                  "$ref": "#/components/schemas/VectorUpsertResult"
                 }
               }
             },

@@ -16,6 +16,7 @@ from ..schemas.edge_providers import (
 from ..services.provider_tester import test_provider_connection
 from ..services.provider_discovery import discover_resources as _discover_resources, create_resource
 
+from ..schemas.op_responses import AddTursoDatabaseResult, GetWorkspaceAgentTokenResult, ListEnginesForProviderResult, RemoveTursoDatabaseResult, TestTursoDatabaseResult
 router = APIRouter(prefix="/api/edge-providers", tags=["edge-providers"])
 
 
@@ -63,7 +64,7 @@ def _provider_response(provider: EdgeProviderAccount) -> dict:
 # Workspace Agent — Stateless JWT Hydration
 # =============================================================================
 
-@router.get("/workspace-agent-token", response_model=dict[str, Any])
+@router.get("/workspace-agent-token", response_model=GetWorkspaceAgentTokenResult)
 def get_workspace_agent_token(db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Generate a stateless JWT for the Workspace Agent using the active GPU provider."""
     from jose import jwt
@@ -560,7 +561,7 @@ async def create_resource_by_account(
 # Turso — Manual Database Registry (CRUD within a Turso provider account)
 # =============================================================================
 
-@router.post("/{account_id}/turso-databases", response_model=dict[str, Any])
+@router.post("/{account_id}/turso-databases", response_model=AddTursoDatabaseResult)
 async def add_turso_database(
     account_id: str,
     payload: TursoDatabaseEntry,
@@ -609,7 +610,7 @@ async def add_turso_database(
     return {"success": True, "database": {k: v for k, v in new_entry.items() if k != "token"}}
 
 
-@router.delete("/{account_id}/turso-databases/{db_id}", response_model=dict[str, Any])
+@router.delete("/{account_id}/turso-databases/{db_id}", response_model=RemoveTursoDatabaseResult)
 async def remove_turso_database(
     account_id: str,
     db_id: str,
@@ -643,7 +644,7 @@ async def remove_turso_database(
     return {"success": True, "detail": "Database removed"}
 
 
-@router.post("/{account_id}/turso-databases/{db_id}/test", response_model=dict[str, Any])
+@router.post("/{account_id}/turso-databases/{db_id}/test", response_model=TestTursoDatabaseResult)
 async def test_turso_database(
     account_id: str,
     db_id: str,
@@ -748,7 +749,7 @@ async def list_account_tables(account_id: str, db: Session = Depends(get_db), ct
 # List Engines — generic multi-provider engine listing
 # =============================================================================
 
-@router.post("/{account_id}/list-engines", response_model=dict[str, Any])
+@router.post("/{account_id}/list-engines", response_model=ListEnginesForProviderResult)
 async def list_engines_for_provider(account_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List engines/functions/apps from a connected edge provider.
 

@@ -25,6 +25,7 @@ from ..services.edge_client import resolve_engine_url
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
 
+from ..schemas.op_responses import GetCatalogResult, GetSchemasResult
 router = APIRouter(prefix="/api/edge-gpu", tags=["edge-gpu"])
 
 
@@ -112,7 +113,7 @@ def _serialize(model: EdgeGPUModel) -> dict:
 # Catalog — provider-agnostic model discovery
 # =============================================================================
 
-@router.get("/catalog", response_model=dict[str, Any])
+@router.get("/catalog", response_model=GetCatalogResult)
 async def get_catalog(
     provider_id: str,
     provider: str = "workers_ai",
@@ -178,7 +179,7 @@ async def get_catalog(
     }
 
 
-@router.get("/schemas", response_model=dict[str, Any])
+@router.get("/schemas", response_model=GetSchemasResult)
 async def get_schemas():
     """Return all available I/O schemas by task type."""
     return {"schemas": IO_SCHEMAS, "providers": available_providers()}

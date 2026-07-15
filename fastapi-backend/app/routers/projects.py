@@ -23,6 +23,8 @@ from app.models.models import (
 from app.middleware.tenant_context import TenantContext, require_tenant_context
 from app.services.plan_limits import check_quota
 
+from ..schemas.op_responses import CreateProjectResult, ListProjectDatasourcesResult, ListProjectMembersResult, ListProjectsResult, UpdateProjectMetaResult
+from ..schemas.common import SuccessAck
 router = APIRouter()
 
 
@@ -90,7 +92,7 @@ def _accessible_project_ids(db: Session, ctx: TenantContext) -> Optional[set]:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("", response_model=dict[str, Any])
+@router.get("", response_model=ListProjectsResult)
 async def list_projects(ctx: TenantContext = Depends(require_tenant_context)):
     """List projects the current user can access."""
     if ctx.is_master or not ctx.tenant_id:
@@ -107,7 +109,7 @@ async def list_projects(ctx: TenantContext = Depends(require_tenant_context)):
         db.close()
 
 
-@router.post("", status_code=201, response_model=dict[str, Any])
+@router.post("", status_code=201, response_model=CreateProjectResult)
 async def create_project(
     body: ProjectCreateBody,
     ctx: TenantContext = Depends(require_tenant_context),
@@ -145,7 +147,7 @@ async def create_project(
         db.close()
 
 
-@router.patch("/{project_id}", response_model=dict[str, Any])
+@router.patch("/{project_id}", response_model=UpdateProjectMetaResult)
 async def update_project_meta(
     project_id: str,
     body: ProjectUpdateBody,
@@ -178,7 +180,7 @@ async def update_project_meta(
         db.close()
 
 
-@router.delete("/{project_id}", response_model=dict[str, Any])
+@router.delete("/{project_id}", response_model=SuccessAck)
 async def delete_project(
     project_id: str,
     ctx: TenantContext = Depends(require_tenant_context),
@@ -236,7 +238,7 @@ def _require_project(db: Session, project_id: str, ctx: TenantContext) -> Projec
     return p
 
 
-@router.get("/{project_id}/members", response_model=dict[str, Any])
+@router.get("/{project_id}/members", response_model=ListProjectMembersResult)
 async def list_project_members(
     project_id: str,
     ctx: TenantContext = Depends(require_tenant_context),
@@ -275,7 +277,7 @@ async def list_project_members(
         db.close()
 
 
-@router.post("/{project_id}/members", status_code=201, response_model=dict[str, Any])
+@router.post("/{project_id}/members", status_code=201, response_model=SuccessAck)
 async def add_project_member(
     project_id: str,
     body: ProjectMemberBody,
@@ -323,7 +325,7 @@ async def add_project_member(
         db.close()
 
 
-@router.delete("/{project_id}/members/{user_id}", response_model=dict[str, Any])
+@router.delete("/{project_id}/members/{user_id}", response_model=SuccessAck)
 async def remove_project_member(
     project_id: str,
     user_id: str,
@@ -393,7 +395,7 @@ def _resource_belongs_to_tenant(db: Session, model, resource_id: str, tenant_id:
 
 # ---- Datasources (shareable, per-project capped on grant) ----
 
-@router.get("/{project_id}/datasources", response_model=dict[str, Any])
+@router.get("/{project_id}/datasources", response_model=ListProjectDatasourcesResult)
 async def list_project_datasources(
     project_id: str,
     ctx: TenantContext = Depends(require_tenant_context),
@@ -426,7 +428,7 @@ async def list_project_datasources(
         db.close()
 
 
-@router.post("/{project_id}/datasources", status_code=201, response_model=dict[str, Any])
+@router.post("/{project_id}/datasources", status_code=201, response_model=SuccessAck)
 async def grant_datasource(project_id: str, body: GrantBody, ctx: TenantContext = Depends(require_tenant_context)):
     from app.services.sync.models.datasource import Datasource
     _require_manage(ctx)
@@ -452,7 +454,7 @@ async def grant_datasource(project_id: str, body: GrantBody, ctx: TenantContext 
         db.close()
 
 
-@router.delete("/{project_id}/datasources/{datasource_id}", response_model=dict[str, Any])
+@router.delete("/{project_id}/datasources/{datasource_id}", response_model=SuccessAck)
 async def revoke_datasource(project_id: str, datasource_id: str, ctx: TenantContext = Depends(require_tenant_context)):
     _require_manage(ctx)
     db = SessionLocal()
@@ -467,7 +469,7 @@ async def revoke_datasource(project_id: str, datasource_id: str, ctx: TenantCont
 
 # ---- Connected accounts (shareable, per-tenant — grant is free) ----
 
-@router.post("/{project_id}/connected-accounts", status_code=201, response_model=dict[str, Any])
+@router.post("/{project_id}/connected-accounts", status_code=201, response_model=SuccessAck)
 async def grant_connected_account(project_id: str, body: GrantBody, ctx: TenantContext = Depends(require_tenant_context)):
     from app.models.models import EdgeProviderAccount
     _require_manage(ctx)
@@ -492,7 +494,7 @@ async def grant_connected_account(project_id: str, body: GrantBody, ctx: TenantC
         db.close()
 
 
-@router.delete("/{project_id}/connected-accounts/{account_id}", response_model=dict[str, Any])
+@router.delete("/{project_id}/connected-accounts/{account_id}", response_model=SuccessAck)
 async def revoke_connected_account(project_id: str, account_id: str, ctx: TenantContext = Depends(require_tenant_context)):
     _require_manage(ctx)
     db = SessionLocal()

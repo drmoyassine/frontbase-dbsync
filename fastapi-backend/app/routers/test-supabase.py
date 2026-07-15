@@ -3,12 +3,13 @@ from typing import Any
 from app.models.schemas import *
 from app.database.utils import get_db
 
+from ..schemas.common import LegacyEndpointNotice
 router = APIRouter(prefix="/test-supabase", tags=["test-supabase"])
 
 # This endpoint was automatically generated from Express.js
 # Original schema: test-supabase
 
-@router.post("/test-supabase", response_model=dict[str, Any])
+@router.post("/test-supabase", response_model=LegacyEndpointNotice)
 async def post_test_supabase(
     request: Any = None,
     db = Depends(get_db)

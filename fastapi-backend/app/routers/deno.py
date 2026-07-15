@@ -21,6 +21,7 @@ from ..core.security import decrypt_credentials, encrypt_credentials
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
 
+from ..schemas.op_responses import ConnectDenoResult
 router = APIRouter(prefix="/api/deno", tags=["Deno Deploy"])
 
 
@@ -28,7 +29,7 @@ class DenoConnectRequest(BaseModel):
     provider_id: str
 
 
-@router.post("/connect", response_model=dict[str, Any])
+@router.post("/connect", response_model=ConnectDenoResult)
 async def connect_deno(payload: DenoConnectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Auto-detect Deno org info using the personal (ddp_) token.
     ...

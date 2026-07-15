@@ -33,6 +33,7 @@ from app.models.models import Project
 
 logger = logging.getLogger(__name__)
 
+from ..schemas.op_responses import GetPromptResult, ListPromptsResult, ListResourcesResult, ListToolsResult, McpRootResult
 router = APIRouter(prefix="/api/agent/mcp", tags=["Agent MCP"])
 
 
@@ -86,7 +87,7 @@ def _tool_to_mcp_schema(tool_def: dict) -> dict:
     }
 
 
-@router.get("/{profile_slug}", response_model=dict[str, Any])
+@router.get("/{profile_slug}", response_model=McpRootResult)
 async def mcp_root(profile_slug: str, request: Request):
     """MCP server discovery endpoint.
 
@@ -116,7 +117,7 @@ async def mcp_root(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/tools/list", response_model=dict[str, Any])
+@router.post("/{profile_slug}/tools/list", response_model=ListToolsResult)
 async def list_tools(profile_slug: str, request: Request):
     """List all tools available on this agent profile.
 
@@ -268,7 +269,7 @@ async def call_tool(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/resources/list", response_model=dict[str, Any])
+@router.post("/{profile_slug}/resources/list", response_model=ListResourcesResult)
 async def list_resources(profile_slug: str, request: Request):
     """List available MCP resources.
 
@@ -325,7 +326,7 @@ async def list_resources(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/prompts/list", response_model=dict[str, Any])
+@router.post("/{profile_slug}/prompts/list", response_model=ListPromptsResult)
 async def list_prompts(profile_slug: str, request: Request):
     """List available prompts (system prompts)."""
     db = SessionLocal()
@@ -352,7 +353,7 @@ async def list_prompts(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/prompts/get", response_model=dict[str, Any])
+@router.post("/{profile_slug}/prompts/get", response_model=GetPromptResult)
 async def get_prompt(profile_slug: str, request: Request):
     """Get a specific prompt by name."""
     db = SessionLocal()

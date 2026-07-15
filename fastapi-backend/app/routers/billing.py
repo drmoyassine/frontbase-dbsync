@@ -13,6 +13,7 @@ from app.models.models import Tenant, Plan
 from app.middleware.tenant_context import TenantContext, require_tenant_context
 from app.services.billing_gateway import BillingGateway, get_billing_gateway
 
+from ..schemas.op_responses import CreateCheckoutResult, CreatePortalResult, HandleWebhookResult
 router = APIRouter()
 
 # ---------------------------------------------------------------------------
@@ -36,7 +37,7 @@ class PortalRequestBody(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/checkout", response_model=dict[str, Any])
+@router.post("/checkout", response_model=CreateCheckoutResult)
 async def create_checkout(
     body: CheckoutRequestBody,
     db: Session = Depends(get_db),
@@ -76,7 +77,7 @@ async def create_checkout(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/portal", response_model=dict[str, Any])
+@router.post("/portal", response_model=CreatePortalResult)
 async def create_portal(
     body: PortalRequestBody,
     db: Session = Depends(get_db),
@@ -105,7 +106,7 @@ async def create_portal(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/webhooks/{provider}", response_model=dict[str, Any])
+@router.post("/webhooks/{provider}", response_model=HandleWebhookResult)
 async def handle_webhook(
     provider: str,
     request: Request,

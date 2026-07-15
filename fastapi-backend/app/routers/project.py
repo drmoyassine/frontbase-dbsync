@@ -12,6 +12,7 @@ from pathlib import Path
 import httpx
 import json
 
+from ..schemas.op_responses import GetInternalCredsResult
 router = APIRouter(prefix="/api/project", tags=["project"])
 
 # Static assets directory for branding files (favicon, logos, etc.)
@@ -181,7 +182,7 @@ async def upload_branding_asset(
     })
 
 
-@router.get("/internal/creds/", include_in_schema=False, response_model=dict[str, Any])
+@router.get("/internal/creds/", include_in_schema=False, response_model=GetInternalCredsResult)
 async def get_internal_creds(
     db: Session = Depends(get_db),
     ctx: TenantContext | None = Depends(get_tenant_context),

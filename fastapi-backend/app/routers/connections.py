@@ -3,12 +3,13 @@ from typing import Any
 from app.models.schemas import *
 from app.database.utils import get_db
 
+from ..schemas.common import LegacyEndpointNotice
 router = APIRouter(prefix="/connections", tags=["connections"])
 
 # This endpoint was automatically generated from Express.js
 # Original schema: connections
 
-@router.get("/connections/", response_model=dict[str, Any])
+@router.get("/connections/", response_model=LegacyEndpointNotice)
 async def get_connections(
     request: Any = None,
     db = Depends(get_db)

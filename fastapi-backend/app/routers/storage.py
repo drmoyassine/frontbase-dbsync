@@ -22,6 +22,7 @@ from app.services.storage_service import get_storage_adapter
 from app.middleware.tenant_context import TenantContext, get_tenant_context
 from app.database.utils import get_project
 
+from ..schemas.op_responses import CreateNetlifySiteResult, CreateStorageProviderResult, CreateVercelProjectResult
 router = APIRouter(prefix="/api/storage", tags=["storage"])
 
 
@@ -71,7 +72,7 @@ async def list_storage_providers(ctx: TenantContext | None = Depends(get_tenant_
         db.close()
 
 
-@router.post("/providers/", response_model=dict[str, Any])
+@router.post("/providers/", response_model=CreateStorageProviderResult)
 async def create_storage_provider(request: dict, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new storage provider linking to a connected account."""
     db = SessionLocal()
@@ -185,7 +186,7 @@ async def list_netlify_sites(account_id: str = Query(..., description="EdgeProvi
     ]
 
 
-@router.post("/netlify-sites", response_model=dict[str, Any])
+@router.post("/netlify-sites", response_model=CreateNetlifySiteResult)
 async def create_netlify_site(request: dict):
     """Create a new Netlify site for storage (reuses netlify_deploy_api.create_site).
 
@@ -278,7 +279,7 @@ async def list_vercel_projects(account_id: str = Query(..., description="EdgePro
     ]
 
 
-@router.post("/vercel-projects", response_model=dict[str, Any])
+@router.post("/vercel-projects", response_model=CreateVercelProjectResult)
 async def create_vercel_project(request: dict):
     """Create a new Vercel project for blob storage connection."""
     from app.core.credential_resolver import get_provider_context_by_id

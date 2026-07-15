@@ -59,6 +59,7 @@ from ..schemas.engine_move import (
     ExportRequest, ImportRequest, FinalizeMoveRequest, MoveToProjectRequest,
 )
 
+from ..schemas.op_responses import CancelMoveResult, ExportEngineResult, FinalizeMoveResult, GetEngineLogsResult, GetEngineSourceResult, GetLogRetentionResult, ImportEngineResult, MoveEngineToProjectEndpointResult, RotationHistoryResult, SyncEngineLogsResult, TenantSecretsAuditLogsResult, UpdateEngineSourceResult, UpdateLogConfigResult
 router = APIRouter(prefix="/api/edge-engines", tags=["Edge Engines"])
 
 
@@ -162,7 +163,7 @@ async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get
     return await provision_and_deploy(payload, db, ctx)
 
 
-@router.post("/import", response_model=dict[str, Any])
+@router.post("/import", response_model=ImportEngineResult)
 async def import_engine(
     payload: ImportRequest,
     db: Session = Depends(get_db),
@@ -731,7 +732,7 @@ async def redeploy_engine(
 # Portable Move — export an engine to a sealed bundle (Step 3)
 # =============================================================================
 
-@router.post("/{engine_id}/export", response_model=dict[str, Any])
+@router.post("/{engine_id}/export", response_model=ExportEngineResult)
 async def export_engine(
     engine_id: str,
     payload: ExportRequest,
@@ -782,7 +783,7 @@ async def export_engine(
     return {"bundle": bundle, "engine_id": str(engine.id), "move_status": engine.move_status}
 
 
-@router.post("/{engine_id}/finalize-move", response_model=dict[str, Any])
+@router.post("/{engine_id}/finalize-move", response_model=FinalizeMoveResult)
 async def finalize_move(
     engine_id: str,
     payload: FinalizeMoveRequest,
@@ -815,7 +816,7 @@ async def finalize_move(
     return {"finalized": True, "engine_id": engine_id}
 
 
-@router.post("/{engine_id}/cancel-move", response_model=dict[str, Any])
+@router.post("/{engine_id}/cancel-move", response_model=CancelMoveResult)
 async def cancel_move(
     engine_id: str,
     db: Session = Depends(get_db),
@@ -834,7 +835,7 @@ async def cancel_move(
     return {"cancelled": True, "engine": serialize_engine(engine)}
 
 
-@router.post("/{engine_id}/move-to-project", response_model=dict[str, Any])
+@router.post("/{engine_id}/move-to-project", response_model=MoveEngineToProjectEndpointResult)
 async def move_engine_to_project_endpoint(
     engine_id: str,
     payload: MoveToProjectRequest,
@@ -987,7 +988,7 @@ async def rollback_rotation(
     return result
 
 
-@router.get("/{engine_id}/rotation-history", response_model=dict[str, Any])
+@router.get("/{engine_id}/rotation-history", response_model=RotationHistoryResult)
 async def rotation_history(
     engine_id: str,
     db: Session = Depends(get_db),
@@ -999,7 +1000,7 @@ async def rotation_history(
     return {"history": list_rotation_history(engine, db)}
 
 
-@router.get("/{engine_id}/audit/tenant-secrets", response_model=dict[str, Any])
+@router.get("/{engine_id}/audit/tenant-secrets", response_model=TenantSecretsAuditLogsResult)
 async def tenant_secrets_audit_logs(
     engine_id: str,
     tenant_slug: str | None = Query(None, description="Filter to a single tenant slug"),
@@ -1134,7 +1135,7 @@ async def test_engine_connection(
 # Source Snapshot — serves the pre-compilation source tree for the Inspector
 # =============================================================================
 
-@router.get("/{engine_id}/source", response_model=dict[str, Any])
+@router.get("/{engine_id}/source", response_model=GetEngineSourceResult)
 async def get_engine_source(
     engine_id: str, 
     db: Session = Depends(get_db), 
@@ -1173,7 +1174,7 @@ async def get_engine_source(
 from ..services.bundle import write_source_files, CORE_PREFIX
 
 
-@router.put("/{engine_id}/source", response_model=dict[str, Any])
+@router.put("/{engine_id}/source", response_model=UpdateEngineSourceResult)
 async def update_engine_source(
     engine_id: str, 
     payload: dict, 
@@ -1300,7 +1301,7 @@ async def list_active_engines_by_scope(
 # Edge Logs — runtime log fetching, persistence config, batch sync
 # =============================================================================
 
-@router.get("/{engine_id}/logs", response_model=dict[str, Any])
+@router.get("/{engine_id}/logs", response_model=GetEngineLogsResult)
 async def get_engine_logs(
     engine_id: str,
     limit: int = Query(default=50, ge=1, le=500),
@@ -1370,7 +1371,7 @@ async def get_engine_logs(
     }
 
 
-@router.post("/{engine_id}/logs/sync", response_model=dict[str, Any])
+@router.post("/{engine_id}/logs/sync", response_model=SyncEngineLogsResult)
 async def sync_engine_logs(
     engine_id: str,
     db: Session = Depends(get_db),
@@ -1462,7 +1463,7 @@ async def sync_engine_logs(
     return {"synced": len(result.logs), "detail": "Logs synced to edge DB"}
 
 
-@router.patch("/{engine_id}/logs/config", response_model=dict[str, Any])
+@router.patch("/{engine_id}/logs/config", response_model=UpdateLogConfigResult)
 async def update_log_config(
     engine_id: str,
     payload: dict,
@@ -1543,7 +1544,7 @@ async def update_log_config(
     return {"log_persistence": log_config}
 
 
-@router.get("/{engine_id}/logs/retention", response_model=dict[str, Any])
+@router.get("/{engine_id}/logs/retention", response_model=GetLogRetentionResult)
 async def get_log_retention(
     engine_id: str, 
     db: Session = Depends(get_db),

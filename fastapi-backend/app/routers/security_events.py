@@ -23,13 +23,14 @@ from ..database.utils import get_project
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..models.models import SecurityEvent
 
+from ..schemas.op_responses import ListSecurityEventsResult, SecurityEventsSummaryResult
 router = APIRouter(prefix="/api/security-events", tags=["security-events"])
 
 _VALID_SEVERITIES = {"low", "medium", "high", "critical"}
 _MAX_LIMIT = 500
 
 
-@router.get("/", response_model=dict[str, Any])
+@router.get("/", response_model=ListSecurityEventsResult)
 async def list_security_events(
     event_type: Optional[str] = Query(None, description="Filter by event type (e.g. ssrf_attempt_blocked)"),
     severity: Optional[str] = Query(None, description="Filter by severity"),
@@ -103,7 +104,7 @@ async def list_security_events(
         db.close()
 
 
-@router.get("/summary", response_model=dict[str, Any])
+@router.get("/summary", response_model=SecurityEventsSummaryResult)
 async def security_events_summary(
     ctx: Optional[TenantContext] = Depends(get_tenant_context),
 ):

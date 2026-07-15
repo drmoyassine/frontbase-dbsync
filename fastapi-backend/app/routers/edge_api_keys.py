@@ -35,6 +35,7 @@ from ..services.engine_reconfigure import (
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 
 
+from ..schemas.op_responses import ListApiKeysResult, RevealApiKeyResult
 router = APIRouter(prefix="/api/edge-api-keys", tags=["edge-api-keys"])
 
 
@@ -228,7 +229,7 @@ def _build_key_secrets(engine: EdgeEngine, db: Session) -> dict:
 # CRUD
 # =============================================================================
 
-@router.get("", response_model=dict[str, Any])
+@router.get("", response_model=ListApiKeysResult)
 def list_api_keys(
     engine_id: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -429,7 +430,7 @@ def delete_api_key(
     background_tasks.add_task(_sync_keys_to_engines, edge_engine_id)
 
 
-@router.get("/{key_id}/reveal", response_model=dict[str, Any])
+@router.get("/{key_id}/reveal", response_model=RevealApiKeyResult)
 def reveal_api_key(key_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Reveal the full API key (only works for Fernet-encrypted keys)."""
     query = db.query(EdgeAPIKey)

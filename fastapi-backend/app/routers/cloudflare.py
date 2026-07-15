@@ -36,6 +36,8 @@ from ..services import cloudflare_api
 from ..services.bundle import build_worker, get_source_hash
 from ..services.secrets_builder import build_engine_secrets
 
+from ..schemas.op_responses import CloudflareStatusResult, DeployToCloudflareResult
+from ..schemas.common import SuccessMessageAck
 router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 
 
@@ -120,7 +122,7 @@ async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_
         raise HTTPException(500, f"Connection failed: {str(e)}")
 
 
-@router.post("/deploy", response_model=dict[str, Any])
+@router.post("/deploy", response_model=DeployToCloudflareResult)
 async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """One-click deploy the Edge Engine to Cloudflare Workers."""
     try:
@@ -344,7 +346,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
         raise HTTPException(500, f"Deploy failed: {str(e) or 'Unknown error'}")
 
 
-@router.post("/status", response_model=dict[str, Any])
+@router.post("/status", response_model=CloudflareStatusResult)
 async def cloudflare_status(payload: StatusRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Check if a Worker is deployed and get its details."""
     try:
@@ -393,7 +395,7 @@ async def cloudflare_status(payload: StatusRequest, db: Session = Depends(get_db
         raise HTTPException(500, str(e))
 
 
-@router.post("/teardown", response_model=dict[str, Any])
+@router.post("/teardown", response_model=SuccessMessageAck)
 async def teardown_cloudflare(payload: TeardownRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Remove a Worker and deactivate its edge engine target."""
     try:

@@ -3,12 +3,13 @@ from typing import Any
 from app.models.schemas import *
 from app.database.utils import get_db
 
+from ..schemas.common import LegacyEndpointNotice
 router = APIRouter(prefix="/advanced-query", tags=["advanced-query"])
 
 # This endpoint was automatically generated from Express.js
 # Original schema: advanced-query
 
-@router.post("/advanced-query", response_model=dict[str, Any])
+@router.post("/advanced-query", response_model=LegacyEndpointNotice)
 async def post_advanced_query(
     request: Any = None,
     db = Depends(get_db)

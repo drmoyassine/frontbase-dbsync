@@ -18,6 +18,7 @@ from ..services.cache_tester import test_cache, TestCacheResult
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
 
+from ..schemas.common import RemoteDeleteAck
 router = APIRouter(prefix="/api/edge-caches", tags=["edge-caches"])
 
 
@@ -275,7 +276,7 @@ async def update_edge_cache(cache_id: str, payload: EdgeCacheUpdate, ctx: Tenant
         db.close()
 
 
-@router.delete("/{cache_id}", response_model=dict[str, Any])
+@router.delete("/{cache_id}", response_model=RemoteDeleteAck)
 async def delete_edge_cache(cache_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge cache connection.
     

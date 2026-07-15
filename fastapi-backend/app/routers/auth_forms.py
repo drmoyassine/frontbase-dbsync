@@ -19,6 +19,7 @@ from app.database.utils import get_db
 from app.database.config import SessionLocal
 from app.middleware.tenant_context import TenantContext, get_tenant_context
 
+from ..schemas.common import SuccessDataEnvelope
 router = APIRouter()
 
 
@@ -219,7 +220,7 @@ async def _sync_embeddable_forms_to_edge(tenant_slug: str | None = None, tenant_
 # CRUD Endpoints
 # =============================================================================
 
-@router.get("/", response_model=dict[str, Any])
+@router.get("/", response_model=SuccessDataEnvelope)
 async def list_auth_forms(
     db: Session = Depends(get_db),
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
@@ -247,7 +248,7 @@ async def list_auth_forms(
         return {"success": False, "error": str(e)}
 
 
-@router.get("/{form_id}/", response_model=dict[str, Any])
+@router.get("/{form_id}/", response_model=SuccessDataEnvelope)
 async def get_auth_form(
     form_id: str,
     db: Session = Depends(get_db),
@@ -275,7 +276,7 @@ async def get_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.post("/", status_code=status.HTTP_201_CREATED, response_model=dict[str, Any])
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=SuccessDataEnvelope)
 async def create_auth_form(
     form: AuthFormCreate,
     db: Session = Depends(get_db),
@@ -355,7 +356,7 @@ async def create_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.put("/{form_id}/", response_model=dict[str, Any])
+@router.put("/{form_id}/", response_model=SuccessDataEnvelope)
 async def update_auth_form(
     form_id: str,
     form: AuthFormUpdate,
@@ -449,7 +450,7 @@ async def update_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.delete("/{form_id}/", response_model=dict[str, Any])
+@router.delete("/{form_id}/", response_model=SuccessDataEnvelope)
 async def delete_auth_form(
     form_id: str,
     db: Session = Depends(get_db),
@@ -500,7 +501,7 @@ async def delete_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.get("/primary/", response_model=dict[str, Any])
+@router.get("/primary/", response_model=SuccessDataEnvelope)
 async def get_primary_auth_form(
     db: Session = Depends(get_db),
     ctx: Optional[TenantContext] = Depends(get_tenant_context)
@@ -541,7 +542,7 @@ async def get_primary_auth_form(
         return {"success": False, "error": str(e)}
 
 
-@router.put("/{form_id}/set-primary/", response_model=dict[str, Any])
+@router.put("/{form_id}/set-primary/", response_model=SuccessDataEnvelope)
 async def set_primary_auth_form(
     form_id: str,
     db: Session = Depends(get_db),

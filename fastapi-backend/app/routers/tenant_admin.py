@@ -19,6 +19,8 @@ from app.models.models import Tenant, TenantMember, User, Project, Page, Automat
 from app.routers.auth import get_current_user, ADMIN_USERS
 
 
+from ..schemas.op_responses import CreateTenantResult, CreateTenantUserResult, GetTenantResult, ListTenantsResult, UpdateTenantResult
+from ..schemas.common import SuccessMessageAck
 router = APIRouter()
 
 
@@ -181,7 +183,7 @@ async def get_tenant_supabase_user_count(db: Session, tenant_id: str) -> int:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/", response_model=dict[str, Any])
+@router.get("/", response_model=ListTenantsResult)
 async def list_tenants(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
@@ -248,7 +250,7 @@ async def list_tenants(
     return {"tenants": [r.model_dump() for r in result]}
 
 
-@router.get("/{tenant_id}", response_model=dict[str, Any])
+@router.get("/{tenant_id}", response_model=GetTenantResult)
 async def get_tenant(
     tenant_id: str,
     db: Session = Depends(get_db),
@@ -334,7 +336,7 @@ async def get_tenant(
     }
 
 
-@router.post("/", status_code=201, response_model=dict[str, Any])
+@router.post("/", status_code=201, response_model=CreateTenantResult)
 async def create_tenant(
     body: CreateTenantRequest,
     db: Session = Depends(get_db),
@@ -401,7 +403,7 @@ async def create_tenant(
     }
 
 
-@router.post("/{tenant_id}/users", status_code=201, response_model=dict[str, Any])
+@router.post("/{tenant_id}/users", status_code=201, response_model=CreateTenantUserResult)
 async def create_tenant_user(
     tenant_id: str,
     body: CreateTenantUserRequest,
@@ -487,7 +489,7 @@ async def create_tenant_user(
     }
 
 
-@router.put("/{tenant_id}", response_model=dict[str, Any])
+@router.put("/{tenant_id}", response_model=UpdateTenantResult)
 async def update_tenant(
     tenant_id: str,
     body: UpdateTenantRequest,
@@ -518,7 +520,7 @@ async def update_tenant(
     }}
 
 
-@router.delete("/{tenant_id}", response_model=dict[str, Any])
+@router.delete("/{tenant_id}", response_model=SuccessMessageAck)
 
 async def delete_tenant(
     tenant_id: str,

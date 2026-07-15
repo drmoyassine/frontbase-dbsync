@@ -35,6 +35,8 @@ from app.schemas.actions import (
 )
 
 logger = logging.getLogger(__name__)
+from ..schemas.op_responses import BulkDeleteDraftsResult, PublishDraftBatchResult, ToggleDraftActiveResult
+from ..schemas.common import SuccessDataEnvelope, SuccessMessageAck
 router = APIRouter()
 
 def _scoped_draft_select(db: Session, ctx: TenantContext | None):
@@ -317,7 +319,7 @@ class ActionBulkDeleteRequest(BaseModel):
     ids: List[str]
 
 
-@router.post("/drafts/bulk-delete", status_code=status.HTTP_200_OK, response_model=dict[str, Any])
+@router.post("/drafts/bulk-delete", status_code=status.HTTP_200_OK, response_model=BulkDeleteDraftsResult)
 async def bulk_delete_drafts(
     request: ActionBulkDeleteRequest,
     db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)
@@ -344,7 +346,7 @@ class ToggleActiveRequest(BaseModel):
     is_active: bool
 
 
-@router.patch("/drafts/{draft_id}/active", response_model=dict[str, Any])
+@router.patch("/drafts/{draft_id}/active", response_model=ToggleDraftActiveResult)
 async def toggle_draft_active(
     draft_id: str,
     request: ToggleActiveRequest,
@@ -572,7 +574,7 @@ class WorkflowBatchPublishRequest(BaseModel):
     engine_ids: List[str]
 
 
-@router.post("/drafts/{draft_id}/publish-batch/", response_model=dict[str, Any])
+@router.post("/drafts/{draft_id}/publish-batch/", response_model=PublishDraftBatchResult)
 async def publish_draft_batch(
     draft_id: str,
     request: WorkflowBatchPublishRequest,
@@ -694,7 +696,7 @@ async def publish_draft_batch(
     }
 
 
-@router.post("/drafts/{draft_id}/publish/{engine_id}/toggle", response_model=dict[str, Any])
+@router.post("/drafts/{draft_id}/publish/{engine_id}/toggle", response_model=SuccessMessageAck)
 async def toggle_target_active(
     draft_id: str,
     engine_id: str,
@@ -1645,7 +1647,7 @@ def create_automation_version_snapshot(db: Session, draft: AutomationDraft, crea
     return version
 
 
-@router.get("/drafts/{draft_id}/versions/", response_model=dict[str, Any])
+@router.get("/drafts/{draft_id}/versions/", response_model=SuccessDataEnvelope)
 async def list_automation_versions(
     draft_id: str,
     db: Session = Depends(get_db),
@@ -1664,7 +1666,7 @@ async def list_automation_versions(
     }
 
 
-@router.get("/drafts/{draft_id}/versions/{version_id}/", response_model=dict[str, Any])
+@router.get("/drafts/{draft_id}/versions/{version_id}/", response_model=SuccessDataEnvelope)
 async def get_automation_version_detail(
     draft_id: str,
     version_id: str,
@@ -1688,7 +1690,7 @@ async def get_automation_version_detail(
     }
 
 
-@router.post("/drafts/{draft_id}/versions/", response_model=dict[str, Any])
+@router.post("/drafts/{draft_id}/versions/", response_model=SuccessDataEnvelope)
 async def create_manual_automation_version(
     draft_id: str,
     request: AutomationVersionLabelRequest,
@@ -1726,7 +1728,7 @@ async def create_manual_automation_version(
     }
 
 
-@router.post("/drafts/{draft_id}/rollback/", response_model=dict[str, Any])
+@router.post("/drafts/{draft_id}/rollback/", response_model=SuccessDataEnvelope)
 async def rollback_automation_to_version(
     draft_id: str,
     request: AutomationRollbackRequest,

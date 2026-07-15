@@ -13,10 +13,11 @@ from app.database.utils import get_db
 from app.models.models import Plan
 from app.services.plan_limits import plan_to_pricing_card, serialize_plan
 
+from ..schemas.op_responses import ListPublicPlansResult
 router = APIRouter()
 
 
-@router.get("/public", response_model=dict[str, Any])
+@router.get("/public", response_model=ListPublicPlansResult)
 async def list_public_plans(db: Session = Depends(get_db)):
     """Public, active plans ordered for a pricing table."""
     plans = (

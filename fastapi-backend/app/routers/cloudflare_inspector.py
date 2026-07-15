@@ -23,6 +23,7 @@ from ..models.models import EdgeProviderAccount
 from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
 
+from ..schemas.op_responses import InspectWorkerSecretsResult, InspectWorkerSettingsResult
 router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Inspector"])
 
 
@@ -166,7 +167,7 @@ async def inspect_worker_content(payload: InspectRequest, db: Session = Depends(
         raise HTTPException(500, str(e))
 
 
-@router.post("/inspect/settings", response_model=dict[str, Any])
+@router.post("/inspect/settings", response_model=InspectWorkerSettingsResult)
 async def inspect_worker_settings(payload: InspectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch a worker's settings: bindings, compatibility, routes, crons."""
     try:
@@ -201,7 +202,7 @@ async def inspect_worker_settings(payload: InspectRequest, db: Session = Depends
         raise HTTPException(500, str(e))
 
 
-@router.post("/inspect/secrets", response_model=dict[str, Any])
+@router.post("/inspect/secrets", response_model=InspectWorkerSecretsResult)
 async def inspect_worker_secrets(payload: InspectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List secret names deployed to a worker (values are never returned by CF)."""
     try:

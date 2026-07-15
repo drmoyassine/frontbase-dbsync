@@ -73,6 +73,20 @@ export type ActionBulkDeleteRequest = {
 };
 
 /**
+ * AddTursoDatabaseResult
+ */
+export type AddTursoDatabaseResult = {
+    /**
+     * Database
+     */
+    database?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
  * AddonCheckoutItem
  */
 export type AddonCheckoutItem = {
@@ -868,6 +882,16 @@ export type BotProtectionUpdateRequest = {
 };
 
 /**
+ * BulkDeleteDraftsResult
+ */
+export type BulkDeleteDraftsResult = {
+    /**
+     * Deleted
+     */
+    deleted?: unknown | null;
+};
+
+/**
  * CacheBatchResult
  */
 export type CacheBatchResult = {
@@ -885,6 +909,34 @@ export type CacheBatchResult = {
      * Total
      */
     total?: number;
+};
+
+/**
+ * CancelMoveResult
+ */
+export type CancelMoveResult = {
+    /**
+     * Cancelled
+     */
+    cancelled: boolean;
+    /**
+     * Engine
+     */
+    engine?: unknown | null;
+};
+
+/**
+ * CheckSlugResult
+ */
+export type CheckSlugResult = {
+    /**
+     * Available
+     */
+    available?: unknown | null;
+    /**
+     * Error
+     */
+    error?: unknown | null;
 };
 
 /**
@@ -907,6 +959,28 @@ export type CheckoutRequestBody = {
      * Success Url
      */
     success_url?: string | null;
+};
+
+/**
+ * CloudflareStatusResult
+ */
+export type CloudflareStatusResult = {
+    /**
+     * Account Id
+     */
+    account_id?: unknown | null;
+    /**
+     * Deployed
+     */
+    deployed: boolean;
+    /**
+     * Url
+     */
+    url?: unknown | null;
+    /**
+     * Worker Name
+     */
+    worker_name?: unknown | null;
 };
 
 /**
@@ -1046,6 +1120,40 @@ export type ComponentThemeOut = {
 };
 
 /**
+ * ConnectDenoResult
+ */
+export type ConnectDenoResult = {
+    /**
+     * Account Name
+     */
+    account_name?: unknown | null;
+    /**
+     * Auto Detected
+     */
+    auto_detected?: unknown | null;
+    /**
+     * Detail
+     */
+    detail?: unknown | null;
+    /**
+     * Org Slug
+     */
+    org_slug?: unknown | null;
+    /**
+     * Org Uuid
+     */
+    org_uuid?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * User Id
+     */
+    user_id?: unknown | null;
+};
+
+/**
  * ConnectRequest
  *
  * List existing workers for a provider account.
@@ -1092,6 +1200,62 @@ export type CreateBatchPolicyRequest = {
 };
 
 /**
+ * CreateCheckoutResult
+ */
+export type CreateCheckoutResult = {
+    /**
+     * Url
+     */
+    url?: unknown | null;
+};
+
+/**
+ * CreateInviteResult
+ */
+export type CreateInviteResult = {
+    /**
+     * Invite
+     */
+    invite?: unknown | null;
+    /**
+     * Link
+     */
+    link?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * CreateNetlifySiteResult
+ */
+export type CreateNetlifySiteResult = {
+    /**
+     * Id
+     */
+    id?: unknown | null;
+    /**
+     * Name
+     */
+    name?: unknown | null;
+    /**
+     * Url
+     */
+    url?: unknown | null;
+};
+
+/**
+ * CreatePlanResult
+ */
+export type CreatePlanResult = {
+    /**
+     * Plan
+     */
+    plan?: unknown | null;
+};
+
+/**
  * CreatePolicyRequest
  */
 export type CreatePolicyRequest = {
@@ -1129,6 +1293,26 @@ export type CreatePolicyRequest = {
      * Usingexpression
      */
     usingExpression?: string | null;
+};
+
+/**
+ * CreatePortalResult
+ */
+export type CreatePortalResult = {
+    /**
+     * Url
+     */
+    url?: unknown | null;
+};
+
+/**
+ * CreateProjectResult
+ */
+export type CreateProjectResult = {
+    /**
+     * Project
+     */
+    project?: unknown | null;
 };
 
 /**
@@ -1178,6 +1362,44 @@ export type CreateSchemaRequest = {
 };
 
 /**
+ * CreateStorageProviderResult
+ */
+export type CreateStorageProviderResult = {
+    /**
+     * Account Name
+     */
+    account_name?: unknown | null;
+    /**
+     * Config
+     */
+    config?: unknown | null;
+    /**
+     * Created At
+     */
+    created_at?: unknown | null;
+    /**
+     * Id
+     */
+    id?: unknown | null;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Name
+     */
+    name?: unknown | null;
+    /**
+     * Provider
+     */
+    provider?: unknown | null;
+    /**
+     * Provider Account Id
+     */
+    provider_account_id?: unknown | null;
+};
+
+/**
  * CreateTenantRequest
  */
 export type CreateTenantRequest = {
@@ -1193,6 +1415,16 @@ export type CreateTenantRequest = {
      * Slug
      */
     slug: string;
+};
+
+/**
+ * CreateTenantResult
+ */
+export type CreateTenantResult = {
+    /**
+     * Tenant
+     */
+    tenant?: unknown | null;
 };
 
 /**
@@ -1219,6 +1451,30 @@ export type CreateTenantUserRequest = {
      * Username
      */
     username?: string | null;
+};
+
+/**
+ * CreateTenantUserResult
+ */
+export type CreateTenantUserResult = {
+    /**
+     * User
+     */
+    user?: unknown | null;
+};
+
+/**
+ * CreateVercelProjectResult
+ */
+export type CreateVercelProjectResult = {
+    /**
+     * Id
+     */
+    id?: unknown | null;
+    /**
+     * Name
+     */
+    name?: unknown | null;
 };
 
 /**
@@ -1273,6 +1529,28 @@ export type DatabaseConnectionResponse = {
      * Message
      */
     message?: string | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * DeleteEdgeVectorResult
+ */
+export type DeleteEdgeVectorResult = {
+    /**
+     * Id
+     */
+    id?: unknown | null;
+    /**
+     * Message
+     */
+    message?: unknown | null;
+    /**
+     * Remote Deleted
+     */
+    remote_deleted?: unknown | null;
     /**
      * Success
      */
@@ -1341,6 +1619,32 @@ export type DeployRequest = {
      * Worker script name
      */
     worker_name?: string;
+};
+
+/**
+ * DeployToCloudflareResult
+ */
+export type DeployToCloudflareResult = {
+    /**
+     * Account Id
+     */
+    account_id?: unknown | null;
+    /**
+     * Engine Id
+     */
+    engine_id?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * Url
+     */
+    url?: unknown | null;
+    /**
+     * Worker Name
+     */
+    worker_name?: unknown | null;
 };
 
 /**
@@ -2487,6 +2791,24 @@ export type EngineBatchResult = {
 export type ExecutionStatus = 'started' | 'executing' | 'completed' | 'error' | 'cancelled';
 
 /**
+ * ExportEngineResult
+ */
+export type ExportEngineResult = {
+    /**
+     * Bundle
+     */
+    bundle?: unknown | null;
+    /**
+     * Engine Id
+     */
+    engine_id?: unknown | null;
+    /**
+     * Move Status
+     */
+    move_status?: unknown | null;
+};
+
+/**
  * ExportRequest
  *
  * Request body for ``POST /api/edge-engines/{engine_id}/export``.
@@ -2515,6 +2837,20 @@ export type FinalizeMoveRequest = {
      * S, revealed by the target import.
      */
     confirm_secret: string;
+};
+
+/**
+ * FinalizeMoveResult
+ */
+export type FinalizeMoveResult = {
+    /**
+     * Engine Id
+     */
+    engine_id?: unknown | null;
+    /**
+     * Finalized
+     */
+    finalized: boolean;
 };
 
 /**
@@ -2716,6 +3052,290 @@ export type GenericDeployRequest = {
 };
 
 /**
+ * GetAgentCatalogueResult
+ */
+export type GetAgentCatalogueResult = {
+    /**
+     * Coretools
+     */
+    coreTools?: unknown | null;
+    /**
+     * Mcpservers
+     */
+    mcpServers?: unknown | null;
+    /**
+     * Skills
+     */
+    skills?: unknown | null;
+};
+
+/**
+ * GetAgentConfigResult
+ */
+export type GetAgentConfigResult = {
+    /**
+     * Default Provider
+     */
+    default_provider?: unknown | null;
+    /**
+     * Enabled
+     */
+    enabled?: unknown | null;
+    /**
+     * Quota Exceeded Action
+     */
+    quota_exceeded_action?: unknown | null;
+};
+
+/**
+ * GetAnalyticsResult
+ */
+export type GetAnalyticsResult = {
+    /**
+     * Active Tenants
+     */
+    active_tenants?: unknown | null;
+    /**
+     * Avg Credits Per Tenant
+     */
+    avg_credits_per_tenant?: unknown | null;
+    /**
+     * Daily Series
+     */
+    daily_series?: unknown | null;
+    /**
+     * Errors
+     */
+    errors?: unknown | null;
+    /**
+     * Model Usage
+     */
+    model_usage?: unknown | null;
+    /**
+     * Period
+     */
+    period?: unknown | null;
+    /**
+     * Provider Usage
+     */
+    provider_usage?: unknown | null;
+    /**
+     * Quota Exhausted
+     */
+    quota_exhausted?: unknown | null;
+    /**
+     * Top Tenants
+     */
+    top_tenants?: unknown | null;
+    /**
+     * Total Consumed
+     */
+    total_consumed?: unknown | null;
+};
+
+/**
+ * GetCatalogResult
+ */
+export type GetCatalogResult = {
+    /**
+     * Models By Type
+     */
+    models_by_type?: unknown | null;
+    /**
+     * Provider
+     */
+    provider?: unknown | null;
+    /**
+     * Total
+     */
+    total?: unknown | null;
+};
+
+/**
+ * GetEngineLogsResult
+ */
+export type GetEngineLogsResult = {
+    /**
+     * Cached
+     */
+    cached?: unknown | null;
+    /**
+     * Logs
+     */
+    logs?: unknown | null;
+    /**
+     * Next Cursor
+     */
+    next_cursor?: unknown | null;
+    /**
+     * Provider
+     */
+    provider?: unknown | null;
+};
+
+/**
+ * GetEngineSourceResult
+ */
+export type GetEngineSourceResult = {
+    /**
+     * File Count
+     */
+    file_count?: unknown | null;
+    /**
+     * Files
+     */
+    files?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * Total Size
+     */
+    total_size?: unknown | null;
+};
+
+/**
+ * GetLimitRegistryResult
+ */
+export type GetLimitRegistryResult = {
+    /**
+     * Limits
+     */
+    limits?: unknown | null;
+};
+
+/**
+ * GetLogRetentionResult
+ */
+export type GetLogRetentionResult = {
+    /**
+     * Log Persistence
+     */
+    log_persistence?: unknown | null;
+    /**
+     * Plan Tier
+     */
+    plan_tier?: unknown | null;
+    /**
+     * Prerequisites Met
+     */
+    prerequisites_met?: unknown | null;
+    /**
+     * Provider
+     */
+    provider?: unknown | null;
+    /**
+     * Retention Hours
+     */
+    retention_hours?: unknown | null;
+};
+
+/**
+ * GetMyAddonsResult
+ */
+export type GetMyAddonsResult = {
+    /**
+     * Addons
+     */
+    addons?: unknown | null;
+};
+
+/**
+ * GetMyPlanResult
+ */
+export type GetMyPlanResult = {
+    /**
+     * Limits
+     */
+    limits?: unknown | null;
+    /**
+     * Plan
+     */
+    plan?: unknown | null;
+    /**
+     * Usage
+     */
+    usage?: unknown | null;
+};
+
+/**
+ * GetMyTenantResult
+ */
+export type GetMyTenantResult = {
+    /**
+     * Message
+     */
+    message?: unknown | null;
+    /**
+     * Tenant
+     */
+    tenant?: unknown | null;
+};
+
+/**
+ * GetProfileConfigsResult
+ */
+export type GetProfileConfigsResult = {
+    /**
+     * Profiles
+     */
+    profiles?: unknown | null;
+};
+
+/**
+ * GetPromptResult
+ */
+export type GetPromptResult = {
+    /**
+     * Description
+     */
+    description: string;
+    /**
+     * Messages
+     */
+    messages?: unknown | null;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
+ * GetSchemasResult
+ */
+export type GetSchemasResult = {
+    /**
+     * Providers
+     */
+    providers?: unknown | null;
+    /**
+     * Schemas
+     */
+    schemas?: unknown | null;
+};
+
+/**
+ * GetTenantResult
+ */
+export type GetTenantResult = {
+    /**
+     * Tenant
+     */
+    tenant?: unknown | null;
+};
+
+/**
+ * GetWorkspaceAgentTokenResult
+ */
+export type GetWorkspaceAgentTokenResult = {
+    /**
+     * Token
+     */
+    token?: unknown | null;
+};
+
+/**
  * GrantBody
  */
 export type GrantBody = {
@@ -2723,6 +3343,16 @@ export type GrantBody = {
      * Resource Id
      */
     resource_id: string;
+};
+
+/**
+ * GrantCreditsResult
+ */
+export type GrantCreditsResult = {
+    /**
+     * Balance
+     */
+    balance?: unknown | null;
 };
 
 /**
@@ -2740,6 +3370,16 @@ export type GrantRequest = {
 };
 
 /**
+ * GrantTenantAddonResult
+ */
+export type GrantTenantAddonResult = {
+    /**
+     * Addon
+     */
+    addon?: unknown | null;
+};
+
+/**
  * HTTPValidationError
  */
 export type HttpValidationError = {
@@ -2747,6 +3387,16 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
+};
+
+/**
+ * HandleWebhookResult
+ */
+export type HandleWebhookResult = {
+    /**
+     * Status
+     */
+    status: string;
 };
 
 /**
@@ -2779,6 +3429,24 @@ export type IpBlockRequest = {
      * Reason
      */
     reason?: string | null;
+};
+
+/**
+ * ImportEngineResult
+ */
+export type ImportEngineResult = {
+    /**
+     * Confirm Secret
+     */
+    confirm_secret?: unknown | null;
+    /**
+     * Engine Id
+     */
+    engine_id?: unknown | null;
+    /**
+     * Summary
+     */
+    summary?: unknown | null;
 };
 
 /**
@@ -2823,6 +3491,52 @@ export type InspectRequest = {
      * Worker script name to inspect
      */
     worker_name: string;
+};
+
+/**
+ * InspectWorkerSecretsResult
+ */
+export type InspectWorkerSecretsResult = {
+    /**
+     * Secrets
+     */
+    secrets?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * InspectWorkerSettingsResult
+ */
+export type InspectWorkerSettingsResult = {
+    /**
+     * Settings
+     */
+    settings?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * InstallSkillResult
+ */
+export type InstallSkillResult = {
+    /**
+     * Installed
+     */
+    installed: boolean;
+    /**
+     * Profileid
+     */
+    profileId?: unknown | null;
+    /**
+     * Skillid
+     */
+    skillId?: unknown | null;
 };
 
 /**
@@ -2902,6 +3616,268 @@ export type LicenseValidationResponse = {
 };
 
 /**
+ * ListAgentProvidersResult
+ */
+export type ListAgentProvidersResult = {
+    /**
+     * Providers
+     */
+    providers?: unknown | null;
+};
+
+/**
+ * ListApiKeysResult
+ */
+export type ListApiKeysResult = {
+    /**
+     * Keys
+     */
+    keys?: unknown | null;
+    /**
+     * Total
+     */
+    total?: unknown | null;
+};
+
+/**
+ * ListBalancesResult
+ */
+export type ListBalancesResult = {
+    /**
+     * Balances
+     */
+    balances?: unknown | null;
+};
+
+/**
+ * ListEnginesForProviderResult
+ */
+export type ListEnginesForProviderResult = {
+    /**
+     * Detail
+     */
+    detail?: unknown | null;
+    /**
+     * Engines
+     */
+    engines?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * ListInvitesResult
+ */
+export type ListInvitesResult = {
+    /**
+     * Invites
+     */
+    invites?: unknown | null;
+};
+
+/**
+ * ListMcpServerToolsResult
+ */
+export type ListMcpServerToolsResult = {
+    /**
+     * Tools
+     */
+    tools?: unknown | null;
+    /**
+     * Total
+     */
+    total?: unknown | null;
+};
+
+/**
+ * ListMcpServersResult
+ */
+export type ListMcpServersResult = {
+    /**
+     * Mcpservers
+     */
+    mcpServers?: unknown | null;
+    /**
+     * Total
+     */
+    total?: unknown | null;
+};
+
+/**
+ * ListPlansResult
+ */
+export type ListPlansResult = {
+    /**
+     * Plans
+     */
+    plans?: unknown | null;
+};
+
+/**
+ * ListProfileSkillsResult
+ */
+export type ListProfileSkillsResult = {
+    /**
+     * Skills
+     */
+    skills?: unknown | null;
+    /**
+     * Total
+     */
+    total?: unknown | null;
+};
+
+/**
+ * ListProfilesResult
+ */
+export type ListProfilesResult = {
+    /**
+     * Profiles
+     */
+    profiles?: unknown | null;
+    /**
+     * Total
+     */
+    total?: unknown | null;
+};
+
+/**
+ * ListProjectDatasourcesResult
+ */
+export type ListProjectDatasourcesResult = {
+    /**
+     * Available
+     */
+    available?: unknown | null;
+    /**
+     * Granted
+     */
+    granted?: unknown | null;
+};
+
+/**
+ * ListProjectMembersResult
+ */
+export type ListProjectMembersResult = {
+    /**
+     * Members
+     */
+    members?: unknown | null;
+};
+
+/**
+ * ListProjectsResult
+ */
+export type ListProjectsResult = {
+    /**
+     * Projects
+     */
+    projects?: unknown | null;
+};
+
+/**
+ * ListPromptsResult
+ */
+export type ListPromptsResult = {
+    /**
+     * Prompts
+     */
+    prompts?: unknown | null;
+};
+
+/**
+ * ListPublicPlansResult
+ */
+export type ListPublicPlansResult = {
+    /**
+     * Detailed
+     */
+    detailed?: unknown | null;
+    /**
+     * Plans
+     */
+    plans?: unknown | null;
+};
+
+/**
+ * ListResourcesResult
+ */
+export type ListResourcesResult = {
+    /**
+     * Resources
+     */
+    resources?: unknown | null;
+};
+
+/**
+ * ListSecurityEventsResult
+ */
+export type ListSecurityEventsResult = {
+    /**
+     * Events
+     */
+    events?: unknown | null;
+    /**
+     * Limit
+     */
+    limit?: unknown | null;
+    /**
+     * Offset
+     */
+    offset?: unknown | null;
+    /**
+     * Total
+     */
+    total?: unknown | null;
+};
+
+/**
+ * ListSkillsResult
+ */
+export type ListSkillsResult = {
+    /**
+     * Skills
+     */
+    skills?: unknown | null;
+    /**
+     * Total
+     */
+    total?: unknown | null;
+};
+
+/**
+ * ListTenantAddonsResult
+ */
+export type ListTenantAddonsResult = {
+    /**
+     * Addons
+     */
+    addons?: unknown | null;
+};
+
+/**
+ * ListTenantsResult
+ */
+export type ListTenantsResult = {
+    /**
+     * Tenants
+     */
+    tenants?: unknown | null;
+};
+
+/**
+ * ListToolsResult
+ */
+export type ListToolsResult = {
+    /**
+     * Tools
+     */
+    tools?: unknown | null;
+};
+
+/**
  * LoginRequest
  */
 export type LoginRequest = {
@@ -2921,6 +3897,32 @@ export type LoginRequest = {
      * Website
      */
     website?: string | null;
+};
+
+/**
+ * McpRootResult
+ */
+export type McpRootResult = {
+    /**
+     * Capabilities
+     */
+    capabilities?: unknown | null;
+    /**
+     * Instructions
+     */
+    instructions?: unknown | null;
+    /**
+     * Name
+     */
+    name?: unknown | null;
+    /**
+     * Protocolversion
+     */
+    protocolVersion: string;
+    /**
+     * Version
+     */
+    version: string;
 };
 
 /**
@@ -3029,6 +4031,20 @@ export type MessageResponse = {
      * Message
      */
     message: string;
+};
+
+/**
+ * MoveEngineToProjectEndpointResult
+ */
+export type MoveEngineToProjectEndpointResult = {
+    /**
+     * Engine Id
+     */
+    engine_id?: unknown | null;
+    /**
+     * Summary
+     */
+    summary?: unknown | null;
 };
 
 /**
@@ -3740,6 +4756,40 @@ export type ProvisionBody = {
 };
 
 /**
+ * PublishDraftBatchResult
+ */
+export type PublishDraftBatchResult = {
+    /**
+     * Engineid
+     */
+    engineId?: unknown | null;
+    /**
+     * Error
+     */
+    error?: unknown | null;
+    /**
+     * Message
+     */
+    message?: unknown | null;
+    /**
+     * Name
+     */
+    name?: unknown | null;
+    /**
+     * Results
+     */
+    results?: unknown | null;
+    /**
+     * Success
+     */
+    success?: unknown | null;
+    /**
+     * Version
+     */
+    version?: unknown | null;
+};
+
+/**
  * PublishResponse
  *
  * Response from publishing a workflow
@@ -3946,6 +4996,68 @@ export type RedisTestResult = {
 };
 
 /**
+ * RemoteDeleteAck
+ *
+ * Edge-resource delete: local ack + whether the remote resource was deleted.
+ */
+export type RemoteDeleteAck = {
+    /**
+     * Message
+     */
+    message?: string | null;
+    /**
+     * Remote Deleted
+     */
+    remote_deleted?: boolean | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * RemoveTursoDatabaseResult
+ */
+export type RemoveTursoDatabaseResult = {
+    /**
+     * Detail
+     */
+    detail: string;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * ResetAgentSettingsResult
+ */
+export type ResetAgentSettingsResult = {
+    /**
+     * Deleted
+     */
+    deleted?: unknown | null;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Scope
+     */
+    scope?: unknown | null;
+};
+
+/**
+ * ResetAllDailyResult
+ */
+export type ResetAllDailyResult = {
+    /**
+     * Reset Count
+     */
+    reset_count?: unknown | null;
+};
+
+/**
  * ResetPasswordRequest
  */
 export type ResetPasswordRequest = {
@@ -3987,6 +5099,26 @@ export type ResetRolePasswordRequest = {
      * Schema Name
      */
     schema_name: string;
+};
+
+/**
+ * ResetTenantDailyResult
+ */
+export type ResetTenantDailyResult = {
+    /**
+     * Balance
+     */
+    balance?: unknown | null;
+};
+
+/**
+ * RevealApiKeyResult
+ */
+export type RevealApiKeyResult = {
+    /**
+     * Key
+     */
+    key?: unknown | null;
 };
 
 /**
@@ -4227,6 +5359,30 @@ export type RotateSecretsKeyRequest = {
 };
 
 /**
+ * RotationHistoryResult
+ */
+export type RotationHistoryResult = {
+    /**
+     * History
+     */
+    history?: unknown | null;
+};
+
+/**
+ * SecurityEventsSummaryResult
+ */
+export type SecurityEventsSummaryResult = {
+    /**
+     * By Severity
+     */
+    by_severity?: unknown | null;
+    /**
+     * Total
+     */
+    total?: unknown | null;
+};
+
+/**
  * SecuritySettings
  *
  * Security-log IP retention (Post-sprint 2.1 — configurable GDPR strict mode).
@@ -4245,6 +5401,16 @@ export type SecuritySettings = {
      * Full Ip Retention Days
      */
     full_ip_retention_days?: number;
+};
+
+/**
+ * SetDefaultAgentProviderResult
+ */
+export type SetDefaultAgentProviderResult = {
+    /**
+     * Provider
+     */
+    provider?: unknown | null;
 };
 
 /**
@@ -4544,6 +5710,58 @@ export type StorageSignedUrlResult = {
 };
 
 /**
+ * SuccessAck
+ *
+ * Bare `{"success": bool}` acknowledgement.
+ */
+export type SuccessAck = {
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * SuccessDataEnvelope
+ *
+ * `{"success", "data"?, "message"?, "error"?}` envelope.
+ */
+export type SuccessDataEnvelope = {
+    /**
+     * Data
+     */
+    data?: unknown | null;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Message
+     */
+    message?: string | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * SuccessMessageAck
+ *
+ * `{"success", "message"?}` acknowledgement.
+ */
+export type SuccessMessageAck = {
+    /**
+     * Message
+     */
+    message?: string | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
  * SuccessMessageResponse
  *
  * `{"success": bool, "message"?: str}` — blocklist ops, reset, bot toggle.
@@ -4575,6 +5793,34 @@ export type SuccessResponse = {
      * Success
      */
     success: boolean;
+};
+
+/**
+ * SyncBillingAddonsResult
+ */
+export type SyncBillingAddonsResult = {
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * Synced Addons
+     */
+    synced_addons?: unknown | null;
+};
+
+/**
+ * SyncEngineLogsResult
+ */
+export type SyncEngineLogsResult = {
+    /**
+     * Detail
+     */
+    detail?: unknown | null;
+    /**
+     * Synced
+     */
+    synced?: unknown | null;
 };
 
 /**
@@ -4841,6 +6087,28 @@ export type TemplateVariable = {
 };
 
 /**
+ * TenantSecretsAuditLogsResult
+ */
+export type TenantSecretsAuditLogsResult = {
+    /**
+     * Engine Id
+     */
+    engine_id?: unknown | null;
+    /**
+     * Filters
+     */
+    filters?: unknown | null;
+    /**
+     * Is Shared
+     */
+    is_shared?: unknown | null;
+    /**
+     * Logs
+     */
+    logs?: unknown | null;
+};
+
+/**
  * TenantUpdateRequest
  */
 export type TenantUpdateRequest = {
@@ -4946,6 +6214,20 @@ export type TestExecuteResponse = {
 };
 
 /**
+ * TestMcpServerResult
+ */
+export type TestMcpServerResult = {
+    /**
+     * Reachable
+     */
+    reachable?: unknown | null;
+    /**
+     * Serverid
+     */
+    serverId?: unknown | null;
+};
+
+/**
  * TestQueueInline
  */
 export type TestQueueInline = {
@@ -4986,6 +6268,20 @@ export type TestQueueResult = {
 };
 
 /**
+ * TestTursoDatabaseResult
+ */
+export type TestTursoDatabaseResult = {
+    /**
+     * Detail
+     */
+    detail?: unknown | null;
+    /**
+     * Success
+     */
+    success?: unknown | null;
+};
+
+/**
  * ToggleActiveRequest
  */
 export type ToggleActiveRequest = {
@@ -4993,6 +6289,20 @@ export type ToggleActiveRequest = {
      * Is Active
      */
     is_active: boolean;
+};
+
+/**
+ * ToggleDraftActiveResult
+ */
+export type ToggleDraftActiveResult = {
+    /**
+     * Id
+     */
+    id?: unknown | null;
+    /**
+     * Is Active
+     */
+    is_active?: unknown | null;
 };
 
 /**
@@ -5030,6 +6340,90 @@ export type TursoDatabaseEntry = {
 };
 
 /**
+ * UpdateAgentConfigResult
+ */
+export type UpdateAgentConfigResult = {
+    /**
+     * Config
+     */
+    config?: unknown | null;
+};
+
+/**
+ * UpdateAgentSettingsResult
+ */
+export type UpdateAgentSettingsResult = {
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Scope
+     */
+    scope?: unknown | null;
+};
+
+/**
+ * UpdateEngineSourceResult
+ */
+export type UpdateEngineSourceResult = {
+    /**
+     * File Count
+     */
+    file_count?: unknown | null;
+    /**
+     * Files Saved
+     */
+    files_saved?: unknown | null;
+    /**
+     * Is Forked
+     */
+    is_forked?: unknown | null;
+    /**
+     * Modified Core Files
+     */
+    modified_core_files?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * UpdateLogConfigResult
+ */
+export type UpdateLogConfigResult = {
+    /**
+     * Log Persistence
+     */
+    log_persistence?: unknown | null;
+};
+
+/**
+ * UpdateMyTenantResult
+ */
+export type UpdateMyTenantResult = {
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * Tenant
+     */
+    tenant?: unknown | null;
+};
+
+/**
+ * UpdatePlanResult
+ */
+export type UpdatePlanResult = {
+    /**
+     * Plan
+     */
+    plan?: unknown | null;
+};
+
+/**
  * UpdatePolicyRequest
  */
 export type UpdatePolicyRequest = {
@@ -5060,6 +6454,30 @@ export type UpdatePolicyRequest = {
 };
 
 /**
+ * UpdateProfileConfigResult
+ */
+export type UpdateProfileConfigResult = {
+    /**
+     * Profile
+     */
+    profile?: unknown | null;
+    /**
+     * Use Type
+     */
+    use_type?: unknown | null;
+};
+
+/**
+ * UpdateProjectMetaResult
+ */
+export type UpdateProjectMetaResult = {
+    /**
+     * Project
+     */
+    project?: unknown | null;
+};
+
+/**
  * UpdateTenantRequest
  */
 export type UpdateTenantRequest = {
@@ -5075,6 +6493,20 @@ export type UpdateTenantRequest = {
      * Status
      */
     status?: string | null;
+};
+
+/**
+ * UpdateTenantResult
+ */
+export type UpdateTenantResult = {
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * Tenant
+     */
+    tenant?: unknown | null;
 };
 
 /**
@@ -5309,6 +6741,20 @@ export type VectorSearchParams = {
 };
 
 /**
+ * VectorSearchResult
+ */
+export type VectorSearchResult = {
+    /**
+     * Results
+     */
+    results?: unknown | null;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
  * VectorTestConnectionRequest
  */
 export type VectorTestConnectionRequest = {
@@ -5379,6 +6825,20 @@ export type VectorUpsertParams = {
      * Table
      */
     table: string;
+};
+
+/**
+ * VectorUpsertResult
+ */
+export type VectorUpsertResult = {
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * Upserted
+     */
+    upserted?: unknown | null;
 };
 
 /**
@@ -5831,13 +7291,9 @@ export type ActionsBulkDeleteDraftsError = ActionsBulkDeleteDraftsErrors[keyof A
 
 export type ActionsBulkDeleteDraftsResponses = {
     /**
-     * Response Actions Bulk Delete Drafts
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: BulkDeleteDraftsResult;
 };
 
 export type ActionsBulkDeleteDraftsResponse = ActionsBulkDeleteDraftsResponses[keyof ActionsBulkDeleteDraftsResponses];
@@ -5955,13 +7411,9 @@ export type ActionsToggleDraftActiveError = ActionsToggleDraftActiveErrors[keyof
 
 export type ActionsToggleDraftActiveResponses = {
     /**
-     * Response Actions Toggle Draft Active
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ToggleDraftActiveResult;
 };
 
 export type ActionsToggleDraftActiveResponse = ActionsToggleDraftActiveResponses[keyof ActionsToggleDraftActiveResponses];
@@ -6019,13 +7471,9 @@ export type ActionsPublishDraftBatchError = ActionsPublishDraftBatchErrors[keyof
 
 export type ActionsPublishDraftBatchResponses = {
     /**
-     * Response Actions Publish Draft Batch
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: PublishDraftBatchResult;
 };
 
 export type ActionsPublishDraftBatchResponse = ActionsPublishDraftBatchResponses[keyof ActionsPublishDraftBatchResponses];
@@ -6091,13 +7539,9 @@ export type ActionsToggleTargetActiveError = ActionsToggleTargetActiveErrors[key
 
 export type ActionsToggleTargetActiveResponses = {
     /**
-     * Response Actions Toggle Target Active
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessMessageAck;
 };
 
 export type ActionsToggleTargetActiveResponse = ActionsToggleTargetActiveResponses[keyof ActionsToggleTargetActiveResponses];
@@ -6125,13 +7569,9 @@ export type ActionsRollbackAutomationToVersionError = ActionsRollbackAutomationT
 
 export type ActionsRollbackAutomationToVersionResponses = {
     /**
-     * Response Actions Rollback Automation To Version
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type ActionsRollbackAutomationToVersionResponse = ActionsRollbackAutomationToVersionResponses[keyof ActionsRollbackAutomationToVersionResponses];
@@ -6223,13 +7663,9 @@ export type ActionsListAutomationVersionsError = ActionsListAutomationVersionsEr
 
 export type ActionsListAutomationVersionsResponses = {
     /**
-     * Response Actions List Automation Versions
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type ActionsListAutomationVersionsResponse = ActionsListAutomationVersionsResponses[keyof ActionsListAutomationVersionsResponses];
@@ -6257,13 +7693,9 @@ export type ActionsCreateManualAutomationVersionError = ActionsCreateManualAutom
 
 export type ActionsCreateManualAutomationVersionResponses = {
     /**
-     * Response Actions Create Manual Automation Version
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type ActionsCreateManualAutomationVersionResponse = ActionsCreateManualAutomationVersionResponses[keyof ActionsCreateManualAutomationVersionResponses];
@@ -6295,13 +7727,9 @@ export type ActionsGetAutomationVersionDetailError = ActionsGetAutomationVersion
 
 export type ActionsGetAutomationVersionDetailResponses = {
     /**
-     * Response Actions Get Automation Version Detail
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type ActionsGetAutomationVersionDetailResponse = ActionsGetAutomationVersionDetailResponses[keyof ActionsGetAutomationVersionDetailResponses];
@@ -6652,13 +8080,9 @@ export type AdminAgentsGetAnalyticsError = AdminAgentsGetAnalyticsErrors[keyof A
 
 export type AdminAgentsGetAnalyticsResponses = {
     /**
-     * Response Admin Agents Get Analytics
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetAnalyticsResult;
 };
 
 export type AdminAgentsGetAnalyticsResponse = AdminAgentsGetAnalyticsResponses[keyof AdminAgentsGetAnalyticsResponses];
@@ -6672,13 +8096,9 @@ export type AdminAgentsGetAgentConfigData = {
 
 export type AdminAgentsGetAgentConfigResponses = {
     /**
-     * Response Admin Agents Get Agent Config
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetAgentConfigResult;
 };
 
 export type AdminAgentsGetAgentConfigResponse = AdminAgentsGetAgentConfigResponses[keyof AdminAgentsGetAgentConfigResponses];
@@ -6701,13 +8121,9 @@ export type AdminAgentsUpdateAgentConfigError = AdminAgentsUpdateAgentConfigErro
 
 export type AdminAgentsUpdateAgentConfigResponses = {
     /**
-     * Response Admin Agents Update Agent Config
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: UpdateAgentConfigResult;
 };
 
 export type AdminAgentsUpdateAgentConfigResponse = AdminAgentsUpdateAgentConfigResponses[keyof AdminAgentsUpdateAgentConfigResponses];
@@ -6721,13 +8137,9 @@ export type AdminAgentsGetProfileConfigsData = {
 
 export type AdminAgentsGetProfileConfigsResponses = {
     /**
-     * Response Admin Agents Get Profile Configs
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetProfileConfigsResult;
 };
 
 export type AdminAgentsGetProfileConfigsResponse = AdminAgentsGetProfileConfigsResponses[keyof AdminAgentsGetProfileConfigsResponses];
@@ -6755,13 +8167,9 @@ export type AdminAgentsUpdateProfileConfigError = AdminAgentsUpdateProfileConfig
 
 export type AdminAgentsUpdateProfileConfigResponses = {
     /**
-     * Response Admin Agents Update Profile Config
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: UpdateProfileConfigResult;
 };
 
 export type AdminAgentsUpdateProfileConfigResponse = AdminAgentsUpdateProfileConfigResponses[keyof AdminAgentsUpdateProfileConfigResponses];
@@ -6775,13 +8183,9 @@ export type AdminAgentsListAgentProvidersData = {
 
 export type AdminAgentsListAgentProvidersResponses = {
     /**
-     * Response Admin Agents List Agent Providers
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListAgentProvidersResult;
 };
 
 export type AdminAgentsListAgentProvidersResponse = AdminAgentsListAgentProvidersResponses[keyof AdminAgentsListAgentProvidersResponses];
@@ -6809,13 +8213,9 @@ export type AdminAgentsSetDefaultAgentProviderError = AdminAgentsSetDefaultAgent
 
 export type AdminAgentsSetDefaultAgentProviderResponses = {
     /**
-     * Response Admin Agents Set Default Agent Provider
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SetDefaultAgentProviderResult;
 };
 
 export type AdminAgentsSetDefaultAgentProviderResponse = AdminAgentsSetDefaultAgentProviderResponses[keyof AdminAgentsSetDefaultAgentProviderResponses];
@@ -6829,13 +8229,9 @@ export type AdminAgentsListBalancesData = {
 
 export type AdminAgentsListBalancesResponses = {
     /**
-     * Response Admin Agents List Balances
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListBalancesResult;
 };
 
 export type AdminAgentsListBalancesResponse = AdminAgentsListBalancesResponses[keyof AdminAgentsListBalancesResponses];
@@ -6849,13 +8245,9 @@ export type AdminAgentsResetAllDailyData = {
 
 export type AdminAgentsResetAllDailyResponses = {
     /**
-     * Response Admin Agents Reset All Daily
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ResetAllDailyResult;
 };
 
 export type AdminAgentsResetAllDailyResponse = AdminAgentsResetAllDailyResponses[keyof AdminAgentsResetAllDailyResponses];
@@ -6883,13 +8275,9 @@ export type AdminAgentsGrantCreditsError = AdminAgentsGrantCreditsErrors[keyof A
 
 export type AdminAgentsGrantCreditsResponses = {
     /**
-     * Response Admin Agents Grant Credits
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GrantCreditsResult;
 };
 
 export type AdminAgentsGrantCreditsResponse = AdminAgentsGrantCreditsResponses[keyof AdminAgentsGrantCreditsResponses];
@@ -6917,13 +8305,9 @@ export type AdminAgentsResetTenantDailyError = AdminAgentsResetTenantDailyErrors
 
 export type AdminAgentsResetTenantDailyResponses = {
     /**
-     * Response Admin Agents Reset Tenant Daily
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ResetTenantDailyResult;
 };
 
 export type AdminAgentsResetTenantDailyResponse = AdminAgentsResetTenantDailyResponses[keyof AdminAgentsResetTenantDailyResponses];
@@ -6937,13 +8321,9 @@ export type AdminPlansSyncBillingAddonsData = {
 
 export type AdminPlansSyncBillingAddonsResponses = {
     /**
-     * Response Admin Plans Sync Billing Addons
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SyncBillingAddonsResult;
 };
 
 export type AdminPlansSyncBillingAddonsResponse = AdminPlansSyncBillingAddonsResponses[keyof AdminPlansSyncBillingAddonsResponses];
@@ -6986,13 +8366,9 @@ export type AdminPlansListPlansData = {
 
 export type AdminPlansListPlansResponses = {
     /**
-     * Response Admin Plans List Plans
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListPlansResult;
 };
 
 export type AdminPlansListPlansResponse = AdminPlansListPlansResponses[keyof AdminPlansListPlansResponses];
@@ -7015,13 +8391,9 @@ export type AdminPlansCreatePlanError = AdminPlansCreatePlanErrors[keyof AdminPl
 
 export type AdminPlansCreatePlanResponses = {
     /**
-     * Response Admin Plans Create Plan
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: CreatePlanResult;
 };
 
 export type AdminPlansCreatePlanResponse = AdminPlansCreatePlanResponses[keyof AdminPlansCreatePlanResponses];
@@ -7035,13 +8407,9 @@ export type AdminPlansGetLimitRegistryData = {
 
 export type AdminPlansGetLimitRegistryResponses = {
     /**
-     * Response Admin Plans Get Limit Registry
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetLimitRegistryResult;
 };
 
 export type AdminPlansGetLimitRegistryResponse = AdminPlansGetLimitRegistryResponses[keyof AdminPlansGetLimitRegistryResponses];
@@ -7069,13 +8437,9 @@ export type AdminPlansDeletePlanError = AdminPlansDeletePlanErrors[keyof AdminPl
 
 export type AdminPlansDeletePlanResponses = {
     /**
-     * Response Admin Plans Delete Plan
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessMessageAck;
 };
 
 export type AdminPlansDeletePlanResponse = AdminPlansDeletePlanResponses[keyof AdminPlansDeletePlanResponses];
@@ -7103,13 +8467,9 @@ export type AdminPlansUpdatePlanError = AdminPlansUpdatePlanErrors[keyof AdminPl
 
 export type AdminPlansUpdatePlanResponses = {
     /**
-     * Response Admin Plans Update Plan
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: UpdatePlanResult;
 };
 
 export type AdminPlansUpdatePlanResponse = AdminPlansUpdatePlanResponses[keyof AdminPlansUpdatePlanResponses];
@@ -7137,13 +8497,9 @@ export type AdminPlansListTenantAddonsError = AdminPlansListTenantAddonsErrors[k
 
 export type AdminPlansListTenantAddonsResponses = {
     /**
-     * Response Admin Plans List Tenant Addons
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListTenantAddonsResult;
 };
 
 export type AdminPlansListTenantAddonsResponse = AdminPlansListTenantAddonsResponses[keyof AdminPlansListTenantAddonsResponses];
@@ -7166,13 +8522,9 @@ export type AdminPlansGrantTenantAddonError = AdminPlansGrantTenantAddonErrors[k
 
 export type AdminPlansGrantTenantAddonResponses = {
     /**
-     * Response Admin Plans Grant Tenant Addon
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: GrantTenantAddonResult;
 };
 
 export type AdminPlansGrantTenantAddonResponse = AdminPlansGrantTenantAddonResponses[keyof AdminPlansGrantTenantAddonResponses];
@@ -7200,13 +8552,9 @@ export type AdminPlansRevokeTenantAddonError = AdminPlansRevokeTenantAddonErrors
 
 export type AdminPlansRevokeTenantAddonResponses = {
     /**
-     * Response Admin Plans Revoke Tenant Addon
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessAck;
 };
 
 export type AdminPlansRevokeTenantAddonResponse = AdminPlansRevokeTenantAddonResponses[keyof AdminPlansRevokeTenantAddonResponses];
@@ -7220,13 +8568,9 @@ export type TenantAdminListTenantsData = {
 
 export type TenantAdminListTenantsResponses = {
     /**
-     * Response Tenant Admin List Tenants
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListTenantsResult;
 };
 
 export type TenantAdminListTenantsResponse = TenantAdminListTenantsResponses[keyof TenantAdminListTenantsResponses];
@@ -7249,13 +8593,9 @@ export type TenantAdminCreateTenantError = TenantAdminCreateTenantErrors[keyof T
 
 export type TenantAdminCreateTenantResponses = {
     /**
-     * Response Tenant Admin Create Tenant
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: CreateTenantResult;
 };
 
 export type TenantAdminCreateTenantResponse = TenantAdminCreateTenantResponses[keyof TenantAdminCreateTenantResponses];
@@ -7283,13 +8623,9 @@ export type TenantAdminDeleteTenantError = TenantAdminDeleteTenantErrors[keyof T
 
 export type TenantAdminDeleteTenantResponses = {
     /**
-     * Response Tenant Admin Delete Tenant
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessMessageAck;
 };
 
 export type TenantAdminDeleteTenantResponse = TenantAdminDeleteTenantResponses[keyof TenantAdminDeleteTenantResponses];
@@ -7317,13 +8653,9 @@ export type TenantAdminGetTenantError = TenantAdminGetTenantErrors[keyof TenantA
 
 export type TenantAdminGetTenantResponses = {
     /**
-     * Response Tenant Admin Get Tenant
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetTenantResult;
 };
 
 export type TenantAdminGetTenantResponse = TenantAdminGetTenantResponses[keyof TenantAdminGetTenantResponses];
@@ -7351,13 +8683,9 @@ export type TenantAdminUpdateTenantError = TenantAdminUpdateTenantErrors[keyof T
 
 export type TenantAdminUpdateTenantResponses = {
     /**
-     * Response Tenant Admin Update Tenant
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: UpdateTenantResult;
 };
 
 export type TenantAdminUpdateTenantResponse = TenantAdminUpdateTenantResponses[keyof TenantAdminUpdateTenantResponses];
@@ -7385,13 +8713,9 @@ export type TenantAdminCreateTenantUserError = TenantAdminCreateTenantUserErrors
 
 export type TenantAdminCreateTenantUserResponses = {
     /**
-     * Response Tenant Admin Create Tenant User
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: CreateTenantUserResult;
 };
 
 export type TenantAdminCreateTenantUserResponse = TenantAdminCreateTenantUserResponses[keyof TenantAdminCreateTenantUserResponses];
@@ -7419,13 +8743,9 @@ export type AgentIntegrationsGetAgentCatalogueError = AgentIntegrationsGetAgentC
 
 export type AgentIntegrationsGetAgentCatalogueResponses = {
     /**
-     * Response Agent Integrations Get Agent Catalogue
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetAgentCatalogueResult;
 };
 
 export type AgentIntegrationsGetAgentCatalogueResponse = AgentIntegrationsGetAgentCatalogueResponses[keyof AgentIntegrationsGetAgentCatalogueResponses];
@@ -7453,13 +8773,9 @@ export type AgentIntegrationsListProfileSkillsError = AgentIntegrationsListProfi
 
 export type AgentIntegrationsListProfileSkillsResponses = {
     /**
-     * Response Agent Integrations List Profile Skills
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListProfileSkillsResult;
 };
 
 export type AgentIntegrationsListProfileSkillsResponse = AgentIntegrationsListProfileSkillsResponses[keyof AgentIntegrationsListProfileSkillsResponses];
@@ -7487,13 +8803,9 @@ export type AgentIntegrationsInstallSkillError = AgentIntegrationsInstallSkillEr
 
 export type AgentIntegrationsInstallSkillResponses = {
     /**
-     * Response Agent Integrations Install Skill
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: InstallSkillResult;
 };
 
 export type AgentIntegrationsInstallSkillResponse = AgentIntegrationsInstallSkillResponses[keyof AgentIntegrationsInstallSkillResponses];
@@ -7555,13 +8867,9 @@ export type AgentIntegrationsListSkillsError = AgentIntegrationsListSkillsErrors
 
 export type AgentIntegrationsListSkillsResponses = {
     /**
-     * Response Agent Integrations List Skills
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListSkillsResult;
 };
 
 export type AgentIntegrationsListSkillsResponse = AgentIntegrationsListSkillsResponses[keyof AgentIntegrationsListSkillsResponses];
@@ -7756,13 +9064,9 @@ export type AgentMcpMcpRootError = AgentMcpMcpRootErrors[keyof AgentMcpMcpRootEr
 
 export type AgentMcpMcpRootResponses = {
     /**
-     * Response Agent Mcp Mcp Root
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: McpRootResult;
 };
 
 export type AgentMcpMcpRootResponse = AgentMcpMcpRootResponses[keyof AgentMcpMcpRootResponses];
@@ -7790,13 +9094,9 @@ export type AgentMcpGetPromptError = AgentMcpGetPromptErrors[keyof AgentMcpGetPr
 
 export type AgentMcpGetPromptResponses = {
     /**
-     * Response Agent Mcp Get Prompt
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetPromptResult;
 };
 
 export type AgentMcpGetPromptResponse = AgentMcpGetPromptResponses[keyof AgentMcpGetPromptResponses];
@@ -7824,13 +9124,9 @@ export type AgentMcpListPromptsError = AgentMcpListPromptsErrors[keyof AgentMcpL
 
 export type AgentMcpListPromptsResponses = {
     /**
-     * Response Agent Mcp List Prompts
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListPromptsResult;
 };
 
 export type AgentMcpListPromptsResponse = AgentMcpListPromptsResponses[keyof AgentMcpListPromptsResponses];
@@ -7858,13 +9154,9 @@ export type AgentMcpListResourcesError = AgentMcpListResourcesErrors[keyof Agent
 
 export type AgentMcpListResourcesResponses = {
     /**
-     * Response Agent Mcp List Resources
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListResourcesResult;
 };
 
 export type AgentMcpListResourcesResponse = AgentMcpListResourcesResponses[keyof AgentMcpListResourcesResponses];
@@ -7924,13 +9216,9 @@ export type AgentMcpListToolsError = AgentMcpListToolsErrors[keyof AgentMcpListT
 
 export type AgentMcpListToolsResponses = {
     /**
-     * Response Agent Mcp List Tools
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListToolsResult;
 };
 
 export type AgentMcpListToolsResponse = AgentMcpListToolsResponses[keyof AgentMcpListToolsResponses];
@@ -7958,13 +9246,9 @@ export type AgentSettingsResetAgentSettingsError = AgentSettingsResetAgentSettin
 
 export type AgentSettingsResetAgentSettingsResponses = {
     /**
-     * Response Agent Settings Reset Agent Settings
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ResetAgentSettingsResult;
 };
 
 export type AgentSettingsResetAgentSettingsResponse = AgentSettingsResetAgentSettingsResponses[keyof AgentSettingsResetAgentSettingsResponses];
@@ -8003,13 +9287,9 @@ export type AgentSettingsUpdateAgentSettingsError = AgentSettingsUpdateAgentSett
 
 export type AgentSettingsUpdateAgentSettingsResponses = {
     /**
-     * Response Agent Settings Update Agent Settings
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: UpdateAgentSettingsResult;
 };
 
 export type AgentSettingsUpdateAgentSettingsResponse = AgentSettingsUpdateAgentSettingsResponses[keyof AgentSettingsUpdateAgentSettingsResponses];
@@ -8023,13 +9303,9 @@ export type AuthFormsListAuthFormsData = {
 
 export type AuthFormsListAuthFormsResponses = {
     /**
-     * Response Auth Forms List Auth Forms
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type AuthFormsListAuthFormsResponse = AuthFormsListAuthFormsResponses[keyof AuthFormsListAuthFormsResponses];
@@ -8052,13 +9328,9 @@ export type AuthFormsCreateAuthFormError = AuthFormsCreateAuthFormErrors[keyof A
 
 export type AuthFormsCreateAuthFormResponses = {
     /**
-     * Response Auth Forms Create Auth Form
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: SuccessDataEnvelope;
 };
 
 export type AuthFormsCreateAuthFormResponse = AuthFormsCreateAuthFormResponses[keyof AuthFormsCreateAuthFormResponses];
@@ -8072,13 +9344,9 @@ export type AuthFormsGetPrimaryAuthFormData = {
 
 export type AuthFormsGetPrimaryAuthFormResponses = {
     /**
-     * Response Auth Forms Get Primary Auth Form
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type AuthFormsGetPrimaryAuthFormResponse = AuthFormsGetPrimaryAuthFormResponses[keyof AuthFormsGetPrimaryAuthFormResponses];
@@ -8106,13 +9374,9 @@ export type AuthFormsDeleteAuthFormError = AuthFormsDeleteAuthFormErrors[keyof A
 
 export type AuthFormsDeleteAuthFormResponses = {
     /**
-     * Response Auth Forms Delete Auth Form
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type AuthFormsDeleteAuthFormResponse = AuthFormsDeleteAuthFormResponses[keyof AuthFormsDeleteAuthFormResponses];
@@ -8140,13 +9404,9 @@ export type AuthFormsGetAuthFormError = AuthFormsGetAuthFormErrors[keyof AuthFor
 
 export type AuthFormsGetAuthFormResponses = {
     /**
-     * Response Auth Forms Get Auth Form
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type AuthFormsGetAuthFormResponse = AuthFormsGetAuthFormResponses[keyof AuthFormsGetAuthFormResponses];
@@ -8174,13 +9434,9 @@ export type AuthFormsUpdateAuthFormError = AuthFormsUpdateAuthFormErrors[keyof A
 
 export type AuthFormsUpdateAuthFormResponses = {
     /**
-     * Response Auth Forms Update Auth Form
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type AuthFormsUpdateAuthFormResponse = AuthFormsUpdateAuthFormResponses[keyof AuthFormsUpdateAuthFormResponses];
@@ -8208,13 +9464,9 @@ export type AuthFormsSetPrimaryAuthFormError = AuthFormsSetPrimaryAuthFormErrors
 
 export type AuthFormsSetPrimaryAuthFormResponses = {
     /**
-     * Response Auth Forms Set Primary Auth Form
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessDataEnvelope;
 };
 
 export type AuthFormsSetPrimaryAuthFormResponse = AuthFormsSetPrimaryAuthFormResponses[keyof AuthFormsSetPrimaryAuthFormResponses];
@@ -8697,13 +9949,9 @@ export type BillingCreateCheckoutError = BillingCreateCheckoutErrors[keyof Billi
 
 export type BillingCreateCheckoutResponses = {
     /**
-     * Response Billing Create Checkout
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CreateCheckoutResult;
 };
 
 export type BillingCreateCheckoutResponse = BillingCreateCheckoutResponses[keyof BillingCreateCheckoutResponses];
@@ -8726,13 +9974,9 @@ export type BillingCreatePortalError = BillingCreatePortalErrors[keyof BillingCr
 
 export type BillingCreatePortalResponses = {
     /**
-     * Response Billing Create Portal
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CreatePortalResult;
 };
 
 export type BillingCreatePortalResponse = BillingCreatePortalResponses[keyof BillingCreatePortalResponses];
@@ -8760,13 +10004,9 @@ export type BillingHandleWebhookError = BillingHandleWebhookErrors[keyof Billing
 
 export type BillingHandleWebhookResponses = {
     /**
-     * Response Billing Handle Webhook
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: HandleWebhookResult;
 };
 
 export type BillingHandleWebhookResponse = BillingHandleWebhookResponses[keyof BillingHandleWebhookResponses];
@@ -8818,13 +10058,9 @@ export type CloudflareDeployDeployToCloudflareError = CloudflareDeployDeployToCl
 
 export type CloudflareDeployDeployToCloudflareResponses = {
     /**
-     * Response Cloudflare Deploy Deploy To Cloudflare
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: DeployToCloudflareResult;
 };
 
 export type CloudflareDeployDeployToCloudflareResponse = CloudflareDeployDeployToCloudflareResponses[keyof CloudflareDeployDeployToCloudflareResponses];
@@ -8876,13 +10112,9 @@ export type CloudflareInspectorInspectWorkerSecretsError = CloudflareInspectorIn
 
 export type CloudflareInspectorInspectWorkerSecretsResponses = {
     /**
-     * Response Cloudflare Inspector Inspect Worker Secrets
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: InspectWorkerSecretsResult;
 };
 
 export type CloudflareInspectorInspectWorkerSecretsResponse = CloudflareInspectorInspectWorkerSecretsResponses[keyof CloudflareInspectorInspectWorkerSecretsResponses];
@@ -8905,13 +10137,9 @@ export type CloudflareInspectorInspectWorkerSettingsError = CloudflareInspectorI
 
 export type CloudflareInspectorInspectWorkerSettingsResponses = {
     /**
-     * Response Cloudflare Inspector Inspect Worker Settings
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: InspectWorkerSettingsResult;
 };
 
 export type CloudflareInspectorInspectWorkerSettingsResponse = CloudflareInspectorInspectWorkerSettingsResponses[keyof CloudflareInspectorInspectWorkerSettingsResponses];
@@ -8934,13 +10162,9 @@ export type CloudflareDeployCloudflareStatusError = CloudflareDeployCloudflareSt
 
 export type CloudflareDeployCloudflareStatusResponses = {
     /**
-     * Response Cloudflare Deploy Cloudflare Status
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CloudflareStatusResult;
 };
 
 export type CloudflareDeployCloudflareStatusResponse = CloudflareDeployCloudflareStatusResponses[keyof CloudflareDeployCloudflareStatusResponses];
@@ -8963,13 +10187,9 @@ export type CloudflareDeployTeardownCloudflareError = CloudflareDeployTeardownCl
 
 export type CloudflareDeployTeardownCloudflareResponses = {
     /**
-     * Response Cloudflare Deploy Teardown Cloudflare
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessMessageAck;
 };
 
 export type CloudflareDeployTeardownCloudflareResponse = CloudflareDeployTeardownCloudflareResponses[keyof CloudflareDeployTeardownCloudflareResponses];
@@ -9653,13 +10873,9 @@ export type DenoDeployConnectDenoError = DenoDeployConnectDenoErrors[keyof DenoD
 
 export type DenoDeployConnectDenoResponses = {
     /**
-     * Response Deno Deploy Connect Deno
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ConnectDenoResult;
 };
 
 export type DenoDeployConnectDenoResponse = DenoDeployConnectDenoResponses[keyof DenoDeployConnectDenoResponses];
@@ -9687,13 +10903,9 @@ export type EdgeApiKeysListApiKeysError = EdgeApiKeysListApiKeysErrors[keyof Edg
 
 export type EdgeApiKeysListApiKeysResponses = {
     /**
-     * Response Edge Api Keys List Api Keys
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListApiKeysResult;
 };
 
 export type EdgeApiKeysListApiKeysResponse = EdgeApiKeysListApiKeysResponses[keyof EdgeApiKeysListApiKeysResponses];
@@ -9814,13 +11026,9 @@ export type EdgeApiKeysRevealApiKeyError = EdgeApiKeysRevealApiKeyErrors[keyof E
 
 export type EdgeApiKeysRevealApiKeyResponses = {
     /**
-     * Response Edge Api Keys Reveal Api Key
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: RevealApiKeyResult;
 };
 
 export type EdgeApiKeysRevealApiKeyResponse = EdgeApiKeysRevealApiKeyResponses[keyof EdgeApiKeysRevealApiKeyResponses];
@@ -9946,13 +11154,9 @@ export type EdgeCachesDeleteEdgeCacheError = EdgeCachesDeleteEdgeCacheErrors[key
 
 export type EdgeCachesDeleteEdgeCacheResponses = {
     /**
-     * Response Edge Caches Delete Edge Cache
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: RemoteDeleteAck;
 };
 
 export type EdgeCachesDeleteEdgeCacheResponse = EdgeCachesDeleteEdgeCacheResponses[keyof EdgeCachesDeleteEdgeCacheResponses];
@@ -10225,13 +11429,9 @@ export type EdgeDatabasesDeleteEdgeDatabaseError = EdgeDatabasesDeleteEdgeDataba
 
 export type EdgeDatabasesDeleteEdgeDatabaseResponses = {
     /**
-     * Response Edge Databases Delete Edge Database
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: RemoteDeleteAck;
 };
 
 export type EdgeDatabasesDeleteEdgeDatabaseResponse = EdgeDatabasesDeleteEdgeDatabaseResponses[keyof EdgeDatabasesDeleteEdgeDatabaseResponses];
@@ -10581,13 +11781,9 @@ export type EdgeEnginesImportEngineError = EdgeEnginesImportEngineErrors[keyof E
 
 export type EdgeEnginesImportEngineResponses = {
     /**
-     * Response Edge Engines Import Engine
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ImportEngineResult;
 };
 
 export type EdgeEnginesImportEngineResponse = EdgeEnginesImportEngineResponses[keyof EdgeEnginesImportEngineResponses];
@@ -10712,13 +11908,9 @@ export type EdgeAgentProfilesListProfilesError = EdgeAgentProfilesListProfilesEr
 
 export type EdgeAgentProfilesListProfilesResponses = {
     /**
-     * Response Edge Agent Profiles List Profiles
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListProfilesResult;
 };
 
 export type EdgeAgentProfilesListProfilesResponse = EdgeAgentProfilesListProfilesResponses[keyof EdgeAgentProfilesListProfilesResponses];
@@ -10875,13 +12067,9 @@ export type EdgeEnginesTenantSecretsAuditLogsError = EdgeEnginesTenantSecretsAud
 
 export type EdgeEnginesTenantSecretsAuditLogsResponses = {
     /**
-     * Response Edge Engines Tenant Secrets Audit Logs
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: TenantSecretsAuditLogsResult;
 };
 
 export type EdgeEnginesTenantSecretsAuditLogsResponse = EdgeEnginesTenantSecretsAuditLogsResponses[keyof EdgeEnginesTenantSecretsAuditLogsResponses];
@@ -10909,13 +12097,9 @@ export type EdgeEnginesCancelMoveError = EdgeEnginesCancelMoveErrors[keyof EdgeE
 
 export type EdgeEnginesCancelMoveResponses = {
     /**
-     * Response Edge Engines Cancel Move
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CancelMoveResult;
 };
 
 export type EdgeEnginesCancelMoveResponse = EdgeEnginesCancelMoveResponses[keyof EdgeEnginesCancelMoveResponses];
@@ -10943,13 +12127,9 @@ export type EdgeEnginesExportEngineError = EdgeEnginesExportEngineErrors[keyof E
 
 export type EdgeEnginesExportEngineResponses = {
     /**
-     * Response Edge Engines Export Engine
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ExportEngineResult;
 };
 
 export type EdgeEnginesExportEngineResponse = EdgeEnginesExportEngineResponses[keyof EdgeEnginesExportEngineResponses];
@@ -10977,13 +12157,9 @@ export type EdgeEnginesFinalizeMoveError = EdgeEnginesFinalizeMoveErrors[keyof E
 
 export type EdgeEnginesFinalizeMoveResponses = {
     /**
-     * Response Edge Engines Finalize Move
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: FinalizeMoveResult;
 };
 
 export type EdgeEnginesFinalizeMoveResponse = EdgeEnginesFinalizeMoveResponses[keyof EdgeEnginesFinalizeMoveResponses];
@@ -11304,13 +12480,9 @@ export type EdgeEnginesGetEngineLogsError = EdgeEnginesGetEngineLogsErrors[keyof
 
 export type EdgeEnginesGetEngineLogsResponses = {
     /**
-     * Response Edge Engines Get Engine Logs
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetEngineLogsResult;
 };
 
 export type EdgeEnginesGetEngineLogsResponse = EdgeEnginesGetEngineLogsResponses[keyof EdgeEnginesGetEngineLogsResponses];
@@ -11343,13 +12515,9 @@ export type EdgeEnginesUpdateLogConfigError = EdgeEnginesUpdateLogConfigErrors[k
 
 export type EdgeEnginesUpdateLogConfigResponses = {
     /**
-     * Response Edge Engines Update Log Config
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: UpdateLogConfigResult;
 };
 
 export type EdgeEnginesUpdateLogConfigResponse = EdgeEnginesUpdateLogConfigResponses[keyof EdgeEnginesUpdateLogConfigResponses];
@@ -11377,13 +12545,9 @@ export type EdgeEnginesGetLogRetentionError = EdgeEnginesGetLogRetentionErrors[k
 
 export type EdgeEnginesGetLogRetentionResponses = {
     /**
-     * Response Edge Engines Get Log Retention
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetLogRetentionResult;
 };
 
 export type EdgeEnginesGetLogRetentionResponse = EdgeEnginesGetLogRetentionResponses[keyof EdgeEnginesGetLogRetentionResponses];
@@ -11411,13 +12575,9 @@ export type EdgeEnginesSyncEngineLogsError = EdgeEnginesSyncEngineLogsErrors[key
 
 export type EdgeEnginesSyncEngineLogsResponses = {
     /**
-     * Response Edge Engines Sync Engine Logs
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SyncEngineLogsResult;
 };
 
 export type EdgeEnginesSyncEngineLogsResponse = EdgeEnginesSyncEngineLogsResponses[keyof EdgeEnginesSyncEngineLogsResponses];
@@ -11445,13 +12605,9 @@ export type EdgeEnginesMoveEngineToProjectEndpointError = EdgeEnginesMoveEngineT
 
 export type EdgeEnginesMoveEngineToProjectEndpointResponses = {
     /**
-     * Response Edge Engines Move Engine To Project Endpoint
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: MoveEngineToProjectEndpointResult;
 };
 
 export type EdgeEnginesMoveEngineToProjectEndpointResponse = EdgeEnginesMoveEngineToProjectEndpointResponses[keyof EdgeEnginesMoveEngineToProjectEndpointResponses];
@@ -11615,13 +12771,9 @@ export type EdgeEnginesRotationHistoryError = EdgeEnginesRotationHistoryErrors[k
 
 export type EdgeEnginesRotationHistoryResponses = {
     /**
-     * Response Edge Engines Rotation History
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: RotationHistoryResult;
 };
 
 export type EdgeEnginesRotationHistoryResponse = EdgeEnginesRotationHistoryResponses[keyof EdgeEnginesRotationHistoryResponses];
@@ -11683,13 +12835,9 @@ export type EdgeEnginesGetEngineSourceError = EdgeEnginesGetEngineSourceErrors[k
 
 export type EdgeEnginesGetEngineSourceResponses = {
     /**
-     * Response Edge Engines Get Engine Source
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetEngineSourceResult;
 };
 
 export type EdgeEnginesGetEngineSourceResponse = EdgeEnginesGetEngineSourceResponses[keyof EdgeEnginesGetEngineSourceResponses];
@@ -11722,13 +12870,9 @@ export type EdgeEnginesUpdateEngineSourceError = EdgeEnginesUpdateEngineSourceEr
 
 export type EdgeEnginesUpdateEngineSourceResponses = {
     /**
-     * Response Edge Engines Update Engine Source
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: UpdateEngineSourceResult;
 };
 
 export type EdgeEnginesUpdateEngineSourceResponse = EdgeEnginesUpdateEngineSourceResponses[keyof EdgeEnginesUpdateEngineSourceResponses];
@@ -11878,13 +13022,9 @@ export type EdgeGpuGetCatalogError = EdgeGpuGetCatalogErrors[keyof EdgeGpuGetCat
 
 export type EdgeGpuGetCatalogResponses = {
     /**
-     * Response Edge Gpu Get Catalog
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetCatalogResult;
 };
 
 export type EdgeGpuGetCatalogResponse = EdgeGpuGetCatalogResponses[keyof EdgeGpuGetCatalogResponses];
@@ -11898,13 +13038,9 @@ export type EdgeGpuGetSchemasData = {
 
 export type EdgeGpuGetSchemasResponses = {
     /**
-     * Response Edge Gpu Get Schemas
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetSchemasResult;
 };
 
 export type EdgeGpuGetSchemasResponse = EdgeGpuGetSchemasResponses[keyof EdgeGpuGetSchemasResponses];
@@ -12262,13 +13398,9 @@ export type EdgeProvidersGetWorkspaceAgentTokenData = {
 
 export type EdgeProvidersGetWorkspaceAgentTokenResponses = {
     /**
-     * Response Edge Providers Get Workspace Agent Token
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetWorkspaceAgentTokenResult;
 };
 
 export type EdgeProvidersGetWorkspaceAgentTokenResponse = EdgeProvidersGetWorkspaceAgentTokenResponses[keyof EdgeProvidersGetWorkspaceAgentTokenResponses];
@@ -12325,13 +13457,9 @@ export type EdgeProvidersListEnginesForProviderError = EdgeProvidersListEnginesF
 
 export type EdgeProvidersListEnginesForProviderResponses = {
     /**
-     * Response Edge Providers List Engines For Provider
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListEnginesForProviderResult;
 };
 
 export type EdgeProvidersListEnginesForProviderResponse = EdgeProvidersListEnginesForProviderResponses[keyof EdgeProvidersListEnginesForProviderResponses];
@@ -12359,13 +13487,9 @@ export type EdgeProvidersAddTursoDatabaseError = EdgeProvidersAddTursoDatabaseEr
 
 export type EdgeProvidersAddTursoDatabaseResponses = {
     /**
-     * Response Edge Providers Add Turso Database
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: AddTursoDatabaseResult;
 };
 
 export type EdgeProvidersAddTursoDatabaseResponse = EdgeProvidersAddTursoDatabaseResponses[keyof EdgeProvidersAddTursoDatabaseResponses];
@@ -12397,13 +13521,9 @@ export type EdgeProvidersRemoveTursoDatabaseError = EdgeProvidersRemoveTursoData
 
 export type EdgeProvidersRemoveTursoDatabaseResponses = {
     /**
-     * Response Edge Providers Remove Turso Database
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: RemoveTursoDatabaseResult;
 };
 
 export type EdgeProvidersRemoveTursoDatabaseResponse = EdgeProvidersRemoveTursoDatabaseResponses[keyof EdgeProvidersRemoveTursoDatabaseResponses];
@@ -12435,13 +13555,9 @@ export type EdgeProvidersTestTursoDatabaseError = EdgeProvidersTestTursoDatabase
 
 export type EdgeProvidersTestTursoDatabaseResponses = {
     /**
-     * Response Edge Providers Test Turso Database
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: TestTursoDatabaseResult;
 };
 
 export type EdgeProvidersTestTursoDatabaseResponse = EdgeProvidersTestTursoDatabaseResponses[keyof EdgeProvidersTestTursoDatabaseResponses];
@@ -12691,13 +13807,9 @@ export type EdgeQueuesDeleteEdgeQueueError = EdgeQueuesDeleteEdgeQueueErrors[key
 
 export type EdgeQueuesDeleteEdgeQueueResponses = {
     /**
-     * Response Edge Queues Delete Edge Queue
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: RemoteDeleteAck;
 };
 
 export type EdgeQueuesDeleteEdgeQueueResponse = EdgeQueuesDeleteEdgeQueueResponses[keyof EdgeQueuesDeleteEdgeQueueResponses];
@@ -12887,13 +13999,9 @@ export type EdgeVectorsDeleteEdgeVectorError = EdgeVectorsDeleteEdgeVectorErrors
 
 export type EdgeVectorsDeleteEdgeVectorResponses = {
     /**
-     * Response Edge Vectors Delete Edge Vector
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: DeleteEdgeVectorResult;
 };
 
 export type EdgeVectorsDeleteEdgeVectorResponse = EdgeVectorsDeleteEdgeVectorResponses[keyof EdgeVectorsDeleteEdgeVectorResponses];
@@ -12985,13 +14093,9 @@ export type AgentIntegrationsListMcpServersError = AgentIntegrationsListMcpServe
 
 export type AgentIntegrationsListMcpServersResponses = {
     /**
-     * Response Agent Integrations List Mcp Servers
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListMcpServersResult;
 };
 
 export type AgentIntegrationsListMcpServersResponse = AgentIntegrationsListMcpServersResponses[keyof AgentIntegrationsListMcpServersResponses];
@@ -13146,13 +14250,9 @@ export type AgentIntegrationsTestMcpServerError = AgentIntegrationsTestMcpServer
 
 export type AgentIntegrationsTestMcpServerResponses = {
     /**
-     * Response Agent Integrations Test Mcp Server
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: TestMcpServerResult;
 };
 
 export type AgentIntegrationsTestMcpServerResponse = AgentIntegrationsTestMcpServerResponses[keyof AgentIntegrationsTestMcpServerResponses];
@@ -13180,13 +14280,9 @@ export type AgentIntegrationsListMcpServerToolsError = AgentIntegrationsListMcpS
 
 export type AgentIntegrationsListMcpServerToolsResponses = {
     /**
-     * Response Agent Integrations List Mcp Server Tools
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListMcpServerToolsResult;
 };
 
 export type AgentIntegrationsListMcpServerToolsResponse = AgentIntegrationsListMcpServerToolsResponses[keyof AgentIntegrationsListMcpServerToolsResponses];
@@ -13708,13 +14804,9 @@ export type PlansListPublicPlansData = {
 
 export type PlansListPublicPlansResponses = {
     /**
-     * Response Plans List Public Plans
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListPublicPlansResult;
 };
 
 export type PlansListPublicPlansResponse = PlansListPublicPlansResponses[keyof PlansListPublicPlansResponses];
@@ -13798,13 +14890,9 @@ export type ProjectsListProjectsData = {
 
 export type ProjectsListProjectsResponses = {
     /**
-     * Response Projects List Projects
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListProjectsResult;
 };
 
 export type ProjectsListProjectsResponse = ProjectsListProjectsResponses[keyof ProjectsListProjectsResponses];
@@ -13827,13 +14915,9 @@ export type ProjectsCreateProjectError = ProjectsCreateProjectErrors[keyof Proje
 
 export type ProjectsCreateProjectResponses = {
     /**
-     * Response Projects Create Project
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: CreateProjectResult;
 };
 
 export type ProjectsCreateProjectResponse = ProjectsCreateProjectResponses[keyof ProjectsCreateProjectResponses];
@@ -13861,13 +14945,9 @@ export type ProjectsDeleteProjectError = ProjectsDeleteProjectErrors[keyof Proje
 
 export type ProjectsDeleteProjectResponses = {
     /**
-     * Response Projects Delete Project
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessAck;
 };
 
 export type ProjectsDeleteProjectResponse = ProjectsDeleteProjectResponses[keyof ProjectsDeleteProjectResponses];
@@ -13895,13 +14975,9 @@ export type ProjectsUpdateProjectMetaError = ProjectsUpdateProjectMetaErrors[key
 
 export type ProjectsUpdateProjectMetaResponses = {
     /**
-     * Response Projects Update Project Meta
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: UpdateProjectMetaResult;
 };
 
 export type ProjectsUpdateProjectMetaResponse = ProjectsUpdateProjectMetaResponses[keyof ProjectsUpdateProjectMetaResponses];
@@ -13929,13 +15005,9 @@ export type ProjectsGrantConnectedAccountError = ProjectsGrantConnectedAccountEr
 
 export type ProjectsGrantConnectedAccountResponses = {
     /**
-     * Response Projects Grant Connected Account
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: SuccessAck;
 };
 
 export type ProjectsGrantConnectedAccountResponse = ProjectsGrantConnectedAccountResponses[keyof ProjectsGrantConnectedAccountResponses];
@@ -13967,13 +15039,9 @@ export type ProjectsRevokeConnectedAccountError = ProjectsRevokeConnectedAccount
 
 export type ProjectsRevokeConnectedAccountResponses = {
     /**
-     * Response Projects Revoke Connected Account
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessAck;
 };
 
 export type ProjectsRevokeConnectedAccountResponse = ProjectsRevokeConnectedAccountResponses[keyof ProjectsRevokeConnectedAccountResponses];
@@ -14001,13 +15069,9 @@ export type ProjectsListProjectDatasourcesError = ProjectsListProjectDatasources
 
 export type ProjectsListProjectDatasourcesResponses = {
     /**
-     * Response Projects List Project Datasources
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListProjectDatasourcesResult;
 };
 
 export type ProjectsListProjectDatasourcesResponse = ProjectsListProjectDatasourcesResponses[keyof ProjectsListProjectDatasourcesResponses];
@@ -14035,13 +15099,9 @@ export type ProjectsGrantDatasourceError = ProjectsGrantDatasourceErrors[keyof P
 
 export type ProjectsGrantDatasourceResponses = {
     /**
-     * Response Projects Grant Datasource
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: SuccessAck;
 };
 
 export type ProjectsGrantDatasourceResponse = ProjectsGrantDatasourceResponses[keyof ProjectsGrantDatasourceResponses];
@@ -14073,13 +15133,9 @@ export type ProjectsRevokeDatasourceError = ProjectsRevokeDatasourceErrors[keyof
 
 export type ProjectsRevokeDatasourceResponses = {
     /**
-     * Response Projects Revoke Datasource
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessAck;
 };
 
 export type ProjectsRevokeDatasourceResponse = ProjectsRevokeDatasourceResponses[keyof ProjectsRevokeDatasourceResponses];
@@ -14107,13 +15163,9 @@ export type ProjectsListProjectMembersError = ProjectsListProjectMembersErrors[k
 
 export type ProjectsListProjectMembersResponses = {
     /**
-     * Response Projects List Project Members
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListProjectMembersResult;
 };
 
 export type ProjectsListProjectMembersResponse = ProjectsListProjectMembersResponses[keyof ProjectsListProjectMembersResponses];
@@ -14141,13 +15193,9 @@ export type ProjectsAddProjectMemberError = ProjectsAddProjectMemberErrors[keyof
 
 export type ProjectsAddProjectMemberResponses = {
     /**
-     * Response Projects Add Project Member
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: SuccessAck;
 };
 
 export type ProjectsAddProjectMemberResponse = ProjectsAddProjectMemberResponses[keyof ProjectsAddProjectMemberResponses];
@@ -14179,13 +15227,9 @@ export type ProjectsRemoveProjectMemberError = ProjectsRemoveProjectMemberErrors
 
 export type ProjectsRemoveProjectMemberResponses = {
     /**
-     * Response Projects Remove Project Member
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessAck;
 };
 
 export type ProjectsRemoveProjectMemberResponse = ProjectsRemoveProjectMemberResponses[keyof ProjectsRemoveProjectMemberResponses];
@@ -14257,13 +15301,9 @@ export type SecurityEventsListSecurityEventsError = SecurityEventsListSecurityEv
 
 export type SecurityEventsListSecurityEventsResponses = {
     /**
-     * Response Security Events List Security Events
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListSecurityEventsResult;
 };
 
 export type SecurityEventsListSecurityEventsResponse = SecurityEventsListSecurityEventsResponses[keyof SecurityEventsListSecurityEventsResponses];
@@ -14277,13 +15317,9 @@ export type SecurityEventsSecurityEventsSummaryData = {
 
 export type SecurityEventsSecurityEventsSummaryResponses = {
     /**
-     * Response Security Events Security Events Summary
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SecurityEventsSummaryResult;
 };
 
 export type SecurityEventsSecurityEventsSummaryResponse = SecurityEventsSecurityEventsSummaryResponses[keyof SecurityEventsSecurityEventsSummaryResponses];
@@ -15095,13 +16131,9 @@ export type StorageCreateNetlifySiteError = StorageCreateNetlifySiteErrors[keyof
 
 export type StorageCreateNetlifySiteResponses = {
     /**
-     * Response Storage Create Netlify Site
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CreateNetlifySiteResult;
 };
 
 export type StorageCreateNetlifySiteResponse = StorageCreateNetlifySiteResponses[keyof StorageCreateNetlifySiteResponses];
@@ -15149,13 +16181,9 @@ export type StorageCreateStorageProviderError = StorageCreateStorageProviderErro
 
 export type StorageCreateStorageProviderResponses = {
     /**
-     * Response Storage Create Storage Provider
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CreateStorageProviderResult;
 };
 
 export type StorageCreateStorageProviderResponse = StorageCreateStorageProviderResponses[keyof StorageCreateStorageProviderResponses];
@@ -15358,13 +16386,9 @@ export type StorageCreateVercelProjectError = StorageCreateVercelProjectErrors[k
 
 export type StorageCreateVercelProjectResponses = {
     /**
-     * Response Storage Create Vercel Project
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CreateVercelProjectResult;
 };
 
 export type StorageCreateVercelProjectResponse = StorageCreateVercelProjectResponses[keyof StorageCreateVercelProjectResponses];
@@ -15392,13 +16416,9 @@ export type TenantsCheckSlugError = TenantsCheckSlugErrors[keyof TenantsCheckSlu
 
 export type TenantsCheckSlugResponses = {
     /**
-     * Response Tenants Check Slug
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CheckSlugResult;
 };
 
 export type TenantsCheckSlugResponse = TenantsCheckSlugResponses[keyof TenantsCheckSlugResponses];
@@ -15412,13 +16432,9 @@ export type TenantsGetMyTenantData = {
 
 export type TenantsGetMyTenantResponses = {
     /**
-     * Response Tenants Get My Tenant
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetMyTenantResult;
 };
 
 export type TenantsGetMyTenantResponse = TenantsGetMyTenantResponses[keyof TenantsGetMyTenantResponses];
@@ -15441,13 +16457,9 @@ export type TenantsUpdateMyTenantError = TenantsUpdateMyTenantErrors[keyof Tenan
 
 export type TenantsUpdateMyTenantResponses = {
     /**
-     * Response Tenants Update My Tenant
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: UpdateMyTenantResult;
 };
 
 export type TenantsUpdateMyTenantResponse = TenantsUpdateMyTenantResponses[keyof TenantsUpdateMyTenantResponses];
@@ -15461,13 +16473,9 @@ export type TenantsGetMyAddonsData = {
 
 export type TenantsGetMyAddonsResponses = {
     /**
-     * Response Tenants Get My Addons
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetMyAddonsResult;
 };
 
 export type TenantsGetMyAddonsResponse = TenantsGetMyAddonsResponses[keyof TenantsGetMyAddonsResponses];
@@ -15481,13 +16489,9 @@ export type TenantsListInvitesData = {
 
 export type TenantsListInvitesResponses = {
     /**
-     * Response Tenants List Invites
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ListInvitesResult;
 };
 
 export type TenantsListInvitesResponse = TenantsListInvitesResponses[keyof TenantsListInvitesResponses];
@@ -15510,13 +16514,9 @@ export type TenantsCreateInviteError = TenantsCreateInviteErrors[keyof TenantsCr
 
 export type TenantsCreateInviteResponses = {
     /**
-     * Response Tenants Create Invite
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: CreateInviteResult;
 };
 
 export type TenantsCreateInviteResponse = TenantsCreateInviteResponses[keyof TenantsCreateInviteResponses];
@@ -15544,13 +16544,9 @@ export type TenantsRevokeInviteError = TenantsRevokeInviteErrors[keyof TenantsRe
 
 export type TenantsRevokeInviteResponses = {
     /**
-     * Response Tenants Revoke Invite
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: SuccessAck;
 };
 
 export type TenantsRevokeInviteResponse = TenantsRevokeInviteResponses[keyof TenantsRevokeInviteResponses];
@@ -15564,13 +16560,9 @@ export type TenantsGetMyPlanData = {
 
 export type TenantsGetMyPlanResponses = {
     /**
-     * Response Tenants Get My Plan
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: GetMyPlanResult;
 };
 
 export type TenantsGetMyPlanResponse = TenantsGetMyPlanResponses[keyof TenantsGetMyPlanResponses];
@@ -15843,13 +16835,9 @@ export type VectorVectorSearchError = VectorVectorSearchErrors[keyof VectorVecto
 
 export type VectorVectorSearchResponses = {
     /**
-     * Response Vector Vector Search
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: VectorSearchResult;
 };
 
 export type VectorVectorSearchResponse = VectorVectorSearchResponses[keyof VectorVectorSearchResponses];
@@ -15872,13 +16860,9 @@ export type VectorVectorUpsertError = VectorVectorUpsertErrors[keyof VectorVecto
 
 export type VectorVectorUpsertResponses = {
     /**
-     * Response Vector Vector Upsert
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: VectorUpsertResult;
 };
 
 export type VectorVectorUpsertResponse = VectorVectorUpsertResponses[keyof VectorVectorUpsertResponses];

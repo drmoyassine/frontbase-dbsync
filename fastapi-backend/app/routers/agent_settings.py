@@ -40,6 +40,7 @@ from app.services.agent_settings import (
 
 logger = logging.getLogger(__name__)
 
+from ..schemas.op_responses import ResetAgentSettingsResult, UpdateAgentSettingsResult
 router = APIRouter(prefix="/api/agent/settings", tags=["Agent Settings"])
 
 
@@ -96,7 +97,7 @@ async def get_agent_settings(
     )
 
 
-@router.put("", response_model=dict[str, Any])
+@router.put("", response_model=UpdateAgentSettingsResult)
 async def update_agent_settings(
     payload: SettingsUpdate,
     request: Request,
@@ -146,7 +147,7 @@ async def update_agent_settings(
     return {"message": "Settings saved", "scope": payload.scope}
 
 
-@router.delete("", response_model=dict[str, Any])
+@router.delete("", response_model=ResetAgentSettingsResult)
 async def reset_agent_settings(
     request: Request,
     scope: str = "user",

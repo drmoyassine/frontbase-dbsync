@@ -17,6 +17,7 @@ from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
 from ..models.models import EdgeQueue, EdgeEngine
 
+from ..schemas.common import RemoteDeleteAck
 router = APIRouter(prefix="/api/edge-queues", tags=["edge-queues"])
 
 
@@ -320,7 +321,7 @@ async def update_edge_queue(queue_id: str, payload: EdgeQueueUpdate, ctx: Tenant
         db.close()
 
 
-@router.delete("/{queue_id}", response_model=dict[str, Any])
+@router.delete("/{queue_id}", response_model=RemoteDeleteAck)
 async def delete_edge_queue(queue_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge queue connection.
     

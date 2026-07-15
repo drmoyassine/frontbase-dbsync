@@ -37,6 +37,7 @@ from ..services.security_logger import (
 )
 from ..services.dns_cache import resolve_all
 
+from ..schemas.op_responses import DeleteEdgeVectorResult
 router = APIRouter(prefix="/api/edge-vectors", tags=["edge-vectors"])
 
 logger = logging.getLogger(__name__)
@@ -821,7 +822,7 @@ async def update_edge_vector(vector_id: str, payload: EdgeVectorUpdate, ctx: Ten
         db.close()
 
 
-@router.delete("/{vector_id}", response_model=dict[str, Any])
+@router.delete("/{vector_id}", response_model=DeleteEdgeVectorResult)
 async def delete_edge_vector(vector_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge vector store connection.
 

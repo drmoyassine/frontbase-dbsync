@@ -32,6 +32,7 @@ from ..services.agent_skills import seed_builtin_skills
 
 logger = logging.getLogger(__name__)
 
+from ..schemas.op_responses import GetAgentCatalogueResult, InstallSkillResult, ListMcpServerToolsResult, ListMcpServersResult, ListProfileSkillsResult, ListSkillsResult, TestMcpServerResult
 router = APIRouter(prefix="/api", tags=["agent-integrations"])
 
 
@@ -125,7 +126,7 @@ def _mcp_view(m: McpServer) -> dict[str, Any]:
     }
 
 
-@router.get("/mcp-servers", response_model=dict[str, Any])
+@router.get("/mcp-servers", response_model=ListMcpServersResult)
 def list_mcp_servers(
     profile_slug: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -241,7 +242,7 @@ def delete_mcp_server(
     db.commit()
 
 
-@router.get("/mcp-servers/{server_id}/tools", response_model=dict[str, Any])
+@router.get("/mcp-servers/{server_id}/tools", response_model=ListMcpServerToolsResult)
 def list_mcp_server_tools(
     server_id: str,
     db: Session = Depends(get_db),
@@ -262,7 +263,7 @@ def list_mcp_server_tools(
     return {"tools": tools, "total": len(tools)}
 
 
-@router.post("/mcp-servers/{server_id}/test", response_model=dict[str, Any])
+@router.post("/mcp-servers/{server_id}/test", response_model=TestMcpServerResult)
 def test_mcp_server(
     server_id: str,
     db: Session = Depends(get_db),
@@ -337,7 +338,7 @@ def _skill_view(s: AgentSkill) -> dict[str, Any]:
     }
 
 
-@router.get("/agent-skills", response_model=dict[str, Any])
+@router.get("/agent-skills", response_model=ListSkillsResult)
 def list_skills(
     profile_slug: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -479,7 +480,7 @@ class SkillInstall(BaseModel):
     config_overrides: Optional[dict[str, Any]] = None
 
 
-@router.get("/agent-profiles/{profile_id}/skills", response_model=dict[str, Any])
+@router.get("/agent-profiles/{profile_id}/skills", response_model=ListProfileSkillsResult)
 def list_profile_skills(
     profile_id: str,
     db: Session = Depends(get_db),
@@ -499,7 +500,7 @@ def list_profile_skills(
     return {"skills": out, "total": len(out)}
 
 
-@router.post("/agent-profiles/{profile_id}/skills", status_code=201, response_model=dict[str, Any])
+@router.post("/agent-profiles/{profile_id}/skills", status_code=201, response_model=InstallSkillResult)
 def install_skill(
     profile_id: str,
     body: SkillInstall,
@@ -547,7 +548,7 @@ def uninstall_skill(
 # Agent Catalogue (for Settings Modal)
 # ---------------------------------------------------------------------------
 
-@router.get("/agent-catalogue", response_model=dict[str, Any])
+@router.get("/agent-catalogue", response_model=GetAgentCatalogueResult)
 def get_agent_catalogue(
     profile_slug: str = "workspace",
     db: Session = Depends(get_db),

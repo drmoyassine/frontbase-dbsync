@@ -29,6 +29,8 @@ from app.services.plan_limits import (
 )
 from app.services.billing_gateway import BillingGateway, get_billing_gateway
 
+from ..schemas.op_responses import CreatePlanResult, GetLimitRegistryResult, GrantTenantAddonResult, ListPlansResult, ListTenantAddonsResult, SyncBillingAddonsResult, UpdatePlanResult
+from ..schemas.common import SuccessAck, SuccessMessageAck
 router = APIRouter()
 
 
@@ -65,7 +67,7 @@ class PlanWriteRequest(BaseModel):
 # Limit registry (drives the admin limits editor)
 # ---------------------------------------------------------------------------
 
-@router.get("/plans/limit-registry", response_model=dict[str, Any])
+@router.get("/plans/limit-registry", response_model=GetLimitRegistryResult)
 async def get_limit_registry(_admin: dict = Depends(require_master_admin)):
     return {"limits": LIMIT_REGISTRY}
 
@@ -74,7 +76,7 @@ async def get_limit_registry(_admin: dict = Depends(require_master_admin)):
 # Plan CRUD
 # ---------------------------------------------------------------------------
 
-@router.get("/plans", response_model=dict[str, Any])
+@router.get("/plans", response_model=ListPlansResult)
 async def list_plans(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
@@ -88,7 +90,7 @@ async def list_plans(
     return {"plans": out}
 
 
-@router.post("/plans", status_code=201, response_model=dict[str, Any])
+@router.post("/plans", status_code=201, response_model=CreatePlanResult)
 async def create_plan(
     body: PlanWriteRequest,
     db: Session = Depends(get_db),
@@ -139,7 +141,7 @@ async def create_plan(
     return {"plan": serialize_plan(plan)}
 
 
-@router.put("/plans/{plan_id}", response_model=dict[str, Any])
+@router.put("/plans/{plan_id}", response_model=UpdatePlanResult)
 async def update_plan(
     plan_id: str,
     body: PlanWriteRequest,
@@ -194,7 +196,7 @@ async def update_plan(
     return {"plan": serialize_plan(plan)}
 
 
-@router.delete("/plans/{plan_id}", response_model=dict[str, Any])
+@router.delete("/plans/{plan_id}", response_model=SuccessMessageAck)
 async def delete_plan(
     plan_id: str,
     db: Session = Depends(get_db),
@@ -222,7 +224,7 @@ async def delete_plan(
     return {"success": True, "message": f"Plan '{plan.slug}' permanently deleted"}
 
 
-@router.post("/billing/sync-addons", response_model=dict[str, Any])
+@router.post("/billing/sync-addons", response_model=SyncBillingAddonsResult)
 async def sync_billing_addons(
     db: Session = Depends(get_db),
     _admin: dict = Depends(require_master_admin),
@@ -268,7 +270,7 @@ def _serialize_addon(a: TenantAddon) -> dict:
     }
 
 
-@router.get("/tenant-addons", response_model=dict[str, Any])
+@router.get("/tenant-addons", response_model=ListTenantAddonsResult)
 async def list_tenant_addons(
     tenant_id: str,
     db: Session = Depends(get_db),
@@ -283,7 +285,7 @@ async def list_tenant_addons(
     return {"addons": [_serialize_addon(a) for a in rows]}
 
 
-@router.post("/tenant-addons", status_code=201, response_model=dict[str, Any])
+@router.post("/tenant-addons", status_code=201, response_model=GrantTenantAddonResult)
 async def grant_tenant_addon(
     body: AddonWriteBody,
     db: Session = Depends(get_db),
@@ -325,7 +327,7 @@ async def grant_tenant_addon(
     return {"addon": _serialize_addon(addon)}
 
 
-@router.delete("/tenant-addons/{addon_id}", response_model=dict[str, Any])
+@router.delete("/tenant-addons/{addon_id}", response_model=SuccessAck)
 async def revoke_tenant_addon(
     addon_id: str,
     db: Session = Depends(get_db),

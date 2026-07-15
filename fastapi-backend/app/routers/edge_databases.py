@@ -29,6 +29,7 @@ from ..schemas.edge_databases import (
 )
 from ..schemas.edge_engines import TestConnectionResult
 
+from ..schemas.common import RemoteDeleteAck
 router = APIRouter(prefix="/api/edge-databases", tags=["edge-databases"])
 
 
@@ -274,7 +275,7 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate, ctx: Ten
         db.close()
 
 
-@router.delete("/{db_id}", response_model=dict[str, Any])
+@router.delete("/{db_id}", response_model=RemoteDeleteAck)
 async def delete_edge_database(db_id: str, delete_remote: bool = False, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Delete an edge database connection.
     

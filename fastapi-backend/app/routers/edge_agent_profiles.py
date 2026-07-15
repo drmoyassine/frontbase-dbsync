@@ -16,6 +16,7 @@ from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
 
 
+from ..schemas.op_responses import ListProfilesResult
 router = APIRouter(prefix="/api/edge-engines/{engine_id}/agent-profiles", tags=["edge-agent-profiles"])
 
 
@@ -74,7 +75,7 @@ def _serialize(profile: EdgeAgentProfile) -> dict:
     }
 
 
-@router.get("", response_model=dict[str, Any])
+@router.get("", response_model=ListProfilesResult)
 def list_profiles(engine_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     engine_query = db.query(EdgeEngine).filter(EdgeEngine.id == engine_id)
     project_id = None

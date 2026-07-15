@@ -22,6 +22,7 @@ from app.middleware.tenant_context import TenantContext, get_tenant_context
 from app.services.vector import get_vector_backend
 from app.services.vector.embeddings import EmbeddingConfig, embed, assert_dimensions
 
+from ..schemas.op_responses import VectorSearchResult, VectorUpsertResult
 router = APIRouter(prefix="/api/vector", tags=["vector"])
 
 
@@ -64,7 +65,7 @@ def _backend(provider: str, dsn: Optional[str], db, tenant_id: Optional[str] = N
         raise HTTPException(400, str(e))
 
 
-@router.post("/search", response_model=dict[str, Any])
+@router.post("/search", response_model=VectorSearchResult)
 async def vector_search(
     params: VectorSearchParams,
     db: Session = Depends(get_db),
@@ -99,7 +100,7 @@ async def vector_search(
     return {"success": True, "results": results}
 
 
-@router.post("/upsert", response_model=dict[str, Any])
+@router.post("/upsert", response_model=VectorUpsertResult)
 async def vector_upsert(
     params: VectorUpsertParams,
     db: Session = Depends(get_db),

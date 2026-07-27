@@ -26,6 +26,12 @@ from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
 
 from ..schemas.op_responses import GetCatalogResult, GetSchemasResult
+from ..schemas.op_responses import (
+    EdgeGpuCreateGpuModelResponse,
+    EdgeGpuDeleteGpuModelResponse,
+    EdgeGpuTestGpuModelResponse,
+    EdgeGpuUpdateGpuModelResponse,
+)
 router = APIRouter(prefix="/api/edge-gpu", tags=["edge-gpu"])
 
 
@@ -203,7 +209,7 @@ async def list_gpu_models(db: Session = Depends(get_db), ctx: TenantContext | No
     return [_serialize(m) for m in models]
 
 
-@router.post("/", response_model=dict[str, Any])
+@router.post("/", response_model=EdgeGpuCreateGpuModelResponse)
 async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context), skip_redeploy: bool = Query(False)):
     """Deploy a new GPU model to an edge engine.
 
@@ -279,7 +285,7 @@ async def create_gpu_model(payload: GPUModelCreate, db: Session = Depends(get_db
     return result
 
 
-@router.put("/{model_id}", response_model=dict[str, Any])
+@router.put("/{model_id}", response_model=EdgeGpuUpdateGpuModelResponse)
 async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Update a GPU model's configuration."""
     query = db.query(EdgeGPUModel).join(EdgeEngine, EdgeGPUModel.edge_engine_id == EdgeEngine.id).filter(EdgeGPUModel.id == model_id)
@@ -313,7 +319,7 @@ async def update_gpu_model(model_id: str, payload: GPUModelUpdate, db: Session =
     return _serialize(model)
 
 
-@router.delete("/{model_id}", response_model=dict[str, Any])
+@router.delete("/{model_id}", response_model=EdgeGpuDeleteGpuModelResponse)
 async def delete_gpu_model(model_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context), skip_redeploy: bool = Query(False)):
     """Delete a GPU model.
 
@@ -356,7 +362,7 @@ async def delete_gpu_model(model_id: str, db: Session = Depends(get_db), ctx: Te
 # Test Inference
 # =============================================================================
 
-@router.post("/{model_id}/test", response_model=dict[str, Any])
+@router.post("/{model_id}/test", response_model=EdgeGpuTestGpuModelResponse)
 async def test_gpu_model(model_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test a deployed GPU model by running a sample inference."""
     query = db.query(EdgeGPUModel).join(EdgeEngine, EdgeGPUModel.edge_engine_id == EdgeEngine.id).filter(EdgeGPUModel.id == model_id)

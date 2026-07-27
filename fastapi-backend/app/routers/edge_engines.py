@@ -60,6 +60,16 @@ from ..schemas.engine_move import (
 )
 
 from ..schemas.op_responses import CancelMoveResult, ExportEngineResult, FinalizeMoveResult, GetEngineLogsResult, GetEngineSourceResult, GetLogRetentionResult, ImportEngineResult, MoveEngineToProjectEndpointResult, RotationHistoryResult, SyncEngineLogsResult, TenantSecretsAuditLogsResult, UpdateEngineSourceResult, UpdateLogConfigResult
+from ..schemas.op_responses import (
+    EdgeEnginesDeployEngineResponse,
+    EdgeEnginesGetBundleHashesResponse,
+    EdgeEnginesReconfigureEngineResponse,
+    EdgeEnginesRedeployEngineResponse,
+    EdgeEnginesRollbackRotationResponse,
+    EdgeEnginesRotateSecretsKeyResponse,
+    EdgeEnginesRotationStatusResponse,
+    EdgeEnginesSyncManifestResponse,
+)
 router = APIRouter(prefix="/api/edge-engines", tags=["Edge Engines"])
 
 
@@ -150,13 +160,13 @@ def _assert_not_moved_out(engine: EdgeEngine) -> None:
 
 # --- Static routes MUST come before /{engine_id} routes ---
 
-@router.get("/bundle-hashes/", response_model=dict[str, Any])
+@router.get("/bundle-hashes/", response_model=EdgeEnginesGetBundleHashesResponse)
 async def get_bundle_hashes():
     """Return current source hash for drift detection."""
     return get_current_hashes()
 
 
-@router.post("/deploy", response_model=dict[str, Any])
+@router.post("/deploy", response_model=EdgeEnginesDeployEngineResponse)
 async def deploy_engine(payload: GenericDeployRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Provider-agnostic one-click deploy. Delegates to engine_provisioner."""
     _validate_resource_ownership(db, ctx, payload.provider_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id)
@@ -662,7 +672,10 @@ async def update_engine(
 # Reconfigure
 # =============================================================================
 
-@router.post("/{engine_id}/reconfigure", response_model=dict[str, Any])
+@router.post(
+    "/{engine_id}/reconfigure",
+    response_model=EdgeEnginesReconfigureEngineResponse,
+)
 async def reconfigure_engine(
     engine_id: str, 
     payload: ReconfigureRequest, 
@@ -702,7 +715,10 @@ async def reconfigure_engine(
 # Redeploy — delegates to engine_deploy service
 # =============================================================================
 
-@router.post("/{engine_id}/redeploy", response_model=dict[str, Any])
+@router.post(
+    "/{engine_id}/redeploy",
+    response_model=EdgeEnginesRedeployEngineResponse,
+)
 async def redeploy_engine(
     engine_id: str, 
     db: Session = Depends(get_db),
@@ -910,7 +926,10 @@ def _load_engine_for_owner(engine_id: str, db: Session, ctx: TenantContext | Non
     return engine
 
 
-@router.post("/{engine_id}/rotate-secrets-key", response_model=dict[str, Any])
+@router.post(
+    "/{engine_id}/rotate-secrets-key",
+    response_model=EdgeEnginesRotateSecretsKeyResponse,
+)
 async def rotate_secrets_key(
     engine_id: str,
     payload: RotateSecretsKeyRequest,
@@ -946,7 +965,10 @@ async def rotate_secrets_key(
     return result
 
 
-@router.get("/{engine_id}/rotation-status", response_model=dict[str, Any])
+@router.get(
+    "/{engine_id}/rotation-status",
+    response_model=EdgeEnginesRotationStatusResponse,
+)
 async def rotation_status(
     engine_id: str,
     db: Session = Depends(get_db),
@@ -958,7 +980,10 @@ async def rotation_status(
     return get_rotation_status(engine)
 
 
-@router.post("/{engine_id}/rollback-rotation", response_model=dict[str, Any])
+@router.post(
+    "/{engine_id}/rollback-rotation",
+    response_model=EdgeEnginesRollbackRotationResponse,
+)
 async def rollback_rotation(
     engine_id: str,
     payload: RollbackRotationRequest,
@@ -1037,7 +1062,10 @@ async def tenant_secrets_audit_logs(
 # Sync Manifest — read self-describing metadata from a running engine
 # =============================================================================
 
-@router.post("/{engine_id}/sync-manifest", response_model=dict[str, Any])
+@router.post(
+    "/{engine_id}/sync-manifest",
+    response_model=EdgeEnginesSyncManifestResponse,
+)
 async def sync_manifest(
     engine_id: str, 
     db: Session = Depends(get_db),

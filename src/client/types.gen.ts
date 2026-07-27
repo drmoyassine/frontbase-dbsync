@@ -73,6 +73,41 @@ export type ActionBulkDeleteRequest = {
 };
 
 /**
+ * ActionsGetExecutionDetailResponse
+ */
+export type ActionsGetExecutionDetailResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * ActionsGetExecutionResultResponse
+ */
+export type ActionsGetExecutionResultResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * ActionsGetExecutionStatsResponse
+ */
+export type ActionsGetExecutionStatsResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * ActionsGetProductionExecutionsResponse
+ */
+export type ActionsGetProductionExecutionsResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * ActionsListAllExecutionsResponse
+ */
+export type ActionsListAllExecutionsResponse = {
+    [key: string]: unknown;
+};
+
+/**
  * AddTursoDatabaseResult
  */
 export type AddTursoDatabaseResult = {
@@ -254,6 +289,13 @@ export type AdvancedVariables = {
 };
 
 /**
+ * AgentAgentCreditsResponse
+ */
+export type AgentAgentCreditsResponse = {
+    [key: string]: unknown;
+};
+
+/**
  * AgentConfigUpdate
  */
 export type AgentConfigUpdate = {
@@ -265,6 +307,41 @@ export type AgentConfigUpdate = {
      * Quota Exceeded Action
      */
     quota_exceeded_action?: string | null;
+};
+
+/**
+ * AgentIntegrationsCreateMcpServerResponse
+ */
+export type AgentIntegrationsCreateMcpServerResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * AgentIntegrationsCreateSkillResponse
+ */
+export type AgentIntegrationsCreateSkillResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * AgentIntegrationsGetMcpServerResponse
+ */
+export type AgentIntegrationsGetMcpServerResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * AgentIntegrationsUpdateMcpServerResponse
+ */
+export type AgentIntegrationsUpdateMcpServerResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * AgentIntegrationsUpdateSkillResponse
+ */
+export type AgentIntegrationsUpdateSkillResponse = {
+    [key: string]: unknown;
 };
 
 /**
@@ -959,6 +1036,20 @@ export type CheckoutRequestBody = {
      * Success Url
      */
     success_url?: string | null;
+};
+
+/**
+ * CloudflareDeployConnectCloudflareResponse
+ */
+export type CloudflareDeployConnectCloudflareResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * CloudflareInspectorInspectWorkerContentResponse
+ */
+export type CloudflareInspectorInspectWorkerContentResponse = {
+    [key: string]: unknown;
 };
 
 /**
@@ -1808,6 +1899,34 @@ export type EdgeAgentProfileUpdate = {
 };
 
 /**
+ * EdgeAgentProfilesCreateProfileResponse
+ */
+export type EdgeAgentProfilesCreateProfileResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeAgentProfilesUpdateProfileResponse
+ */
+export type EdgeAgentProfilesUpdateProfileResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeApiKeysCreateApiKeyResponse
+ */
+export type EdgeApiKeysCreateApiKeyResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeApiKeysUpdateApiKeyResponse
+ */
+export type EdgeApiKeysUpdateApiKeyResponse = {
+    [key: string]: unknown;
+};
+
+/**
  * EdgeCacheCreate
  */
 export type EdgeCacheCreate = {
@@ -2073,6 +2192,27 @@ export type EdgeDatabaseUpdate = {
      * Schema Name
      */
     schema_name?: string | null;
+};
+
+/**
+ * EdgeDatabasesCreateSchemaResponse
+ */
+export type EdgeDatabasesCreateSchemaResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeDatabasesDiscoverSchemasResponse
+ */
+export type EdgeDatabasesDiscoverSchemasResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeDatabasesResetRolePasswordResponse
+ */
+export type EdgeDatabasesResetRolePasswordResponse = {
+    [key: string]: unknown;
 };
 
 /**
@@ -2346,6 +2486,90 @@ export type EdgeEngineUpdate = {
 };
 
 /**
+ * EdgeEnginesDeployEngineResponse
+ */
+export type EdgeEnginesDeployEngineResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeEnginesGetBundleHashesResponse
+ */
+export type EdgeEnginesGetBundleHashesResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeEnginesReconfigureEngineResponse
+ */
+export type EdgeEnginesReconfigureEngineResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeEnginesRedeployEngineResponse
+ */
+export type EdgeEnginesRedeployEngineResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeEnginesRollbackRotationResponse
+ */
+export type EdgeEnginesRollbackRotationResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeEnginesRotateSecretsKeyResponse
+ */
+export type EdgeEnginesRotateSecretsKeyResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeEnginesRotationStatusResponse
+ */
+export type EdgeEnginesRotationStatusResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeEnginesSyncManifestResponse
+ */
+export type EdgeEnginesSyncManifestResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeGpuCreateGpuModelResponse
+ */
+export type EdgeGpuCreateGpuModelResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeGpuDeleteGpuModelResponse
+ */
+export type EdgeGpuDeleteGpuModelResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeGpuTestGpuModelResponse
+ */
+export type EdgeGpuTestGpuModelResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeGpuUpdateGpuModelResponse
+ */
+export type EdgeGpuUpdateGpuModelResponse = {
+    [key: string]: unknown;
+};
+
+/**
  * EdgeProviderAccountCreate
  */
 export type EdgeProviderAccountCreate = {
@@ -2429,6 +2653,62 @@ export type EdgeProviderAccountUpdate = {
     provider_credentials?: {
         [key: string]: unknown;
     } | null;
+};
+
+/**
+ * EdgeProvidersCreateResourceByAccountResponse
+ */
+export type EdgeProvidersCreateResourceByAccountResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeProvidersDiscoverByAccountResponse
+ */
+export type EdgeProvidersDiscoverByAccountResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeProvidersDiscoverResourcesEndpointResponse
+ */
+export type EdgeProvidersDiscoverResourcesEndpointResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeProvidersGetCredentialsResponse
+ */
+export type EdgeProvidersGetCredentialsResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeProvidersListAccountTablesResponse
+ */
+export type EdgeProvidersListAccountTablesResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeProvidersRetestProviderResponse
+ */
+export type EdgeProvidersRetestProviderResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeProvidersSetWorkspaceAgentTokenResponse
+ */
+export type EdgeProvidersSetWorkspaceAgentTokenResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeProvidersTestConnectionResponse
+ */
+export type EdgeProvidersTestConnectionResponse = {
+    [key: string]: unknown;
 };
 
 /**
@@ -2740,6 +3020,20 @@ export type EdgeVectorUpdate = {
 };
 
 /**
+ * EdgeVectorsTestConnectionInlineResponse
+ */
+export type EdgeVectorsTestConnectionInlineResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EdgeVectorsTestEdgeVectorConnectionResponse
+ */
+export type EdgeVectorsTestEdgeVectorConnectionResponse = {
+    [key: string]: unknown;
+};
+
+/**
  * EmbeddingParams
  */
 export type EmbeddingParams = {
@@ -2781,6 +3075,62 @@ export type EngineBatchResult = {
      * Total
      */
     total?: number;
+};
+
+/**
+ * EngineInspectorAddEngineDomainResponse
+ */
+export type EngineInspectorAddEngineDomainResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EngineInspectorDeleteEngineDomainResponse
+ */
+export type EngineInspectorDeleteEngineDomainResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EngineInspectorHealthCheckResponse
+ */
+export type EngineInspectorHealthCheckResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EngineInspectorInspectEngineDomainsResponse
+ */
+export type EngineInspectorInspectEngineDomainsResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EngineInspectorInspectEngineSecretsResponse
+ */
+export type EngineInspectorInspectEngineSecretsResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EngineInspectorInspectEngineSettingsResponse
+ */
+export type EngineInspectorInspectEngineSettingsResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EngineInspectorInspectEngineSourceResponse
+ */
+export type EngineInspectorInspectEngineSourceResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * EngineInspectorVerifyEngineDomainResponse
+ */
+export type EngineInspectorVerifyEngineDomainResponse = {
+    [key: string]: unknown;
 };
 
 /**
@@ -4718,6 +5068,13 @@ export type ProjectUpdateRequest = {
 };
 
 /**
+ * ProjectUploadBrandingAssetResponse
+ */
+export type ProjectUploadBrandingAssetResponse = {
+    [key: string]: unknown;
+};
+
+/**
  * ProvisionBody
  */
 export type ProvisionBody = {
@@ -5659,6 +6016,13 @@ export type StorageFilesResult = {
      * Total
      */
     total?: number | null;
+};
+
+/**
+ * StorageListBucketsResponse
+ */
+export type StorageListBucketsResponse = {
+    [key: string]: unknown;
 };
 
 /**
@@ -7743,16 +8107,12 @@ export type ActionsGetExecutionStatsData = {
 
 export type ActionsGetExecutionStatsResponses = {
     /**
-     * Response Actions Get Execution Stats
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ActionsGetExecutionStatsResponse;
 };
 
-export type ActionsGetExecutionStatsResponse = ActionsGetExecutionStatsResponses[keyof ActionsGetExecutionStatsResponses];
+export type ActionsGetExecutionStatsResponse2 = ActionsGetExecutionStatsResponses[keyof ActionsGetExecutionStatsResponses];
 
 export type ActionsGetExecutionResultData = {
     body?: never;
@@ -7777,16 +8137,12 @@ export type ActionsGetExecutionResultError = ActionsGetExecutionResultErrors[key
 
 export type ActionsGetExecutionResultResponses = {
     /**
-     * Response Actions Get Execution Result
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ActionsGetExecutionResultResponse;
 };
 
-export type ActionsGetExecutionResultResponse = ActionsGetExecutionResultResponses[keyof ActionsGetExecutionResultResponses];
+export type ActionsGetExecutionResultResponse2 = ActionsGetExecutionResultResponses[keyof ActionsGetExecutionResultResponses];
 
 export type ActionsListAllExecutionsData = {
     body?: never;
@@ -7827,16 +8183,12 @@ export type ActionsListAllExecutionsError = ActionsListAllExecutionsErrors[keyof
 
 export type ActionsListAllExecutionsResponses = {
     /**
-     * Response Actions List All Executions
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ActionsListAllExecutionsResponse;
 };
 
-export type ActionsListAllExecutionsResponse = ActionsListAllExecutionsResponses[keyof ActionsListAllExecutionsResponses];
+export type ActionsListAllExecutionsResponse2 = ActionsListAllExecutionsResponses[keyof ActionsListAllExecutionsResponses];
 
 export type ActionsGetExecutionDetailData = {
     body?: never;
@@ -7866,16 +8218,12 @@ export type ActionsGetExecutionDetailError = ActionsGetExecutionDetailErrors[key
 
 export type ActionsGetExecutionDetailResponses = {
     /**
-     * Response Actions Get Execution Detail
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ActionsGetExecutionDetailResponse;
 };
 
-export type ActionsGetExecutionDetailResponse = ActionsGetExecutionDetailResponses[keyof ActionsGetExecutionDetailResponses];
+export type ActionsGetExecutionDetailResponse2 = ActionsGetExecutionDetailResponses[keyof ActionsGetExecutionDetailResponses];
 
 export type ActionsExportExecutionsCsvData = {
     body?: never;
@@ -7916,9 +8264,7 @@ export type ActionsExportExecutionsCsvError = ActionsExportExecutionsCsvErrors[k
 
 export type ActionsExportExecutionsCsvResponses = {
     /**
-     * Response Actions Export Executions Csv
-     *
-     * Successful Response
+     * Execution log CSV
      */
     200: string;
 };
@@ -7998,16 +8344,12 @@ export type ActionsGetProductionExecutionsError = ActionsGetProductionExecutions
 
 export type ActionsGetProductionExecutionsResponses = {
     /**
-     * Response Actions Get Production Executions
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ActionsGetProductionExecutionsResponse;
 };
 
-export type ActionsGetProductionExecutionsResponse = ActionsGetProductionExecutionsResponses[keyof ActionsGetProductionExecutionsResponses];
+export type ActionsGetProductionExecutionsResponse2 = ActionsGetProductionExecutionsResponses[keyof ActionsGetProductionExecutionsResponses];
 
 export type AdminPlansListAddonsData = {
     body?: never;
@@ -8892,16 +9234,12 @@ export type AgentIntegrationsCreateSkillError = AgentIntegrationsCreateSkillErro
 
 export type AgentIntegrationsCreateSkillResponses = {
     /**
-     * Response Agent Integrations Create Skill
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: AgentIntegrationsCreateSkillResponse;
 };
 
-export type AgentIntegrationsCreateSkillResponse = AgentIntegrationsCreateSkillResponses[keyof AgentIntegrationsCreateSkillResponses];
+export type AgentIntegrationsCreateSkillResponse2 = AgentIntegrationsCreateSkillResponses[keyof AgentIntegrationsCreateSkillResponses];
 
 export type AgentIntegrationsDeleteSkillData = {
     body?: never;
@@ -8956,16 +9294,12 @@ export type AgentIntegrationsUpdateSkillError = AgentIntegrationsUpdateSkillErro
 
 export type AgentIntegrationsUpdateSkillResponses = {
     /**
-     * Response Agent Integrations Update Skill
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: AgentIntegrationsUpdateSkillResponse;
 };
 
-export type AgentIntegrationsUpdateSkillResponse = AgentIntegrationsUpdateSkillResponses[keyof AgentIntegrationsUpdateSkillResponses];
+export type AgentIntegrationsUpdateSkillResponse2 = AgentIntegrationsUpdateSkillResponses[keyof AgentIntegrationsUpdateSkillResponses];
 
 export type AgentAgentChatData = {
     body?: never;
@@ -8976,13 +9310,9 @@ export type AgentAgentChatData = {
 
 export type AgentAgentChatResponses = {
     /**
-     * Response Agent Agent Chat
-     *
-     * Successful Response
+     * Server-sent agent events
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: string;
 };
 
 export type AgentAgentChatResponse = AgentAgentChatResponses[keyof AgentAgentChatResponses];
@@ -9010,13 +9340,9 @@ export type AgentAgentChatWithProfileError = AgentAgentChatWithProfileErrors[key
 
 export type AgentAgentChatWithProfileResponses = {
     /**
-     * Response Agent Agent Chat With Profile
-     *
-     * Successful Response
+     * Server-sent agent events
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: string;
 };
 
 export type AgentAgentChatWithProfileResponse = AgentAgentChatWithProfileResponses[keyof AgentAgentChatWithProfileResponses];
@@ -9030,16 +9356,12 @@ export type AgentAgentCreditsData = {
 
 export type AgentAgentCreditsResponses = {
     /**
-     * Response Agent Agent Credits
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: AgentAgentCreditsResponse;
 };
 
-export type AgentAgentCreditsResponse = AgentAgentCreditsResponses[keyof AgentAgentCreditsResponses];
+export type AgentAgentCreditsResponse2 = AgentAgentCreditsResponses[keyof AgentAgentCreditsResponses];
 
 export type AgentMcpMcpRootData = {
     body?: never;
@@ -9184,9 +9506,7 @@ export type AgentMcpCallToolError = AgentMcpCallToolErrors[keyof AgentMcpCallToo
 
 export type AgentMcpCallToolResponses = {
     /**
-     * Response Agent Mcp Call Tool
-     *
-     * Successful Response
+     * Server-sent tool execution events
      */
     200: string;
 };
@@ -9590,16 +9910,10 @@ export type AuthenticationLoginOptionsData = {
 
 export type AuthenticationLoginOptionsResponses = {
     /**
-     * Response Authentication Login Options
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: unknown;
 };
-
-export type AuthenticationLoginOptionsResponse = AuthenticationLoginOptionsResponses[keyof AuthenticationLoginOptionsResponses];
 
 export type AuthenticationLoginData = {
     body: LoginRequest;
@@ -9895,16 +10209,10 @@ export type AuthenticationSignupOptionsData = {
 
 export type AuthenticationSignupOptionsResponses = {
     /**
-     * Response Authentication Signup Options
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: unknown;
 };
-
-export type AuthenticationSignupOptionsResponse = AuthenticationSignupOptionsResponses[keyof AuthenticationSignupOptionsResponses];
 
 export type AuthenticationSignupData = {
     body: SignupRequest;
@@ -10029,16 +10337,12 @@ export type CloudflareDeployConnectCloudflareError = CloudflareDeployConnectClou
 
 export type CloudflareDeployConnectCloudflareResponses = {
     /**
-     * Response Cloudflare Deploy Connect Cloudflare
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CloudflareDeployConnectCloudflareResponse;
 };
 
-export type CloudflareDeployConnectCloudflareResponse = CloudflareDeployConnectCloudflareResponses[keyof CloudflareDeployConnectCloudflareResponses];
+export type CloudflareDeployConnectCloudflareResponse2 = CloudflareDeployConnectCloudflareResponses[keyof CloudflareDeployConnectCloudflareResponses];
 
 export type CloudflareDeployDeployToCloudflareData = {
     body: DeployRequest;
@@ -10083,16 +10387,12 @@ export type CloudflareInspectorInspectWorkerContentError = CloudflareInspectorIn
 
 export type CloudflareInspectorInspectWorkerContentResponses = {
     /**
-     * Response Cloudflare Inspector Inspect Worker Content
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: CloudflareInspectorInspectWorkerContentResponse;
 };
 
-export type CloudflareInspectorInspectWorkerContentResponse = CloudflareInspectorInspectWorkerContentResponses[keyof CloudflareInspectorInspectWorkerContentResponses];
+export type CloudflareInspectorInspectWorkerContentResponse2 = CloudflareInspectorInspectWorkerContentResponses[keyof CloudflareInspectorInspectWorkerContentResponses];
 
 export type CloudflareInspectorInspectWorkerSecretsData = {
     body: InspectRequest;
@@ -10928,16 +11228,12 @@ export type EdgeApiKeysCreateApiKeyError = EdgeApiKeysCreateApiKeyErrors[keyof E
 
 export type EdgeApiKeysCreateApiKeyResponses = {
     /**
-     * Response Edge Api Keys Create Api Key
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: EdgeApiKeysCreateApiKeyResponse;
 };
 
-export type EdgeApiKeysCreateApiKeyResponse = EdgeApiKeysCreateApiKeyResponses[keyof EdgeApiKeysCreateApiKeyResponses];
+export type EdgeApiKeysCreateApiKeyResponse2 = EdgeApiKeysCreateApiKeyResponses[keyof EdgeApiKeysCreateApiKeyResponses];
 
 export type EdgeApiKeysDeleteApiKeyData = {
     body?: never;
@@ -10992,16 +11288,12 @@ export type EdgeApiKeysUpdateApiKeyError = EdgeApiKeysUpdateApiKeyErrors[keyof E
 
 export type EdgeApiKeysUpdateApiKeyResponses = {
     /**
-     * Response Edge Api Keys Update Api Key
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeApiKeysUpdateApiKeyResponse;
 };
 
-export type EdgeApiKeysUpdateApiKeyResponse = EdgeApiKeysUpdateApiKeyResponses[keyof EdgeApiKeysUpdateApiKeyResponses];
+export type EdgeApiKeysUpdateApiKeyResponse2 = EdgeApiKeysUpdateApiKeyResponses[keyof EdgeApiKeysUpdateApiKeyResponses];
 
 export type EdgeApiKeysRevealApiKeyData = {
     body?: never;
@@ -11307,16 +11599,12 @@ export type EdgeDatabasesCreateSchemaError = EdgeDatabasesCreateSchemaErrors[key
 
 export type EdgeDatabasesCreateSchemaResponses = {
     /**
-     * Response Edge Databases Create Schema
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeDatabasesCreateSchemaResponse;
 };
 
-export type EdgeDatabasesCreateSchemaResponse = EdgeDatabasesCreateSchemaResponses[keyof EdgeDatabasesCreateSchemaResponses];
+export type EdgeDatabasesCreateSchemaResponse2 = EdgeDatabasesCreateSchemaResponses[keyof EdgeDatabasesCreateSchemaResponses];
 
 export type EdgeDatabasesDiscoverSchemasData = {
     body: DiscoverSchemasRequest;
@@ -11336,16 +11624,12 @@ export type EdgeDatabasesDiscoverSchemasError = EdgeDatabasesDiscoverSchemasErro
 
 export type EdgeDatabasesDiscoverSchemasResponses = {
     /**
-     * Response Edge Databases Discover Schemas
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeDatabasesDiscoverSchemasResponse;
 };
 
-export type EdgeDatabasesDiscoverSchemasResponse = EdgeDatabasesDiscoverSchemasResponses[keyof EdgeDatabasesDiscoverSchemasResponses];
+export type EdgeDatabasesDiscoverSchemasResponse2 = EdgeDatabasesDiscoverSchemasResponses[keyof EdgeDatabasesDiscoverSchemasResponses];
 
 export type EdgeDatabasesResetRolePasswordData = {
     body: ResetRolePasswordRequest;
@@ -11365,16 +11649,12 @@ export type EdgeDatabasesResetRolePasswordError = EdgeDatabasesResetRolePassword
 
 export type EdgeDatabasesResetRolePasswordResponses = {
     /**
-     * Response Edge Databases Reset Role Password
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeDatabasesResetRolePasswordResponse;
 };
 
-export type EdgeDatabasesResetRolePasswordResponse = EdgeDatabasesResetRolePasswordResponses[keyof EdgeDatabasesResetRolePasswordResponses];
+export type EdgeDatabasesResetRolePasswordResponse2 = EdgeDatabasesResetRolePasswordResponses[keyof EdgeDatabasesResetRolePasswordResponses];
 
 export type EdgeDatabasesTestConnectionInlineData = {
     body: EdgeDatabaseCreate;
@@ -11723,16 +12003,12 @@ export type EdgeEnginesGetBundleHashesData = {
 
 export type EdgeEnginesGetBundleHashesResponses = {
     /**
-     * Response Edge Engines Get Bundle Hashes
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeEnginesGetBundleHashesResponse;
 };
 
-export type EdgeEnginesGetBundleHashesResponse = EdgeEnginesGetBundleHashesResponses[keyof EdgeEnginesGetBundleHashesResponses];
+export type EdgeEnginesGetBundleHashesResponse2 = EdgeEnginesGetBundleHashesResponses[keyof EdgeEnginesGetBundleHashesResponses];
 
 export type EdgeEnginesDeployEngineData = {
     body: GenericDeployRequest;
@@ -11752,16 +12028,12 @@ export type EdgeEnginesDeployEngineError = EdgeEnginesDeployEngineErrors[keyof E
 
 export type EdgeEnginesDeployEngineResponses = {
     /**
-     * Response Edge Engines Deploy Engine
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeEnginesDeployEngineResponse;
 };
 
-export type EdgeEnginesDeployEngineResponse = EdgeEnginesDeployEngineResponses[keyof EdgeEnginesDeployEngineResponses];
+export type EdgeEnginesDeployEngineResponse2 = EdgeEnginesDeployEngineResponses[keyof EdgeEnginesDeployEngineResponses];
 
 export type EdgeEnginesImportEngineData = {
     body: ImportRequest;
@@ -11938,16 +12210,12 @@ export type EdgeAgentProfilesCreateProfileError = EdgeAgentProfilesCreateProfile
 
 export type EdgeAgentProfilesCreateProfileResponses = {
     /**
-     * Response Edge Agent Profiles Create Profile
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: EdgeAgentProfilesCreateProfileResponse;
 };
 
-export type EdgeAgentProfilesCreateProfileResponse = EdgeAgentProfilesCreateProfileResponses[keyof EdgeAgentProfilesCreateProfileResponses];
+export type EdgeAgentProfilesCreateProfileResponse2 = EdgeAgentProfilesCreateProfileResponses[keyof EdgeAgentProfilesCreateProfileResponses];
 
 export type EdgeAgentProfilesDeleteProfileData = {
     body?: never;
@@ -12010,16 +12278,12 @@ export type EdgeAgentProfilesUpdateProfileError = EdgeAgentProfilesUpdateProfile
 
 export type EdgeAgentProfilesUpdateProfileResponses = {
     /**
-     * Response Edge Agent Profiles Update Profile
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeAgentProfilesUpdateProfileResponse;
 };
 
-export type EdgeAgentProfilesUpdateProfileResponse = EdgeAgentProfilesUpdateProfileResponses[keyof EdgeAgentProfilesUpdateProfileResponses];
+export type EdgeAgentProfilesUpdateProfileResponse2 = EdgeAgentProfilesUpdateProfileResponses[keyof EdgeAgentProfilesUpdateProfileResponses];
 
 export type EdgeEnginesTenantSecretsAuditLogsData = {
     body?: never;
@@ -12187,16 +12451,12 @@ export type EngineInspectorHealthCheckError = EngineInspectorHealthCheckErrors[k
 
 export type EngineInspectorHealthCheckResponses = {
     /**
-     * Response Engine Inspector Health Check
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EngineInspectorHealthCheckResponse;
 };
 
-export type EngineInspectorHealthCheckResponse = EngineInspectorHealthCheckResponses[keyof EngineInspectorHealthCheckResponses];
+export type EngineInspectorHealthCheckResponse2 = EngineInspectorHealthCheckResponses[keyof EngineInspectorHealthCheckResponses];
 
 export type EngineInspectorInspectEngineDomainsData = {
     body?: never;
@@ -12221,16 +12481,12 @@ export type EngineInspectorInspectEngineDomainsError = EngineInspectorInspectEng
 
 export type EngineInspectorInspectEngineDomainsResponses = {
     /**
-     * Response Engine Inspector Inspect Engine Domains
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EngineInspectorInspectEngineDomainsResponse;
 };
 
-export type EngineInspectorInspectEngineDomainsResponse = EngineInspectorInspectEngineDomainsResponses[keyof EngineInspectorInspectEngineDomainsResponses];
+export type EngineInspectorInspectEngineDomainsResponse2 = EngineInspectorInspectEngineDomainsResponses[keyof EngineInspectorInspectEngineDomainsResponses];
 
 export type EngineInspectorAddEngineDomainData = {
     body: AddDomainBody;
@@ -12255,16 +12511,12 @@ export type EngineInspectorAddEngineDomainError = EngineInspectorAddEngineDomain
 
 export type EngineInspectorAddEngineDomainResponses = {
     /**
-     * Response Engine Inspector Add Engine Domain
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EngineInspectorAddEngineDomainResponse;
 };
 
-export type EngineInspectorAddEngineDomainResponse = EngineInspectorAddEngineDomainResponses[keyof EngineInspectorAddEngineDomainResponses];
+export type EngineInspectorAddEngineDomainResponse2 = EngineInspectorAddEngineDomainResponses[keyof EngineInspectorAddEngineDomainResponses];
 
 export type EngineInspectorDeleteEngineDomainData = {
     body?: never;
@@ -12293,16 +12545,12 @@ export type EngineInspectorDeleteEngineDomainError = EngineInspectorDeleteEngine
 
 export type EngineInspectorDeleteEngineDomainResponses = {
     /**
-     * Response Engine Inspector Delete Engine Domain
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EngineInspectorDeleteEngineDomainResponse;
 };
 
-export type EngineInspectorDeleteEngineDomainResponse = EngineInspectorDeleteEngineDomainResponses[keyof EngineInspectorDeleteEngineDomainResponses];
+export type EngineInspectorDeleteEngineDomainResponse2 = EngineInspectorDeleteEngineDomainResponses[keyof EngineInspectorDeleteEngineDomainResponses];
 
 export type EngineInspectorVerifyEngineDomainData = {
     body?: never;
@@ -12331,16 +12579,12 @@ export type EngineInspectorVerifyEngineDomainError = EngineInspectorVerifyEngine
 
 export type EngineInspectorVerifyEngineDomainResponses = {
     /**
-     * Response Engine Inspector Verify Engine Domain
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EngineInspectorVerifyEngineDomainResponse;
 };
 
-export type EngineInspectorVerifyEngineDomainResponse = EngineInspectorVerifyEngineDomainResponses[keyof EngineInspectorVerifyEngineDomainResponses];
+export type EngineInspectorVerifyEngineDomainResponse2 = EngineInspectorVerifyEngineDomainResponses[keyof EngineInspectorVerifyEngineDomainResponses];
 
 export type EngineInspectorInspectEngineSecretsData = {
     body?: never;
@@ -12365,16 +12609,12 @@ export type EngineInspectorInspectEngineSecretsError = EngineInspectorInspectEng
 
 export type EngineInspectorInspectEngineSecretsResponses = {
     /**
-     * Response Engine Inspector Inspect Engine Secrets
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EngineInspectorInspectEngineSecretsResponse;
 };
 
-export type EngineInspectorInspectEngineSecretsResponse = EngineInspectorInspectEngineSecretsResponses[keyof EngineInspectorInspectEngineSecretsResponses];
+export type EngineInspectorInspectEngineSecretsResponse2 = EngineInspectorInspectEngineSecretsResponses[keyof EngineInspectorInspectEngineSecretsResponses];
 
 export type EngineInspectorInspectEngineSettingsData = {
     body?: never;
@@ -12399,16 +12639,12 @@ export type EngineInspectorInspectEngineSettingsError = EngineInspectorInspectEn
 
 export type EngineInspectorInspectEngineSettingsResponses = {
     /**
-     * Response Engine Inspector Inspect Engine Settings
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EngineInspectorInspectEngineSettingsResponse;
 };
 
-export type EngineInspectorInspectEngineSettingsResponse = EngineInspectorInspectEngineSettingsResponses[keyof EngineInspectorInspectEngineSettingsResponses];
+export type EngineInspectorInspectEngineSettingsResponse2 = EngineInspectorInspectEngineSettingsResponses[keyof EngineInspectorInspectEngineSettingsResponses];
 
 export type EngineInspectorInspectEngineSourceData = {
     body?: never;
@@ -12433,16 +12669,12 @@ export type EngineInspectorInspectEngineSourceError = EngineInspectorInspectEngi
 
 export type EngineInspectorInspectEngineSourceResponses = {
     /**
-     * Response Engine Inspector Inspect Engine Source
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EngineInspectorInspectEngineSourceResponse;
 };
 
-export type EngineInspectorInspectEngineSourceResponse = EngineInspectorInspectEngineSourceResponses[keyof EngineInspectorInspectEngineSourceResponses];
+export type EngineInspectorInspectEngineSourceResponse2 = EngineInspectorInspectEngineSourceResponses[keyof EngineInspectorInspectEngineSourceResponses];
 
 export type EdgeEnginesGetEngineLogsData = {
     body?: never;
@@ -12635,16 +12867,12 @@ export type EdgeEnginesReconfigureEngineError = EdgeEnginesReconfigureEngineErro
 
 export type EdgeEnginesReconfigureEngineResponses = {
     /**
-     * Response Edge Engines Reconfigure Engine
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeEnginesReconfigureEngineResponse;
 };
 
-export type EdgeEnginesReconfigureEngineResponse = EdgeEnginesReconfigureEngineResponses[keyof EdgeEnginesReconfigureEngineResponses];
+export type EdgeEnginesReconfigureEngineResponse2 = EdgeEnginesReconfigureEngineResponses[keyof EdgeEnginesReconfigureEngineResponses];
 
 export type EdgeEnginesRedeployEngineData = {
     body?: never;
@@ -12669,16 +12897,12 @@ export type EdgeEnginesRedeployEngineError = EdgeEnginesRedeployEngineErrors[key
 
 export type EdgeEnginesRedeployEngineResponses = {
     /**
-     * Response Edge Engines Redeploy Engine
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeEnginesRedeployEngineResponse;
 };
 
-export type EdgeEnginesRedeployEngineResponse = EdgeEnginesRedeployEngineResponses[keyof EdgeEnginesRedeployEngineResponses];
+export type EdgeEnginesRedeployEngineResponse2 = EdgeEnginesRedeployEngineResponses[keyof EdgeEnginesRedeployEngineResponses];
 
 export type EdgeEnginesRollbackRotationData = {
     body: RollbackRotationRequest;
@@ -12703,16 +12927,12 @@ export type EdgeEnginesRollbackRotationError = EdgeEnginesRollbackRotationErrors
 
 export type EdgeEnginesRollbackRotationResponses = {
     /**
-     * Response Edge Engines Rollback Rotation
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeEnginesRollbackRotationResponse;
 };
 
-export type EdgeEnginesRollbackRotationResponse = EdgeEnginesRollbackRotationResponses[keyof EdgeEnginesRollbackRotationResponses];
+export type EdgeEnginesRollbackRotationResponse2 = EdgeEnginesRollbackRotationResponses[keyof EdgeEnginesRollbackRotationResponses];
 
 export type EdgeEnginesRotateSecretsKeyData = {
     body: RotateSecretsKeyRequest;
@@ -12737,16 +12957,12 @@ export type EdgeEnginesRotateSecretsKeyError = EdgeEnginesRotateSecretsKeyErrors
 
 export type EdgeEnginesRotateSecretsKeyResponses = {
     /**
-     * Response Edge Engines Rotate Secrets Key
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeEnginesRotateSecretsKeyResponse;
 };
 
-export type EdgeEnginesRotateSecretsKeyResponse = EdgeEnginesRotateSecretsKeyResponses[keyof EdgeEnginesRotateSecretsKeyResponses];
+export type EdgeEnginesRotateSecretsKeyResponse2 = EdgeEnginesRotateSecretsKeyResponses[keyof EdgeEnginesRotateSecretsKeyResponses];
 
 export type EdgeEnginesRotationHistoryData = {
     body?: never;
@@ -12801,16 +13017,12 @@ export type EdgeEnginesRotationStatusError = EdgeEnginesRotationStatusErrors[key
 
 export type EdgeEnginesRotationStatusResponses = {
     /**
-     * Response Edge Engines Rotation Status
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeEnginesRotationStatusResponse;
 };
 
-export type EdgeEnginesRotationStatusResponse = EdgeEnginesRotationStatusResponses[keyof EdgeEnginesRotationStatusResponses];
+export type EdgeEnginesRotationStatusResponse2 = EdgeEnginesRotationStatusResponses[keyof EdgeEnginesRotationStatusResponses];
 
 export type EdgeEnginesGetEngineSourceData = {
     body?: never;
@@ -12900,16 +13112,12 @@ export type EdgeEnginesSyncManifestError = EdgeEnginesSyncManifestErrors[keyof E
 
 export type EdgeEnginesSyncManifestResponses = {
     /**
-     * Response Edge Engines Sync Manifest
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeEnginesSyncManifestResponse;
 };
 
-export type EdgeEnginesSyncManifestResponse = EdgeEnginesSyncManifestResponses[keyof EdgeEnginesSyncManifestResponses];
+export type EdgeEnginesSyncManifestResponse2 = EdgeEnginesSyncManifestResponses[keyof EdgeEnginesSyncManifestResponses];
 
 export type EdgeEnginesTestEngineConnectionData = {
     body?: never;
@@ -12984,16 +13192,12 @@ export type EdgeGpuCreateGpuModelError = EdgeGpuCreateGpuModelErrors[keyof EdgeG
 
 export type EdgeGpuCreateGpuModelResponses = {
     /**
-     * Response Edge Gpu Create Gpu Model
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeGpuCreateGpuModelResponse;
 };
 
-export type EdgeGpuCreateGpuModelResponse = EdgeGpuCreateGpuModelResponses[keyof EdgeGpuCreateGpuModelResponses];
+export type EdgeGpuCreateGpuModelResponse2 = EdgeGpuCreateGpuModelResponses[keyof EdgeGpuCreateGpuModelResponses];
 
 export type EdgeGpuGetCatalogData = {
     body?: never;
@@ -13073,16 +13277,12 @@ export type EdgeGpuDeleteGpuModelError = EdgeGpuDeleteGpuModelErrors[keyof EdgeG
 
 export type EdgeGpuDeleteGpuModelResponses = {
     /**
-     * Response Edge Gpu Delete Gpu Model
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeGpuDeleteGpuModelResponse;
 };
 
-export type EdgeGpuDeleteGpuModelResponse = EdgeGpuDeleteGpuModelResponses[keyof EdgeGpuDeleteGpuModelResponses];
+export type EdgeGpuDeleteGpuModelResponse2 = EdgeGpuDeleteGpuModelResponses[keyof EdgeGpuDeleteGpuModelResponses];
 
 export type EdgeGpuUpdateGpuModelData = {
     body: GpuModelUpdate;
@@ -13107,16 +13307,12 @@ export type EdgeGpuUpdateGpuModelError = EdgeGpuUpdateGpuModelErrors[keyof EdgeG
 
 export type EdgeGpuUpdateGpuModelResponses = {
     /**
-     * Response Edge Gpu Update Gpu Model
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeGpuUpdateGpuModelResponse;
 };
 
-export type EdgeGpuUpdateGpuModelResponse = EdgeGpuUpdateGpuModelResponses[keyof EdgeGpuUpdateGpuModelResponses];
+export type EdgeGpuUpdateGpuModelResponse2 = EdgeGpuUpdateGpuModelResponses[keyof EdgeGpuUpdateGpuModelResponses];
 
 export type EdgeGpuTestGpuModelData = {
     body?: never;
@@ -13141,16 +13337,12 @@ export type EdgeGpuTestGpuModelError = EdgeGpuTestGpuModelErrors[keyof EdgeGpuTe
 
 export type EdgeGpuTestGpuModelResponses = {
     /**
-     * Response Edge Gpu Test Gpu Model
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeGpuTestGpuModelResponse;
 };
 
-export type EdgeGpuTestGpuModelResponse = EdgeGpuTestGpuModelResponses[keyof EdgeGpuTestGpuModelResponses];
+export type EdgeGpuTestGpuModelResponse2 = EdgeGpuTestGpuModelResponses[keyof EdgeGpuTestGpuModelResponses];
 
 export type EdgeProvidersListProvidersData = {
     body?: never;
@@ -13218,16 +13410,12 @@ export type EdgeProvidersListAccountTablesError = EdgeProvidersListAccountTables
 
 export type EdgeProvidersListAccountTablesResponses = {
     /**
-     * Response Edge Providers List Account Tables
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeProvidersListAccountTablesResponse;
 };
 
-export type EdgeProvidersListAccountTablesResponse = EdgeProvidersListAccountTablesResponses[keyof EdgeProvidersListAccountTablesResponses];
+export type EdgeProvidersListAccountTablesResponse2 = EdgeProvidersListAccountTablesResponses[keyof EdgeProvidersListAccountTablesResponses];
 
 export type EdgeProvidersCreateResourceByAccountData = {
     body: CreateResourceRequest;
@@ -13252,16 +13440,12 @@ export type EdgeProvidersCreateResourceByAccountError = EdgeProvidersCreateResou
 
 export type EdgeProvidersCreateResourceByAccountResponses = {
     /**
-     * Response Edge Providers Create Resource By Account
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeProvidersCreateResourceByAccountResponse;
 };
 
-export type EdgeProvidersCreateResourceByAccountResponse = EdgeProvidersCreateResourceByAccountResponses[keyof EdgeProvidersCreateResourceByAccountResponses];
+export type EdgeProvidersCreateResourceByAccountResponse2 = EdgeProvidersCreateResourceByAccountResponses[keyof EdgeProvidersCreateResourceByAccountResponses];
 
 export type EdgeProvidersDiscoverResourcesEndpointData = {
     body: DiscoverRequest;
@@ -13281,16 +13465,12 @@ export type EdgeProvidersDiscoverResourcesEndpointError = EdgeProvidersDiscoverR
 
 export type EdgeProvidersDiscoverResourcesEndpointResponses = {
     /**
-     * Response Edge Providers Discover Resources Endpoint
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeProvidersDiscoverResourcesEndpointResponse;
 };
 
-export type EdgeProvidersDiscoverResourcesEndpointResponse = EdgeProvidersDiscoverResourcesEndpointResponses[keyof EdgeProvidersDiscoverResourcesEndpointResponses];
+export type EdgeProvidersDiscoverResourcesEndpointResponse2 = EdgeProvidersDiscoverResourcesEndpointResponses[keyof EdgeProvidersDiscoverResourcesEndpointResponses];
 
 export type EdgeProvidersDiscoverByAccountData = {
     body?: never;
@@ -13315,16 +13495,12 @@ export type EdgeProvidersDiscoverByAccountError = EdgeProvidersDiscoverByAccount
 
 export type EdgeProvidersDiscoverByAccountResponses = {
     /**
-     * Response Edge Providers Discover By Account
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeProvidersDiscoverByAccountResponse;
 };
 
-export type EdgeProvidersDiscoverByAccountResponse = EdgeProvidersDiscoverByAccountResponses[keyof EdgeProvidersDiscoverByAccountResponses];
+export type EdgeProvidersDiscoverByAccountResponse2 = EdgeProvidersDiscoverByAccountResponses[keyof EdgeProvidersDiscoverByAccountResponses];
 
 export type EdgeProvidersRetestProviderData = {
     body?: never;
@@ -13349,16 +13525,12 @@ export type EdgeProvidersRetestProviderError = EdgeProvidersRetestProviderErrors
 
 export type EdgeProvidersRetestProviderResponses = {
     /**
-     * Response Edge Providers Retest Provider
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeProvidersRetestProviderResponse;
 };
 
-export type EdgeProvidersRetestProviderResponse = EdgeProvidersRetestProviderResponses[keyof EdgeProvidersRetestProviderResponses];
+export type EdgeProvidersRetestProviderResponse2 = EdgeProvidersRetestProviderResponses[keyof EdgeProvidersRetestProviderResponses];
 
 export type EdgeProvidersTestConnectionData = {
     body: TestConnectionRequest;
@@ -13378,16 +13550,12 @@ export type EdgeProvidersTestConnectionError = EdgeProvidersTestConnectionErrors
 
 export type EdgeProvidersTestConnectionResponses = {
     /**
-     * Response Edge Providers Test Connection
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeProvidersTestConnectionResponse;
 };
 
-export type EdgeProvidersTestConnectionResponse = EdgeProvidersTestConnectionResponses[keyof EdgeProvidersTestConnectionResponses];
+export type EdgeProvidersTestConnectionResponse2 = EdgeProvidersTestConnectionResponses[keyof EdgeProvidersTestConnectionResponses];
 
 export type EdgeProvidersGetWorkspaceAgentTokenData = {
     body?: never;
@@ -13423,16 +13591,12 @@ export type EdgeProvidersSetWorkspaceAgentTokenError = EdgeProvidersSetWorkspace
 
 export type EdgeProvidersSetWorkspaceAgentTokenResponses = {
     /**
-     * Response Edge Providers Set Workspace Agent Token
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeProvidersSetWorkspaceAgentTokenResponse;
 };
 
-export type EdgeProvidersSetWorkspaceAgentTokenResponse = EdgeProvidersSetWorkspaceAgentTokenResponses[keyof EdgeProvidersSetWorkspaceAgentTokenResponses];
+export type EdgeProvidersSetWorkspaceAgentTokenResponse2 = EdgeProvidersSetWorkspaceAgentTokenResponses[keyof EdgeProvidersSetWorkspaceAgentTokenResponses];
 
 export type EdgeProvidersListEnginesForProviderData = {
     body?: never;
@@ -13675,16 +13839,12 @@ export type EdgeProvidersGetCredentialsError = EdgeProvidersGetCredentialsErrors
 
 export type EdgeProvidersGetCredentialsResponses = {
     /**
-     * Response Edge Providers Get Credentials
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeProvidersGetCredentialsResponse;
 };
 
-export type EdgeProvidersGetCredentialsResponse = EdgeProvidersGetCredentialsResponses[keyof EdgeProvidersGetCredentialsResponses];
+export type EdgeProvidersGetCredentialsResponse2 = EdgeProvidersGetCredentialsResponses[keyof EdgeProvidersGetCredentialsResponses];
 
 export type EdgeQueuesListEdgeQueuesData = {
     body?: never;
@@ -13960,16 +14120,12 @@ export type EdgeVectorsTestConnectionInlineError = EdgeVectorsTestConnectionInli
 
 export type EdgeVectorsTestConnectionInlineResponses = {
     /**
-     * Response Edge Vectors Test Connection Inline
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeVectorsTestConnectionInlineResponse;
 };
 
-export type EdgeVectorsTestConnectionInlineResponse = EdgeVectorsTestConnectionInlineResponses[keyof EdgeVectorsTestConnectionInlineResponses];
+export type EdgeVectorsTestConnectionInlineResponse2 = EdgeVectorsTestConnectionInlineResponses[keyof EdgeVectorsTestConnectionInlineResponses];
 
 export type EdgeVectorsDeleteEdgeVectorData = {
     body?: never;
@@ -14059,16 +14215,12 @@ export type EdgeVectorsTestEdgeVectorConnectionError = EdgeVectorsTestEdgeVector
 
 export type EdgeVectorsTestEdgeVectorConnectionResponses = {
     /**
-     * Response Edge Vectors Test Edge Vector Connection
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: EdgeVectorsTestEdgeVectorConnectionResponse;
 };
 
-export type EdgeVectorsTestEdgeVectorConnectionResponse = EdgeVectorsTestEdgeVectorConnectionResponses[keyof EdgeVectorsTestEdgeVectorConnectionResponses];
+export type EdgeVectorsTestEdgeVectorConnectionResponse2 = EdgeVectorsTestEdgeVectorConnectionResponses[keyof EdgeVectorsTestEdgeVectorConnectionResponses];
 
 export type AgentIntegrationsListMcpServersData = {
     body?: never;
@@ -14118,16 +14270,12 @@ export type AgentIntegrationsCreateMcpServerError = AgentIntegrationsCreateMcpSe
 
 export type AgentIntegrationsCreateMcpServerResponses = {
     /**
-     * Response Agent Integrations Create Mcp Server
-     *
      * Successful Response
      */
-    201: {
-        [key: string]: unknown;
-    };
+    201: AgentIntegrationsCreateMcpServerResponse;
 };
 
-export type AgentIntegrationsCreateMcpServerResponse = AgentIntegrationsCreateMcpServerResponses[keyof AgentIntegrationsCreateMcpServerResponses];
+export type AgentIntegrationsCreateMcpServerResponse2 = AgentIntegrationsCreateMcpServerResponses[keyof AgentIntegrationsCreateMcpServerResponses];
 
 export type AgentIntegrationsDeleteMcpServerData = {
     body?: never;
@@ -14182,16 +14330,12 @@ export type AgentIntegrationsGetMcpServerError = AgentIntegrationsGetMcpServerEr
 
 export type AgentIntegrationsGetMcpServerResponses = {
     /**
-     * Response Agent Integrations Get Mcp Server
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: AgentIntegrationsGetMcpServerResponse;
 };
 
-export type AgentIntegrationsGetMcpServerResponse = AgentIntegrationsGetMcpServerResponses[keyof AgentIntegrationsGetMcpServerResponses];
+export type AgentIntegrationsGetMcpServerResponse2 = AgentIntegrationsGetMcpServerResponses[keyof AgentIntegrationsGetMcpServerResponses];
 
 export type AgentIntegrationsUpdateMcpServerData = {
     body: McpServerUpdate;
@@ -14216,16 +14360,12 @@ export type AgentIntegrationsUpdateMcpServerError = AgentIntegrationsUpdateMcpSe
 
 export type AgentIntegrationsUpdateMcpServerResponses = {
     /**
-     * Response Agent Integrations Update Mcp Server
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: AgentIntegrationsUpdateMcpServerResponse;
 };
 
-export type AgentIntegrationsUpdateMcpServerResponse = AgentIntegrationsUpdateMcpServerResponses[keyof AgentIntegrationsUpdateMcpServerResponses];
+export type AgentIntegrationsUpdateMcpServerResponse2 = AgentIntegrationsUpdateMcpServerResponses[keyof AgentIntegrationsUpdateMcpServerResponses];
 
 export type AgentIntegrationsTestMcpServerData = {
     body?: never;
@@ -14870,16 +15010,12 @@ export type ProjectUploadBrandingAssetError = ProjectUploadBrandingAssetErrors[k
 
 export type ProjectUploadBrandingAssetResponses = {
     /**
-     * Response Project Upload Branding Asset
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: ProjectUploadBrandingAssetResponse;
 };
 
-export type ProjectUploadBrandingAssetResponse = ProjectUploadBrandingAssetResponses[keyof ProjectUploadBrandingAssetResponses];
+export type ProjectUploadBrandingAssetResponse2 = ProjectUploadBrandingAssetResponses[keyof ProjectUploadBrandingAssetResponses];
 
 export type ProjectsListProjectsData = {
     body?: never;
@@ -15613,16 +15749,12 @@ export type StorageListBucketsError = StorageListBucketsErrors[keyof StorageList
 
 export type StorageListBucketsResponses = {
     /**
-     * Response Storage List Buckets
-     *
      * Successful Response
      */
-    200: {
-        [key: string]: unknown;
-    };
+    200: StorageListBucketsResponse;
 };
 
-export type StorageListBucketsResponse = StorageListBucketsResponses[keyof StorageListBucketsResponses];
+export type StorageListBucketsResponse2 = StorageListBucketsResponses[keyof StorageListBucketsResponses];
 
 export type StorageCreateBucketData = {
     /**

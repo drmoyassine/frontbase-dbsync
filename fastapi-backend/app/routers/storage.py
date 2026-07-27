@@ -23,6 +23,7 @@ from app.middleware.tenant_context import TenantContext, get_tenant_context
 from app.database.utils import get_project
 
 from ..schemas.op_responses import CreateNetlifySiteResult, CreateStorageProviderResult, CreateVercelProjectResult
+from ..schemas.op_responses import StorageListBucketsResponse
 router = APIRouter(prefix="/api/storage", tags=["storage"])
 
 
@@ -348,7 +349,7 @@ def _resolve_adapter(provider_id: str, ctx: TenantContext | None = None):
 # Bucket Operations (all scoped by provider_id)
 # ============================================================================
 
-@router.get("/buckets", response_model=dict[str, Any])
+@router.get("/buckets", response_model=StorageListBucketsResponse)
 async def list_buckets(provider_id: str = Query(..., description="StorageProvider ID"), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List all buckets for a storage provider (fast — no size computation)."""
     try:

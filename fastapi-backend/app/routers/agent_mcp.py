@@ -187,7 +187,17 @@ async def list_tools(profile_slug: str, request: Request):
         db.close()
 
 
-@router.post("/{profile_slug}/tools/call", response_model=str)
+@router.post(
+    "/{profile_slug}/tools/call",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            "description": "Server-sent tool execution events",
+        }
+    },
+)
 async def call_tool(profile_slug: str, request: Request):
     """Execute a tool and return the result.
 

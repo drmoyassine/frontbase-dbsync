@@ -12,6 +12,12 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict
 
 
+class JsonObjectResponse(BaseModel):
+    """Named pass-through contract for handlers that proxy variable JSON objects."""
+
+    model_config = ConfigDict(extra="allow")
+
+
 class AddTursoDatabaseResult(BaseModel):
     database: Optional[Any] = None
     success: bool
@@ -502,4 +508,218 @@ class VectorSearchResult(BaseModel):
 class VectorUpsertResult(BaseModel):
     success: bool
     upserted: Optional[Any] = None
+
+
+# CF-22 response-contract closure.
+#
+# These operation-specific subclasses deliberately preserve arbitrary JSON keys:
+# the corresponding handlers proxy provider/edge payloads whose exact fields are
+# owned by the downstream service. Giving each operation a named model keeps the
+# OpenAPI/client contract explicit without stripping those provider-owned fields.
+class ActionsGetExecutionStatsResponse(JsonObjectResponse):
+    pass
+
+
+class ActionsGetExecutionResultResponse(JsonObjectResponse):
+    pass
+
+
+class ActionsListAllExecutionsResponse(JsonObjectResponse):
+    pass
+
+
+class ActionsGetExecutionDetailResponse(JsonObjectResponse):
+    pass
+
+
+class ActionsGetProductionExecutionsResponse(JsonObjectResponse):
+    pass
+
+
+class AgentIntegrationsCreateSkillResponse(JsonObjectResponse):
+    pass
+
+
+class AgentIntegrationsUpdateSkillResponse(JsonObjectResponse):
+    pass
+
+
+class AgentIntegrationsCreateMcpServerResponse(JsonObjectResponse):
+    pass
+
+
+class AgentIntegrationsGetMcpServerResponse(JsonObjectResponse):
+    pass
+
+
+class AgentIntegrationsUpdateMcpServerResponse(JsonObjectResponse):
+    pass
+
+
+class AgentAgentCreditsResponse(JsonObjectResponse):
+    pass
+
+
+class CloudflareDeployConnectCloudflareResponse(JsonObjectResponse):
+    pass
+
+
+class CloudflareInspectorInspectWorkerContentResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeApiKeysCreateApiKeyResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeApiKeysUpdateApiKeyResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeDatabasesCreateSchemaResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeDatabasesDiscoverSchemasResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeDatabasesResetRolePasswordResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeEnginesGetBundleHashesResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeEnginesDeployEngineResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeEnginesReconfigureEngineResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeEnginesRedeployEngineResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeEnginesRollbackRotationResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeEnginesRotateSecretsKeyResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeEnginesRotationStatusResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeEnginesSyncManifestResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeAgentProfilesCreateProfileResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeAgentProfilesUpdateProfileResponse(JsonObjectResponse):
+    pass
+
+
+class EngineInspectorHealthCheckResponse(JsonObjectResponse):
+    pass
+
+
+class EngineInspectorInspectEngineDomainsResponse(JsonObjectResponse):
+    pass
+
+
+class EngineInspectorAddEngineDomainResponse(JsonObjectResponse):
+    pass
+
+
+class EngineInspectorDeleteEngineDomainResponse(JsonObjectResponse):
+    pass
+
+
+class EngineInspectorVerifyEngineDomainResponse(JsonObjectResponse):
+    pass
+
+
+class EngineInspectorInspectEngineSecretsResponse(JsonObjectResponse):
+    pass
+
+
+class EngineInspectorInspectEngineSettingsResponse(JsonObjectResponse):
+    pass
+
+
+class EngineInspectorInspectEngineSourceResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeGpuCreateGpuModelResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeGpuDeleteGpuModelResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeGpuUpdateGpuModelResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeGpuTestGpuModelResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeProvidersListAccountTablesResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeProvidersCreateResourceByAccountResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeProvidersDiscoverResourcesEndpointResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeProvidersDiscoverByAccountResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeProvidersRetestProviderResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeProvidersTestConnectionResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeProvidersSetWorkspaceAgentTokenResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeProvidersGetCredentialsResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeVectorsTestConnectionInlineResponse(JsonObjectResponse):
+    pass
+
+
+class EdgeVectorsTestEdgeVectorConnectionResponse(JsonObjectResponse):
+    pass
+
+
+class ProjectUploadBrandingAssetResponse(JsonObjectResponse):
+    pass
+
+
+class StorageListBucketsResponse(JsonObjectResponse):
+    pass
 

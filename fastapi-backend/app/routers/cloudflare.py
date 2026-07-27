@@ -37,6 +37,7 @@ from ..services.bundle import build_worker, get_source_hash
 from ..services.secrets_builder import build_engine_secrets
 
 from ..schemas.op_responses import CloudflareStatusResult, DeployToCloudflareResult
+from ..schemas.op_responses import CloudflareDeployConnectCloudflareResponse
 from ..schemas.common import SuccessMessageAck
 router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 
@@ -45,7 +46,7 @@ router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Deploy"])
 # Endpoints
 # =============================================================================
 
-@router.post("/connect", response_model=dict[str, Any])
+@router.post("/connect", response_model=CloudflareDeployConnectCloudflareResponse)
 async def connect_cloudflare(payload: ConnectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """
     List existing workers using saved credentials from EdgeProviderAccount.

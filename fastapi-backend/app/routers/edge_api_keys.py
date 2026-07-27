@@ -36,6 +36,10 @@ from ..middleware.tenant_context import TenantContext, get_tenant_context
 
 
 from ..schemas.op_responses import ListApiKeysResult, RevealApiKeyResult
+from ..schemas.op_responses import (
+    EdgeApiKeysCreateApiKeyResponse,
+    EdgeApiKeysUpdateApiKeyResponse,
+)
 router = APIRouter(prefix="/api/edge-api-keys", tags=["edge-api-keys"])
 
 
@@ -262,7 +266,7 @@ def list_api_keys(
     return {"keys": result, "total": len(result)}
 
 
-@router.post("", status_code=201, response_model=dict[str, Any])
+@router.post("", status_code=201, response_model=EdgeApiKeysCreateApiKeyResponse)
 def create_api_key(
     payload: APIKeyCreate,
     background_tasks: BackgroundTasks,
@@ -332,7 +336,7 @@ def create_api_key(
     return response
 
 
-@router.put("/{key_id}", response_model=dict[str, Any])
+@router.put("/{key_id}", response_model=EdgeApiKeysUpdateApiKeyResponse)
 def update_api_key(
     key_id: str,
     payload: APIKeyUpdate,

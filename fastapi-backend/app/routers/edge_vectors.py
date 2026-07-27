@@ -38,6 +38,10 @@ from ..services.security_logger import (
 from ..services.dns_cache import resolve_all
 
 from ..schemas.op_responses import DeleteEdgeVectorResult
+from ..schemas.op_responses import (
+    EdgeVectorsTestConnectionInlineResponse,
+    EdgeVectorsTestEdgeVectorConnectionResponse,
+)
 router = APIRouter(prefix="/api/edge-vectors", tags=["edge-vectors"])
 
 logger = logging.getLogger(__name__)
@@ -887,7 +891,10 @@ async def delete_edge_vector(vector_id: str, delete_remote: bool = False, ctx: T
         db.close()
 
 
-@router.post("/{vector_id}/test", response_model=dict[str, Any])
+@router.post(
+    "/{vector_id}/test",
+    response_model=EdgeVectorsTestEdgeVectorConnectionResponse,
+)
 async def test_edge_vector_connection(vector_id: str, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test connection to an existing edge vector store."""
     db = SessionLocal()
@@ -925,7 +932,10 @@ async def test_edge_vector_connection(vector_id: str, ctx: TenantContext | None 
         db.close()
 
 
-@router.post("/test-connection", response_model=dict[str, Any])
+@router.post(
+    "/test-connection",
+    response_model=EdgeVectorsTestConnectionInlineResponse,
+)
 async def test_connection_inline(payload: VectorTestConnectionRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Test connection using raw fields (pre-save)."""
     db = SessionLocal()

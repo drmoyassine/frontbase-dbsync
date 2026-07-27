@@ -24,6 +24,7 @@ from ..middleware.tenant_context import TenantContext, get_tenant_context
 from ..database.utils import get_project
 
 from ..schemas.op_responses import InspectWorkerSecretsResult, InspectWorkerSettingsResult
+from ..schemas.op_responses import CloudflareInspectorInspectWorkerContentResponse
 router = APIRouter(prefix="/api/cloudflare", tags=["Cloudflare Inspector"])
 
 
@@ -134,7 +135,10 @@ def _inspect_settings_sync(api_token: str, account_id: str, worker_name: str) ->
 # Endpoints
 # =============================================================================
 
-@router.post("/inspect/content", response_model=dict[str, Any])
+@router.post(
+    "/inspect/content",
+    response_model=CloudflareInspectorInspectWorkerContentResponse,
+)
 async def inspect_worker_content(payload: InspectRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Fetch the deployed worker's script source code."""
     try:

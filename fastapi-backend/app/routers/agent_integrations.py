@@ -33,6 +33,13 @@ from ..services.agent_skills import seed_builtin_skills
 logger = logging.getLogger(__name__)
 
 from ..schemas.op_responses import GetAgentCatalogueResult, InstallSkillResult, ListMcpServerToolsResult, ListMcpServersResult, ListProfileSkillsResult, ListSkillsResult, TestMcpServerResult
+from ..schemas.op_responses import (
+    AgentIntegrationsCreateMcpServerResponse,
+    AgentIntegrationsCreateSkillResponse,
+    AgentIntegrationsGetMcpServerResponse,
+    AgentIntegrationsUpdateMcpServerResponse,
+    AgentIntegrationsUpdateSkillResponse,
+)
 router = APIRouter(prefix="/api", tags=["agent-integrations"])
 
 
@@ -162,7 +169,11 @@ def list_mcp_servers(
     return {"mcpServers": [_mcp_view(m) for m in rows], "total": len(rows)}
 
 
-@router.post("/mcp-servers", status_code=201, response_model=dict[str, Any])
+@router.post(
+    "/mcp-servers",
+    status_code=201,
+    response_model=AgentIntegrationsCreateMcpServerResponse,
+)
 def create_mcp_server(
     body: McpServerCreate,
     db: Session = Depends(get_db),
@@ -195,7 +206,10 @@ def create_mcp_server(
     return _mcp_view(m)
 
 
-@router.get("/mcp-servers/{server_id}", response_model=dict[str, Any])
+@router.get(
+    "/mcp-servers/{server_id}",
+    response_model=AgentIntegrationsGetMcpServerResponse,
+)
 def get_mcp_server(
     server_id: str,
     db: Session = Depends(get_db),
@@ -205,7 +219,10 @@ def get_mcp_server(
     return _mcp_view(m)
 
 
-@router.put("/mcp-servers/{server_id}", response_model=dict[str, Any])
+@router.put(
+    "/mcp-servers/{server_id}",
+    response_model=AgentIntegrationsUpdateMcpServerResponse,
+)
 def update_mcp_server(
     server_id: str,
     body: McpServerUpdate,
@@ -379,7 +396,11 @@ def list_skills(
     return {"skills": [_skill_view(s) for s in rows], "total": len(rows)}
 
 
-@router.post("/agent-skills", status_code=201, response_model=dict[str, Any])
+@router.post(
+    "/agent-skills",
+    status_code=201,
+    response_model=AgentIntegrationsCreateSkillResponse,
+)
 def create_skill(
     body: SkillCreate,
     db: Session = Depends(get_db),
@@ -409,7 +430,10 @@ def create_skill(
     return _skill_view(s)
 
 
-@router.put("/agent-skills/{skill_id}", response_model=dict[str, Any])
+@router.put(
+    "/agent-skills/{skill_id}",
+    response_model=AgentIntegrationsUpdateSkillResponse,
+)
 def update_skill(
     skill_id: str,
     body: SkillUpdate,

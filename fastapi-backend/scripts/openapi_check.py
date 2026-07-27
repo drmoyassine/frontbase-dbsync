@@ -46,7 +46,9 @@ def _has_typed_success(op: dict) -> bool:
     for status, resp in op.get("responses", {}).items():
         if not status.startswith("2"):
             continue
-        if status == "204":  # no content is a legitimate typed contract
+        if not resp.get("content"):
+            # Explicit response_class=Response endpoints (for example CORS
+            # preflights) legitimately return no body even when the status is 200.
             return True
         for media in resp.get("content", {}).values():
             schema = media.get("schema")

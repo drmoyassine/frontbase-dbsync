@@ -26,6 +26,7 @@ from app.middleware.tenant_context import TenantContext, get_tenant_context
 
 from ..services.agent_executor import execute_agent_turn
 from ..services import agent_quota
+from ..schemas.op_responses import AgentAgentCreditsResponse
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,11 @@ async def _agent_chat_impl(request: Request, ctx: Optional[TenantContext], profi
     cloud = is_cloud()
     # Tenant-side quota applies only in cloud, for a real tenant, not master admin.
     track = bool(cloud and ctx is not None and not getattr(ctx, "is_master", False) and getattr(ctx, "tenant_id", None))
+    quota_tenant_id = (
+        str(ctx.tenant_id)
+        if track and ctx is not None and ctx.tenant_id is not None
+        else None
+    )
 
     # Provider selection:
     #  - cloud mode: tenants use the master-admin-configured SHARED provider
@@ -117,7 +123,7 @@ async def _agent_chat_impl(request: Request, ctx: Optional[TenantContext], profi
 
     # --- Disabled / quota gate (workspace turns only) ----------------------
     quota_warning: Optional[dict] = None
-    if track and use_type == "workspace":
+    if quota_tenant_id is not None and use_type == "workspace":
         db = SessionLocal()
         try:
             cfg = agent_quota.get_agent_global_config(db)
@@ -127,9 +133,9 @@ async def _agent_chat_impl(request: Request, ctx: Optional[TenantContext], profi
                     yield _sse({"type": "done"})
                 return StreamingResponse(_disabled_stream(), media_type="text/event-stream", headers=_stream_headers())
 
-            check = agent_quota.check_credit_available(db, ctx.tenant_id, use_type)
+            check = agent_quota.check_credit_available(db, quota_tenant_id, use_type)
             if not check["allowed"]:
-                action = agent_quota.get_quota_exceeded_action(db, ctx.tenant_id)
+                action = agent_quota.get_quota_exceeded_action(db, quota_tenant_id)
                 if action == "warn":
                     # Allow the turn (overage) but surface a warning event first.
                     quota_warning = check
@@ -246,7 +252,17 @@ def _stream_headers() -> dict[str, str]:
     }
 
 
-@router.post("/chat", response_model=dict[str, Any])
+@router.post(
+    "/chat",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            "description": "Server-sent agent events",
+        }
+    },
+)
 async def agent_chat(
     request: Request,
     ctx: TenantContext | None = Depends(get_tenant_context),
@@ -255,7 +271,17 @@ async def agent_chat(
     return await _agent_chat_impl(request, ctx, "workspace-agent")
 
 
-@router.post("/chat/{profile_slug}", response_model=dict[str, Any])
+@router.post(
+    "/chat/{profile_slug}",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            "description": "Server-sent agent events",
+        }
+    },
+)
 async def agent_chat_with_profile(
     profile_slug: str,
     request: Request,
@@ -265,7 +291,7 @@ async def agent_chat_with_profile(
     return await _agent_chat_impl(request, ctx, profile_slug or "workspace-agent")
 
 
-@router.get("/credits", response_model=dict[str, Any])
+@router.get("/credits", response_model=AgentAgentCreditsResponse)
 async def agent_credits(ctx: TenantContext | None = Depends(get_tenant_context)):
     """Current Workspace Agent credit balance for the caller.
 
@@ -274,11 +300,12 @@ async def agent_credits(ctx: TenantContext | None = Depends(get_tenant_context))
     """
     if not is_cloud() or ctx is None or getattr(ctx, "is_master", False) or not getattr(ctx, "tenant_id", None):
         return {"enabled": True, "unlimited": True}
+    tenant_id = str(ctx.tenant_id)
     db = SessionLocal()
     try:
         cfg = agent_quota.get_agent_global_config(db)
-        bal = agent_quota.get_credit_balance(db, ctx.tenant_id)
-        action = agent_quota.get_quota_exceeded_action(db, ctx.tenant_id)
+        bal = agent_quota.get_credit_balance(db, tenant_id)
+        action = agent_quota.get_quota_exceeded_action(db, tenant_id)
         return {
             "enabled": bool(cfg.get("enabled", True)),
             "unlimited": False,

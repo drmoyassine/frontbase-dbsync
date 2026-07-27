@@ -5,6 +5,7 @@ Handles CRUD for workflow drafts and publishing to the Actions Runtime.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from typing import List, Optional, Any
@@ -36,6 +37,13 @@ from app.schemas.actions import (
 
 logger = logging.getLogger(__name__)
 from ..schemas.op_responses import BulkDeleteDraftsResult, PublishDraftBatchResult, ToggleDraftActiveResult
+from ..schemas.op_responses import (
+    ActionsGetExecutionDetailResponse,
+    ActionsGetExecutionResultResponse,
+    ActionsGetExecutionStatsResponse,
+    ActionsGetProductionExecutionsResponse,
+    ActionsListAllExecutionsResponse,
+)
 from ..schemas.common import SuccessDataEnvelope, SuccessMessageAck
 router = APIRouter()
 
@@ -971,7 +979,7 @@ async def test_node(
 
 # ============ Execution Result ============
 
-@router.get("/execution/{execution_id}", response_model=dict[str, Any])
+@router.get("/execution/{execution_id}", response_model=ActionsGetExecutionResultResponse)
 async def get_execution_result(execution_id: str):
     """Get detailed execution result from Edge Engine"""
     try:
@@ -1153,7 +1161,7 @@ async def _pull_from_edges(db: Session, params: dict, ctx: TenantContext | None 
     return all_executions
 
 
-@router.get("/executions", response_model=dict[str, Any])
+@router.get("/executions", response_model=ActionsListAllExecutionsResponse)
 async def list_all_executions(
     limit: int = 100,
     status: Optional[str] = None,
@@ -1249,7 +1257,7 @@ async def list_all_executions(
 
 # ── Execution Detail (lazy-load on row expand) ────────────────────────────────
 
-@router.get("/executions/detail/{execution_id}", response_model=dict[str, Any])
+@router.get("/executions/detail/{execution_id}", response_model=ActionsGetExecutionDetailResponse)
 async def get_execution_detail(execution_id: str, engine_url: Optional[str] = None):
     """Fetch full execution detail (nodeExecutions, triggerPayload) from the
     correct Edge engine.  The global log strips these fields for payload size;
@@ -1287,7 +1295,17 @@ async def get_execution_detail(execution_id: str, engine_url: Optional[str] = No
 
 # ── CSV Export ────────────────────────────────────────────────────────────────
 
-@router.get("/executions/export", response_model=str)
+@router.get(
+    "/executions/export",
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/csv": {"schema": {"type": "string"}}},
+            "description": "Execution log CSV",
+        }
+    },
+)
 async def export_executions_csv(
     engine_ids: Optional[str] = None,
     workflow_ids: Optional[str] = None,
@@ -1298,7 +1316,6 @@ async def export_executions_csv(
 ):
     """Export execution logs as CSV. Always pulls fresh from selected edges.
     Also updates the Redis cache with fresh data."""
-    from fastapi.responses import StreamingResponse
     from app.services.sync.redis_client import cache_set, get_configured_redis_settings
     import io
     import csv
@@ -1490,7 +1507,10 @@ async def get_draft_executions(
     return {"executions": all_logs[:limit], "total": len(all_logs)}
 
 
-@router.get("/executions/{draft_id}/production/{engine_id}", response_model=dict[str, Any])
+@router.get(
+    "/executions/{draft_id}/production/{engine_id}",
+    response_model=ActionsGetProductionExecutionsResponse,
+)
 async def get_production_executions(
     draft_id: str,
     engine_id: str,
@@ -1527,7 +1547,7 @@ async def get_production_executions(
         return {"executions": [], "total": 0, "error": f"Engine '{engine_name}' not reachable"}
 
 
-@router.get("/execution-stats", response_model=dict[str, Any])
+@router.get("/execution-stats", response_model=ActionsGetExecutionStatsResponse)
 async def get_execution_stats():
     """Get execution run counts for all workflows"""
     try:

@@ -17,6 +17,10 @@ from ..database.utils import get_project
 
 
 from ..schemas.op_responses import ListProfilesResult
+from ..schemas.op_responses import (
+    EdgeAgentProfilesCreateProfileResponse,
+    EdgeAgentProfilesUpdateProfileResponse,
+)
 router = APIRouter(prefix="/api/edge-engines/{engine_id}/agent-profiles", tags=["edge-agent-profiles"])
 
 
@@ -63,11 +67,11 @@ def _serialize(profile: EdgeAgentProfile) -> dict:
         "slug": str(profile.slug),
         "system_prompt": str(profile.system_prompt) if str(profile.system_prompt) else None,
         "permissions": json.loads(str(profile.permissions)) if str(profile.permissions) else None,
-        "temperature": float(profile.temperature) if profile.temperature not in (None, "") else None,
-        "max_tokens": int(profile.max_tokens) if profile.max_tokens is not None else None,
-        "top_p": float(profile.top_p) if profile.top_p not in (None, "") else None,
+        "temperature": float(str(profile.temperature)) if profile.temperature not in (None, "") else None,
+        "max_tokens": int(str(profile.max_tokens)) if profile.max_tokens is not None else None,
+        "top_p": float(str(profile.top_p)) if profile.top_p not in (None, "") else None,
         "excluded_tools": json.loads(str(profile.excluded_tools)) if str(profile.excluded_tools) else None,
-        "max_auto_tools": int(profile.max_auto_tools) if profile.max_auto_tools is not None else None,
+        "max_auto_tools": int(str(profile.max_auto_tools)) if profile.max_auto_tools is not None else None,
         "mcp_enabled": bool(profile.mcp_enabled) if profile.mcp_enabled is not None else True,
         "skills_enabled": bool(profile.skills_enabled) if profile.skills_enabled is not None else True,
         "created_at": str(profile.created_at),
@@ -99,7 +103,11 @@ def list_profiles(engine_id: str, db: Session = Depends(get_db), ctx: TenantCont
     return {"profiles": result, "total": len(result)}
 
 
-@router.post("", status_code=201, response_model=dict[str, Any])
+@router.post(
+    "",
+    status_code=201,
+    response_model=EdgeAgentProfilesCreateProfileResponse,
+)
 def create_profile(
     engine_id: str,
     payload: EdgeAgentProfileCreate,
@@ -159,7 +167,10 @@ def create_profile(
     return _serialize(profile)
 
 
-@router.put("/{profile_id}", response_model=dict[str, Any])
+@router.put(
+    "/{profile_id}",
+    response_model=EdgeAgentProfilesUpdateProfileResponse,
+)
 def update_profile(
     engine_id: str,
     profile_id: str,

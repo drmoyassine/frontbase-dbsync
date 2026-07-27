@@ -640,13 +640,13 @@ def _set_session_cookie(response: Response, token: str) -> None:
 # CORS Preflight
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.options("/login", response_model=dict[str, Any])
+@router.options("/login", response_class=Response)
 async def login_options():
     """Handle CORS preflight for login."""
     return Response(status_code=200)
 
 
-@router.options("/signup", response_model=dict[str, Any])
+@router.options("/signup", response_class=Response)
 async def signup_options():
     """Handle CORS preflight for signup."""
     return Response(status_code=200)

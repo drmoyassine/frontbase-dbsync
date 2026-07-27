@@ -17,6 +17,16 @@ from ..services.provider_tester import test_provider_connection
 from ..services.provider_discovery import discover_resources as _discover_resources, create_resource
 
 from ..schemas.op_responses import AddTursoDatabaseResult, GetWorkspaceAgentTokenResult, ListEnginesForProviderResult, RemoveTursoDatabaseResult, TestTursoDatabaseResult
+from ..schemas.op_responses import (
+    EdgeProvidersCreateResourceByAccountResponse,
+    EdgeProvidersDiscoverByAccountResponse,
+    EdgeProvidersDiscoverResourcesEndpointResponse,
+    EdgeProvidersGetCredentialsResponse,
+    EdgeProvidersListAccountTablesResponse,
+    EdgeProvidersRetestProviderResponse,
+    EdgeProvidersSetWorkspaceAgentTokenResponse,
+    EdgeProvidersTestConnectionResponse,
+)
 router = APIRouter(prefix="/api/edge-providers", tags=["edge-providers"])
 
 
@@ -117,7 +127,10 @@ from pydantic import BaseModel
 class SetWorkspaceDefaultRequest(BaseModel):
     provider_id: str
 
-@router.post("/workspace-agent-token", response_model=dict[str, Any])
+@router.post(
+    "/workspace-agent-token",
+    response_model=EdgeProvidersSetWorkspaceAgentTokenResponse,
+)
 def set_workspace_agent_token(payload: SetWorkspaceDefaultRequest, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Set a specific provider as the default Workspace Agent provider and generate token."""
     import json
@@ -224,7 +237,7 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
     if ctx and ctx.tenant_id:
         proj = get_project(db, ctx)
         if proj:
-            project_id_val = proj.id
+            project_id_val = str(proj.id)
 
     if payload.provider_credentials and payload.provider != "turso":
         # Dedup by account IDENTITY (primary credential), scoped to THIS tenant's
@@ -417,7 +430,10 @@ async def delete_provider(provider_id: str, db: Session = Depends(get_db), ctx: 
 # Re-test — validate STORED credentials by provider ID (server-side decrypt)
 # =============================================================================
 
-@router.post("/retest/{provider_id}", response_model=dict[str, Any])
+@router.post(
+    "/retest/{provider_id}",
+    response_model=EdgeProvidersRetestProviderResponse,
+)
 async def retest_provider(provider_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Re-validate an existing provider's credentials.
 
@@ -440,7 +456,10 @@ async def retest_provider(provider_id: str, db: Session = Depends(get_db), ctx: 
 # Credentials — internal endpoint for cross-service credential resolution
 # =============================================================================
 
-@router.get("/{provider_id}/credentials", response_model=dict[str, Any])
+@router.get(
+    "/{provider_id}/credentials",
+    response_model=EdgeProvidersGetCredentialsResponse,
+)
 def get_credentials(provider_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Return decrypted credentials for a provider account.
 
@@ -465,7 +484,10 @@ def get_credentials(provider_id: str, db: Session = Depends(get_db), ctx: Tenant
 # Test Connection — validate credentials against provider API before saving
 # =============================================================================
 
-@router.post("/test-connection", response_model=dict[str, Any])
+@router.post(
+    "/test-connection",
+    response_model=EdgeProvidersTestConnectionResponse,
+)
 async def test_connection(payload: TestConnectionRequest):
     """Validate provider credentials by making a lightweight API call.
 
@@ -479,7 +501,10 @@ async def test_connection(payload: TestConnectionRequest):
 # Discover — list resources for a provider after token validation
 # =============================================================================
 
-@router.post("/discover-by-account/{account_id}", response_model=dict[str, Any])
+@router.post(
+    "/discover-by-account/{account_id}",
+    response_model=EdgeProvidersDiscoverByAccountResponse,
+)
 async def discover_by_account(account_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """Discover resources using stored credentials from a Connected Account.
     
@@ -521,7 +546,10 @@ async def discover_by_account(account_id: str, db: Session = Depends(get_db), ct
     return await _discover_resources(str(provider_row.provider), creds)
 
 
-@router.post("/discover", response_model=dict[str, Any])
+@router.post(
+    "/discover",
+    response_model=EdgeProvidersDiscoverResourcesEndpointResponse,
+)
 async def discover_resources_endpoint(payload: DiscoverRequest):
     """Discover resources (projects, databases, sites) available with the given credentials.
 
@@ -534,7 +562,10 @@ async def discover_resources_endpoint(payload: DiscoverRequest):
 # Create Resource — create a new resource via provider management API
 # =============================================================================
 
-@router.post("/create-resource-by-account/{account_id}", response_model=dict[str, Any])
+@router.post(
+    "/create-resource-by-account/{account_id}",
+    response_model=EdgeProvidersCreateResourceByAccountResponse,
+)
 async def create_resource_by_account(
     account_id: str,
     payload: CreateResourceRequest,
@@ -715,7 +746,10 @@ async def test_turso_database(
 # Table Discovery — list database tables from a connected account
 # =============================================================================
 
-@router.get("/accounts/{account_id}/tables", response_model=dict[str, Any])
+@router.get(
+    "/accounts/{account_id}/tables",
+    response_model=EdgeProvidersListAccountTablesResponse,
+)
 async def list_account_tables(account_id: str, db: Session = Depends(get_db), ctx: TenantContext | None = Depends(get_tenant_context)):
     """List database tables from a connected account's credentials.
 

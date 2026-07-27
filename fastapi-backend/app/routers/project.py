@@ -13,6 +13,7 @@ import httpx
 import json
 
 from ..schemas.op_responses import GetInternalCredsResult
+from ..schemas.op_responses import ProjectUploadBrandingAssetResponse
 router = APIRouter(prefix="/api/project", tags=["project"])
 
 # Static assets directory for branding files (favicon, logos, etc.)
@@ -121,7 +122,10 @@ async def update_project_endpoint(
         return JSONResponse(content=resp)
 
     return response_data
-@router.post("/assets/upload/", response_model=dict[str, Any])
+@router.post(
+    "/assets/upload/",
+    response_model=ProjectUploadBrandingAssetResponse,
+)
 async def upload_branding_asset(
     file: UploadFile = File(...),
     asset_type: str = Form(default="favicon"),

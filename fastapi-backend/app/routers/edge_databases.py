@@ -30,6 +30,11 @@ from ..schemas.edge_databases import (
 from ..schemas.edge_engines import TestConnectionResult
 
 from ..schemas.common import RemoteDeleteAck
+from ..schemas.op_responses import (
+    EdgeDatabasesCreateSchemaResponse,
+    EdgeDatabasesDiscoverSchemasResponse,
+    EdgeDatabasesResetRolePasswordResponse,
+)
 router = APIRouter(prefix="/api/edge-databases", tags=["edge-databases"])
 
 
@@ -509,7 +514,10 @@ async def test_connection_inline(payload: EdgeDatabaseCreate, ctx: TenantContext
     return await test_db_connection(payload.provider, payload.db_url, payload.db_token, payload.provider_account_id)
 
 
-@router.post("/discover-schemas", response_model=dict[str, Any])
+@router.post(
+    "/discover-schemas",
+    response_model=EdgeDatabasesDiscoverSchemasResponse,
+)
 async def discover_schemas(payload: DiscoverSchemasRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Discover existing frontbase_edge* schemas in a PG database.
     
@@ -540,7 +548,7 @@ async def discover_schemas(payload: DiscoverSchemasRequest, ctx: TenantContext |
     return result
 
 
-@router.post("/create-schema", response_model=dict[str, Any])
+@router.post("/create-schema", response_model=EdgeDatabasesCreateSchemaResponse)
 async def create_schema(payload: CreateSchemaRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Create a new frontbase_edge_<suffix> schema in a PG database.
     
@@ -570,7 +578,10 @@ async def create_schema(payload: CreateSchemaRequest, ctx: TenantContext | None 
     return result
 
 
-@router.post("/reset-role-password", response_model=dict[str, Any])
+@router.post(
+    "/reset-role-password",
+    response_model=EdgeDatabasesResetRolePasswordResponse,
+)
 async def reset_role_password(payload: ResetRolePasswordRequest, ctx: TenantContext | None = Depends(get_tenant_context)):
     """Reset the scoped role password for an existing Supabase schema.
 

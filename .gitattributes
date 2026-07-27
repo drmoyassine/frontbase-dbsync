@@ -1,0 +1,9 @@
+# Generated contract artifacts + client are compared byte-for-byte by the
+# staleness gates (fastapi-backend/scripts/export_openapi.py --check and the
+# `git diff --exit-code src/client` check in .github/workflows/contracts.yml).
+#
+# Without this, core.autocrlf=true on Windows rewrites them to CRLF on checkout,
+# so `git status` reports them modified even when the content is identical —
+# a false "stale contract" signal. Pin them to LF everywhere.
+fastapi-backend/contracts/*.json  text eol=lf
+src/client/**                     text eol=lf

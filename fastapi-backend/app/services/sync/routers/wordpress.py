@@ -146,7 +146,20 @@ async def start_import(
     return {"import_id": import_id}
 
 
-@router.get("/import/{import_id}/progress/", summary="SSE stream of import progress")
+@router.get(
+    "/import/{import_id}/progress/",
+    summary="SSE stream of import progress",
+    # SSE, not JSON — declare the real media type so the contract does not claim
+    # an application/json body. Mirrors the /api/agent/chat pattern.
+    response_model=None,
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+            "description": "Server-sent import progress events",
+        }
+    },
+)
 async def import_progress_stream(
     import_id: str,
     ctx: TenantContext | None = Depends(get_tenant_context),

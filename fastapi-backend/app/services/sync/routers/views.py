@@ -17,6 +17,12 @@ from app.services.sync.models.datasource import Datasource
 from app.services.sync.schemas.datasource import DatasourceViewCreate, DatasourceViewUpdate, DatasourceViewResponse
 from app.services.sync.adapters import get_adapter
 from app.services.sync.services.expression_engine import ExpressionEngine
+from app.services.sync.schemas.op_responses import (
+    ViewRecordsResponse,
+    ViewCountResponse,
+    ViewRecordMutationResponse,
+    ViewTriggerResponse,
+)
 
 engine = ExpressionEngine()
 logger = logging.getLogger(__name__)
@@ -74,7 +80,7 @@ async def update_datasource_view(
     return db_view
 
 
-@router.get("/{view_id}/records/")
+@router.get("/{view_id}/records/", response_model=ViewRecordsResponse)
 async def get_view_records(
     view_id: str,
     page: int = 1,
@@ -197,7 +203,7 @@ async def get_view_records(
     }
 
 
-@router.get("/{view_id}/count")
+@router.get("/{view_id}/count", response_model=ViewCountResponse)
 async def get_view_count(
     view_id: str,
     db: AsyncSession = Depends(get_db)
@@ -241,7 +247,7 @@ async def get_view_count(
     }
 
 
-@router.post("/{view_id}/records", status_code=status.HTTP_201_CREATED)
+@router.post("/{view_id}/records", status_code=status.HTTP_201_CREATED, response_model=ViewRecordMutationResponse)
 async def create_view_record(
     view_id: str,
     record: Dict[str, Any],
@@ -277,7 +283,7 @@ async def create_view_record(
     return {"success": True, "message": "Record created successfully"}
 
 
-@router.patch("/{view_id}/records")
+@router.patch("/{view_id}/records", response_model=ViewRecordMutationResponse)
 async def patch_view_record(
     view_id: str,
     record: Dict[str, Any],
@@ -342,7 +348,7 @@ async def trigger_actions_engine(workflow_id: str, payload: Dict[str, Any]):
         logger.error(f"Failed to trigger Actions Engine workflow {workflow_id}: {e}")
 
 
-@router.post("/{view_id}/trigger/")
+@router.post("/{view_id}/trigger/", response_model=ViewTriggerResponse)
 async def trigger_view_webhook(
     view_id: str,
     payload: Dict[str, Any],

@@ -18,6 +18,14 @@ from app.services.sync.services.schema_service import SchemaService
 from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
 from app.middleware.tenant_context import TenantContext, get_tenant_context
 from app.models.models import Project
+from app.services.sync.schemas.op_responses import (
+    TableDataResponse,
+    TableAggregateResponse,
+    DistinctValuesResponse,
+    RecordMutationResponse,
+    TableSearchResponse,
+    SearchAllResponse,
+)
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.data")
@@ -97,7 +105,7 @@ async def _build_fk_display_lookups(adapter: Any, datasource: Datasource, table:
     return lookups
 
 
-@router.get("/{datasource_id}/tables/{table}/data/")
+@router.get("/{datasource_id}/tables/{table}/data/", response_model=TableDataResponse)
 async def get_datasource_table_data(
     table: str,
     limit: int = 50,
@@ -308,7 +316,7 @@ async def get_datasource_table_data(
         raise HTTPException(status_code=500, detail=f"Failed to fetch sample data: {str(e)}")
 
 
-@router.get("/{datasource_id}/tables/{table}/aggregate/")
+@router.get("/{datasource_id}/tables/{table}/aggregate/", response_model=TableAggregateResponse)
 async def get_datasource_table_aggregate(
     table: str,
     category: str,
@@ -413,7 +421,7 @@ def _aggregate_in_python(
     return result[: max(1, min(limit or 10, 1000))]
 
 
-@router.get("/{datasource_id}/tables/{table}/distinct/{column}/")
+@router.get("/{datasource_id}/tables/{table}/distinct/{column}/", response_model=DistinctValuesResponse)
 async def get_distinct_values(
     table: str,
     column: str,
@@ -439,7 +447,7 @@ async def get_distinct_values(
         raise HTTPException(status_code=500, detail=f"Failed to fetch distinct values: {str(e)}")
 
 
-@router.post("/{datasource_id}/tables/{table}/records/")
+@router.post("/{datasource_id}/tables/{table}/records/", response_model=RecordMutationResponse)
 async def create_record(
     table: str,
     body: Dict[str, Any],
@@ -467,7 +475,7 @@ async def create_record(
         raise HTTPException(status_code=500, detail=f"Failed to create record: {str(e)}")
 
 
-@router.patch("/{datasource_id}/tables/{table}/records/{record_id}")
+@router.patch("/{datasource_id}/tables/{table}/records/{record_id}", response_model=RecordMutationResponse)
 async def update_record(
     table: str,
     record_id: str,
@@ -496,7 +504,7 @@ async def update_record(
         raise HTTPException(status_code=500, detail=f"Failed to update record: {str(e)}")
 
 
-@router.get("/{datasource_id}/search")
+@router.get("/{datasource_id}/search", response_model=TableSearchResponse)
 async def search_datasource_tables(
     q: str,
     detailed: bool = False,
@@ -556,7 +564,7 @@ async def search_datasource_tables(
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
 
-@router.get("/search-all/")
+@router.get("/search-all/", response_model=SearchAllResponse)
 async def search_all_datasources(
     q: str,
     detailed: bool = False,

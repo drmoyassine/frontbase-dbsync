@@ -12,12 +12,16 @@ from app.services.sync.database import get_db
 from app.services.sync.models.datasource import Datasource
 from app.services.sync.adapters import get_adapter
 from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
+from app.services.sync.schemas.op_responses import (
+    MigrationCheckResponse,
+    MigrationApplyResponse,
+)
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.migration")
 
 
-@router.get("/{datasource_id}/check-migration")
+@router.get("/{datasource_id}/check-migration", response_model=MigrationCheckResponse)
 async def check_datasource_migration(
     datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
@@ -43,7 +47,7 @@ async def check_datasource_migration(
         return {"applicable": True, "applied": False, "error": str(e)}
 
 
-@router.post("/{datasource_id}/apply-migration")
+@router.post("/{datasource_id}/apply-migration", response_model=MigrationApplyResponse)
 async def apply_datasource_migration(
     datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)

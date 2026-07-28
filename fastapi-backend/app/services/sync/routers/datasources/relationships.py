@@ -25,12 +25,17 @@ from app.services.sync.schemas.relationship import (
     get_user_relationships,
 )
 from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
+from app.services.sync.schemas.op_responses import (
+    RelationshipsResponse,
+    UserRelationshipsResponse,
+    RelationshipRemovedResponse,
+)
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.relationships")
 
 
-@router.get("/{datasource_id}/relationships/")
+@router.get("/{datasource_id}/relationships/", response_model=RelationshipsResponse)
 async def get_datasource_relationships(
     refresh: bool = False,
     datasource: Datasource = Depends(get_scoped_datasource),
@@ -122,7 +127,7 @@ async def update_relationship(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/{datasource_id}/relationships/{index}/")
+@router.delete("/{datasource_id}/relationships/{index}/", response_model=RelationshipRemovedResponse)
 async def remove_relationship(
     index: int,
     datasource: Datasource = Depends(get_scoped_datasource),
@@ -138,7 +143,7 @@ async def remove_relationship(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/{datasource_id}/relationships/user-defined/")
+@router.get("/{datasource_id}/relationships/user-defined/", response_model=UserRelationshipsResponse)
 async def list_user_relationships(
     datasource: Datasource = Depends(get_scoped_datasource),
 ):

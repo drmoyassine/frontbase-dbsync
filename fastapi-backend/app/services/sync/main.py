@@ -7,6 +7,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 
 from app.services.sync.config import settings
+from app.services.sync.schemas.op_responses import SyncHealthResponse
 from app.services.sync.database import init_db
 from app.services.sync.routers import (
     datasources as datasources_router,
@@ -96,7 +97,7 @@ class TrailingSlashMiddleware:
 sync_app.add_middleware(TrailingSlashMiddleware)
 
 # Register specific routes BEFORE parametrized routers to avoid conflicts
-@sync_app.get("/health/")
+@sync_app.get("/health/", response_model=SyncHealthResponse, tags=["Service"])
 async def health():
     """Health check endpoint."""
     return {"status": "healthy"}

@@ -16,6 +16,11 @@ from app.services.sync.adapters import get_adapter
 from app.services.sync.config import settings
 from app.services.sync.redis_client import cache_get, cache_set, cache_delete_pattern
 from app.services.sync.routers.datasources.dependencies import get_scoped_datasource
+from app.services.sync.schemas.op_responses import (
+    TableSessionSaveResponse,
+    TableSessionResponse,
+    TableSessionClearedResponse,
+)
 
 router = APIRouter()
 logger = logging.getLogger("app.routers.datasources.schema")
@@ -127,7 +132,7 @@ async def get_table_schema(
 
 
 # Session endpoints for draft layout/config
-@router.post("/{datasource_id}/tables/{table_name}/session/")
+@router.post("/{datasource_id}/tables/{table_name}/session/", response_model=TableSessionSaveResponse)
 async def save_table_session(
     table_name: str,
     session_data: Dict[str, Any],
@@ -143,7 +148,7 @@ async def save_table_session(
     return {"status": "ok", "persisted": True}
 
 
-@router.get("/{datasource_id}/tables/{table_name}/session/")
+@router.get("/{datasource_id}/tables/{table_name}/session/", response_model=TableSessionResponse)
 async def get_table_session(
     table_name: str,
     datasource: Datasource = Depends(get_scoped_datasource)
@@ -154,7 +159,7 @@ async def get_table_session(
     return data or {}
 
 
-@router.delete("/{datasource_id}/tables/{table_name}/session/")
+@router.delete("/{datasource_id}/tables/{table_name}/session/", response_model=TableSessionClearedResponse)
 async def clear_table_session(
     table_name: str,
     datasource: Datasource = Depends(get_scoped_datasource)

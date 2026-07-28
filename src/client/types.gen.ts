@@ -1135,6 +1135,46 @@ export type ColumnInfo = {
 };
 
 /**
+ * ColumnSchema
+ *
+ * Schema for a single column.
+ */
+export type ColumnSchema = {
+    /**
+     * Default
+     */
+    default?: unknown | null;
+    /**
+     * Foreign Column
+     */
+    foreign_column?: string | null;
+    /**
+     * Foreign Table
+     */
+    foreign_table?: string | null;
+    /**
+     * Is Foreign
+     */
+    is_foreign?: boolean;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Nullable
+     */
+    nullable?: boolean;
+    /**
+     * Primary Key
+     */
+    primary_key?: boolean;
+    /**
+     * Type
+     */
+    type: string | Array<string>;
+};
+
+/**
  * ComponentThemeCreate
  */
 export type ComponentThemeCreate = {
@@ -1627,6 +1667,520 @@ export type DatabaseConnectionResponse = {
 };
 
 /**
+ * DatasourceCreate
+ *
+ * Schema for creating a datasource.
+ */
+export type DatasourceCreate = {
+    /**
+     * Anon Key
+     */
+    anon_key?: string | null;
+    /**
+     * Api Key
+     */
+    api_key?: string | null;
+    /**
+     * Api Url
+     */
+    api_url?: string | null;
+    /**
+     * App Password
+     */
+    app_password?: string | null;
+    /**
+     * Base Url
+     */
+    base_url?: string | null;
+    /**
+     * Connection Uri
+     */
+    connection_uri?: string | null;
+    /**
+     * Database
+     */
+    database?: string | null;
+    /**
+     * Extra Config
+     */
+    extra_config?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Host
+     */
+    host?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Port
+     */
+    port?: number | null;
+    /**
+     * Provider Account Id
+     */
+    provider_account_id?: string | null;
+    /**
+     * Table Prefix
+     */
+    table_prefix?: string;
+    type: DatasourceType;
+    /**
+     * Username
+     */
+    username?: string | null;
+};
+
+/**
+ * DatasourceResponse
+ *
+ * Schema for datasource response.
+ */
+export type DatasourceResponse = {
+    /**
+     * Api Url
+     */
+    api_url?: string | null;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Database
+     */
+    database?: string | null;
+    /**
+     * Extra Config
+     */
+    extra_config?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Host
+     */
+    host?: string | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Is Active
+     */
+    is_active: boolean;
+    /**
+     * Last Test Success
+     */
+    last_test_success?: boolean | null;
+    /**
+     * Last Tested At
+     */
+    last_tested_at?: string | null;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Port
+     */
+    port?: number | null;
+    /**
+     * Project Id
+     */
+    project_id?: string | null;
+    /**
+     * Table Prefix
+     */
+    table_prefix?: string;
+    type: DatasourceType;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Username
+     */
+    username?: string | null;
+    /**
+     * Views
+     */
+    views?: Array<DatasourceViewResponse>;
+};
+
+/**
+ * DatasourceTestRequest
+ *
+ * Schema for testing a new datasource connection.
+ */
+export type DatasourceTestRequest = {
+    /**
+     * Anon Key
+     */
+    anon_key?: string | null;
+    /**
+     * Api Key
+     */
+    api_key?: string | null;
+    /**
+     * Api Url
+     */
+    api_url?: string | null;
+    /**
+     * App Password
+     */
+    app_password?: string | null;
+    /**
+     * Base Url
+     */
+    base_url?: string | null;
+    /**
+     * Connection Uri
+     */
+    connection_uri?: string | null;
+    /**
+     * Database
+     */
+    database?: string | null;
+    /**
+     * Extra Config
+     */
+    extra_config?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Host
+     */
+    host?: string | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Port
+     */
+    port?: number | null;
+    /**
+     * Provider Account Id
+     */
+    provider_account_id?: string | null;
+    /**
+     * Table Prefix
+     */
+    table_prefix?: string;
+    type: DatasourceType;
+    /**
+     * Username
+     */
+    username?: string | null;
+};
+
+/**
+ * DatasourceTestResult
+ *
+ * Schema for connection test result.
+ */
+export type DatasourceTestResult = {
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Success
+     */
+    success: boolean;
+    /**
+     * Suggestion
+     */
+    suggestion?: string | null;
+    /**
+     * Tables
+     */
+    tables?: Array<string> | null;
+};
+
+/**
+ * DatasourceType
+ *
+ * Supported datasource types.
+ */
+export type DatasourceType = 'supabase' | 'postgres' | 'wordpress' | 'wordpress_rest' | 'wordpress_graphql' | 'wordpress_plugin' | 'neon' | 'planetscale' | 'turso' | 'mysql' | 'sqlite' | 'google_sheets' | 'rest';
+
+/**
+ * DatasourceUpdate
+ *
+ * Schema for updating a datasource.
+ */
+export type DatasourceUpdate = {
+    /**
+     * Anon Key
+     */
+    anon_key?: string | null;
+    /**
+     * Api Key
+     */
+    api_key?: string | null;
+    /**
+     * Api Url
+     */
+    api_url?: string | null;
+    /**
+     * App Password
+     */
+    app_password?: string | null;
+    /**
+     * Base Url
+     */
+    base_url?: string | null;
+    /**
+     * Connection Uri
+     */
+    connection_uri?: string | null;
+    /**
+     * Database
+     */
+    database?: string | null;
+    /**
+     * Extra Config
+     */
+    extra_config?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Host
+     */
+    host?: string | null;
+    /**
+     * Is Active
+     */
+    is_active?: boolean | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Password
+     */
+    password?: string | null;
+    /**
+     * Port
+     */
+    port?: number | null;
+    /**
+     * Provider Account Id
+     */
+    provider_account_id?: string | null;
+    /**
+     * Table Prefix
+     */
+    table_prefix?: string | null;
+    /**
+     * Username
+     */
+    username?: string | null;
+};
+
+/**
+ * DatasourceViewCreate
+ *
+ * Schema for creating a datasource view.
+ */
+export type DatasourceViewCreate = {
+    /**
+     * Column Order
+     */
+    column_order?: Array<string>;
+    /**
+     * Datasource Id
+     */
+    datasource_id?: string | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Field Mappings
+     */
+    field_mappings?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Filters
+     */
+    filters?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Linked Views
+     */
+    linked_views?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Pinned Columns
+     */
+    pinned_columns?: Array<string>;
+    /**
+     * Target Table
+     */
+    target_table: string;
+    /**
+     * Visible Columns
+     */
+    visible_columns?: Array<string>;
+    /**
+     * Webhooks
+     */
+    webhooks?: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+/**
+ * DatasourceViewResponse
+ *
+ * Schema for datasource view response.
+ */
+export type DatasourceViewResponse = {
+    /**
+     * Column Order
+     */
+    column_order?: Array<string>;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Datasource Id
+     */
+    datasource_id: string;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Field Mappings
+     */
+    field_mappings?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Filters
+     */
+    filters?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Linked Views
+     */
+    linked_views?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Pinned Columns
+     */
+    pinned_columns?: Array<string>;
+    /**
+     * Target Table
+     */
+    target_table: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Visible Columns
+     */
+    visible_columns?: Array<string>;
+    /**
+     * Webhooks
+     */
+    webhooks?: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+/**
+ * DatasourceViewUpdate
+ *
+ * Schema for updating a datasource view.
+ */
+export type DatasourceViewUpdate = {
+    /**
+     * Column Order
+     */
+    column_order?: Array<string> | null;
+    /**
+     * Description
+     */
+    description?: string | null;
+    /**
+     * Field Mappings
+     */
+    field_mappings?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Filters
+     */
+    filters?: Array<{
+        [key: string]: unknown;
+    }> | null;
+    /**
+     * Linked Views
+     */
+    linked_views?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Name
+     */
+    name?: string | null;
+    /**
+     * Pinned Columns
+     */
+    pinned_columns?: Array<string> | null;
+    /**
+     * Target Table
+     */
+    target_table?: string | null;
+    /**
+     * Visible Columns
+     */
+    visible_columns?: Array<string> | null;
+    /**
+     * Webhooks
+     */
+    webhooks?: Array<{
+        [key: string]: unknown;
+    }> | null;
+};
+
+/**
  * DeleteEdgeVectorResult
  */
 export type DeleteEdgeVectorResult = {
@@ -1792,6 +2346,23 @@ export type DistinctValuesEnvelope = {
      * Success
      */
     success: boolean;
+};
+
+/**
+ * DistinctValuesResponse
+ *
+ * GET /{datasource_id}/tables/{table}/distinct/{column}/.
+ */
+export type DistinctValuesResponse = {
+    /**
+     * Data
+     */
+    data?: Array<unknown>;
+    /**
+     * Success
+     */
+    success?: boolean;
+    [key: string]: unknown;
 };
 
 /**
@@ -4384,6 +4955,50 @@ export type MessageResponse = {
 };
 
 /**
+ * MigrationApplyResponse
+ */
+export type MigrationApplyResponse = {
+    /**
+     * Applicable
+     */
+    applicable?: boolean | null;
+    /**
+     * Applied
+     */
+    applied?: boolean | null;
+    /**
+     * Error
+     */
+    error?: string | null;
+    [key: string]: unknown;
+};
+
+/**
+ * MigrationCheckResponse
+ *
+ * GET check-migration — `applicable` False for non-Supabase datasources.
+ */
+export type MigrationCheckResponse = {
+    /**
+     * Applicable
+     */
+    applicable: boolean;
+    /**
+     * Applied
+     */
+    applied?: boolean | null;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Reason
+     */
+    reason?: string | null;
+    [key: string]: unknown;
+};
+
+/**
  * MoveEngineToProjectEndpointResult
  */
 export type MoveEngineToProjectEndpointResult = {
@@ -5309,6 +5924,25 @@ export type ReconfigureRequest = {
 };
 
 /**
+ * RecordMutationResponse
+ *
+ * POST/PATCH a single record — echoes the affected row.
+ */
+export type RecordMutationResponse = {
+    /**
+     * Record
+     */
+    record?: {
+        [key: string]: unknown;
+    } | null;
+    /**
+     * Success
+     */
+    success?: boolean;
+    [key: string]: unknown;
+};
+
+/**
  * RedisSettings
  */
 export type RedisSettings = {
@@ -5339,6 +5973,70 @@ export type RedisSettings = {
 };
 
 /**
+ * RedisSettingsResponse
+ *
+ * Schema for Redis settings response.
+ */
+export type RedisSettingsResponse = {
+    /**
+     * Cache Ttl Count
+     */
+    cache_ttl_count?: number;
+    /**
+     * Cache Ttl Data
+     */
+    cache_ttl_data?: number;
+    /**
+     * Redis Enabled
+     */
+    redis_enabled?: boolean;
+    /**
+     * Redis Token
+     */
+    redis_token?: string | null;
+    /**
+     * Redis Type
+     */
+    redis_type?: string;
+    /**
+     * Redis Url
+     */
+    redis_url?: string | null;
+};
+
+/**
+ * RedisSettingsUpdate
+ *
+ * Schema for updating Redis settings.
+ */
+export type RedisSettingsUpdate = {
+    /**
+     * Cache Ttl Count
+     */
+    cache_ttl_count?: number;
+    /**
+     * Cache Ttl Data
+     */
+    cache_ttl_data?: number;
+    /**
+     * Redis Enabled
+     */
+    redis_enabled?: boolean;
+    /**
+     * Redis Token
+     */
+    redis_token?: string | null;
+    /**
+     * Redis Type
+     */
+    redis_type?: string;
+    /**
+     * Redis Url
+     */
+    redis_url?: string | null;
+};
+
+/**
  * RedisTestResult
  */
 export type RedisTestResult = {
@@ -5350,6 +6048,105 @@ export type RedisTestResult = {
      * Success
      */
     success: boolean;
+};
+
+/**
+ * RelationshipDefinition
+ *
+ * A manually-defined FK relationship.
+ */
+export type RelationshipDefinition = {
+    /**
+     * Cascade Delete
+     *
+     * Delete related rows when source is deleted (future)
+     */
+    cascade_delete?: boolean;
+    /**
+     * Display Column
+     *
+     * Column in the parent (to_table) whose value to display for this FK (e.g. show a school's name instead of its id). When set, the table data endpoint returns a lookup map for this FK column.
+     */
+    display_column?: string | null;
+    /**
+     * From Column
+     *
+     * Source column (the FK)
+     */
+    from_column: string;
+    /**
+     * From Table
+     *
+     * Source table (holds the FK column)
+     */
+    from_table: string;
+    /**
+     * Label
+     *
+     * Human-readable label for the UI
+     */
+    label?: string | null;
+    /**
+     * Relationship Type
+     *
+     * many_to_one | one_to_one | one_to_many | many_to_many
+     */
+    relationship_type?: string;
+    /**
+     * To Column
+     *
+     * Target column (the referenced PK/column)
+     */
+    to_column: string;
+    /**
+     * To Table
+     *
+     * Target table (the referenced table)
+     */
+    to_table: string;
+};
+
+/**
+ * RelationshipRemovedResponse
+ */
+export type RelationshipRemovedResponse = {
+    /**
+     * Removed
+     */
+    removed?: unknown;
+    /**
+     * Success
+     */
+    success?: boolean;
+    [key: string]: unknown;
+};
+
+/**
+ * RelationshipResponse
+ *
+ * Relationship echoed back after create/update, with its array index.
+ */
+export type RelationshipResponse = {
+    /**
+     * Index
+     */
+    index: number;
+    relationship: RelationshipDefinition;
+};
+
+/**
+ * RelationshipsResponse
+ */
+export type RelationshipsResponse = {
+    /**
+     * Relationships
+     */
+    relationships?: Array<unknown>;
+    /**
+     * Tables
+     */
+    tables?: Array<unknown>;
+    [key: string]: unknown;
 };
 
 /**
@@ -5726,6 +6523,21 @@ export type RotationHistoryResult = {
 };
 
 /**
+ * SearchAllResponse
+ *
+ * GET /search-all/ — matches across every datasource.
+ */
+export type SearchAllResponse = {
+    /**
+     * Matches
+     */
+    matches?: Array<{
+        [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+};
+
+/**
  * SecurityEventsSummaryResult
  */
 export type SecurityEventsSummaryResult = {
@@ -5820,6 +6632,104 @@ export type SettingsUpdate = {
      */
     scope?: string;
     system?: AgentSettingsSystem;
+};
+
+/**
+ * SheetsConnectCallback
+ */
+export type SheetsConnectCallback = {
+    /**
+     * Spreadsheetid
+     *
+     * Google Sheet ID
+     */
+    spreadsheetId: string;
+    /**
+     * Spreadsheetname
+     *
+     * Human-readable sheet name
+     */
+    spreadsheetName?: string | null;
+    /**
+     * Token
+     *
+     * Connect token from /issue
+     */
+    token: string;
+    /**
+     * Webappsecret
+     *
+     * Shared secret for Web App
+     */
+    webAppSecret: string;
+    /**
+     * Webappurl
+     *
+     * Apps Script Web App exec URL
+     */
+    webAppUrl: string;
+};
+
+/**
+ * SheetsConnectIssueRequest
+ *
+ * Optional reconnect target. If omitted, a new datasource is created.
+ */
+export type SheetsConnectIssueRequest = {
+    /**
+     * Datasource Id
+     */
+    datasource_id?: string | null;
+};
+
+/**
+ * SheetsConnectIssueResponse
+ */
+export type SheetsConnectIssueResponse = {
+    /**
+     * Addoninstallurl
+     */
+    addonInstallUrl: string;
+    /**
+     * Expiresat
+     */
+    expiresAt: string;
+    /**
+     * Token
+     */
+    token: string;
+};
+
+/**
+ * SheetsConnectResult
+ */
+export type SheetsConnectResult = {
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
+    /**
+     * Ok
+     */
+    ok: boolean;
+};
+
+/**
+ * SheetsConnectStatus
+ */
+export type SheetsConnectStatus = {
+    /**
+     * Accountid
+     */
+    accountId?: string | null;
+    /**
+     * Connected
+     */
+    connected: boolean;
+    /**
+     * Spreadsheetname
+     */
+    spreadsheetName?: string | null;
 };
 
 /**
@@ -6188,6 +7098,50 @@ export type SyncEngineLogsResult = {
 };
 
 /**
+ * SyncHealthResponse
+ */
+export type SyncHealthResponse = {
+    /**
+     * Status
+     */
+    status: string;
+    [key: string]: unknown;
+};
+
+/**
+ * RedisTestResult
+ *
+ * Schema for Redis connection test result.
+ */
+export type SyncRedisTestResult = {
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Success
+     */
+    success: boolean;
+};
+
+/**
+ * TableAggregateResponse
+ *
+ * GET /{datasource_id}/tables/{table}/aggregate/ — caller-chosen aggregates.
+ */
+export type TableAggregateResponse = {
+    /**
+     * Data
+     */
+    data?: unknown;
+    /**
+     * Success
+     */
+    success?: boolean;
+    [key: string]: unknown;
+};
+
+/**
  * TableDataEnvelope
  *
  * Paged rows from a user table — rows are dynamic dicts by nature.
@@ -6211,6 +7165,47 @@ export type TableDataEnvelope = {
      * Total
      */
     total?: number | null;
+};
+
+/**
+ * TableDataResponse
+ *
+ * GET /{datasource_id}/tables/{table}/data/ — a page of rows.
+ */
+export type TableDataResponse = {
+    /**
+     * Fk Columns
+     */
+    fk_columns?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Has More
+     */
+    has_more: boolean;
+    /**
+     * Limit
+     */
+    limit: number;
+    /**
+     * Offset
+     */
+    offset: number;
+    /**
+     * Records
+     */
+    records: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Timestamp Utc
+     */
+    timestamp_utc?: string | null;
+    /**
+     * Total
+     */
+    total: number;
+    [key: string]: unknown;
 };
 
 /**
@@ -6255,6 +7250,24 @@ export type TableRulePolicyData = {
 };
 
 /**
+ * TableSchema
+ *
+ * Schema for a table/resource.
+ */
+export type TableSchema = {
+    /**
+     * Columns
+     */
+    columns: Array<ColumnSchema>;
+    /**
+     * Foreign Keys
+     */
+    foreign_keys?: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+/**
  * TableSchemaData
  */
 export type TableSchemaData = {
@@ -6281,6 +7294,62 @@ export type TableSchemaEnvelope = {
      * Success
      */
     success: boolean;
+};
+
+/**
+ * TableSearchResponse
+ *
+ * GET /{datasource_id}/search — per-table match counts.
+ */
+export type TableSearchResponse = {
+    /**
+     * Matches
+     */
+    matches?: Array<{
+        [key: string]: unknown;
+    }>;
+    [key: string]: unknown;
+};
+
+/**
+ * TableSessionClearedResponse
+ */
+export type TableSessionClearedResponse = {
+    /**
+     * Status
+     */
+    status: string;
+    [key: string]: unknown;
+};
+
+/**
+ * TableSessionResponse
+ *
+ * GET session — an arbitrary persisted editor session blob (may be empty).
+ */
+export type TableSessionResponse = {
+    [key: string]: unknown;
+};
+
+/**
+ * TableSessionSaveResponse
+ *
+ * POST session — `persisted` is False when Redis is unavailable.
+ */
+export type TableSessionSaveResponse = {
+    /**
+     * Message
+     */
+    message?: string | null;
+    /**
+     * Persisted
+     */
+    persisted: boolean;
+    /**
+     * Status
+     */
+    status: string;
+    [key: string]: unknown;
 };
 
 /**
@@ -6898,6 +7967,23 @@ export type UserPayload = {
 };
 
 /**
+ * UserRelationshipsResponse
+ */
+export type UserRelationshipsResponse = {
+    /**
+     * Relationships
+     */
+    relationships?: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Total
+     */
+    total?: number;
+    [key: string]: unknown;
+};
+
+/**
  * UserResponse
  */
 export type UserResponse = {
@@ -7234,6 +8320,122 @@ export type VersionLabelRequest = {
 };
 
 /**
+ * ViewCountResponse
+ */
+export type ViewCountResponse = {
+    /**
+     * Datasource Name
+     */
+    datasource_name?: string | null;
+    /**
+     * Target Table
+     */
+    target_table?: string | null;
+    /**
+     * Timestamp Utc
+     */
+    timestamp_utc?: string | null;
+    /**
+     * Total Records
+     */
+    total_records: number;
+    /**
+     * View Id
+     */
+    view_id: unknown;
+    /**
+     * View Name
+     */
+    view_name?: string | null;
+    [key: string]: unknown;
+};
+
+/**
+ * ViewRecordMutationResponse
+ */
+export type ViewRecordMutationResponse = {
+    /**
+     * Message
+     */
+    message?: string | null;
+    /**
+     * Success
+     */
+    success?: boolean;
+    [key: string]: unknown;
+};
+
+/**
+ * ViewRecordsResponse
+ *
+ * GET /views/{view_id}/records/ — a page of rows plus view metadata.
+ */
+export type ViewRecordsResponse = {
+    /**
+     * Current Page
+     */
+    current_page: number;
+    /**
+     * Datasource Name
+     */
+    datasource_name?: string | null;
+    /**
+     * Per Page
+     */
+    per_page: number;
+    /**
+     * Records
+     */
+    records: Array<{
+        [key: string]: unknown;
+    }>;
+    /**
+     * Target Table
+     */
+    target_table?: string | null;
+    /**
+     * Timestamp Utc
+     */
+    timestamp_utc?: string | null;
+    /**
+     * Total Pages
+     */
+    total_pages: number;
+    /**
+     * Total Records
+     */
+    total_records: number;
+    /**
+     * View Name
+     */
+    view_name?: string | null;
+    /**
+     * Visible Columns
+     */
+    visible_columns?: Array<unknown>;
+    [key: string]: unknown;
+};
+
+/**
+ * ViewTriggerResponse
+ */
+export type ViewTriggerResponse = {
+    /**
+     * Data
+     */
+    data?: unknown;
+    /**
+     * Message
+     */
+    message?: string | null;
+    /**
+     * Success
+     */
+    success?: boolean;
+    [key: string]: unknown;
+};
+
+/**
  * WafStatus
  */
 export type WafStatus = {
@@ -7265,6 +8467,24 @@ export type WafUpdateResponse = {
      * Success
      */
     success: boolean;
+};
+
+/**
+ * WordPressImportRequest
+ *
+ * Body for POST /import/.
+ */
+export type WordPressImportRequest = {
+    /**
+     * Datasource Id
+     */
+    datasource_id: string;
+    /**
+     * Options
+     */
+    options?: {
+        [key: string]: unknown;
+    };
 };
 
 /**
@@ -16524,6 +17744,1589 @@ export type StorageCreateVercelProjectResponses = {
 };
 
 export type StorageCreateVercelProjectResponse = StorageCreateVercelProjectResponses[keyof StorageCreateVercelProjectResponses];
+
+export type ListDatasourcesDatasourcesGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sync/datasources/';
+};
+
+export type ListDatasourcesDatasourcesGetResponses = {
+    /**
+     * Response List Datasources Datasources  Get
+     *
+     * Successful Response
+     */
+    200: Array<DatasourceResponse>;
+};
+
+export type ListDatasourcesDatasourcesGetResponse = ListDatasourcesDatasourcesGetResponses[keyof ListDatasourcesDatasourcesGetResponses];
+
+export type CreateDatasourceDatasourcesPostData = {
+    body: DatasourceCreate;
+    path?: never;
+    query?: never;
+    url: '/api/sync/datasources/';
+};
+
+export type CreateDatasourceDatasourcesPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateDatasourceDatasourcesPostError = CreateDatasourceDatasourcesPostErrors[keyof CreateDatasourceDatasourcesPostErrors];
+
+export type CreateDatasourceDatasourcesPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: DatasourceResponse;
+};
+
+export type CreateDatasourceDatasourcesPostResponse = CreateDatasourceDatasourcesPostResponses[keyof CreateDatasourceDatasourcesPostResponses];
+
+export type SearchAllDatasourcesDatasourcesSearchAllGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Q
+         */
+        q: string;
+        /**
+         * Detailed
+         */
+        detailed?: boolean;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/sync/datasources/search-all/';
+};
+
+export type SearchAllDatasourcesDatasourcesSearchAllGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SearchAllDatasourcesDatasourcesSearchAllGetError = SearchAllDatasourcesDatasourcesSearchAllGetErrors[keyof SearchAllDatasourcesDatasourcesSearchAllGetErrors];
+
+export type SearchAllDatasourcesDatasourcesSearchAllGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SearchAllResponse;
+};
+
+export type SearchAllDatasourcesDatasourcesSearchAllGetResponse = SearchAllDatasourcesDatasourcesSearchAllGetResponses[keyof SearchAllDatasourcesDatasourcesSearchAllGetResponses];
+
+export type SheetsConnectCallbackDatasourcesSheetsConnectCallbackPostData = {
+    body: SheetsConnectCallback;
+    path?: never;
+    query: {
+        /**
+         * Local Kw
+         */
+        local_kw: unknown;
+    };
+    url: '/api/sync/datasources/sheets/connect/callback/';
+};
+
+export type SheetsConnectCallbackDatasourcesSheetsConnectCallbackPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SheetsConnectCallbackDatasourcesSheetsConnectCallbackPostError = SheetsConnectCallbackDatasourcesSheetsConnectCallbackPostErrors[keyof SheetsConnectCallbackDatasourcesSheetsConnectCallbackPostErrors];
+
+export type SheetsConnectCallbackDatasourcesSheetsConnectCallbackPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SheetsConnectResult;
+};
+
+export type SheetsConnectCallbackDatasourcesSheetsConnectCallbackPostResponse = SheetsConnectCallbackDatasourcesSheetsConnectCallbackPostResponses[keyof SheetsConnectCallbackDatasourcesSheetsConnectCallbackPostResponses];
+
+export type SheetsConnectIssueDatasourcesSheetsConnectIssuePostData = {
+    /**
+     * Body
+     */
+    body?: SheetsConnectIssueRequest | null;
+    path?: never;
+    query?: never;
+    url: '/api/sync/datasources/sheets/connect/issue/';
+};
+
+export type SheetsConnectIssueDatasourcesSheetsConnectIssuePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SheetsConnectIssueDatasourcesSheetsConnectIssuePostError = SheetsConnectIssueDatasourcesSheetsConnectIssuePostErrors[keyof SheetsConnectIssueDatasourcesSheetsConnectIssuePostErrors];
+
+export type SheetsConnectIssueDatasourcesSheetsConnectIssuePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SheetsConnectIssueResponse;
+};
+
+export type SheetsConnectIssueDatasourcesSheetsConnectIssuePostResponse = SheetsConnectIssueDatasourcesSheetsConnectIssuePostResponses[keyof SheetsConnectIssueDatasourcesSheetsConnectIssuePostResponses];
+
+export type SheetsConnectStatusDatasourcesSheetsConnectStatusGetData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Token
+         */
+        token: string;
+    };
+    url: '/api/sync/datasources/sheets/connect/status/';
+};
+
+export type SheetsConnectStatusDatasourcesSheetsConnectStatusGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SheetsConnectStatusDatasourcesSheetsConnectStatusGetError = SheetsConnectStatusDatasourcesSheetsConnectStatusGetErrors[keyof SheetsConnectStatusDatasourcesSheetsConnectStatusGetErrors];
+
+export type SheetsConnectStatusDatasourcesSheetsConnectStatusGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SheetsConnectStatus;
+};
+
+export type SheetsConnectStatusDatasourcesSheetsConnectStatusGetResponse = SheetsConnectStatusDatasourcesSheetsConnectStatusGetResponses[keyof SheetsConnectStatusDatasourcesSheetsConnectStatusGetResponses];
+
+export type TestNewDatasourceDatasourcesTestRawPostData = {
+    body: DatasourceTestRequest;
+    path?: never;
+    query?: never;
+    url: '/api/sync/datasources/test-raw/';
+};
+
+export type TestNewDatasourceDatasourcesTestRawPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TestNewDatasourceDatasourcesTestRawPostError = TestNewDatasourceDatasourcesTestRawPostErrors[keyof TestNewDatasourceDatasourcesTestRawPostErrors];
+
+export type TestNewDatasourceDatasourcesTestRawPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DatasourceTestResult;
+};
+
+export type TestNewDatasourceDatasourcesTestRawPostResponse = TestNewDatasourceDatasourcesTestRawPostResponses[keyof TestNewDatasourceDatasourcesTestRawPostResponses];
+
+export type DeleteDatasourceDatasourcesDatasourceIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/';
+};
+
+export type DeleteDatasourceDatasourcesDatasourceIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteDatasourceDatasourcesDatasourceIdDeleteError = DeleteDatasourceDatasourcesDatasourceIdDeleteErrors[keyof DeleteDatasourceDatasourcesDatasourceIdDeleteErrors];
+
+export type DeleteDatasourceDatasourcesDatasourceIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteDatasourceDatasourcesDatasourceIdDeleteResponse = DeleteDatasourceDatasourcesDatasourceIdDeleteResponses[keyof DeleteDatasourceDatasourcesDatasourceIdDeleteResponses];
+
+export type GetDatasourceDatasourcesDatasourceIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/';
+};
+
+export type GetDatasourceDatasourcesDatasourceIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDatasourceDatasourcesDatasourceIdGetError = GetDatasourceDatasourcesDatasourceIdGetErrors[keyof GetDatasourceDatasourcesDatasourceIdGetErrors];
+
+export type GetDatasourceDatasourcesDatasourceIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DatasourceResponse;
+};
+
+export type GetDatasourceDatasourcesDatasourceIdGetResponse = GetDatasourceDatasourcesDatasourceIdGetResponses[keyof GetDatasourceDatasourcesDatasourceIdGetResponses];
+
+export type UpdateDatasourceDatasourcesDatasourceIdPutData = {
+    body: DatasourceUpdate;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/';
+};
+
+export type UpdateDatasourceDatasourcesDatasourceIdPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateDatasourceDatasourcesDatasourceIdPutError = UpdateDatasourceDatasourcesDatasourceIdPutErrors[keyof UpdateDatasourceDatasourcesDatasourceIdPutErrors];
+
+export type UpdateDatasourceDatasourcesDatasourceIdPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: DatasourceResponse;
+};
+
+export type UpdateDatasourceDatasourcesDatasourceIdPutResponse = UpdateDatasourceDatasourcesDatasourceIdPutResponses[keyof UpdateDatasourceDatasourcesDatasourceIdPutResponses];
+
+export type ApplyDatasourceMigrationDatasourcesDatasourceIdApplyMigrationPostData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/apply-migration';
+};
+
+export type ApplyDatasourceMigrationDatasourcesDatasourceIdApplyMigrationPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApplyDatasourceMigrationDatasourcesDatasourceIdApplyMigrationPostError = ApplyDatasourceMigrationDatasourcesDatasourceIdApplyMigrationPostErrors[keyof ApplyDatasourceMigrationDatasourcesDatasourceIdApplyMigrationPostErrors];
+
+export type ApplyDatasourceMigrationDatasourcesDatasourceIdApplyMigrationPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: MigrationApplyResponse;
+};
+
+export type ApplyDatasourceMigrationDatasourcesDatasourceIdApplyMigrationPostResponse = ApplyDatasourceMigrationDatasourcesDatasourceIdApplyMigrationPostResponses[keyof ApplyDatasourceMigrationDatasourcesDatasourceIdApplyMigrationPostResponses];
+
+export type CheckDatasourceMigrationDatasourcesDatasourceIdCheckMigrationGetData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/check-migration';
+};
+
+export type CheckDatasourceMigrationDatasourcesDatasourceIdCheckMigrationGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CheckDatasourceMigrationDatasourcesDatasourceIdCheckMigrationGetError = CheckDatasourceMigrationDatasourcesDatasourceIdCheckMigrationGetErrors[keyof CheckDatasourceMigrationDatasourcesDatasourceIdCheckMigrationGetErrors];
+
+export type CheckDatasourceMigrationDatasourcesDatasourceIdCheckMigrationGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: MigrationCheckResponse;
+};
+
+export type CheckDatasourceMigrationDatasourcesDatasourceIdCheckMigrationGetResponse = CheckDatasourceMigrationDatasourcesDatasourceIdCheckMigrationGetResponses[keyof CheckDatasourceMigrationDatasourcesDatasourceIdCheckMigrationGetResponses];
+
+export type GetDatasourceRelationshipsDatasourcesDatasourceIdRelationshipsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: {
+        /**
+         * Refresh
+         */
+        refresh?: boolean;
+    };
+    url: '/api/sync/datasources/{datasource_id}/relationships/';
+};
+
+export type GetDatasourceRelationshipsDatasourcesDatasourceIdRelationshipsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDatasourceRelationshipsDatasourcesDatasourceIdRelationshipsGetError = GetDatasourceRelationshipsDatasourcesDatasourceIdRelationshipsGetErrors[keyof GetDatasourceRelationshipsDatasourcesDatasourceIdRelationshipsGetErrors];
+
+export type GetDatasourceRelationshipsDatasourcesDatasourceIdRelationshipsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RelationshipsResponse;
+};
+
+export type GetDatasourceRelationshipsDatasourcesDatasourceIdRelationshipsGetResponse = GetDatasourceRelationshipsDatasourcesDatasourceIdRelationshipsGetResponses[keyof GetDatasourceRelationshipsDatasourcesDatasourceIdRelationshipsGetResponses];
+
+export type CreateUserRelationshipDatasourcesDatasourceIdRelationshipsPostData = {
+    body: RelationshipDefinition;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/relationships/';
+};
+
+export type CreateUserRelationshipDatasourcesDatasourceIdRelationshipsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateUserRelationshipDatasourcesDatasourceIdRelationshipsPostError = CreateUserRelationshipDatasourcesDatasourceIdRelationshipsPostErrors[keyof CreateUserRelationshipDatasourcesDatasourceIdRelationshipsPostErrors];
+
+export type CreateUserRelationshipDatasourcesDatasourceIdRelationshipsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: RelationshipResponse;
+};
+
+export type CreateUserRelationshipDatasourcesDatasourceIdRelationshipsPostResponse = CreateUserRelationshipDatasourcesDatasourceIdRelationshipsPostResponses[keyof CreateUserRelationshipDatasourcesDatasourceIdRelationshipsPostResponses];
+
+export type ListUserRelationshipsDatasourcesDatasourceIdRelationshipsUserDefinedGetData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/relationships/user-defined/';
+};
+
+export type ListUserRelationshipsDatasourcesDatasourceIdRelationshipsUserDefinedGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListUserRelationshipsDatasourcesDatasourceIdRelationshipsUserDefinedGetError = ListUserRelationshipsDatasourcesDatasourceIdRelationshipsUserDefinedGetErrors[keyof ListUserRelationshipsDatasourcesDatasourceIdRelationshipsUserDefinedGetErrors];
+
+export type ListUserRelationshipsDatasourcesDatasourceIdRelationshipsUserDefinedGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserRelationshipsResponse;
+};
+
+export type ListUserRelationshipsDatasourcesDatasourceIdRelationshipsUserDefinedGetResponse = ListUserRelationshipsDatasourcesDatasourceIdRelationshipsUserDefinedGetResponses[keyof ListUserRelationshipsDatasourcesDatasourceIdRelationshipsUserDefinedGetResponses];
+
+export type RemoveRelationshipDatasourcesDatasourceIdRelationshipsIndexDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Index
+         */
+        index: number;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/relationships/{index}/';
+};
+
+export type RemoveRelationshipDatasourcesDatasourceIdRelationshipsIndexDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RemoveRelationshipDatasourcesDatasourceIdRelationshipsIndexDeleteError = RemoveRelationshipDatasourcesDatasourceIdRelationshipsIndexDeleteErrors[keyof RemoveRelationshipDatasourcesDatasourceIdRelationshipsIndexDeleteErrors];
+
+export type RemoveRelationshipDatasourcesDatasourceIdRelationshipsIndexDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: RelationshipRemovedResponse;
+};
+
+export type RemoveRelationshipDatasourcesDatasourceIdRelationshipsIndexDeleteResponse = RemoveRelationshipDatasourcesDatasourceIdRelationshipsIndexDeleteResponses[keyof RemoveRelationshipDatasourcesDatasourceIdRelationshipsIndexDeleteResponses];
+
+export type UpdateRelationshipDatasourcesDatasourceIdRelationshipsIndexPutData = {
+    body: RelationshipDefinition;
+    path: {
+        /**
+         * Index
+         */
+        index: number;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/relationships/{index}/';
+};
+
+export type UpdateRelationshipDatasourcesDatasourceIdRelationshipsIndexPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateRelationshipDatasourcesDatasourceIdRelationshipsIndexPutError = UpdateRelationshipDatasourcesDatasourceIdRelationshipsIndexPutErrors[keyof UpdateRelationshipDatasourcesDatasourceIdRelationshipsIndexPutErrors];
+
+export type UpdateRelationshipDatasourcesDatasourceIdRelationshipsIndexPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: RelationshipResponse;
+};
+
+export type UpdateRelationshipDatasourcesDatasourceIdRelationshipsIndexPutResponse = UpdateRelationshipDatasourcesDatasourceIdRelationshipsIndexPutResponses[keyof UpdateRelationshipDatasourcesDatasourceIdRelationshipsIndexPutResponses];
+
+export type SearchDatasourceTablesDatasourcesDatasourceIdSearchGetData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query: {
+        /**
+         * Q
+         */
+        q: string;
+        /**
+         * Detailed
+         */
+        detailed?: boolean;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/sync/datasources/{datasource_id}/search';
+};
+
+export type SearchDatasourceTablesDatasourcesDatasourceIdSearchGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SearchDatasourceTablesDatasourcesDatasourceIdSearchGetError = SearchDatasourceTablesDatasourcesDatasourceIdSearchGetErrors[keyof SearchDatasourceTablesDatasourcesDatasourceIdSearchGetErrors];
+
+export type SearchDatasourceTablesDatasourcesDatasourceIdSearchGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TableSearchResponse;
+};
+
+export type SearchDatasourceTablesDatasourcesDatasourceIdSearchGetResponse = SearchDatasourceTablesDatasourcesDatasourceIdSearchGetResponses[keyof SearchDatasourceTablesDatasourcesDatasourceIdSearchGetResponses];
+
+export type GetDatasourceTablesDatasourcesDatasourceIdTablesGetData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/tables/';
+};
+
+export type GetDatasourceTablesDatasourcesDatasourceIdTablesGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDatasourceTablesDatasourcesDatasourceIdTablesGetError = GetDatasourceTablesDatasourcesDatasourceIdTablesGetErrors[keyof GetDatasourceTablesDatasourcesDatasourceIdTablesGetErrors];
+
+export type GetDatasourceTablesDatasourcesDatasourceIdTablesGetResponses = {
+    /**
+     * Response Get Datasource Tables Datasources  Datasource Id  Tables  Get
+     *
+     * Successful Response
+     */
+    200: Array<string>;
+};
+
+export type GetDatasourceTablesDatasourcesDatasourceIdTablesGetResponse = GetDatasourceTablesDatasourcesDatasourceIdTablesGetResponses[keyof GetDatasourceTablesDatasourcesDatasourceIdTablesGetResponses];
+
+export type ClearTableSessionDatasourcesDatasourceIdTablesTableNameSessionDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * Table Name
+         */
+        table_name: string;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/tables/{table_name}/session/';
+};
+
+export type ClearTableSessionDatasourcesDatasourceIdTablesTableNameSessionDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClearTableSessionDatasourcesDatasourceIdTablesTableNameSessionDeleteError = ClearTableSessionDatasourcesDatasourceIdTablesTableNameSessionDeleteErrors[keyof ClearTableSessionDatasourcesDatasourceIdTablesTableNameSessionDeleteErrors];
+
+export type ClearTableSessionDatasourcesDatasourceIdTablesTableNameSessionDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    200: TableSessionClearedResponse;
+};
+
+export type ClearTableSessionDatasourcesDatasourceIdTablesTableNameSessionDeleteResponse = ClearTableSessionDatasourcesDatasourceIdTablesTableNameSessionDeleteResponses[keyof ClearTableSessionDatasourcesDatasourceIdTablesTableNameSessionDeleteResponses];
+
+export type GetTableSessionDatasourcesDatasourceIdTablesTableNameSessionGetData = {
+    body?: never;
+    path: {
+        /**
+         * Table Name
+         */
+        table_name: string;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/tables/{table_name}/session/';
+};
+
+export type GetTableSessionDatasourcesDatasourceIdTablesTableNameSessionGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetTableSessionDatasourcesDatasourceIdTablesTableNameSessionGetError = GetTableSessionDatasourcesDatasourceIdTablesTableNameSessionGetErrors[keyof GetTableSessionDatasourcesDatasourceIdTablesTableNameSessionGetErrors];
+
+export type GetTableSessionDatasourcesDatasourceIdTablesTableNameSessionGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TableSessionResponse;
+};
+
+export type GetTableSessionDatasourcesDatasourceIdTablesTableNameSessionGetResponse = GetTableSessionDatasourcesDatasourceIdTablesTableNameSessionGetResponses[keyof GetTableSessionDatasourcesDatasourceIdTablesTableNameSessionGetResponses];
+
+export type SaveTableSessionDatasourcesDatasourceIdTablesTableNameSessionPostData = {
+    /**
+     * Session Data
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        /**
+         * Table Name
+         */
+        table_name: string;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/tables/{table_name}/session/';
+};
+
+export type SaveTableSessionDatasourcesDatasourceIdTablesTableNameSessionPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveTableSessionDatasourcesDatasourceIdTablesTableNameSessionPostError = SaveTableSessionDatasourcesDatasourceIdTablesTableNameSessionPostErrors[keyof SaveTableSessionDatasourcesDatasourceIdTablesTableNameSessionPostErrors];
+
+export type SaveTableSessionDatasourcesDatasourceIdTablesTableNameSessionPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: TableSessionSaveResponse;
+};
+
+export type SaveTableSessionDatasourcesDatasourceIdTablesTableNameSessionPostResponse = SaveTableSessionDatasourcesDatasourceIdTablesTableNameSessionPostResponses[keyof SaveTableSessionDatasourcesDatasourceIdTablesTableNameSessionPostResponses];
+
+export type GetDatasourceTableAggregateDatasourcesDatasourceIdTablesTableAggregateGetData = {
+    body?: never;
+    path: {
+        /**
+         * Table
+         */
+        table: string;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query: {
+        /**
+         * Category
+         */
+        category: string;
+        /**
+         * Aggregation
+         */
+        aggregation?: string;
+        /**
+         * Value
+         */
+        value?: string | null;
+        /**
+         * Sort
+         */
+        sort?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Filters
+         */
+        filters?: string | null;
+        /**
+         * Hidden Filters
+         */
+        hidden_filters?: string | null;
+    };
+    url: '/api/sync/datasources/{datasource_id}/tables/{table}/aggregate/';
+};
+
+export type GetDatasourceTableAggregateDatasourcesDatasourceIdTablesTableAggregateGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDatasourceTableAggregateDatasourcesDatasourceIdTablesTableAggregateGetError = GetDatasourceTableAggregateDatasourcesDatasourceIdTablesTableAggregateGetErrors[keyof GetDatasourceTableAggregateDatasourcesDatasourceIdTablesTableAggregateGetErrors];
+
+export type GetDatasourceTableAggregateDatasourcesDatasourceIdTablesTableAggregateGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TableAggregateResponse;
+};
+
+export type GetDatasourceTableAggregateDatasourcesDatasourceIdTablesTableAggregateGetResponse = GetDatasourceTableAggregateDatasourcesDatasourceIdTablesTableAggregateGetResponses[keyof GetDatasourceTableAggregateDatasourcesDatasourceIdTablesTableAggregateGetResponses];
+
+export type GetDatasourceTableDataDatasourcesDatasourceIdTablesTableDataGetData = {
+    body?: never;
+    path: {
+        /**
+         * Table
+         */
+        table: string;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Filters
+         */
+        filters?: string | null;
+        /**
+         * Sort
+         */
+        sort?: string | null;
+        /**
+         * Order
+         */
+        order?: string | null;
+        /**
+         * Search
+         */
+        search?: string | null;
+        /**
+         * Search Cols
+         */
+        search_cols?: string | null;
+        /**
+         * Select
+         */
+        select?: string | null;
+    };
+    url: '/api/sync/datasources/{datasource_id}/tables/{table}/data/';
+};
+
+export type GetDatasourceTableDataDatasourcesDatasourceIdTablesTableDataGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDatasourceTableDataDatasourcesDatasourceIdTablesTableDataGetError = GetDatasourceTableDataDatasourcesDatasourceIdTablesTableDataGetErrors[keyof GetDatasourceTableDataDatasourcesDatasourceIdTablesTableDataGetErrors];
+
+export type GetDatasourceTableDataDatasourcesDatasourceIdTablesTableDataGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TableDataResponse;
+};
+
+export type GetDatasourceTableDataDatasourcesDatasourceIdTablesTableDataGetResponse = GetDatasourceTableDataDatasourcesDatasourceIdTablesTableDataGetResponses[keyof GetDatasourceTableDataDatasourcesDatasourceIdTablesTableDataGetResponses];
+
+export type GetDistinctValuesDatasourcesDatasourceIdTablesTableDistinctColumnGetData = {
+    body?: never;
+    path: {
+        /**
+         * Table
+         */
+        table: string;
+        /**
+         * Column
+         */
+        column: string;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: {
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/sync/datasources/{datasource_id}/tables/{table}/distinct/{column}/';
+};
+
+export type GetDistinctValuesDatasourcesDatasourceIdTablesTableDistinctColumnGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDistinctValuesDatasourcesDatasourceIdTablesTableDistinctColumnGetError = GetDistinctValuesDatasourcesDatasourceIdTablesTableDistinctColumnGetErrors[keyof GetDistinctValuesDatasourcesDatasourceIdTablesTableDistinctColumnGetErrors];
+
+export type GetDistinctValuesDatasourcesDatasourceIdTablesTableDistinctColumnGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DistinctValuesResponse;
+};
+
+export type GetDistinctValuesDatasourcesDatasourceIdTablesTableDistinctColumnGetResponse = GetDistinctValuesDatasourcesDatasourceIdTablesTableDistinctColumnGetResponses[keyof GetDistinctValuesDatasourcesDatasourceIdTablesTableDistinctColumnGetResponses];
+
+export type CreateRecordDatasourcesDatasourceIdTablesTableRecordsPostData = {
+    /**
+     * Body
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        /**
+         * Table
+         */
+        table: string;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/tables/{table}/records/';
+};
+
+export type CreateRecordDatasourcesDatasourceIdTablesTableRecordsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateRecordDatasourcesDatasourceIdTablesTableRecordsPostError = CreateRecordDatasourcesDatasourceIdTablesTableRecordsPostErrors[keyof CreateRecordDatasourcesDatasourceIdTablesTableRecordsPostErrors];
+
+export type CreateRecordDatasourcesDatasourceIdTablesTableRecordsPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecordMutationResponse;
+};
+
+export type CreateRecordDatasourcesDatasourceIdTablesTableRecordsPostResponse = CreateRecordDatasourcesDatasourceIdTablesTableRecordsPostResponses[keyof CreateRecordDatasourcesDatasourceIdTablesTableRecordsPostResponses];
+
+export type UpdateRecordDatasourcesDatasourceIdTablesTableRecordsRecordIdPatchData = {
+    /**
+     * Body
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        /**
+         * Table
+         */
+        table: string;
+        /**
+         * Record Id
+         */
+        record_id: string;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/tables/{table}/records/{record_id}';
+};
+
+export type UpdateRecordDatasourcesDatasourceIdTablesTableRecordsRecordIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateRecordDatasourcesDatasourceIdTablesTableRecordsRecordIdPatchError = UpdateRecordDatasourcesDatasourceIdTablesTableRecordsRecordIdPatchErrors[keyof UpdateRecordDatasourcesDatasourceIdTablesTableRecordsRecordIdPatchErrors];
+
+export type UpdateRecordDatasourcesDatasourceIdTablesTableRecordsRecordIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: RecordMutationResponse;
+};
+
+export type UpdateRecordDatasourcesDatasourceIdTablesTableRecordsRecordIdPatchResponse = UpdateRecordDatasourcesDatasourceIdTablesTableRecordsRecordIdPatchResponses[keyof UpdateRecordDatasourcesDatasourceIdTablesTableRecordsRecordIdPatchResponses];
+
+export type GetTableSchemaDatasourcesDatasourceIdTablesTableSchemaGetData = {
+    body?: never;
+    path: {
+        /**
+         * Table
+         */
+        table: string;
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: {
+        /**
+         * Refresh
+         */
+        refresh?: boolean;
+    };
+    url: '/api/sync/datasources/{datasource_id}/tables/{table}/schema/';
+};
+
+export type GetTableSchemaDatasourcesDatasourceIdTablesTableSchemaGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetTableSchemaDatasourcesDatasourceIdTablesTableSchemaGetError = GetTableSchemaDatasourcesDatasourceIdTablesTableSchemaGetErrors[keyof GetTableSchemaDatasourcesDatasourceIdTablesTableSchemaGetErrors];
+
+export type GetTableSchemaDatasourcesDatasourceIdTablesTableSchemaGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: TableSchema;
+};
+
+export type GetTableSchemaDatasourcesDatasourceIdTablesTableSchemaGetResponse = GetTableSchemaDatasourcesDatasourceIdTablesTableSchemaGetResponses[keyof GetTableSchemaDatasourcesDatasourceIdTablesTableSchemaGetResponses];
+
+export type TestDatasourceUpdateDatasourcesDatasourceIdTestUpdatePostData = {
+    body?: DatasourceUpdate;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/test-update/';
+};
+
+export type TestDatasourceUpdateDatasourcesDatasourceIdTestUpdatePostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TestDatasourceUpdateDatasourcesDatasourceIdTestUpdatePostError = TestDatasourceUpdateDatasourcesDatasourceIdTestUpdatePostErrors[keyof TestDatasourceUpdateDatasourcesDatasourceIdTestUpdatePostErrors];
+
+export type TestDatasourceUpdateDatasourcesDatasourceIdTestUpdatePostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DatasourceTestResult;
+};
+
+export type TestDatasourceUpdateDatasourcesDatasourceIdTestUpdatePostResponse = TestDatasourceUpdateDatasourcesDatasourceIdTestUpdatePostResponses[keyof TestDatasourceUpdateDatasourcesDatasourceIdTestUpdatePostResponses];
+
+export type TestDatasourceDatasourcesDatasourceIdTestPostData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/test/';
+};
+
+export type TestDatasourceDatasourcesDatasourceIdTestPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TestDatasourceDatasourcesDatasourceIdTestPostError = TestDatasourceDatasourcesDatasourceIdTestPostErrors[keyof TestDatasourceDatasourcesDatasourceIdTestPostErrors];
+
+export type TestDatasourceDatasourcesDatasourceIdTestPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: DatasourceTestResult;
+};
+
+export type TestDatasourceDatasourcesDatasourceIdTestPostResponse = TestDatasourceDatasourcesDatasourceIdTestPostResponses[keyof TestDatasourceDatasourcesDatasourceIdTestPostResponses];
+
+export type ListDatasourceViewsDatasourcesDatasourceIdViewsGetData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/views/';
+};
+
+export type ListDatasourceViewsDatasourcesDatasourceIdViewsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListDatasourceViewsDatasourcesDatasourceIdViewsGetError = ListDatasourceViewsDatasourcesDatasourceIdViewsGetErrors[keyof ListDatasourceViewsDatasourcesDatasourceIdViewsGetErrors];
+
+export type ListDatasourceViewsDatasourcesDatasourceIdViewsGetResponses = {
+    /**
+     * Response List Datasource Views Datasources  Datasource Id  Views  Get
+     *
+     * Successful Response
+     */
+    200: Array<DatasourceViewResponse>;
+};
+
+export type ListDatasourceViewsDatasourcesDatasourceIdViewsGetResponse = ListDatasourceViewsDatasourcesDatasourceIdViewsGetResponses[keyof ListDatasourceViewsDatasourcesDatasourceIdViewsGetResponses];
+
+export type CreateDatasourceViewDatasourcesDatasourceIdViewsPostData = {
+    body: DatasourceViewCreate;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/views/';
+};
+
+export type CreateDatasourceViewDatasourcesDatasourceIdViewsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateDatasourceViewDatasourcesDatasourceIdViewsPostError = CreateDatasourceViewDatasourcesDatasourceIdViewsPostErrors[keyof CreateDatasourceViewDatasourcesDatasourceIdViewsPostErrors];
+
+export type CreateDatasourceViewDatasourcesDatasourceIdViewsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: DatasourceViewResponse;
+};
+
+export type CreateDatasourceViewDatasourcesDatasourceIdViewsPostResponse = CreateDatasourceViewDatasourcesDatasourceIdViewsPostResponses[keyof CreateDatasourceViewDatasourcesDatasourceIdViewsPostResponses];
+
+export type GetWordpressDiscoveryDatasourcesDatasourceIdWordpressDiscoverGetData = {
+    body?: never;
+    path: {
+        /**
+         * Datasource Id
+         */
+        datasource_id: string;
+    };
+    query?: never;
+    url: '/api/sync/datasources/{datasource_id}/wordpress/discover/';
+};
+
+export type GetWordpressDiscoveryDatasourcesDatasourceIdWordpressDiscoverGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetWordpressDiscoveryDatasourcesDatasourceIdWordpressDiscoverGetError = GetWordpressDiscoveryDatasourcesDatasourceIdWordpressDiscoverGetErrors[keyof GetWordpressDiscoveryDatasourcesDatasourceIdWordpressDiscoverGetErrors];
+
+export type GetWordpressDiscoveryDatasourcesDatasourceIdWordpressDiscoverGetResponses = {
+    /**
+     * Response Get Wordpress Discovery Datasources  Datasource Id  Wordpress Discover  Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetWordpressDiscoveryDatasourcesDatasourceIdWordpressDiscoverGetResponse = GetWordpressDiscoveryDatasourcesDatasourceIdWordpressDiscoverGetResponses[keyof GetWordpressDiscoveryDatasourcesDatasourceIdWordpressDiscoverGetResponses];
+
+export type HealthHealthGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sync/health/';
+};
+
+export type HealthHealthGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: SyncHealthResponse;
+};
+
+export type HealthHealthGetResponse = HealthHealthGetResponses[keyof HealthHealthGetResponses];
+
+export type GetRedisSettingsSettingsRedisGetData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/sync/settings/redis/';
+};
+
+export type GetRedisSettingsSettingsRedisGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: RedisSettingsResponse;
+};
+
+export type GetRedisSettingsSettingsRedisGetResponse = GetRedisSettingsSettingsRedisGetResponses[keyof GetRedisSettingsSettingsRedisGetResponses];
+
+export type UpdateRedisSettingsSettingsRedisPutData = {
+    body: RedisSettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/sync/settings/redis/';
+};
+
+export type UpdateRedisSettingsSettingsRedisPutErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateRedisSettingsSettingsRedisPutError = UpdateRedisSettingsSettingsRedisPutErrors[keyof UpdateRedisSettingsSettingsRedisPutErrors];
+
+export type UpdateRedisSettingsSettingsRedisPutResponses = {
+    /**
+     * Successful Response
+     */
+    200: RedisSettingsResponse;
+};
+
+export type UpdateRedisSettingsSettingsRedisPutResponse = UpdateRedisSettingsSettingsRedisPutResponses[keyof UpdateRedisSettingsSettingsRedisPutResponses];
+
+export type TestRedisSettingsRedisTestPostData = {
+    body: RedisSettingsUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/sync/settings/redis/test/';
+};
+
+export type TestRedisSettingsRedisTestPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TestRedisSettingsRedisTestPostError = TestRedisSettingsRedisTestPostErrors[keyof TestRedisSettingsRedisTestPostErrors];
+
+export type TestRedisSettingsRedisTestPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: SyncRedisTestResult;
+};
+
+export type TestRedisSettingsRedisTestPostResponse = TestRedisSettingsRedisTestPostResponses[keyof TestRedisSettingsRedisTestPostResponses];
+
+export type DeleteDatasourceViewViewsViewIdDeleteData = {
+    body?: never;
+    path: {
+        /**
+         * View Id
+         */
+        view_id: string;
+    };
+    query?: never;
+    url: '/api/sync/views/{view_id}/';
+};
+
+export type DeleteDatasourceViewViewsViewIdDeleteErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteDatasourceViewViewsViewIdDeleteError = DeleteDatasourceViewViewsViewIdDeleteErrors[keyof DeleteDatasourceViewViewsViewIdDeleteErrors];
+
+export type DeleteDatasourceViewViewsViewIdDeleteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteDatasourceViewViewsViewIdDeleteResponse = DeleteDatasourceViewViewsViewIdDeleteResponses[keyof DeleteDatasourceViewViewsViewIdDeleteResponses];
+
+export type GetDatasourceViewViewsViewIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * View Id
+         */
+        view_id: string;
+    };
+    query?: never;
+    url: '/api/sync/views/{view_id}/';
+};
+
+export type GetDatasourceViewViewsViewIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetDatasourceViewViewsViewIdGetError = GetDatasourceViewViewsViewIdGetErrors[keyof GetDatasourceViewViewsViewIdGetErrors];
+
+export type GetDatasourceViewViewsViewIdGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: DatasourceViewResponse;
+};
+
+export type GetDatasourceViewViewsViewIdGetResponse = GetDatasourceViewViewsViewIdGetResponses[keyof GetDatasourceViewViewsViewIdGetResponses];
+
+export type UpdateDatasourceViewViewsViewIdPatchData = {
+    body: DatasourceViewUpdate;
+    path: {
+        /**
+         * View Id
+         */
+        view_id: string;
+    };
+    query?: never;
+    url: '/api/sync/views/{view_id}/';
+};
+
+export type UpdateDatasourceViewViewsViewIdPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateDatasourceViewViewsViewIdPatchError = UpdateDatasourceViewViewsViewIdPatchErrors[keyof UpdateDatasourceViewViewsViewIdPatchErrors];
+
+export type UpdateDatasourceViewViewsViewIdPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: DatasourceViewResponse;
+};
+
+export type UpdateDatasourceViewViewsViewIdPatchResponse = UpdateDatasourceViewViewsViewIdPatchResponses[keyof UpdateDatasourceViewViewsViewIdPatchResponses];
+
+export type GetViewCountViewsViewIdCountGetData = {
+    body?: never;
+    path: {
+        /**
+         * View Id
+         */
+        view_id: string;
+    };
+    query?: never;
+    url: '/api/sync/views/{view_id}/count';
+};
+
+export type GetViewCountViewsViewIdCountGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetViewCountViewsViewIdCountGetError = GetViewCountViewsViewIdCountGetErrors[keyof GetViewCountViewsViewIdCountGetErrors];
+
+export type GetViewCountViewsViewIdCountGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ViewCountResponse;
+};
+
+export type GetViewCountViewsViewIdCountGetResponse = GetViewCountViewsViewIdCountGetResponses[keyof GetViewCountViewsViewIdCountGetResponses];
+
+export type PatchViewRecordViewsViewIdRecordsPatchData = {
+    /**
+     * Record
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        /**
+         * View Id
+         */
+        view_id: string;
+    };
+    query?: {
+        /**
+         * Key Column
+         */
+        key_column?: string;
+    };
+    url: '/api/sync/views/{view_id}/records';
+};
+
+export type PatchViewRecordViewsViewIdRecordsPatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PatchViewRecordViewsViewIdRecordsPatchError = PatchViewRecordViewsViewIdRecordsPatchErrors[keyof PatchViewRecordViewsViewIdRecordsPatchErrors];
+
+export type PatchViewRecordViewsViewIdRecordsPatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: ViewRecordMutationResponse;
+};
+
+export type PatchViewRecordViewsViewIdRecordsPatchResponse = PatchViewRecordViewsViewIdRecordsPatchResponses[keyof PatchViewRecordViewsViewIdRecordsPatchResponses];
+
+export type CreateViewRecordViewsViewIdRecordsPostData = {
+    /**
+     * Record
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        /**
+         * View Id
+         */
+        view_id: string;
+    };
+    query?: never;
+    url: '/api/sync/views/{view_id}/records';
+};
+
+export type CreateViewRecordViewsViewIdRecordsPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateViewRecordViewsViewIdRecordsPostError = CreateViewRecordViewsViewIdRecordsPostErrors[keyof CreateViewRecordViewsViewIdRecordsPostErrors];
+
+export type CreateViewRecordViewsViewIdRecordsPostResponses = {
+    /**
+     * Successful Response
+     */
+    201: ViewRecordMutationResponse;
+};
+
+export type CreateViewRecordViewsViewIdRecordsPostResponse = CreateViewRecordViewsViewIdRecordsPostResponses[keyof CreateViewRecordViewsViewIdRecordsPostResponses];
+
+export type GetViewRecordsViewsViewIdRecordsGetData = {
+    body?: never;
+    path: {
+        /**
+         * View Id
+         */
+        view_id: string;
+    };
+    query?: {
+        /**
+         * Page
+         */
+        page?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/sync/views/{view_id}/records/';
+};
+
+export type GetViewRecordsViewsViewIdRecordsGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetViewRecordsViewsViewIdRecordsGetError = GetViewRecordsViewsViewIdRecordsGetErrors[keyof GetViewRecordsViewsViewIdRecordsGetErrors];
+
+export type GetViewRecordsViewsViewIdRecordsGetResponses = {
+    /**
+     * Successful Response
+     */
+    200: ViewRecordsResponse;
+};
+
+export type GetViewRecordsViewsViewIdRecordsGetResponse = GetViewRecordsViewsViewIdRecordsGetResponses[keyof GetViewRecordsViewsViewIdRecordsGetResponses];
+
+export type TriggerViewWebhookViewsViewIdTriggerPostData = {
+    /**
+     * Payload
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        /**
+         * View Id
+         */
+        view_id: string;
+    };
+    query?: never;
+    url: '/api/sync/views/{view_id}/trigger/';
+};
+
+export type TriggerViewWebhookViewsViewIdTriggerPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TriggerViewWebhookViewsViewIdTriggerPostError = TriggerViewWebhookViewsViewIdTriggerPostErrors[keyof TriggerViewWebhookViewsViewIdTriggerPostErrors];
+
+export type TriggerViewWebhookViewsViewIdTriggerPostResponses = {
+    /**
+     * Successful Response
+     */
+    200: ViewTriggerResponse;
+};
+
+export type TriggerViewWebhookViewsViewIdTriggerPostResponse = TriggerViewWebhookViewsViewIdTriggerPostResponses[keyof TriggerViewWebhookViewsViewIdTriggerPostResponses];
+
+export type StartImportWordpressImportPostData = {
+    body: WordPressImportRequest;
+    path?: never;
+    query?: never;
+    url: '/api/sync/wordpress/import/';
+};
+
+export type StartImportWordpressImportPostErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type StartImportWordpressImportPostError = StartImportWordpressImportPostErrors[keyof StartImportWordpressImportPostErrors];
+
+export type StartImportWordpressImportPostResponses = {
+    /**
+     * Response Start Import Wordpress Import  Post
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: string;
+    };
+};
+
+export type StartImportWordpressImportPostResponse = StartImportWordpressImportPostResponses[keyof StartImportWordpressImportPostResponses];
+
+export type GetImportResultWordpressImportImportIdGetData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/api/sync/wordpress/import/{import_id}/';
+};
+
+export type GetImportResultWordpressImportImportIdGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetImportResultWordpressImportImportIdGetError = GetImportResultWordpressImportImportIdGetErrors[keyof GetImportResultWordpressImportImportIdGetErrors];
+
+export type GetImportResultWordpressImportImportIdGetResponses = {
+    /**
+     * Response Get Import Result Wordpress Import  Import Id   Get
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetImportResultWordpressImportImportIdGetResponse = GetImportResultWordpressImportImportIdGetResponses[keyof GetImportResultWordpressImportImportIdGetResponses];
+
+export type ImportProgressStreamWordpressImportImportIdProgressGetData = {
+    body?: never;
+    path: {
+        /**
+         * Import Id
+         */
+        import_id: string;
+    };
+    query?: never;
+    url: '/api/sync/wordpress/import/{import_id}/progress/';
+};
+
+export type ImportProgressStreamWordpressImportImportIdProgressGetErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportProgressStreamWordpressImportImportIdProgressGetError = ImportProgressStreamWordpressImportImportIdProgressGetErrors[keyof ImportProgressStreamWordpressImportImportIdProgressGetErrors];
+
+export type ImportProgressStreamWordpressImportImportIdProgressGetResponses = {
+    /**
+     * Server-sent import progress events
+     */
+    200: string;
+};
+
+export type ImportProgressStreamWordpressImportImportIdProgressGetResponse = ImportProgressStreamWordpressImportImportIdProgressGetResponses[keyof ImportProgressStreamWordpressImportImportIdProgressGetResponses];
 
 export type TenantsCheckSlugData = {
     body?: never;

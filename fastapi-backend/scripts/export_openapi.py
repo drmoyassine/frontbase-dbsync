@@ -44,12 +44,79 @@ MODES = {
 }
 
 
+def _rewrite_refs(node, rename: dict[str, str]):
+    """Rewrite #/components/schemas/<old> → <new> throughout a spec fragment."""
+    if isinstance(node, dict):
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/components/schemas/"):
+            old = ref.rsplit("/", 1)[1]
+            if old in rename:
+                node["$ref"] = f"#/components/schemas/{rename[old]}"
+        for value in node.values():
+            _rewrite_refs(value, rename)
+    elif isinstance(node, list):
+        for item in node:
+            _rewrite_refs(item, rename)
+    return node
+
+
+def _merge_mounted(app, spec: dict) -> dict:
+    """
+    Fold every mounted FastAPI sub-application's operations into `spec`.
+
+    `app.openapi()` walks `app.routes`, and a Mount is opaque to it — the sub-app's
+    routes are simply absent. The DB-Synchronizer (`app.mount("/api/sync", sync_app)`)
+    is a full FastAPI instance with ~47 operations, so the exported contract silently
+    described the product surface MINUS that API. Everything downstream inherited the
+    blind spot: the framework's compat layer could not implement what the contract
+    never mentioned, and no conformance or drift gate could notice the omission.
+
+    Sub-app schema names are namespaced ONLY on genuine collision (same name, different
+    definition), so an unchanged surface keeps its existing names and this does not
+    churn the whole artifact.
+    """
+    from fastapi import FastAPI  # noqa: PLC0415
+    from starlette.routing import Mount  # noqa: PLC0415
+
+    paths = spec.setdefault("paths", {})
+    schemas = spec.setdefault("components", {}).setdefault("schemas", {})
+
+    for route in app.routes:  # route order — deterministic
+        if not isinstance(route, Mount) or not isinstance(route.app, FastAPI):
+            continue
+        prefix = route.path.rstrip("/")
+        sub = route.app.openapi()
+        sub_schemas = sub.get("components", {}).get("schemas", {})
+
+        rename: dict[str, str] = {}
+        tag = "".join(part.capitalize() for part in prefix.strip("/").split("/")[-1:])
+        for name, definition in sub_schemas.items():
+            if name in schemas and schemas[name] != definition:
+                rename[name] = f"{tag}{name}"
+
+        sub = _rewrite_refs(sub, rename)
+        sub_schemas = sub.get("components", {}).get("schemas", {})
+
+        for name, definition in sub_schemas.items():
+            schemas.setdefault(rename.get(name, name), definition)
+
+        for sub_path, item in sub.get("paths", {}).items():
+            merged = prefix + sub_path
+            if merged in paths:
+                raise SystemExit(
+                    f"mounted sub-app path collides with the main app: {merged}"
+                )
+            paths[merged] = item
+
+    return spec
+
+
 def _dump_current_process(outfile: str) -> None:
     """Subprocess entry: import the app under the ambient env and dump its spec."""
     sys.path.insert(0, str(ROOT))
     from main import app  # noqa: PLC0415 — must import after env is set
 
-    Path(outfile).write_text(json.dumps(app.openapi()), encoding="utf-8")
+    Path(outfile).write_text(json.dumps(_merge_mounted(app, app.openapi())), encoding="utf-8")
 
 
 def _export_mode(mode: str) -> dict:

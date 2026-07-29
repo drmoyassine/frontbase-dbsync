@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEdgeQueues, EdgeQueue } from '@/hooks/useEdgeInfrastructure';
 import { toast } from 'sonner';
+import { Loader2, Trash2, Star, Shield, Lock, Zap, Pencil } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';

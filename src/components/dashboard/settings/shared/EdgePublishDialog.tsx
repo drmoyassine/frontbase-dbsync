@@ -12,6 +12,7 @@ import { AlertCircle, ExternalLink, Loader2, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 import { resolvePreviewUrl } from '@/lib/edgeUtils';
+import { isCloud } from '@/lib/edition';
 import { toast } from 'sonner';
 
 export interface EdgeTarget {
@@ -58,9 +59,12 @@ export const EdgePublishDialog: React.FC<EdgePublishDialogProps> = ({
         const response = await fetch('/api/edge-engines/active/by-scope/full');
         const data = await response.json();
         
-        // Filter out local engines in cloud mode
+        // In CLOUD mode, tenants can't publish to the system/control-plane edge
+        // (it's the product's own runtime). In SELF-HOST the system edge IS the
+        // worker this deployment runs on — the only publish target — so it must be
+        // eligible even though is_system is true.
         const eligible = (data as EdgeTarget[]).filter(
-          e => e.edge_db_id && (!tenantSlug || !e.is_system)
+          e => e.edge_db_id && (!isCloud() || !tenantSlug || !e.is_system)
         );
         
         setTargets(eligible);

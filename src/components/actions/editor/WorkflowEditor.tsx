@@ -24,7 +24,7 @@ import {
     useWorkflowDraft,
     useCreateDraft,
     useUpdateDraft,
-    usePublishDraftBatch,
+    usePublishDraftToEngine,
     useToggleDraftActive,
     useToggleTargetActive,
     useTestDraft,
@@ -79,7 +79,7 @@ export function WorkflowEditor({
     const { data: draft } = useWorkflowDraft(draftId || currentDraftId);
     const createDraft = useCreateDraft();
     const updateDraft = useUpdateDraft();
-    const publishBatch = usePublishDraftBatch();
+    const publishToEngine = usePublishDraftToEngine();
     const toggleActive = useToggleDraftActive();
     const toggleTargetActive = useToggleTargetActive();
     const testDraft = useTestDraft();
@@ -280,8 +280,9 @@ export function WorkflowEditor({
         }
     }, [executionResult?.status]);
 
-    // Batch publish handler — replaces both handlePublish and handlePublishToEngine
-    const handleBatchPublish = async (engineIds: string[]) => {
+    // Single-target publish: publish to one engine (defaults to the system edge,
+    // the worker this deployment runs on — listed first by the backend).
+    const handlePublish = async (engineId: string) => {
         // Auto-save if never saved or dirty
         if (!currentDraftId || isDirty) {
             await handleSave();
@@ -295,17 +296,8 @@ export function WorkflowEditor({
         }
 
         try {
-            const result = await publishBatch.mutateAsync({ draftId: draftIdToPublish, engineIds });
-            const succeeded = result.results?.filter((r: any) => r.success) || [];
-            const failed = result.results?.filter((r: any) => !r.success) || [];
-            if (succeeded.length > 0) {
-                const names = succeeded.map((r: any) => r.name).join(', ');
-                toast({ title: 'Published!', description: `Deployed to ${names}` });
-            }
-            if (failed.length > 0) {
-                const names = failed.map((r: any) => r.name).join(', ');
-                toast({ title: 'Publish Failed', description: `Failed: ${names}`, variant: 'destructive' });
-            }
+            const result = await publishToEngine.mutateAsync({ draftId: draftIdToPublish, engineId });
+            toast({ title: 'Published!', description: result.message || 'Workflow deployed' });
             markClean();
         } catch (error: any) {
             const detail = error?.message || 'Unknown error';
@@ -340,12 +332,12 @@ export function WorkflowEditor({
                     onClose={onClose}
                     isSaving={updateDraft.isPending || createDraft.isPending}
                     isTesting={testDraft.isPending}
-                    isPublishing={publishBatch.isPending}
+                    isPublishing={publishToEngine.isPending}
                     onDescriptionChange={setDescription}
                     onSettingsChange={setWorkflowSettings}
                     onSave={handleSave}
                     onTest={handleTest}
-                    onBatchPublish={handleBatchPublish}
+                    onPublish={handlePublish}
                     onToggleActive={(checked) => toggleActive.mutate({ draftId: currentDraftId, isActive: checked })}
                     onToggleTargetActive={(draftId, engineId, checked) => toggleTargetActive.mutate({ draftId, engineId, is_active: checked })}
                     onClose_handler={handleClose}

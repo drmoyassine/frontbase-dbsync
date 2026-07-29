@@ -65,7 +65,7 @@ interface WorkflowEditorToolbarProps {
     onSettingsChange: (settings: WorkflowSettings) => void;
     onSave: () => void;
     onTest: () => void;
-    onBatchPublish: (engineIds: string[]) => Promise<void>;
+    onPublish: (engineId: string) => Promise<void>;
     onToggleActive: (active: boolean) => void;
     onToggleTargetActive: (draftId: string, engineId: string, active: boolean) => void;
     onClose_handler: () => void;
@@ -78,12 +78,12 @@ export function WorkflowEditorToolbar({
     onClose,
     isSaving, isTesting, isPublishing,
     onDescriptionChange, onSettingsChange,
-    onSave, onTest, onBatchPublish,
+    onSave, onTest, onPublish,
     onToggleActive, onToggleTargetActive,
     onClose_handler, onToggleHistory,
 }: WorkflowEditorToolbarProps) {
     const [publishOpen, setPublishOpen] = useState(false);
-    const [selectedTargets, setSelectedTargets] = useState<Set<string>>(new Set());
+    const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
     const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
 
     // Determine if a target is synced (deploy hash matches content hash)
@@ -95,47 +95,32 @@ export function WorkflowEditorToolbar({
         return deployed.deployed_version_hash === draft.content_hash;
     };
 
-    // When popover opens, pre-select unsynced engines
+    // Eligible targets: full-bundle engines with a database connection. The system
+    // edge is listed first by the backend, so it is the default selection.
+    const eligibleEngines = engines.filter((e: any) => e.edge_db_id);
+
+    // When the popover opens, default the selection to the first eligible engine
+    // (the system edge) if nothing is chosen yet.
     const handlePopoverOpen = (open: boolean) => {
-        if (open) {
-            const eligible = engines.filter((e: any) => e.edge_db_id);
-            const unsynced = eligible.filter((e: any) => !isTargetSynced(e.id));
-            setSelectedTargets(new Set(unsynced.map((e: any) => e.id)));
+        if (open && !selectedTargetId && eligibleEngines.length > 0) {
+            setSelectedTargetId(eligibleEngines[0].id);
         }
         setPublishOpen(open);
     };
 
-    const toggleTarget = (id: string) => {
-        setSelectedTargets(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-        });
-    };
-
     const handlePublishSelected = async () => {
-        const selected = engines.filter((e: any) => selectedTargets.has(e.id) && !isTargetSynced(e.id));
-        if (selected.length === 0) return;
-        await onBatchPublish(selected.map((e: any) => e.id));
+        if (!selectedTargetId) return;
+        await onPublish(selectedTargetId);
         setPublishOpen(false);
     };
 
-    // Main publish button: batch to all deployed engines (or all if first publish)
+    // Main publish button: publish to the selected target (default system edge).
     const handleMainPublish = async () => {
-        const eligible = engines.filter((e: any) => e.edge_db_id);
-        if (eligible.length === 0) {
-            // Open popover to show "no targets"
-            handlePopoverOpen(true);
+        if (eligibleEngines.length === 0) {
+            handlePopoverOpen(true); // open popover to show "no targets"
             return;
         }
-        if (eligible.length === 1) {
-            // Single target — publish directly
-            await onBatchPublish([eligible[0].id]);
-            return;
-        }
-        // Multiple targets — open popover for selection
-        handlePopoverOpen(true);
+        await onPublish(selectedTargetId ?? eligibleEngines[0].id);
     };
 
     return (
@@ -209,22 +194,26 @@ export function WorkflowEditorToolbar({
                                 <p className="text-sm font-medium">Publish to Edge</p>
                             </div>
                             <div className="p-2 space-y-1 max-h-[200px] overflow-auto">
-                                {engines.filter((e: any) => e.edge_db_id).length === 0 ? (
+                                {eligibleEngines.length === 0 ? (
                                     <p className="text-xs text-muted-foreground px-2 py-3 text-center">
                                         No deployment targets configured.
-                                        <br />Configure in Settings → Edge.
+                                        <br />The system edge should appear here.
                                     </p>
                                 ) : (
-                                    engines.filter((e: any) => e.edge_db_id).map((engine: any) => {
+                                    eligibleEngines.map((engine: any) => {
                                         const synced = isTargetSynced(engine.id);
+                                        const isSelected = selectedTargetId === engine.id;
                                         return (
                                             <label
                                                 key={engine.id}
                                                 className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted cursor-pointer group"
                                             >
-                                                <Checkbox
-                                                    checked={selectedTargets.has(engine.id)}
-                                                    onCheckedChange={() => toggleTarget(engine.id)}
+                                                <input
+                                                    type="radio"
+                                                    name="workflow-publish-target"
+                                                    checked={isSelected}
+                                                    onChange={() => setSelectedTargetId(engine.id)}
+                                                    className="h-4 w-4 accent-primary"
                                                 />
                                                 <span className="truncate min-w-0 flex-1 text-sm" title={engine.name}>
                                                     {engine.name}
@@ -257,12 +246,12 @@ export function WorkflowEditorToolbar({
                                     })
                                 )}
                             </div>
-                            {engines.filter((e: any) => e.edge_db_id).length > 0 && (
+                            {eligibleEngines.length > 0 && (
                                 <div className="p-2 border-t">
                                     <Button
                                         size="sm"
                                         className="w-full"
-                                        disabled={selectedTargets.size === 0 || isPublishing}
+                                        disabled={!selectedTargetId || isPublishing}
                                         onClick={handlePublishSelected}
                                     >
                                         {isPublishing ? (
@@ -272,7 +261,7 @@ export function WorkflowEditorToolbar({
                                         )}
                                         {isPublishing
                                             ? 'Publishing...'
-                                            : `Publish to ${selectedTargets.size} target${selectedTargets.size !== 1 ? 's' : ''}`}
+                                            : `Publish to ${eligibleEngines.find((e: any) => e.id === selectedTargetId)?.name ?? ''}`}
                                     </Button>
                                 </div>
                             )}

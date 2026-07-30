@@ -24,16 +24,33 @@ export default tseslint.config(
     },
   },
   {
-    // CF-22 P0/W2: raw axios is being phased out in favor of the generated,
+    // CF-22 P0/W2: raw axios is phased out in favor of the generated,
     // contract-typed client (src/client + lib/api-client). New code must not
-    // import axios directly; the legacy instance (services/api-service) and
-    // the generated client runtime are the only sanctioned users. Escalate
-    // "warn" -> "error" once the service migration completes.
+    // import axios directly — this is now a hard ERROR. The only sanctioned
+    // direct-axios users are runtimes that need transport config the shared
+    // generated client can't provide:
+    //   - src/services/api-service.ts  — the legacy product-wide instance
+    //   - src/lib/api-client.ts        — the generated client's own runtime
+    //   - src/modules/dbsync/api/{client,settings}.ts — the DBSync module's
+    //     own instances (a distinct /api/sync baseURL + a Supabase-JWT request
+    //     interceptor for cloud mode); @/client is single-baseURL, so these
+    //     stay until a multi-baseURL client exists.
+    // Services whose endpoints ARE in the contract must use @/client. Two
+    // remain on api-service because their endpoints are NOT in the generated
+    // contract yet: usersApi (/api/users) and rlsApi.updateMetadata
+    // (PUT /api/database/rls/metadata/{t}/{p}) — they import api-service, not
+    // axios, so they don't trip this rule; they migrate once the contract grows.
     files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/client/**", "src/services/api-service.ts", "src/lib/api-client.ts"],
+    ignores: [
+      "src/client/**",
+      "src/services/api-service.ts",
+      "src/lib/api-client.ts",
+      "src/modules/dbsync/api/client.ts",
+      "src/modules/dbsync/api/settings.ts",
+    ],
     rules: {
       "no-restricted-imports": [
-        "warn",
+        "error",
         {
           paths: [
             {

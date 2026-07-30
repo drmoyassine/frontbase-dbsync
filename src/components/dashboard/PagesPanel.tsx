@@ -128,13 +128,15 @@ export const PagesPanel: React.FC = () => {
 
   const handlePageCreated = (pageId: string) => {
     setCurrentPageId(pageId);
-    navigate(`/builder/${pageId}`);
+    // Open the framework eSSR builder (same-origin → fb_session cookie carries
+    // → passes the auth gate). New tab so the console stays open.
+    window.open(`/builder/edit/${pageId}`, '_blank');
     toast.success('Page created successfully!');
   };
 
   const handleEditPage = (pageId: string) => {
     setCurrentPageId(pageId);
-    navigate(`/builder/${pageId}`);
+    window.open(`/builder/edit/${pageId}`, '_blank');
   };
 
   const handlePreviewPage = (page: any) => {

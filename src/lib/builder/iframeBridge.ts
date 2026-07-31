@@ -3,9 +3,10 @@
  * builder shell and the eSSR iframe canvas.
  *
  * Responsibilities:
- *  - resolveBuilderApiUrl / fetchReRender: POST the layout to the framework
- *    worker's /builder/api/reRender endpoint and return the HTML document.
- *  - buildReRenderRequest: shape the product Page into the request body.
+ *  - buildReRenderRequest: shape the product Page into the `{ layout, pageData }`
+ *    body consumed by BOTH POST /builder/api/reRender (worker fallback) and
+ *    POST /__fb_builder_render__ (builder Service Worker primary). The actual
+ *    credentialed fetches live in the shared `./builderApi` client.
  *  - stampComponentIds: THE load-bearing gap fix. The eSSR renderer emits
  *    `id="${id}"` on every real component root (static.ts getCommonAttributes)
  *    but `data-fb-id` / `data-fb-component` ONLY on unknown-component
@@ -23,67 +24,17 @@ import type {
     NodeLocation,
     PageLayoutLike,
     ReRenderRequest,
-    ReRenderResponse,
 } from './iframeTypes';
 
-/**
- * Resolve the URL for a builder API call.
- *
- * In production the console is served FROM the framework worker (cf-full,
- * CF-22 system edge), so a relative path (`/builder/api/reRender`) is
- * same-origin and the `fb_session` cookie is sent with `credentials:'include'`.
- *
- * In Vite dev (:5173) `/builder` is NOT proxied (vite.config.ts is outside
- * this phase's allowlist). Callers MAY pass an absolute system-edge URL
- * (`engine.url` where `engine.is_system === true`), which routes the fetch
- * cross-origin — that requires CORS + SameSite=None on `fb_session`. Until
- * infra picks one of the two remedies (see openQuestions), the bridge defaults
- * to the same-origin relative URL, which is correct wherever the console is
- * served from the worker.
- */
-export function resolveBuilderApiUrl(path: string, systemEdgeUrl?: string): string {
-    if (systemEdgeUrl) {
-        const base = systemEdgeUrl.replace(/\/+$/, '');
-        return `${base}${path.startsWith('/') ? path : `/${path}`}`;
-    }
-    return path;
-}
+// Backward-compat aliases: the credentialed fetches + URL resolution now live
+// in the shared `./builderApi` client. Historical names are re-exported so any
+// dormant caller keeps compiling; new code should import builderApi directly.
+export { resolveBuilderUrl as resolveBuilderApiUrl } from './builderApi';
+export type { BuilderApiOptions as FetchReRenderOptions } from './builderApi';
 
-export interface FetchReRenderOptions {
-    systemEdgeUrl?: string;
-    signal?: AbortSignal;
-}
-
-/** POST the layout to /builder/api/reRender and return the rendered HTML
- *  document string. Throws on non-2xx or `{ error }` body. */
-export async function fetchReRender(
-    body: ReRenderRequest,
-    opts: FetchReRenderOptions = {},
-): Promise<string> {
-    const url = resolveBuilderApiUrl('/builder/api/reRender', opts.systemEdgeUrl);
-    const res = await fetch(url, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: opts.signal,
-    });
-    if (!res.ok) {
-        let detail = '';
-        try {
-            const data = (await res.json()) as ReRenderResponse;
-            detail = data?.error ?? '';
-        } catch {
-            /* non-JSON error body — ignore */
-        }
-        throw new Error(`reRender failed (${res.status})${detail ? `: ${detail}` : ''}`);
-    }
-    const data = (await res.json()) as ReRenderResponse;
-    if (data.error) throw new Error(`reRender error: ${data.error}`);
-    return data.html;
-}
-
-/** Shape the product Page into the POST /builder/api/reRender body. */
+/** Shape the product Page into the `{ layout, pageData }` body consumed by
+ *  BOTH POST /builder/api/reRender (worker fallback) and
+ *  POST /__fb_builder_render__ (builder SW primary). */
 export function buildReRenderRequest(page: Page): ReRenderRequest {
     const layout: PageLayoutLike = {
         content: page.layoutData?.content ?? [],

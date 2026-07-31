@@ -5,9 +5,25 @@
  *  - debounce ~120ms (coalesce rapid mutations: inline-edit typing, Phase C
  *    style-slider drags) so the worker isn't stampeded;
  *  - abort any in-flight request (the layout already superseded it);
- *  - POST /builder/api/reRender and store the returned HTML;
+ *  - render the page and store the returned HTML;
  *  - bump `renderNonce` so consumers can re-run post-load work (stamping,
  *    rect measurement, selection listener attach, selection restore).
+ *
+ * PHASE E RENDER PATH (SW-first, network fallback):
+ *  1. PRIMARY — POST the reserved same-origin path /__fb_builder_render__ with
+ *     the `{ layout, pageData }` body. The builder-scoped Service Worker
+ *     intercepts this WHEN it is the active controller and runs the SAME
+ *     `renderDocument(renderPage(layout))` the worker uses (imported from
+ *     @frontbase/edge-core), answering `{ html }` LOCALLY — no network
+ *     round-trip, zero drift vs the worker.
+ *  2. FALLBACK — if the primary fails for ANY reason (network error, non-2xx,
+ *     the 404 the framework worker returns while the SW is not yet active, or
+ *     the render threw), retry the SAME body via POST /builder/api/reRender and
+ *     use its `{ html }`.
+ *
+ * The consumed response shape (`{ html }`) is identical on both paths, so
+ * IframeCanvas is unchanged. The Phase D debounce / coalesce / AbortController
+ * behavior is preserved across both paths.
  *
  * The iframe element itself (and its `load` handler) is owned by IframeCanvas;
  * this hook only owns the fetch lifecycle and the resulting HTML string.
@@ -15,7 +31,12 @@
 
 import { useEffect, useState } from 'react';
 import type { Page } from '@/types/builder';
-import { buildReRenderRequest, fetchReRender } from '@/lib/builder/iframeBridge';
+import { buildReRenderRequest } from '@/lib/builder/iframeBridge';
+import {
+    fetchBuilderRender,
+    fetchReRender,
+    type BuilderApiOptions,
+} from '@/lib/builder/builderApi';
 
 export type IframeStatus = 'idle' | 'rendering' | 'ready' | 'error';
 
@@ -47,21 +68,52 @@ export function useIframeCanvas(page: Page, systemEdgeUrl?: string): UseIframeCa
         const issue = async () => {
             setStatus((prev) => (prev === 'ready' ? 'rendering' : prev));
             setError(null);
-            try {
-                const out = await fetchReRender(buildReRenderRequest(page), {
-                    systemEdgeUrl,
-                    signal: controller.signal,
-                });
+
+            const body = buildReRenderRequest(page);
+            const baseOpts: BuilderApiOptions = {
+                systemEdgeUrl,
+                signal: controller.signal,
+            };
+
+            // Helper: was this error a deliberate cancellation (not a failure)?
+            const isAbort = (e: unknown) =>
+                controller.signal.aborted ||
+                (e instanceof DOMException && e.name === 'AbortError');
+
+            // Commit a successful { html } from EITHER path identically.
+            const commit = (html: string) => {
                 if (cancelled) return;
-                setHtml(out);
+                setHtml(html);
                 setStatus('ready');
                 setRenderNonce((n) => n + 1);
-            } catch (e: unknown) {
-                if (cancelled || (e instanceof DOMException && e.name === 'AbortError')) {
+            };
+
+            try {
+                // PRIMARY: builder-scoped Service Worker virtual fetch. When the
+                // SW is active it answers LOCALLY (zero drift, no round-trip).
+                const primary = await fetchBuilderRender(body, baseOpts);
+                commit(primary.html);
+                return;
+            } catch (primaryErr: unknown) {
+                // Cancellation is not a failure — bail without surfacing error.
+                if (cancelled || isAbort(primaryErr)) return;
+
+                // FALLBACK: the worker's POST /builder/api/reRender. Same body,
+                // same { html } response shape. Reached when the SW is not yet
+                // active (path 404s on the worker), or any other primary failure.
+                try {
+                    const fallback = await fetchReRender(body, baseOpts);
+                    commit(fallback.html);
                     return;
+                } catch (fallbackErr: unknown) {
+                    if (cancelled || isAbort(fallbackErr)) return;
+                    const primaryDetail =
+                        primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+                    const fallbackDetail =
+                        fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+                    setError(`${fallbackDetail} (SW render also failed: ${primaryDetail})`);
+                    setStatus('error');
                 }
-                setError(e instanceof Error ? e.message : String(e));
-                setStatus('error');
             }
         };
 

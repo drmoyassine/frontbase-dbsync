@@ -23,6 +23,7 @@
 
 import { useEffect, useState } from 'react';
 import type { PropertyFieldConfig } from '@/components/builder/registry/propertySchemas';
+import { fetchRegistry } from './builderApi';
 
 // ---------------------------------------------------------------------------
 // Framework PropDefinition (runtime mirror — arrives over HTTP as JSON, so we
@@ -138,6 +139,12 @@ export function reshapeRegistryDescriptor(data: unknown): RegistryDescriptor | n
  * Fetch the registry descriptor from the framework worker and cache it.
  * Resolves to `null` on any failure (network, non-OK, bad shape) so callers
  * can fall back without try/catch.
+ *
+ * The credentialed fetch itself is routed through the shared `./builderApi`
+ * client (`fetchRegistry`), which centralizes `credentials: 'include'` + the
+ * same-origin relative URL (and the system-edge absolute-URL fallback).
+ * `fetchRegistry` already swallows network/non-2xx failures into `null`, so
+ * the only reshape-time failures left are structural (bad body shape).
  */
 export async function fetchRegistryDescriptor(): Promise<RegistryDescriptor | null> {
     if (cachedDescriptor) return cachedDescriptor;
@@ -145,12 +152,7 @@ export async function fetchRegistryDescriptor(): Promise<RegistryDescriptor | nu
 
     inflight = (async () => {
         try {
-            const res = await fetch('/builder/api/registry', {
-                headers: { Accept: 'application/json' },
-                credentials: 'same-origin',
-            });
-            if (!res.ok) return null;
-            const data: unknown = await res.json();
+            const data = await fetchRegistry();
             const reshaped = reshapeRegistryDescriptor(data);
             if (reshaped) cachedDescriptor = reshaped;
             return reshaped;

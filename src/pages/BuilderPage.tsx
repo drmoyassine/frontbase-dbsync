@@ -3,6 +3,13 @@ import { useParams, Navigate } from 'react-router-dom';
 import { FrontbaseBuilder } from '@/components/builder/FrontbaseBuilder';
 import { useBuilderStore } from '@/stores/builder';
 import { toast } from '@/hooks/use-toast';
+import { registerBuilderSw } from '@/sw/registerBuilderSw';
+
+// Phase E: the builder-scoped SW registration is idempotent and shared across
+// every BuilderPage mount, so module scope (run once per page load) is the
+// correct place — registering inside the component effect would re-run on every
+// route change and add noise.
+let builderSwRegistered = false;
 
 const BuilderPage: React.FC = () => {
   const { pageId } = useParams<{ pageId: string }>();
@@ -33,6 +40,20 @@ const BuilderPage: React.FC = () => {
 
     initializeBuilder();
   }, [loadPagesFromDatabase]);
+
+  useEffect(() => {
+    // Phase E: register the builder-scoped Service Worker so canvas re-renders
+    // are served LOCALLY (no /builder/api/reRender round-trip). Fire-and-forget
+    // — failure is non-fatal; iframeBridge falls back to the worker endpoint.
+    if (builderSwRegistered) return;
+    builderSwRegistered = true;
+    void registerBuilderSw().then((result) => {
+      if (!result.ok && result.error !== 'service-worker-unsupported') {
+        // Log only — never block the builder. The fallback render path still works.
+        console.warn('[builder-sw] registration failed:', result.error);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (pageId && pageId !== currentPageId) {

@@ -78,6 +78,15 @@ export default defineConfig(({ mode }) => {
           secure: false,
           rewrite: (path: string) => path.replace(/^\/actions/, ''),
         },
+        // Framework builder worker (cf-full / wrangler dev :8787) — eSSR reRender +
+        // registry descriptor. Same-origin via proxy so the fb_session cookie carries
+        // through builderAuthGate. (In prod the console is served from the worker, so
+        // these are already same-origin; this is dev-only.)
+        '/builder': {
+          target: 'http://localhost:8787',
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
     plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

@@ -1,32 +1,30 @@
-import React from 'react';
-import { useDroppable } from '@dnd-kit/core';
+import React, { useState } from 'react';
 import { useBuilderStore, type Page } from '@/stores/builder';
-import { DraggableComponent } from './DraggableComponent';
 import { CanvasGrid } from './CanvasGrid';
 import { ComponentBreadcrumb } from './ComponentBreadcrumb';
-import { cn, sanitizeCSS } from '@/lib/utils';
-import { getDefaultProps } from '@/lib/componentDefaults';
-import { stylesToCSS } from '@/lib/styles/converters';
-import type { StylesData } from '@/types/builder';
+import { IframeCanvas } from './canvas/IframeCanvas';
+import { CanvasOverlay } from './canvas/CanvasOverlay';
+import { useSystemEdgeUrl } from './canvas/useSystemEdgeUrl';
+import type { ComponentRect } from '@/lib/builder/iframeTypes';
+import { cn } from '@/lib/utils';
 import { Target, X } from 'lucide-react';
 
 interface BuilderCanvasProps {
   page: Page;
 }
 
-/** Recursively find a component node by id. Pure (no closure state) so it is
- *  stable across renders and safe to call from a memoized handler. */
-const findComponentById = (components: any[], id: string): any => {
-  for (const comp of components) {
-    if (comp.id === id) return comp;
-    if (comp.children) {
-      const found = findComponentById(comp.children, id);
-      if (found) return found;
-    }
-  }
-  return null;
-};
-
+/**
+ * BuilderCanvas — the Phase D eSSR iframe canvas.
+ *
+ * The canvas is now a same-origin <iframe> (IframeCanvas) whose `srcdoc` is the
+ * byte-identical eSSR output of POST /builder/api/reRender, plus a React
+ * overlay sibling (CanvasOverlay) that owns selection/hover rectangles and all
+ * @dnd-kit droppables. Selection, hover, and inline-edit are bridged through
+ * the iframe contentDocument (see useIframeSelection / iframeInlineEdit).
+ *
+ * This component retains the viewport / zoom / device-frame chrome, the
+ * scroll-target selection banner, the grid overlay, and the breadcrumb.
+ */
 export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   const {
     selectedComponentId,
@@ -37,48 +35,17 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     showDeviceFrame,
     showGrid,
     scrollTargetSelectionMode,
-    scrollTargetCallback,
     exitScrollTargetMode
   } = useBuilderStore();
 
-  const components = page.layoutData?.content || [];
-  const hasComponents = components.length > 0;
+  // System-edge worker URL (production console is served from it → relative URL
+  // is same-origin; dev falls back to this absolute URL if configured).
+  const systemEdgeUrl = useSystemEdgeUrl();
 
-  // Empty canvas drop zone for initial component
-  const { setNodeRef: setDropRef, isOver: isOverEmpty } = useDroppable({
-    id: 'canvas-drop-zone',
-    data: {
-      accepts: ['component', 'existing-component', 'layer-component'],
-      pageId: page.id
-    },
-    disabled: hasComponents
-  });
-
-  // Memoized so the reference passed to DraggableComponent.onSelect is stable.
-  // Stability is what lets DraggableComponent's React.memo skip unaffected
-  // siblings during inline editing. Reads fresh state via getState() for the
-  // rare scroll-target branch so the common path has no reactive deps.
-  const handleComponentClick = React.useCallback((componentId: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-
-    const state = useBuilderStore.getState();
-
-    // Handle scroll target selection mode
-    if (state.scrollTargetSelectionMode && state.scrollTargetCallback) {
-      const currentPage = state.pages.find(p => p.id === page.id);
-      const component = currentPage
-        ? findComponentById(currentPage.layoutData?.content || [], componentId)
-        : null;
-      const componentType = component?.type || 'Section';
-      state.scrollTargetCallback(componentId, componentType);
-      state.exitScrollTargetMode();
-      return;
-    }
-
-    if (!state.isPreviewMode) {
-      state.setSelectedComponentId(state.selectedComponentId === componentId ? null : componentId);
-    }
-  }, [page.id]);
+  // Component rects (viewport-local to the iframe) + hovered id, published up
+  // from IframeCanvas so the overlay can draw selection/hover/drop targets.
+  const [rects, setRects] = useState<ComponentRect[]>([]);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   // Viewport dimensions - Industry standard sizes
   const getViewportDimensions = () => {
@@ -90,164 +57,8 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     }
   };
 
-  const { width: viewportWidth, height: viewportHeight } = getViewportDimensions();
+  const { width: viewportWidth } = getViewportDimensions();
   const scaleFactor = zoomLevel / 100;
-
-  // Convert NEW containerStyles format to inline CSS
-  const getContainerCSS = (): React.CSSProperties => {
-    const containerStyles = page.containerStyles;
-
-    if (!containerStyles) {
-      // Match SSR's .fb-page default styles: display:flex; flex-direction:column; padding:2rem; gap:1rem
-      return { display: 'flex', flexDirection: 'column', padding: '2rem', gap: '1rem' };
-    }
-
-    const styles: React.CSSProperties = {};
-
-    // Handle NEW StylesData format
-    if ('activeProperties' in containerStyles && 'values' in containerStyles) {
-      const stylesData = containerStyles as StylesData;
-      const values = stylesData.values;
-
-      // Flex direction
-      if (values.flexDirection) {
-        styles.display = 'flex';
-        styles.flexDirection = values.flexDirection as any;
-      }
-
-      // Gap
-      if (values.gap !== undefined) {
-        styles.gap = typeof values.gap === 'number' ? `${values.gap}px` : values.gap;
-      }
-
-      // Flex wrap
-      if (values.flexWrap) {
-        styles.flexWrap = values.flexWrap as any;
-      }
-
-      // Align items
-      if (values.alignItems) {
-        styles.alignItems = values.alignItems as any;
-      }
-
-      // Justify content
-      if (values.justifyContent) {
-        styles.justifyContent = values.justifyContent as any;
-      }
-
-      // Background color
-      if (values.backgroundColor) {
-        styles.backgroundColor = values.backgroundColor;
-      }
-
-      // Padding
-      if (values.padding) {
-        const p = values.padding;
-        if (typeof p === 'object' && 'top' in p) {
-          styles.padding = `${p.top}px ${p.right}px ${p.bottom}px ${p.left}px`;
-        }
-      }
-
-      // Width, height, etc.
-      ['width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight'].forEach(prop => {
-        if (values[prop] !== undefined && values[prop] !== 'auto') {
-          (styles as any)[prop] = typeof values[prop] === 'number' ? `${values[prop]}px` : values[prop];
-        }
-      });
-
-      // Typography
-      if (values.fontSize) styles.fontSize = `${values.fontSize}px`;
-      if (values.fontWeight) styles.fontWeight = values.fontWeight;
-      if (values.lineHeight) styles.lineHeight = values.lineHeight;
-      if (values.textAlign) styles.textAlign = values.textAlign as any;
-      if (values.color) styles.color = values.color;
-
-      // Effects
-      if (values.opacity) styles.opacity = values.opacity;
-      if (values.borderRadius) styles.borderRadius = `${values.borderRadius}px`;
-      if (values.borderWidth) styles.borderWidth = `${values.borderWidth}px`;
-      if (values.borderStyle) styles.borderStyle = values.borderStyle as any;
-      if (values.borderColor) styles.borderColor = values.borderColor;
-      if (values.boxShadow && typeof values.boxShadow === 'object') {
-        const { x, y, blur, spread, color } = values.boxShadow;
-        styles.boxShadow = `${x}px ${y}px ${blur}px ${spread}px ${color}`;
-      }
-    } else {
-      // Handle OLD ContainerStyles format for backward compatibility
-      const oldStyles = containerStyles as any;
-
-      if (oldStyles.orientation) {
-        styles.display = 'flex';
-        styles.flexDirection = oldStyles.orientation;
-      }
-
-      if (oldStyles.gap !== undefined) {
-        styles.gap = `${oldStyles.gap}px`;
-      }
-
-      if (oldStyles.flexWrap) {
-        styles.flexWrap = oldStyles.flexWrap;
-      }
-
-      if (oldStyles.alignItems) {
-        const alignMap: Record<string, string> = {
-          'start': 'flex-start',
-          'center': 'center',
-          'end': 'flex-end',
-          'stretch': 'stretch'
-        };
-        styles.alignItems = alignMap[oldStyles.alignItems] || oldStyles.alignItems;
-      }
-
-      if (oldStyles.justifyContent) {
-        const justifyMap: Record<string, string> = {
-          'start': 'flex-start',
-          'center': 'center',
-          'end': 'flex-end',
-          'between': 'space-between',
-          'around': 'space-around'
-        };
-        styles.justifyContent = justifyMap[oldStyles.justifyContent] || oldStyles.justifyContent;
-      }
-
-      if (oldStyles.backgroundColor) {
-        styles.backgroundColor = oldStyles.backgroundColor;
-      }
-
-      if (oldStyles.padding) {
-        const { top, right, bottom, left } = oldStyles.padding;
-        styles.padding = `${top}px ${right}px ${bottom}px ${left}px`;
-      }
-    }
-
-    return styles;
-  };
-
-  // Collect all rawCSS from the component tree
-  const getAllRawCSS = React.useCallback((items: any[]): string => {
-    let cssString = '';
-    
-    for (const item of items) {
-      const rawCSS = item.stylesData?.rawCSS;
-      if (rawCSS && typeof rawCSS === 'string') {
-        // Scope the CSS to this specific component
-        cssString += `\n/* Component ${item.id} */\n`;
-        cssString += rawCSS.replace(/&/g, `.fb-${item.id}`);
-        cssString += '\n';
-      }
-      
-      // Recursively process children
-      if (item.children && Array.isArray(item.children)) {
-        cssString += getAllRawCSS(item.children);
-      }
-    }
-    
-    return cssString;
-  }, []);
-  
-  const pageRawCSS = React.useMemo(() => {
-    return getAllRawCSS(components);
-  }, [components, getAllRawCSS]);
 
   return (
     <div
@@ -257,22 +68,17 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
       )}
       style={{ minHeight: '100%' }}
       onClick={(e) => {
-        // Cancel selection mode if clicking outside components
+        // Cancel selection mode if clicking outside the device frame.
         if (scrollTargetSelectionMode && e.target === e.currentTarget) {
           exitScrollTargetMode();
           return;
         }
-        // Only deselect if clicking on outer wrapper, not canvas content
+        // Only deselect if clicking on the outer padding, not the canvas content.
         if (e.target === e.currentTarget && !isPreviewMode) {
           setSelectedComponentId(null);
         }
       }}
     >
-      {/* Dynamic Component Themes CSS */}
-      {pageRawCSS && (
-        <style dangerouslySetInnerHTML={{ __html: sanitizeCSS(pageRawCSS) }} />
-      )}
-
       {/* Scroll Target Selection Mode Banner */}
       {scrollTargetSelectionMode && (
         <div className="absolute top-0 left-0 right-0 z-50 bg-primary text-primary-foreground px-4 py-2 flex items-center justify-between shadow-lg">
@@ -291,54 +97,38 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
           </button>
         </div>
       )}
-      {/* Device Frame / Viewport Container */}
+
+      {/* Device Frame / Viewport Container.
+          position: relative so the iframe (in-flow) and the overlay (absolute
+          inset:0) share an origin inside the same transform-scaled wrapper —
+          iframe-local coords map 1:1 to overlay coords at any zoom. */}
       <div
         className={cn(
           "mx-auto transition-all duration-300 relative w-full",
-          showDeviceFrame && "shadow-2xl rounded-lg overflow-hidden"
+          showDeviceFrame && "shadow-2xl rounded-lg overflow-hidden bg-background"
         )}
         style={{
           maxWidth: `${viewportWidth}px`,
-          minHeight: '800px', // Good working height that fits most screens
+          minHeight: '800px',
           transform: `scale(${scaleFactor})`,
           transformOrigin: 'top center'
         }}
       >
-        {/* Grid Overlay - Now inside viewport container */}
+        {/* Grid overlay — pure background, pointer-events handled by CSS. */}
         {showGrid && <CanvasGrid visible={showGrid} />}
-        {/* Canvas Content with Container Styles - No onClick here */}
-        <div
-          ref={hasComponents ? undefined : setDropRef}
-          className={cn(
-            "min-h-full w-full",
-            !hasComponents && isOverEmpty && "bg-blue-50/50 border-2 border-dashed border-blue-400"
-          )}
-          style={getContainerCSS()}
-        >
-          {!hasComponents && (
-            <div className="flex flex-col items-center justify-center h-full w-full text-center p-12">
-              <div className="text-5xl mb-4">📄</div>
-              <h3 className="text-xl font-semibold mb-2">Empty Canvas</h3>
-              <p className="text-muted-foreground">
-                Drag components from the left panel to start building your page
-              </p>
-            </div>
-          )}
 
-          {components.map((component, index) => (
-            <DraggableComponent
-              key={component.id}
-              component={component}
-              index={index}
-              pageId={page.id}
-              isSelected={selectedComponentId === component.id}
-              isLastComponent={index === components.length - 1}
-              onSelect={handleComponentClick}
-            />
-          ))}
-        </div>
+        {/* The eSSR presentation surface (srcdoc = reRender output). */}
+        <IframeCanvas
+          page={page}
+          systemEdgeUrl={systemEdgeUrl}
+          onRects={setRects}
+          onHoveredId={setHoveredId}
+        />
 
-        {/* Breadcrumb Navigation — shows ancestry when component is selected */}
+        {/* Interaction layer: selection / hover / drop targets / reorder handle. */}
+        <CanvasOverlay page={page} rects={rects} hoveredId={hoveredId} />
+
+        {/* Breadcrumb Navigation — shows ancestry when a component is selected. */}
         {!isPreviewMode && selectedComponentId && <ComponentBreadcrumb />}
       </div>
     </div>

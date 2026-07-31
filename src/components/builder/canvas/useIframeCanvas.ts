@@ -88,32 +88,43 @@ export function useIframeCanvas(page: Page, systemEdgeUrl?: string): UseIframeCa
                 setRenderNonce((n) => n + 1);
             };
 
-            try {
-                // PRIMARY: builder-scoped Service Worker virtual fetch. When the
-                // SW is active it answers LOCALLY (zero drift, no round-trip).
-                const primary = await fetchBuilderRender(body, baseOpts);
-                commit(primary.html);
-                return;
-            } catch (primaryErr: unknown) {
-                // Cancellation is not a failure — bail without surfacing error.
-                if (cancelled || isAbort(primaryErr)) return;
+            // Only attempt the SW primary path when a Service Worker is actually
+            // CONTROLLING this page. On cold start (or if the SW failed to
+            // register/activate) there is no controller, so the
+            // /__fb_builder_render__ fetch would just 404 on the worker and
+            // immediately fall back — a wasted round-trip that ALSO provokes
+            // intermittent 503s from the rapid 404→fallback sequence. Going
+            // straight to reRender when uncontrolled keeps the canvas clean.
+            const swController =
+                typeof navigator !== 'undefined' ? navigator.serviceWorker?.controller : null;
 
-                // FALLBACK: the worker's POST /builder/api/reRender. Same body,
-                // same { html } response shape. Reached when the SW is not yet
-                // active (path 404s on the worker), or any other primary failure.
+            if (swController) {
                 try {
-                    const fallback = await fetchReRender(body, baseOpts);
-                    commit(fallback.html);
+                    // PRIMARY: builder-scoped Service Worker virtual fetch. When
+                    // the SW is active it answers LOCALLY (zero drift, no
+                    // round-trip).
+                    const primary = await fetchBuilderRender(body, baseOpts);
+                    commit(primary.html);
                     return;
-                } catch (fallbackErr: unknown) {
-                    if (cancelled || isAbort(fallbackErr)) return;
-                    const primaryDetail =
-                        primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-                    const fallbackDetail =
-                        fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-                    setError(`${fallbackDetail} (SW render also failed: ${primaryDetail})`);
-                    setStatus('error');
+                } catch (primaryErr: unknown) {
+                    // Cancellation is not a failure — bail without surfacing error.
+                    if (cancelled || isAbort(primaryErr)) return;
+                    // Otherwise fall through to the network fallback below.
                 }
+            }
+
+            // PRIMARY when no SW controls the page, or FALLBACK after a SW
+            // failure: the worker's POST /builder/api/reRender. Same body, same
+            // { html } response shape.
+            try {
+                const fallback = await fetchReRender(body, baseOpts);
+                commit(fallback.html);
+            } catch (fallbackErr: unknown) {
+                if (cancelled || isAbort(fallbackErr)) return;
+                const detail =
+                    fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+                setError(detail);
+                setStatus('error');
             }
         };
 

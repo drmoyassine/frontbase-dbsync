@@ -14,7 +14,7 @@ let _loadPagesPromise: Promise<void> | null = null;
 export interface PageSlice {
     pages: Page[];
     currentPageId: string | null;
-    isLoading: boolean;
+    isPagesLoading: boolean;
     error: string | null;
 
     createPage: (page: Omit<Page, 'id' | 'createdAt' | 'updatedAt'>) => void;
@@ -43,7 +43,7 @@ export interface PageSlice {
 export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (set, get) => ({
     pages: [],
     currentPageId: null,
-    isLoading: false,
+    isPagesLoading: false,
     error: null,
 
     // `setCurrentPage` is kept as a back-compat alias for `setCurrentPageId`
@@ -409,8 +409,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         }
 
         const doLoad = async () => {
-            const { setLoading } = get();
-            setLoading(true);
+            set({ isPagesLoading: true });
             try {
                 const pagesRaw = await getPages(includeDeleted);
                 const safePages = Array.isArray(pagesRaw) ? pagesRaw : [];
@@ -453,7 +452,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 });
                 set({ isInitialized: true });
             } finally {
-                setLoading(false);
+                set({ isPagesLoading: false });
                 _loadPagesPromise = null;
             }
         };

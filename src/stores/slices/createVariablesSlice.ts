@@ -6,7 +6,7 @@ import { getVariables as getVariablesApi, createVariable as createVariableApi, u
 
 export interface VariablesSlice {
     appVariables: AppVariable[];
-    isLoading: boolean;
+    isVariablesLoading: boolean;
     error: string | null;
     addAppVariable: (variable: Omit<AppVariable, 'id' | 'createdAt'>) => void;
     updateAppVariable: (id: string, updates: Partial<AppVariable>) => void;
@@ -16,18 +16,18 @@ export interface VariablesSlice {
 
 export const createVariablesSlice: StateCreator<BuilderState, [], [], VariablesSlice> = (set, get) => ({
     appVariables: [],
-    isLoading: false,
+    isVariablesLoading: false,
     error: null,
 
     loadVariablesFromDatabase: async () => {
-        set({ isLoading: true, error: null });
+        set({ isVariablesLoading: true, error: null });
         try {
             const variables = await getVariablesApi();
-            set({ appVariables: variables, isLoading: false });
+            set({ appVariables: variables, isVariablesLoading: false });
         } catch (error: any) {
             set({
                 error: error.response?.data?.message || 'Failed to fetch variables',
-                isLoading: false,
+                isVariablesLoading: false,
             });
         }
     },

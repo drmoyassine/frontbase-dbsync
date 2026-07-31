@@ -20,7 +20,7 @@ const BuilderPage: React.FC = () => {
     currentPageId,
     loadPagesFromDatabase,
     createPageInDatabase,
-    isLoading,
+    isPagesLoading,
     isInitialized
   } = useBuilderStore(useShallow(s => ({
     pages: s.pages,
@@ -28,7 +28,7 @@ const BuilderPage: React.FC = () => {
     currentPageId: s.currentPageId,
     loadPagesFromDatabase: s.loadPagesFromDatabase,
     createPageInDatabase: s.createPageInDatabase,
-    isLoading: s.isLoading,
+    isPagesLoading: s.isPagesLoading,
     isInitialized: s.isInitialized
   })));
 
@@ -81,7 +81,7 @@ const BuilderPage: React.FC = () => {
     }
   }, [pageId, setCurrentPageId, currentPageId, pages]);
 
-  if (isLoading || !isInitialized) {
+  if (isPagesLoading || !isInitialized) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center">

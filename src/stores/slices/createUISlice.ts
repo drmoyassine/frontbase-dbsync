@@ -5,7 +5,6 @@ export interface UISlice {
     // Builder state
     isPreviewMode: boolean;
     isSaving: boolean;
-    isLoading: boolean;
     hasUnsavedChanges: boolean;
 
     // Responsive state
@@ -27,7 +26,6 @@ export interface UISlice {
     // Actions
     setPreviewMode: (isPreview: boolean) => void;
     setSaving: (saving: boolean) => void;
-    setLoading: (loading: boolean) => void;
     setUnsavedChanges: (hasChanges: boolean) => void;
     setCurrentViewport: (viewport: 'mobile' | 'tablet' | 'desktop') => void;
     setZoomLevel: (zoom: number) => void;
@@ -44,7 +42,6 @@ export interface UISlice {
 export const createUISlice: StateCreator<BuilderState, [], [], UISlice> = (set) => ({
     isPreviewMode: false,
     isSaving: false,
-    isLoading: false,
     hasUnsavedChanges: false,
 
     currentViewport: 'desktop',
@@ -63,7 +60,6 @@ export const createUISlice: StateCreator<BuilderState, [], [], UISlice> = (set) 
 
     setPreviewMode: (isPreview) => set({ isPreviewMode: isPreview }),
     setSaving: (saving) => set({ isSaving: saving }),
-    setLoading: (loading) => set({ isLoading: loading }),
     setUnsavedChanges: (hasChanges) => set({ hasUnsavedChanges: hasChanges }),
     setCurrentViewport: (viewport) => set({ currentViewport: viewport }),
     setZoomLevel: (zoom) => set({ zoomLevel: zoom }),

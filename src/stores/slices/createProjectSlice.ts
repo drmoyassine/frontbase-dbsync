@@ -5,7 +5,7 @@ import { getProject as getProjectApi, updateProject as updateProjectApi } from '
 
 export interface ProjectSlice {
     project: ProjectConfig | null;
-    isLoading: boolean;
+    isProjectLoading: boolean;
     error: string | null;
     setProject: (project: ProjectConfig) => void;
     updateProject: (updates: Partial<ProjectConfig>) => void;
@@ -30,35 +30,35 @@ function transformProjectData(apiProject: any): ProjectConfig {
 
 export const createProjectSlice: StateCreator<BuilderState, [], [], ProjectSlice> = (set, get) => ({
     project: null,
-    isLoading: false,
+    isProjectLoading: false,
     error: null,
     setProject: (project) => set({ project }),
     updateProject: (updates) => set((state) => ({
         project: state.project ? { ...state.project, ...updates, updatedAt: new Date().toISOString() } : null
     })),
     loadProjectFromDatabase: async () => {
-        set({ isLoading: true, error: null });
+        set({ isProjectLoading: true, error: null });
         try {
             const apiProject = await getProjectApi();
             const project = transformProjectData(apiProject);
-            set({ project, isLoading: false });
+            set({ project, isProjectLoading: false });
         } catch (error: any) {
             set({
                 error: error.response?.data?.message || 'Failed to fetch project',
-                isLoading: false,
+                isProjectLoading: false,
             });
         }
     },
     updateProjectInDatabase: async (projectData: Partial<ProjectConfig>) => {
-        set({ isLoading: true, error: null });
+        set({ isProjectLoading: true, error: null });
         try {
             const apiProject = await updateProjectApi(projectData);
             const project = transformProjectData(apiProject);
-            set({ project, isLoading: false });
+            set({ project, isProjectLoading: false });
         } catch (error: any) {
             set({
                 error: error.response?.data?.message || 'Failed to update project',
-                isLoading: false,
+                isProjectLoading: false,
             });
             throw error;
         }

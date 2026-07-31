@@ -23,10 +23,10 @@ interface ProjectDetailsFormProps {
 }
 
 export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps) {
-    const { project, updateProjectInDatabase, isLoading } = useBuilderStore(useShallow(s => ({
+    const { project, updateProjectInDatabase, isProjectLoading } = useBuilderStore(useShallow(s => ({
         project: s.project,
         updateProjectInDatabase: s.updateProjectInDatabase,
-        isLoading: s.isLoading
+        isProjectLoading: s.isProjectLoading
     })));
 
     const [formData, setFormData] = useState({
@@ -162,7 +162,7 @@ export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps
                 />
             </div>
             <div className="pt-2">
-                <Button onClick={handleSave} disabled={isSaving || isLoading}>
+                <Button onClick={handleSave} disabled={isSaving || isProjectLoading}>
                     {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Save Changes
                 </Button>

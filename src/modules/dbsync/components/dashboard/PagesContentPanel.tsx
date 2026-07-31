@@ -198,7 +198,7 @@ export function PagesContentPanel() {
                                                 variant="ghost"
                                                 size="icon"
                                                 className="h-8 w-8"
-                                                onClick={() => window.open(`/builder/edit/${page.id}`, '_blank')}
+                                                onClick={() => navigate(`/builder/${page.id}`)}
                                                 title="Edit"
                                             >
                                                 <Edit className="w-4 h-4" />

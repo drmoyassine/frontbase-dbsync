@@ -492,26 +492,50 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         set((state) => {
             const newPages = [...state.pages];
             const newPage = { ...newPages[pageIndex] };
-            const newContent = JSON.parse(JSON.stringify(newPage.layoutData?.content || []));
+            // Shallow-copy the root array only; the insert walk below rebuilds
+            // the matched path immutably (spreading each ancestor + the parent's
+            // children array), so no object that belongs to the prior state
+            // snapshot is ever written to in place. (Previously this used a
+            // JSON deep-clone as a brute-force guard; the structural clone
+            // below is cheaper and matches removeComponentFromTree's pattern.)
+            let newContent = [...(newPage.layoutData?.content || [])];
 
             // If there's a selected component, try to paste into its parent container
             if (selectedComponentId) {
                 const result = findComponentWithParent(newContent, selectedComponentId);
                 if (result && result.parent) {
-                    // Find parent in new structure and add after selected component
-                    const findAndInsert = (components: ComponentData[]): boolean => {
-                        for (const comp of components) {
+                    // Immutably walk to the parent and insert the clone right
+                    // after the selected component. Returns a rebuilt tree (or
+                    // null if the parent is somehow unreachable), mirroring the
+                    // removeComponentFromTree / insertComponentIntoTree pattern.
+                    const insertAfter = (components: ComponentData[]): ComponentData[] | null => {
+                        for (let i = 0; i < components.length; i++) {
+                            const comp = components[i];
                             if (comp.id === result.parent!.id && comp.children) {
-                                comp.children.splice(result.index + 1, 0, newComponent);
-                                return true;
+                                const newChildren = [...comp.children];
+                                newChildren.splice(result.index + 1, 0, newComponent);
+                                const rebuilt = [...components];
+                                rebuilt[i] = { ...comp, children: newChildren };
+                                return rebuilt;
                             }
-                            if (comp.children && findAndInsert(comp.children)) {
-                                return true;
+                            if (comp.children) {
+                                const rebuiltChildren = insertAfter(comp.children);
+                                if (rebuiltChildren) {
+                                    const rebuilt = [...components];
+                                    rebuilt[i] = { ...comp, children: rebuiltChildren };
+                                    return rebuilt;
+                                }
                             }
                         }
-                        return false;
+                        return null;
                     };
-                    findAndInsert(newContent);
+                    const updated = insertAfter(newContent);
+                    if (updated) {
+                        newContent = updated;
+                    } else {
+                        // No selection found, add to end
+                        newContent.push(newComponent);
+                    }
                 } else if (result) {
                     // Selected component is at root level, insert after it
                     newContent.splice(result.index + 1, 0, newComponent);
@@ -567,24 +591,36 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         set((state) => {
             const newPages = [...state.pages];
             const newPage = { ...newPages[pageIndex] };
-            const newContent = [...(newPage.layoutData?.content || [])];
+            let newContent = [...(newPage.layoutData?.content || [])];
 
-            // Insert duplicate after original
+            // Insert duplicate after original. The walk rebuilds the matched
+            // path immutably (spreading each ancestor + the parent's children
+            // array) so no node from the prior state snapshot is mutated in
+            // place — same pattern as removeComponentFromTree.
             if (result.parent) {
-                // Find parent in new structure and add to its children
-                const findAndInsert = (components: ComponentData[]): boolean => {
-                    for (const comp of components) {
+                const insertAfter = (components: ComponentData[]): ComponentData[] | null => {
+                    for (let i = 0; i < components.length; i++) {
+                        const comp = components[i];
                         if (comp.id === result.parent!.id && comp.children) {
-                            comp.children.splice(result.index + 1, 0, duplicate);
-                            return true;
+                            const newChildren = [...comp.children];
+                            newChildren.splice(result.index + 1, 0, duplicate);
+                            const rebuilt = [...components];
+                            rebuilt[i] = { ...comp, children: newChildren };
+                            return rebuilt;
                         }
-                        if (comp.children && findAndInsert(comp.children)) {
-                            return true;
+                        if (comp.children) {
+                            const rebuiltChildren = insertAfter(comp.children);
+                            if (rebuiltChildren) {
+                                const rebuilt = [...components];
+                                rebuilt[i] = { ...comp, children: rebuiltChildren };
+                                return rebuilt;
+                            }
                         }
                     }
-                    return false;
+                    return null;
                 };
-                findAndInsert(newContent);
+                const updated = insertAfter(newContent);
+                if (updated) newContent = updated;
             } else {
                 newContent.splice(result.index + 1, 0, duplicate);
             }

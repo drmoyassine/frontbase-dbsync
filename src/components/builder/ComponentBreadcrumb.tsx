@@ -1,5 +1,6 @@
 import React from 'react';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -38,7 +39,12 @@ function findAncestry(components: any[], targetId: string, path: AncestryNode[] 
  * with each segment clickable to select that component.
  */
 export const ComponentBreadcrumb: React.FC = () => {
-  const { selectedComponentId, setSelectedComponentId, currentPageId, pages } = useBuilderStore();
+  const { selectedComponentId, setSelectedComponentId, currentPageId, pages } = useBuilderStore(useShallow(s => ({
+    selectedComponentId: s.selectedComponentId,
+    setSelectedComponentId: s.setSelectedComponentId,
+    currentPageId: s.currentPageId,
+    pages: s.pages
+  })));
 
   if (!selectedComponentId || !currentPageId) return null;
 

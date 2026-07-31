@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 
 interface SelectTargetButtonProps {
     /** Called with the final section ID (anchor or component ID) */
@@ -26,7 +27,10 @@ export const SelectTargetButton: React.FC<SelectTargetButtonProps> = ({
     size = 'icon',
     className = ''
 }) => {
-    const { enterScrollTargetMode, updateComponent } = useBuilderStore();
+    const { enterScrollTargetMode, updateComponent } = useBuilderStore(useShallow(s => ({
+        enterScrollTargetMode: s.enterScrollTargetMode,
+        updateComponent: s.updateComponent
+    })));
     const [showAnchorDialog, setShowAnchorDialog] = useState(false);
     const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
     const [anchorValue, setAnchorValue] = useState('');

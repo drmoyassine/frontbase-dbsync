@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import {
     Sheet,
     SheetContent,
@@ -53,7 +54,12 @@ export const PageSettingsDrawer: React.FC<PageSettingsDrawerProps> = ({
     open,
     onOpenChange,
 }) => {
-    const { currentPageId, pages, updatePage, savePageToDatabase } = useBuilderStore();
+    const { currentPageId, pages, updatePage, savePageToDatabase } = useBuilderStore(useShallow(s => ({
+        currentPageId: s.currentPageId,
+        pages: s.pages,
+        updatePage: s.updatePage,
+        savePageToDatabase: s.savePageToDatabase
+    })));
     const [activeTab, setActiveTab] = useState<string>('basic');
     const [isSaving, setIsSaving] = useState(false);
     const [showHomepageWarning, setShowHomepageWarning] = useState(false);

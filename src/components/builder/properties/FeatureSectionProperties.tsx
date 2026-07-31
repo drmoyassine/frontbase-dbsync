@@ -27,6 +27,7 @@ import { Plus, Trash2, Grip, Copy, GripVertical } from 'lucide-react';
 import { IconPicker } from './IconPicker';
 import { VariableInput } from '../VariableInput';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import {
     DndContext,
     closestCenter,
@@ -186,7 +187,10 @@ export const FeatureSectionProperties: React.FC<FeatureSectionPropertiesProps> =
     updateComponentProp
 }) => {
     const features: FeatureItem[] = props.features || [];
-    const { selectedCardIndex, selectedComponentId } = useBuilderStore();
+    const { selectedCardIndex, selectedComponentId } = useBuilderStore(useShallow(s => ({
+        selectedCardIndex: s.selectedCardIndex,
+        selectedComponentId: s.selectedComponentId
+    })));
 
     // Track which accordion items are expanded
     const [expandedItems, setExpandedItems] = useState<string[]>([]);

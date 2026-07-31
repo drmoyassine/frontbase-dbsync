@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
+import { findComponent } from '@/lib/tree-utils';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -51,17 +53,7 @@ import {
   mapComponentPropsToFields,
 } from '@/lib/builder/registryDescriptor';
 
-// Helper to find component recursively
-const findComponent = (components: any[], id: string): any => {
-  for (const component of components) {
-    if (component.id === id) return component;
-    if (component.children) {
-      const found = findComponent(component.children, id);
-      if (found) return found;
-    }
-  }
-  return null;
-};
+// Helper to find component recursively — now imported from @/lib/tree-utils.
 
 /**
  * Component types whose bespoke panels MUST stay — they own non-schema UX the
@@ -88,7 +80,14 @@ export const PropertiesPanel = () => {
     updateComponent,
     removeComponent,
     project
-  } = useBuilderStore();
+  } = useBuilderStore(useShallow(s => ({
+    selectedComponentId: s.selectedComponentId,
+    pages: s.pages,
+    currentPageId: s.currentPageId,
+    updateComponent: s.updateComponent,
+    removeComponent: s.removeComponent,
+    project: s.project,
+  })));
 
   const { setComponentBinding, initialize } = useDataBindingStore();
 

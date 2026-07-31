@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useParams, Navigate } from 'react-router-dom';
 import { FrontbaseBuilder } from '@/components/builder/FrontbaseBuilder';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { toast } from '@/hooks/use-toast';
 import { registerBuilderSw } from '@/sw/registerBuilderSw';
 
@@ -21,7 +22,15 @@ const BuilderPage: React.FC = () => {
     createPageInDatabase,
     isLoading,
     isInitialized
-  } = useBuilderStore();
+  } = useBuilderStore(useShallow(s => ({
+    pages: s.pages,
+    setCurrentPageId: s.setCurrentPageId,
+    currentPageId: s.currentPageId,
+    loadPagesFromDatabase: s.loadPagesFromDatabase,
+    createPageInDatabase: s.createPageInDatabase,
+    isLoading: s.isLoading,
+    isInitialized: s.isInitialized
+  })));
 
   useEffect(() => {
     // Load pages from database on component mount

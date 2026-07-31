@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { useDashboardStore } from '@/stores/dashboard';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
@@ -35,7 +36,19 @@ import { EdgePublishDialog } from './settings/shared/EdgePublishDialog';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPageToTarget, publishPageToTargets, unpublishPageFromTarget } = useBuilderStore();
+  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPageToTarget, publishPageToTargets, unpublishPageFromTarget } = useBuilderStore(useShallow(s => ({
+    project: s.project,
+    pages: s.pages,
+    createPage: s.createPage,
+    deletePage: s.deletePage,
+    restorePage: s.restorePage,
+    permanentDeletePage: s.permanentDeletePage,
+    setCurrentPageId: s.setCurrentPageId,
+    loadPagesFromDatabase: s.loadPagesFromDatabase,
+    publishPageToTarget: s.publishPageToTarget,
+    publishPageToTargets: s.publishPageToTargets,
+    unpublishPageFromTarget: s.unpublishPageFromTarget
+  })));
   const { isAuthenticated, isLoading, tenant, user } = useAuthStore();
   const tenantSlug = tenant?.slug || user?.tenant_slug;
   const { searchQuery, setSearchQuery, filterStatus } = useDashboardStore();

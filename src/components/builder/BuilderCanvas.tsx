@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useBuilderStore, type Page } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { CanvasGrid } from './CanvasGrid';
 import { ComponentBreadcrumb } from './ComponentBreadcrumb';
 import { IframeCanvas } from './canvas/IframeCanvas';
@@ -44,7 +45,17 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
     showGrid,
     scrollTargetSelectionMode,
     exitScrollTargetMode
-  } = useBuilderStore();
+  } = useBuilderStore(useShallow(s => ({
+    selectedComponentId: s.selectedComponentId,
+    setSelectedComponentId: s.setSelectedComponentId,
+    isPreviewMode: s.isPreviewMode,
+    currentViewport: s.currentViewport,
+    zoomLevel: s.zoomLevel,
+    showDeviceFrame: s.showDeviceFrame,
+    showGrid: s.showGrid,
+    scrollTargetSelectionMode: s.scrollTargetSelectionMode,
+    exitScrollTargetMode: s.exitScrollTargetMode
+  })));
 
   // System-edge worker URL (production console is served from it → relative URL
   // is same-origin; dev falls back to this absolute URL if configured).

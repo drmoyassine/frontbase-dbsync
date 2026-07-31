@@ -265,7 +265,7 @@ export function UserContactConfigPanel() {
   const { config, setConfig, setContactsTable, resetConfig } = useUserContactConfig();
   const { schemas, loadTableSchema, initialize, connected, connectionError } = useDataBindingStore();
   const { fetchConnections } = useDashboardStore();
-  const { pages } = useBuilderStore();
+  const pages = useBuilderStore(s => s.pages);
 
 
   const { data: allProviders = [] } = useEdgeProviders();

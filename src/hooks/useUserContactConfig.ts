@@ -1,10 +1,14 @@
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { UserContactConfig } from '@/types/builder';
 import { projectAPI } from '@/lib/api';
 import { toast } from 'sonner';
 
 export const useUserContactConfig = () => {
-  const { project, updateProject } = useBuilderStore();
+  const { project, updateProject } = useBuilderStore(useShallow(s => ({
+    project: s.project,
+    updateProject: s.updateProject
+  })));
 
   const config = project?.usersConfig || null;
 

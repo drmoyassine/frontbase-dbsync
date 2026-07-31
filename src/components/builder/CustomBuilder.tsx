@@ -17,6 +17,8 @@ import { LeftSidebar } from './LeftSidebar';
 import { RightSidebar } from './RightSidebar';
 import { BuilderCanvas } from './BuilderCanvas';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
+import { findComponent } from '@/lib/tree-utils';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { DeleteConfirmationDialog } from '@/components/ui/delete-confirmation-dialog';
 import { toast } from 'sonner';
@@ -40,7 +42,19 @@ export const CustomBuilder: React.FC = () => {
     currentViewport,
     setCurrentViewport,
     updateComponent,
-  } = useBuilderStore();
+  } = useBuilderStore(useShallow(s => ({
+    currentPageId: s.currentPageId,
+    pages: s.pages,
+    isPreviewMode: s.isPreviewMode,
+    deleteSelectedComponent: s.deleteSelectedComponent,
+    selectedComponentId: s.selectedComponentId,
+    setSelectedComponentId: s.setSelectedComponentId,
+    savePageToDatabase: s.savePageToDatabase,
+    moveComponent: s.moveComponent,
+    currentViewport: s.currentViewport,
+    setCurrentViewport: s.setCurrentViewport,
+    updateComponent: s.updateComponent,
+  })));
 
   // Keyboard shortcuts integration
   useKeyboardShortcuts({
@@ -278,17 +292,6 @@ export const CustomBuilder: React.FC = () => {
         // Find source and target sections
         const currentPage = pages.find(p => p.id === currentPageId);
         if (!currentPage?.layoutData?.content) return;
-
-        const findComponent = (components: any[], id: string): any => {
-          for (const comp of components) {
-            if (comp.id === id) return comp;
-            if (comp.children) {
-              const found = findComponent(comp.children, id);
-              if (found) return found;
-            }
-          }
-          return null;
-        };
 
         const sourceSection = findComponent(currentPage.layoutData.content, sourceSectionId);
         const targetSection = findComponent(currentPage.layoutData.content, targetSectionId);

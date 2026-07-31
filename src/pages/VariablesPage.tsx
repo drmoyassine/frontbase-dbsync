@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useBuilderStore, AppVariable } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,7 +39,14 @@ export default function VariablesPage() {
         updateAppVariable,
         deleteAppVariable,
         isSaving
-    } = useBuilderStore();
+    } = useBuilderStore(useShallow(s => ({
+        appVariables: s.appVariables,
+        loadVariablesFromDatabase: s.loadVariablesFromDatabase,
+        addAppVariable: s.addAppVariable,
+        updateAppVariable: s.updateAppVariable,
+        deleteAppVariable: s.deleteAppVariable,
+        isSaving: s.isSaving
+    })));
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingVariable, setEditingVariable] = useState<AppVariable | null>(null);

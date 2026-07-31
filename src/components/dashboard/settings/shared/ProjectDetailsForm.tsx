@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Globe, Loader2 } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { toast } from 'sonner';
 import { AssetUploader } from '@/components/shared/AssetUploader';
 
@@ -22,7 +23,11 @@ interface ProjectDetailsFormProps {
 }
 
 export function ProjectDetailsForm({ withCard = false }: ProjectDetailsFormProps) {
-    const { project, updateProjectInDatabase, isLoading } = useBuilderStore();
+    const { project, updateProjectInDatabase, isLoading } = useBuilderStore(useShallow(s => ({
+        project: s.project,
+        updateProjectInDatabase: s.updateProjectInDatabase,
+        isLoading: s.isLoading
+    })));
 
     const [formData, setFormData] = useState({
         name: '',

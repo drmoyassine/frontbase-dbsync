@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import {
   Dialog,
   DialogContent,
@@ -21,7 +22,10 @@ export const VersionHistoryDialog: React.FC<VersionHistoryDialogProps> = ({
   open,
   onOpenChange,
 }) => {
-  const { currentPageId, loadPagesFromDatabase } = useBuilderStore();
+  const { currentPageId, loadPagesFromDatabase } = useBuilderStore(useShallow(s => ({
+    currentPageId: s.currentPageId,
+    loadPagesFromDatabase: s.loadPagesFromDatabase
+  })));
   const [versions, setVersions] = useState<PageVersion[]>([]);
   const [loading, setLoading] = useState(false);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);

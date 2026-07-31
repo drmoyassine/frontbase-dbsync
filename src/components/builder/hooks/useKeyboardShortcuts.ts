@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useBuilderStore } from '@/stores/builder';
+import { findComponent } from '@/lib/tree-utils';
 
 interface KeyboardShortcutsOptions {
     onSave?: () => void;
@@ -26,7 +28,22 @@ export const useKeyboardShortcuts = (options: KeyboardShortcutsOptions = {}) => 
         deleteCard,
         pages,
         currentPageId,
-    } = useBuilderStore();
+    } = useBuilderStore(useShallow(s => ({
+        selectedComponentId: s.selectedComponentId,
+        removeComponent: s.removeComponent,
+        duplicateComponent: s.duplicateComponent,
+        copyComponent: s.copyComponent,
+        pasteComponent: s.pasteComponent,
+        copiedComponent: s.copiedComponent,
+        isPreviewMode: s.isPreviewMode,
+        selectedCardIndex: s.selectedCardIndex,
+        copiedCard: s.copiedCard,
+        copyCard: s.copyCard,
+        pasteCard: s.pasteCard,
+        deleteCard: s.deleteCard,
+        pages: s.pages,
+        currentPageId: s.currentPageId,
+    })));
 
     // Get the selected card's data for copy operation
     const getSelectedCardData = () => {
@@ -34,17 +51,6 @@ export const useKeyboardShortcuts = (options: KeyboardShortcutsOptions = {}) => 
 
         const page = pages.find(p => p.id === currentPageId);
         if (!page?.layoutData?.content) return null;
-
-        const findComponent = (components: any[], id: string): any => {
-            for (const comp of components) {
-                if (comp.id === id) return comp;
-                if (comp.children) {
-                    const found = findComponent(comp.children, id);
-                    if (found) return found;
-                }
-            }
-            return null;
-        };
 
         const component = findComponent(page.layoutData.content, selectedComponentId);
         if (component?.type === 'FeatureSection' && component.props?.features?.[selectedCardIndex]) {

@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { getDefaultProps } from '@/lib/componentDefaults';
 import { getSectionTemplate, expandTemplate } from './templates';
 import {
@@ -118,7 +119,11 @@ const componentCategories = {
 
 // Draggable component item using @dnd-kit
 const DraggableComponentItem: React.FC<{ component: any }> = ({ component }) => {
-  const { currentPageId, moveComponent, setSelectedComponentId } = useBuilderStore();
+  const { currentPageId, moveComponent, setSelectedComponentId } = useBuilderStore(useShallow(s => ({
+    currentPageId: s.currentPageId,
+    moveComponent: s.moveComponent,
+    setSelectedComponentId: s.setSelectedComponentId
+  })));
 
   // Render separator
   if (component.section === 'separator') {

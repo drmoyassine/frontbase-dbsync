@@ -8,9 +8,14 @@ import {
 } from '@/components/ui/select';
 import { FileText, Home } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 
 export const PageSelector: React.FC = () => {
-  const { pages, currentPageId, setCurrentPage } = useBuilderStore();
+  const { pages, currentPageId, setCurrentPage } = useBuilderStore(useShallow(s => ({
+    pages: s.pages,
+    currentPageId: s.currentPageId,
+    setCurrentPage: s.setCurrentPage
+  })));
 
   const currentPage = pages.find(page => page.id === currentPageId);
 

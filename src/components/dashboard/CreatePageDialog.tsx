@@ -37,7 +37,7 @@ export const CreatePageDialog: React.FC<CreatePageDialogProps> = ({
     onOpenChange,
     onPageCreated,
 }) => {
-    const { pages } = useBuilderStore();
+    const pages = useBuilderStore(s => s.pages);
     const [name, setName] = useState('');
     const [slug, setSlug] = useState('');
     const [isCreating, setIsCreating] = useState(false);

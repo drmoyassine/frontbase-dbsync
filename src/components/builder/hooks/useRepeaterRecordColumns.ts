@@ -1,4 +1,5 @@
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { useDataBindingStore } from '@/stores/data-binding-simple';
 import { useBindingColumns } from '@/hooks/data/useBindingColumns';
 
@@ -43,7 +44,11 @@ function findAncestorRepeater(
  * Returns undefined when the component is not inside a Repeater.
  */
 export function useRepeaterRecordColumns(componentId?: string): string[] | undefined {
-    const { pages, currentPageId, selectedComponentId } = useBuilderStore();
+    const { pages, currentPageId, selectedComponentId } = useBuilderStore(useShallow(s => ({
+        pages: s.pages,
+        currentPageId: s.currentPageId,
+        selectedComponentId: s.selectedComponentId
+    })));
     const { getComponentBinding } = useDataBindingStore();
 
     const id = componentId ?? selectedComponentId ?? undefined;

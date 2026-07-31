@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Trash2, Copy, Monitor, Tablet, Smartphone } from 'lucide-react';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { StylesPanel } from '@/components/styles/StylesPanel';
 import { ThemeSelector } from '@/components/builder/ThemeSelector';
 import type { StylesData, ViewportType, VisibilitySettings } from '@/lib/styles/types';
@@ -31,7 +32,15 @@ export const StylingPanel: React.FC = () => {
     updatePage,
     updateComponentStylesData,
     setSelectedComponentId
-  } = useBuilderStore();
+  } = useBuilderStore(useShallow(s => ({
+    selectedComponentId: s.selectedComponentId,
+    currentPageId: s.currentPageId,
+    currentViewport: s.currentViewport,
+    pages: s.pages,
+    updatePage: s.updatePage,
+    updateComponentStylesData: s.updateComponentStylesData,
+    setSelectedComponentId: s.setSelectedComponentId
+  })));
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 

@@ -4,6 +4,13 @@ export interface ComponentData {
     props: Record<string, any>;
     styles?: Record<string, any>;
     children?: ComponentData[];
+    /**
+     * Conditional-visibility expression (written at runtime via updateComponent;
+     * typed as string to match the framework's PageComponent.shape and the
+     * VisibilityConditionEditor value). Kept optional since legacy components
+     * and freshly-added ones do not specify it.
+     */
+    visibilityCondition?: string;
 }
 
 // Legacy type for backward compatibility

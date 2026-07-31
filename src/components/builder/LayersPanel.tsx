@@ -3,6 +3,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -39,7 +40,16 @@ export const LayersPanel: React.FC = () => {
     removeComponent,
     duplicateComponent,
     updateComponent
-  } = useBuilderStore();
+  } = useBuilderStore(useShallow(s => ({
+    currentPageId: s.currentPageId,
+    pages: s.pages,
+    selectedComponentId: s.selectedComponentId,
+    setSelectedComponentId: s.setSelectedComponentId,
+    updatePage: s.updatePage,
+    removeComponent: s.removeComponent,
+    duplicateComponent: s.duplicateComponent,
+    updateComponent: s.updateComponent
+  })));
 
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedComponents, setExpandedComponents] = useState<Set<string>>(new Set());

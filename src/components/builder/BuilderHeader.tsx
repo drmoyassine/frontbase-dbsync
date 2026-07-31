@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useBuilderStore } from '@/stores/builder';
+import { useShallow } from 'zustand/react/shallow';
 import { useAuthStore } from '@/stores/auth';
 import { PageSelector } from './PageSelector';
 import { PageSettingsDrawer } from './PageSettingsDrawer';
@@ -84,7 +85,29 @@ export const BuilderHeader: React.FC<{
       loadPagesFromDatabase,
       togglePageVisibility,
       deleteSelectedComponent
-    } = useBuilderStore();
+    } = useBuilderStore(useShallow(s => ({
+      project: s.project,
+      currentPageId: s.currentPageId,
+      pages: s.pages,
+      isPreviewMode: s.isPreviewMode,
+      setPreviewMode: s.setPreviewMode,
+      isSupabaseConnected: s.isSupabaseConnected,
+      selectedComponentId: s.selectedComponentId,
+      isSaving: s.isSaving,
+      hasUnsavedChanges: s.hasUnsavedChanges,
+      currentViewport: s.currentViewport,
+      zoomLevel: s.zoomLevel,
+      setCurrentViewport: s.setCurrentViewport,
+      setZoomLevel: s.setZoomLevel,
+      showGrid: s.showGrid,
+      setShowGrid: s.setShowGrid,
+      savePageToDatabase: s.savePageToDatabase,
+      publishPageToTarget: s.publishPageToTarget,
+      publishPageToTargets: s.publishPageToTargets,
+      loadPagesFromDatabase: s.loadPagesFromDatabase,
+      togglePageVisibility: s.togglePageVisibility,
+      deleteSelectedComponent: s.deleteSelectedComponent
+    })));
 
     const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
     const [showPageSettings, setShowPageSettings] = useState(false);

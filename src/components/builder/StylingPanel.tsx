@@ -29,6 +29,7 @@ export const StylingPanel: React.FC = () => {
     currentViewport,
     pages,
     updatePage,
+    updateComponentStylesData,
     setSelectedComponentId
   } = useBuilderStore();
 
@@ -145,7 +146,7 @@ export const StylingPanel: React.FC = () => {
   // For desktop: update base values
   // For mobile/tablet: update viewportOverrides
   const handleStylesUpdate = (newStyles: StylesData) => {
-    if (!currentPage) return;
+    if (!currentPage || !selectedComponentId) return;
 
     const existingStyles: StylesData = selectedComponent.stylesData || {
       activeProperties: [],
@@ -165,45 +166,25 @@ export const StylingPanel: React.FC = () => {
         rawCSS: newStyles.rawCSS || ''
       };
     } else {
-      // Mobile/Tablet: extract override values (differences from base)
-      const baseValues = existingStyles.values || {};
-      const overrideValues: Record<string, any> = {};
-
-      // Only store values that differ from base
-      for (const [key, value] of Object.entries(newStyles.values)) {
-        // Always store if it's a viewport-specific edit
-        // (In a more advanced version, we could compare to base and only store differences)
-        overrideValues[key] = value;
-      }
-
+      // Mobile/Tablet: store the edited values as the viewport override. (The
+      // previous implementation noted it could diff against base to store only
+      // changes, but in practice it stored the full edited set — preserved
+      // verbatim to avoid a behavior change.)
       updatedStylesData = {
         ...existingStyles,
         viewportOverrides: {
           ...existingStyles.viewportOverrides,
-          [currentViewport]: overrideValues
+          [currentViewport]: { ...newStyles.values }
         }
       };
     }
 
-    const updatedContent = updateComponentInContent(
-      currentPage.layoutData.content,
-      selectedComponentId!,
-      {
-        stylesData: updatedStylesData
-      }
-    );
-
-    updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
-    });
+    updateComponentStylesData(selectedComponentId, updatedStylesData);
   };
 
   // Copy all styles from another viewport to the current viewport
   const copyStylesFromViewport = (sourceViewport: ViewportType) => {
-    if (!currentPage || !selectedComponent.stylesData) return;
+    if (!currentPage || !selectedComponentId || !selectedComponent.stylesData) return;
 
     const existingStyles: StylesData = selectedComponent.stylesData;
 
@@ -231,23 +212,12 @@ export const StylingPanel: React.FC = () => {
       };
     }
 
-    const updatedContent = updateComponentInContent(
-      currentPage.layoutData.content,
-      selectedComponentId!,
-      { stylesData: updatedStylesData }
-    );
-
-    updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
-    });
+    updateComponentStylesData(selectedComponentId, updatedStylesData);
   };
 
   // Reset a property to its inherited value (remove from viewport overrides)
   const resetPropertyToInherited = (propertyId: string) => {
-    if (!currentPage || currentViewport === 'desktop') return;
+    if (!currentPage || !selectedComponentId || currentViewport === 'desktop') return;
 
     const existingStyles: StylesData = selectedComponent.stylesData || {
       activeProperties: [],
@@ -267,18 +237,7 @@ export const StylingPanel: React.FC = () => {
       }
     };
 
-    const updatedContent = updateComponentInContent(
-      currentPage.layoutData.content,
-      selectedComponentId!,
-      { stylesData: updatedStylesData }
-    );
-
-    updatePage(currentPage.id, {
-      layoutData: {
-        ...currentPage.layoutData,
-        content: updatedContent
-      }
-    });
+    updateComponentStylesData(selectedComponentId, updatedStylesData);
   };
 
   // Get visibility settings with defaults (all visible by default)

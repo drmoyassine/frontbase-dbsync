@@ -1,5 +1,6 @@
 import { StateCreator } from 'zustand';
 import { ComponentData } from '@/types/builder';
+import type { StylesData } from '@/lib/styles/types';
 import { BuilderState } from '../builder';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -47,6 +48,14 @@ export interface BuilderSlice {
     moveComponent: (pageId: string, componentId: string | null, component: ComponentData, targetIndex: number, parentId?: string, sourceParentId?: string) => void;
     updateComponentText: (componentId: string, textProperty: string, text: string) => void;
     updateComponent: (componentId: string, propsUpdates: Record<string, any>) => void;
+    /**
+     * Write a fully-computed `stylesData` object onto a component node. This is
+     * the single store action for root-level CSS writes (the Styling tab and
+     * any `styleTarget: 'stylesData'` schema prop route through here). The
+     * caller owns the viewport-merge policy (base values vs.
+     * viewportOverrides); this action only persists the result into the tree.
+     */
+    updateComponentStylesData: (componentId: string, stylesData: StylesData) => void;
     /** Replace a component node in-place with a new node (same position in the
      * tree). Used by the Repeater "Convert / Wrap" actions. */
     replaceComponent: (componentId: string, newComponent: ComponentData) => void;
@@ -290,6 +299,35 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
                         }
                         return updated;
                     }
+                );
+            }
+
+            const newPages = [...state.pages];
+            newPages[pageIndex] = page;
+
+            return {
+                ...state,
+                pages: newPages,
+                hasUnsavedChanges: true
+            };
+        });
+    },
+
+    updateComponentStylesData: (componentId: string, stylesData: StylesData) => {
+        set((state) => {
+            const { pages, currentPageId } = state;
+            if (!currentPageId) return state;
+
+            const pageIndex = pages.findIndex(p => p.id === currentPageId);
+            if (pageIndex === -1) return state;
+
+            const page = { ...pages[pageIndex] };
+
+            if (page.layoutData?.content) {
+                page.layoutData.content = updateComponentInTree(
+                    page.layoutData.content,
+                    componentId,
+                    (comp) => ({ ...comp, stylesData }) as ComponentData
                 );
             }
 

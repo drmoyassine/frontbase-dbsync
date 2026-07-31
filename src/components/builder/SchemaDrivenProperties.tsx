@@ -25,22 +25,48 @@ interface SchemaDrivenPropertiesProps {
     updateProp: (key: string, value: any) => void;
 }
 
+/**
+ * Render a list of schema-described fields, inserting a small group heading
+ * whenever a run of fields shares the same `group` (framework
+ * PropDefinition.group). Fields without a group render headerless, preserving
+ * the legacy look for product-local schemas that don't set groups.
+ */
 export const SchemaDrivenProperties: React.FC<SchemaDrivenPropertiesProps> = ({
     fields,
     props,
     updateProp,
 }) => {
+    let lastGroup: string | undefined = undefined;
+    let groupIndex = 0;
+
     return (
         <>
-            {fields.map((field) => (
-                <PropertyField
-                    key={field.name}
-                    field={field}
-                    value={props[field.name]}
-                    onChange={(value) => updateProp(field.name, value)}
-                    allProps={props}
-                />
-            ))}
+            {fields.map((field) => {
+                const showGroupHeader =
+                    field.group !== undefined && field.group !== lastGroup;
+                lastGroup = field.group;
+
+                return (
+                    <React.Fragment key={field.name}>
+                        {showGroupHeader && (
+                            <div
+                                key={`group-${field.group}-${groupIndex++}`}
+                                className="col-span-full mt-2 first:mt-0 -mb-1"
+                            >
+                                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {field.group}
+                                </h4>
+                            </div>
+                        )}
+                        <PropertyField
+                            field={field}
+                            value={props[field.name]}
+                            onChange={(value) => updateProp(field.name, value)}
+                            allProps={props}
+                        />
+                    </React.Fragment>
+                );
+            })}
         </>
     );
 };
@@ -70,6 +96,11 @@ const PropertyField: React.FC<PropertyFieldProps> = ({ field, value, onChange, a
         </Label>
     );
 
+    const renderDescription = () =>
+        field.description ? (
+            <p className="text-xs text-muted-foreground">{field.description}</p>
+        ) : null;
+
     switch (field.type) {
         case 'text':
             return (
@@ -83,6 +114,7 @@ const PropertyField: React.FC<PropertyFieldProps> = ({ field, value, onChange, a
                         placeholder={field.placeholder}
                         allowedGroups={field.allowedGroups}
                     />
+                    {renderDescription()}
                 </div>
             );
 
@@ -95,6 +127,7 @@ const PropertyField: React.FC<PropertyFieldProps> = ({ field, value, onChange, a
                         onChange={(e) => onChange(e.target.value)}
                         placeholder={field.placeholder}
                     />
+                    {renderDescription()}
                 </div>
             );
 
@@ -108,6 +141,7 @@ const PropertyField: React.FC<PropertyFieldProps> = ({ field, value, onChange, a
                         placeholder={field.placeholder}
                         rows={field.rows ?? 3}
                     />
+                    {renderDescription()}
                 </div>
             );
 
@@ -122,6 +156,7 @@ const PropertyField: React.FC<PropertyFieldProps> = ({ field, value, onChange, a
                         min={field.min}
                         max={field.max}
                     />
+                    {renderDescription()}
                 </div>
             );
 
@@ -144,17 +179,21 @@ const PropertyField: React.FC<PropertyFieldProps> = ({ field, value, onChange, a
                             ))}
                         </SelectContent>
                     </Select>
+                    {renderDescription()}
                 </div>
             );
 
         case 'boolean':
             return (
-                <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium">{label}</Label>
-                    <Switch
-                        checked={value ?? field.defaultValue ?? false}
-                        onCheckedChange={onChange}
-                    />
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">{label}</Label>
+                        <Switch
+                            checked={value ?? field.defaultValue ?? false}
+                            onCheckedChange={onChange}
+                        />
+                    </div>
+                    {renderDescription()}
                 </div>
             );
 
@@ -163,6 +202,7 @@ const PropertyField: React.FC<PropertyFieldProps> = ({ field, value, onChange, a
                 <div className="space-y-2">
                     {renderLabel()}
                     <ColorInput value={value ?? ''} onChange={onChange} />
+                    {renderDescription()}
                 </div>
             );
 
@@ -171,6 +211,7 @@ const PropertyField: React.FC<PropertyFieldProps> = ({ field, value, onChange, a
                 <div className="space-y-2">
                     {renderLabel()}
                     <IconPicker value={value ?? ''} onChange={onChange} />
+                    {renderDescription()}
                 </div>
             );
 

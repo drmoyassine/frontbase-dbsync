@@ -2,31 +2,21 @@
  * Basic Property Components
  * Barrel export for all basic component property panels.
  *
- * NOTE: Heading, Text, Link, Badge, Alert, and Progress are now schema-driven
- * (see registry/propertySchemas.ts) and no longer have bespoke panels here.
+ * Schema-driven (no bespoke panel — see registry/propertySchemas.ts for the
+ * offline fallback, and lib/builder/registryDescriptor.ts for the framework
+ * descriptor that drives these when the worker is reachable):
+ *   Heading, Text, Link, Badge, Alert, Progress,
+ *   Input, Textarea, Checkbox, Switch, Image, Avatar, Icon, Embed.
+ *
+ * The bespoke panels below remain because they own non-schema UX the
+ * descriptor cannot express (data binding, action/icon composition).
  */
-
-// Typography
-// (Heading, Text — schema-driven)
 
 // Actions
 export { ButtonProperties } from './ButtonProperties';
-// (Link — schema-driven)
-
-// Media
-export { IconProperties } from './IconProperties';
-export { ImageProperties } from './ImageProperties';
-export { AvatarProperties } from './AvatarProperties';
 
 // Form Inputs
-export { InputProperties } from './InputProperties';
-export { TextareaProperties } from './TextareaProperties';
 export { SelectProperties } from './SelectProperties';
-export { ToggleProperties } from './ToggleProperties';
-
-// Display
-// (Badge, Alert, Progress — schema-driven)
-export { EmbedProperties } from './EmbedProperties';
 
 // Data
 export { ChartProperties } from './ChartProperties';

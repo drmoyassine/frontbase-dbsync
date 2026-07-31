@@ -27,13 +27,7 @@ import { ActionConfigurator, ActionBinding } from '@/components/actions';
 // Basic Components
 import {
   ButtonProperties,
-  IconProperties,
-  ImageProperties,
-  InputProperties,
-  TextareaProperties,
   SelectProperties,
-  ToggleProperties,
-  AvatarProperties,
   ChartProperties,
   GridProperties,
   KPICardProperties,
@@ -51,6 +45,11 @@ import { DisplayProperties } from './properties/DisplayProperties';
 // Schema-driven property rendering (simple components)
 import { getPropertySchema, type PropertySchema, type PropertyTab } from './registry/propertySchemas';
 import { SchemaDrivenProperties } from './SchemaDrivenProperties';
+// Framework registry descriptor (single source of truth when reachable)
+import {
+  useRegistryDescriptor,
+  mapComponentPropsToFields,
+} from '@/lib/builder/registryDescriptor';
 
 // Helper to find component recursively
 const findComponent = (components: any[], id: string): any => {
@@ -64,6 +63,23 @@ const findComponent = (components: any[], id: string): any => {
   return null;
 };
 
+/**
+ * Component types whose bespoke panels MUST stay — they own non-schema UX the
+ * framework descriptor can't express (data binding, project integration,
+ * array/column editors, action + icon composition). Every OTHER type whose
+ * framework descriptor is present is rendered schema-driven; types absent from
+ * the descriptor fall through to the product-local schema, then this switch.
+ */
+const KEEP_BESPOKE_PANEL = new Set<string>([
+  'DataTable', 'Chart', 'Grid', 'KPICard', 'Repeater', // data-bound
+  'Navbar', 'Footer', 'Pricing', 'LogoCloud', 'FeatureSection', // landing
+  'Form', 'InfoList', // FormPropertiesPanel (multi-field)
+  'Button', // ActionProperties + icon composition
+  'Select', // options array editor
+  'Card', // DisplayProperties fallback
+  'Container', // styling-only hint
+]);
+
 export const PropertiesPanel = () => {
   const {
     selectedComponentId,
@@ -75,6 +91,11 @@ export const PropertiesPanel = () => {
   } = useBuilderStore();
 
   const { setComponentBinding, initialize } = useDataBindingStore();
+
+  // Framework registry descriptor — single source of truth for editable props
+  // when the worker is reachable. null while loading / on fetch failure
+  // (PropertiesPanel then falls back to product-local schemas + bespoke panels).
+  const registryDescriptor = useRegistryDescriptor();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [activeTab, setActiveTab] = useState('general');
@@ -114,22 +135,44 @@ export const PropertiesPanel = () => {
     updateComponent(selectedComponentId, { [key]: value });
   };
 
-  const updateComponentStyle = (key: string, value: any) => {
-    const currentStyles = selectedComponent.styles || {};
-    updateComponent(selectedComponentId, {
-      styles: { ...currentStyles, [key]: value }
-    });
-  };
-
   const deleteComponent = () => {
     removeComponent(selectedComponentId);
     setShowDeleteDialog(false);
   };
 
   const renderPropertyFields = (tab: string) => {
-    const { type, props, styles = {} } = selectedComponent;
+    const { type, props } = selectedComponent;
 
-    // ── Schema-driven path ────────────────────────────────────────────────
+    // ── Tier 1: Framework registry descriptor (source of truth) ───────────
+    // When the descriptor is reachable AND the component isn't in the
+    // keep-bespoke set, render its editable.props via the schema engine.
+    // styleTarget='stylesData' props are filtered out by the mapper (they
+    // belong on the Styling tab). The framework schema has no product tabs,
+    // so everything renders on 'general'; 'options'/'actions' yield null and
+    // the tab wrapper still shows the Visibility / Action editors.
+    if (registryDescriptor && type && !KEEP_BESPOKE_PANEL.has(type)) {
+      const componentDescriptor = registryDescriptor.components[type];
+      if (componentDescriptor) {
+        if (tab !== 'general') return null;
+        const fields = mapComponentPropsToFields(componentDescriptor);
+        if (fields.length === 0) {
+          return (
+            <p className="text-muted-foreground text-sm">
+              {componentDescriptor.displayName} is configured via the Styling tab.
+            </p>
+          );
+        }
+        return (
+          <SchemaDrivenProperties
+            fields={fields}
+            props={props}
+            updateProp={updateComponentProp}
+          />
+        );
+      }
+    }
+
+    // ── Tier 2: Product-local schema (offline fallback for simple types) ───
     // Simple components declare their fields via a PropertySchema (see
     // registry/propertySchemas.ts). If a schema exists, render its fields for
     // the requested tab and return. Tabs the schema doesn't define yield null,
@@ -148,7 +191,7 @@ export const PropertiesPanel = () => {
       );
     }
 
-    // ── Legacy path: complex components with bespoke panels ───────────────
+    // ── Tier 3: Bespoke panels (complex / non-schema UX) ──────────────────
     const isMultiTabComponent = ['DataTable', 'Chart', 'Grid', 'KPICard', 'Form', 'InfoList', 'Button'].includes(type);
     if (!isMultiTabComponent && tab !== 'general') {
       return null;
@@ -179,41 +222,13 @@ export const PropertiesPanel = () => {
       case 'Pricing':
         return <PricingProperties componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} />;
 
-      // === TYPOGRAPHY ===
-      // (Heading, Text — schema-driven; see registry/propertySchemas.ts)
-
       // === ACTIONS ===
       case 'Button':
         return <ButtonProperties activeTab={tab} componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} />;
 
-      // (Link — schema-driven; see registry/propertySchemas.ts)
-
-      // === MEDIA ===
-      case 'Icon':
-        return <IconProperties props={props} styles={styles} updateComponentProp={updateComponentProp} updateComponentStyle={updateComponentStyle} />;
-
-      case 'Image':
-        return <ImageProperties props={props} updateComponentProp={updateComponentProp} />;
-
-      case 'Avatar':
-        return <AvatarProperties props={props} updateComponentProp={updateComponentProp} />;
-
       // === FORM INPUTS ===
-      case 'Input':
-        return <InputProperties props={props} updateComponentProp={updateComponentProp} />;
-
-      case 'Textarea':
-        return <TextareaProperties props={props} updateComponentProp={updateComponentProp} />;
-
       case 'Select':
         return <SelectProperties props={props} updateComponentProp={updateComponentProp} />;
-
-      case 'Checkbox':
-      case 'Switch':
-        return <ToggleProperties props={props} updateComponentProp={updateComponentProp} />;
-
-      // === DISPLAY ===
-      // (Badge, Alert, Progress — schema-driven; see registry/propertySchemas.ts)
 
       // === DATA ===
       case 'Chart':
@@ -296,7 +311,10 @@ export const PropertiesPanel = () => {
       case 'InfoList':
         return <FormPropertiesPanel activeTab={tab} componentId={selectedComponentId} props={props} updateComponentProp={updateComponentProp} type="InfoList" />;
 
-      // === DISPLAY PROPERTIES (fallback for some types) ===
+      // === DISPLAY PROPERTIES (fallback) ===
+      // Card stays bespoke; Embed falls back here OFFLINE only (when the
+      // framework descriptor is unreachable). Online, Embed is rendered
+      // schema-driven from its framework editable.props (tier 1 above).
       case 'Card':
       case 'Embed':
         return <DisplayProperties type={type} props={props} updateComponentProp={updateComponentProp} />;

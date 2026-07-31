@@ -28,6 +28,12 @@ interface BaseFieldConfig {
     /** Hide this field based on other prop values (e.g. icon options only when
      *  an icon is set). */
     visible?: (props: Record<string, any>) => boolean;
+    /** Optional group heading — when consecutive fields share a group, the
+     *  renderer renders a small sub-header above them. Framework
+     *  PropDefinition.group maps straight onto this. */
+    group?: string;
+    /** Optional help text rendered under the control. */
+    description?: string;
 }
 
 /** Variable-capable text input (VariableInput, shows the "@ for variables" hint). */
@@ -234,5 +240,83 @@ registerPropertySchema('Badge', {
             label: 'Icon Color',
             visible: (props) => !!props.icon,
         },
+    ],
+});
+
+// ---------------------------------------------------------------------------
+// OFFLINE FALLBACKS for retired bespoke panels
+// ---------------------------------------------------------------------------
+// These mirror the EXACT fields the now-deleted bespoke *Properties.tsx panels
+// exposed. They only render when the framework registry descriptor is
+// unreachable (standalone product dev / no worker proxy). When the descriptor
+// IS available, PropertiesPanel prefers it (richer, framework-source-of-truth
+// fields) — see registryDescriptor.ts + PropertiesPanel.tsx.
+
+registerPropertySchema('Input', {
+    general: [
+        { type: 'input', name: 'label', label: 'Label' },
+        { type: 'input', name: 'placeholder', label: 'Placeholder' },
+        {
+            type: 'select',
+            name: 'inputType',
+            label: 'Type',
+            defaultValue: 'text',
+            options: [
+                { value: 'text', label: 'Text' },
+                { value: 'email', label: 'Email' },
+                { value: 'password', label: 'Password' },
+                { value: 'number', label: 'Number' },
+            ],
+        },
+    ],
+});
+
+registerPropertySchema('Textarea', {
+    general: [
+        { type: 'input', name: 'label', label: 'Label' },
+        { type: 'input', name: 'placeholder', label: 'Placeholder' },
+        { type: 'number', name: 'rows', label: 'Rows', defaultValue: 3 },
+    ],
+});
+
+registerPropertySchema('Checkbox', {
+    general: [{ type: 'input', name: 'label', label: 'Label' }],
+});
+
+registerPropertySchema('Switch', {
+    general: [{ type: 'input', name: 'label', label: 'Label' }],
+});
+
+registerPropertySchema('Image', {
+    general: [
+        { type: 'input', name: 'src', label: 'Image URL' },
+        { type: 'input', name: 'alt', label: 'Alt Text' },
+    ],
+});
+
+registerPropertySchema('Avatar', {
+    general: [
+        { type: 'input', name: 'src', label: 'Image URL' },
+        { type: 'input', name: 'fallback', label: 'Fallback Text' },
+    ],
+});
+
+registerPropertySchema('Icon', {
+    general: [
+        { type: 'icon', name: 'icon', label: 'Icon' },
+        {
+            type: 'select',
+            name: 'size',
+            label: 'Size',
+            defaultValue: 'md',
+            options: [
+                { value: 'xs', label: 'Extra Small' },
+                { value: 'sm', label: 'Small' },
+                { value: 'md', label: 'Medium' },
+                { value: 'lg', label: 'Large' },
+                { value: 'xl', label: 'Extra Large' },
+            ],
+        },
+        { type: 'color', name: 'color', label: 'Icon Color' },
     ],
 });

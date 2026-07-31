@@ -13,6 +13,14 @@ interface BuilderCanvasProps {
   page: Page;
 }
 
+// Viewport dimensions — industry standard sizes. Module-scoped so the record is
+// not rebuilt on every render (it is static data keyed by viewport id).
+const VIEWPORT_DIMENSIONS: Record<'mobile' | 'tablet' | 'desktop', { width: number; height: number }> = {
+  mobile: { width: 375, height: 812 },    // iPhone 13 size
+  tablet: { width: 768, height: 1024 },   // iPad size
+  desktop: { width: 1200, height: 1400 }, // Better working height
+};
+
 /**
  * BuilderCanvas — the Phase D eSSR iframe canvas.
  *
@@ -47,17 +55,7 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
   const [rects, setRects] = useState<ComponentRect[]>([]);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  // Viewport dimensions - Industry standard sizes
-  const getViewportDimensions = () => {
-    switch (currentViewport) {
-      case 'mobile': return { width: 375, height: 812 }; // iPhone 13 size
-      case 'tablet': return { width: 768, height: 1024 }; // iPad size
-      case 'desktop': return { width: 1200, height: 1400 }; // Better working height
-      default: return { width: 1200, height: 1400 };
-    }
-  };
-
-  const { width: viewportWidth } = getViewportDimensions();
+  const { width: viewportWidth } = VIEWPORT_DIMENSIONS[currentViewport];
   const scaleFactor = zoomLevel / 100;
 
   return (
@@ -109,7 +107,6 @@ export const BuilderCanvas: React.FC<BuilderCanvasProps> = ({ page }) => {
         )}
         style={{
           maxWidth: `${viewportWidth}px`,
-          minHeight: '800px',
           transform: `scale(${scaleFactor})`,
           transformOrigin: 'top center'
         }}

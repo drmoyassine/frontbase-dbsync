@@ -21,11 +21,17 @@ export const ColorInput: React.FC<ColorInputProps> = ({
     placeholder = 'CSS color',
     disabled,
 }) => {
+    // HTML5 <input type="color"> only accepts hex colors (#rrggbb).
+    // For CSS variables (var(--foo)) or complex expressions (hsl(var(--primary))),
+    // we can't bind the value to the color input. Only bind when it's a valid hex color.
+    const isHexColor = /^#[0-9A-Fa-f]{6}$/.test(value || '');
+    const colorInputValue = isHexColor ? value : '#000000';
+
     return (
         <div className="flex gap-2">
             <Input
                 type="color"
-                value={value || '#000000'}
+                value={colorInputValue}
                 onChange={(e) => onChange(e.target.value)}
                 className="w-20 h-9 p-1 cursor-pointer"
                 disabled={disabled}

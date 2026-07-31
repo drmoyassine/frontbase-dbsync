@@ -141,8 +141,19 @@ export function useIframeCanvas(page: Page, systemEdgeUrl?: string): UseIframeCa
             // Abort an in-flight fetch so its stale result never lands.
             controller.abort();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page.layoutData, page.id, systemEdgeUrl]);
+        // Deps mirror EXACTLY what buildReRenderRequest(page) consumes (layout
+        // content/root via page.layoutData, plus pageData: title ?? name, slug,
+        // description) plus the effect's own systemEdgeUrl input. page.id is
+        // intentionally omitted: it is not read in the render body, and a page
+        // swap always surfaces as a new page.layoutData reference anyway.
+    }, [
+        page.layoutData,
+        page.title,
+        page.name,
+        page.slug,
+        page.description,
+        systemEdgeUrl,
+    ]);
 
     return { html, status, error, renderNonce };
 }

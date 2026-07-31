@@ -10,11 +10,16 @@ export const ColorControl: React.FC<ColorControlProps> = ({
     value,
     onChange
 }) => {
+    // HTML5 <input type="color"> only accepts hex colors (#rrggbb).
+    // For CSS variables (var(--foo)) or complex expressions, only bind when it's a valid hex color.
+    const isHexColor = /^#[0-9A-Fa-f]{6}$/.test(value);
+    const colorInputValue = value === 'transparent' ? '#FFFFFF' : (isHexColor ? value : '#000000');
+
     return (
         <div className="flex items-center gap-2">
             <input
                 type="color"
-                value={value === 'transparent' ? '#FFFFFF' : value}
+                value={colorInputValue}
                 onChange={(e) => onChange(e.target.value)}
                 className="w-12 h-10 rounded border border-border cursor-pointer"
             />

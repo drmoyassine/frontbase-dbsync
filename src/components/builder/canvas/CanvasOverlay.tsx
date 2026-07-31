@@ -29,6 +29,18 @@ import { cn } from '@/lib/utils';
 import { findNodeLocation } from '@/lib/builder/iframeBridge';
 import { CONTAINER_TYPES, type ComponentRect } from '@/lib/builder/iframeTypes';
 
+// Geometry constants for the overlay affordances. Centralized so the corner
+// dots, drop strips, and move handle stay consistent + tweakable in one place.
+/** Side length (px) of the selection corner dots. They are offset by half this
+ *  value so they sit centered on the selection rectangle's corners. */
+const CORNER_DOT_SIZE = 6;
+/** Default thickness (px) of a root before/after drop strip. The strip is
+ *  centered on the edge it marks, so the offset is half this value. */
+const DROP_STRIP_HEIGHT = 6;
+/** Vertical offset (px) of the reorder MoveHandle above the selected rect
+ *  (clamped to 0 so it never escapes the top of the viewport). */
+const MOVE_HANDLE_OFFSET = 18;
+
 interface CanvasOverlayProps {
     page: Page;
     rects: ComponentRect[];
@@ -112,10 +124,10 @@ export const CanvasOverlay: React.FC<CanvasOverlayProps> = ({ page, rects, hover
                         }}
                     />
                     {/* Corner handles. */}
-                    <CornerDot left={selectedRect.left - 3} top={selectedRect.top - 3} />
-                    <CornerDot left={selectedRect.left + selectedRect.width - 3} top={selectedRect.top - 3} />
-                    <CornerDot left={selectedRect.left - 3} top={selectedRect.top + selectedRect.height - 3} />
-                    <CornerDot left={selectedRect.left + selectedRect.width - 3} top={selectedRect.top + selectedRect.height - 3} />
+                    <CornerDot left={selectedRect.left - CORNER_DOT_SIZE / 2} top={selectedRect.top - CORNER_DOT_SIZE / 2} />
+                    <CornerDot left={selectedRect.left + selectedRect.width - CORNER_DOT_SIZE / 2} top={selectedRect.top - CORNER_DOT_SIZE / 2} />
+                    <CornerDot left={selectedRect.left - CORNER_DOT_SIZE / 2} top={selectedRect.top + selectedRect.height - CORNER_DOT_SIZE / 2} />
+                    <CornerDot left={selectedRect.left + selectedRect.width - CORNER_DOT_SIZE / 2} top={selectedRect.top + selectedRect.height - CORNER_DOT_SIZE / 2} />
                     <MoveHandle rect={selectedRect} page={page} />
                 </>
             )}
@@ -138,7 +150,7 @@ const DropStrip: React.FC<{
     placement: 'before' | 'after';
 }> = ({ id, data, rect, placement }) => {
     const { isOver, setNodeRef } = useDroppable({ id, data });
-    const top = placement === 'before' ? rect.top - 3 : rect.top + rect.height - 3;
+    const top = placement === 'before' ? rect.top - DROP_STRIP_HEIGHT / 2 : rect.top + rect.height - DROP_STRIP_HEIGHT / 2;
     return (
         <div
             ref={setNodeRef}
@@ -233,7 +245,7 @@ const MoveHandle: React.FC<{ rect: ComponentRect; page: Page }> = ({ rect, page 
             )}
             style={{
                 left: rect.left,
-                top: Math.max(rect.top - 18, 0),
+                top: Math.max(rect.top - MOVE_HANDLE_OFFSET, 0),
                 pointerEvents: 'auto',
             }}
             onPointerDown={(e) => e.stopPropagation()}

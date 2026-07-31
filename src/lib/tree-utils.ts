@@ -36,15 +36,20 @@ export const findComponentWithParent = (
 
 /**
  * Recursively removes a component by ID from a list of components.
+ * Pure: never mutates the input tree — parents along the matched path are
+ * shallow-copied so their `children` ref is replaced.
  */
 export const removeComponentFromTree = (items: ComponentData[], id: string): ComponentData[] => {
-    return items.filter(item => {
-        if (item.id === id) return false;
+    const result: ComponentData[] = [];
+    for (const item of items) {
+        if (item.id === id) continue;
         if (item.children) {
-            item.children = removeComponentFromTree(item.children, id);
+            result.push({ ...item, children: removeComponentFromTree(item.children, id) });
+        } else {
+            result.push(item);
         }
-        return true;
-    });
+    }
+    return result;
 };
 
 /**

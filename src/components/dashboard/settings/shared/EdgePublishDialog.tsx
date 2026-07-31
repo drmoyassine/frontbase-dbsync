@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { AlertCircle, ExternalLink, Loader2, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
-import { resolvePreviewUrl } from '@/lib/edgeUtils';
+import { resolvePagePreviewUrl } from '@/lib/edgeUtils';
 import { isCloud } from '@/lib/edition';
 import { toast } from 'sonner';
 
@@ -145,12 +145,12 @@ export const EdgePublishDialog: React.FC<EdgePublishDialogProps> = ({
                 const synced = isSingle && isTargetSynced(target.id, singlePageData, hasUnsavedChanges);
                 const isSelected = selectedTargetId === target.id;
                 
-                // Preview URL resolution
+                // Preview URL resolution (shared with the builder header direct-publish path)
                 const pagePath = singlePageData?.isHomepage ? '' : singlePageData?.slug || '';
                 const storedDep = singlePageData?.deployments?.find(
                   (d: any) => d.engineId === target.id && d.status === 'published'
                 );
-                const previewUrl = storedDep?.previewUrl || resolvePreviewUrl(target.url, pagePath, target.is_shared, tenantSlug);
+                const previewUrl = resolvePagePreviewUrl(target, pagePath, storedDep?.previewUrl, tenantSlug);
 
                 return (
                   <label

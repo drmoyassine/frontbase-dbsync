@@ -1,9 +1,12 @@
 import { StateCreator } from 'zustand';
+import { v4 as uuidv4 } from 'uuid';
 import { ComponentData } from '@/types/builder';
 import type { StylesData } from '@/lib/styles/types';
 import { BuilderState } from '../builder';
 import { toast } from '@/hooks/use-toast';
 import {
+    findComponent,
+    findComponentWithParent,
     removeComponentFromTree,
     insertComponentIntoTree,
     updateComponentInTree
@@ -107,17 +110,6 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         if (pageIndex === -1) return;
 
         // Find the selected component and check if it's a FeatureSection
-        const findComponent = (components: ComponentData[], id: string): ComponentData | null => {
-            for (const comp of components) {
-                if (comp.id === id) return comp;
-                if (comp.children) {
-                    const found = findComponent(comp.children, id);
-                    if (found) return found;
-                }
-            }
-            return null;
-        };
-
         const page = pages[pageIndex];
         const component = findComponent(page.layoutData?.content || [], selectedComponentId);
 
@@ -239,28 +231,44 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
             const page = { ...pages[pageIndex] };
 
             if (page.layoutData?.content) {
-                page.layoutData.content = updateComponentInTree(
-                    page.layoutData.content,
-                    componentId,
-                    (comp) => {
-                        const newProps = { ...comp.props };
-                        if (textProperty.includes('.')) {
-                            const parts = textProperty.split('.');
-                            let current: any = newProps;
-                            for (let i = 0; i < parts.length - 1; i++) {
-                                current[parts[i]] = Array.isArray(current[parts[i]]) ? [...current[parts[i]]] : { ...current[parts[i]] };
-                                current = current[parts[i]];
+                page.layoutData = {
+                    ...page.layoutData,
+                    content: updateComponentInTree(
+                        page.layoutData.content,
+                        componentId,
+                        (comp) => {
+                            const newProps = { ...comp.props };
+                            if (textProperty.includes('.')) {
+                                const parts = textProperty.split('.');
+                                let current: any = newProps;
+                                for (let i = 0; i < parts.length - 1; i++) {
+                                    // Primitive-intermediate guard: if the path
+                                    // walks through a non-object/non-array value
+                                    // (e.g. a string or number was stored where a
+                                    // nested object was expected), reset it to a
+                                    // fresh object instead of spreading a primitive
+                                    // (which would yield {}) or stringifying it.
+                                    const existing = current[parts[i]];
+                                    if (Array.isArray(existing)) {
+                                        current[parts[i]] = [...existing];
+                                    } else if (existing !== null && typeof existing === 'object') {
+                                        current[parts[i]] = { ...existing };
+                                    } else {
+                                        current[parts[i]] = {};
+                                    }
+                                    current = current[parts[i]];
+                                }
+                                current[parts[parts.length - 1]] = text;
+                            } else {
+                                newProps[textProperty] = text;
                             }
-                            current[parts[parts.length - 1]] = text;
-                        } else {
-                            newProps[textProperty] = text;
+                            return {
+                                ...comp,
+                                props: newProps
+                            };
                         }
-                        return {
-                            ...comp,
-                            props: newProps
-                        };
-                    }
-                );
+                    )
+                };
             }
 
             const updatedPages = [...state.pages];
@@ -285,21 +293,24 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
             const page = { ...pages[pageIndex] };
 
             if (page.layoutData?.content) {
-                page.layoutData.content = updateComponentInTree(
-                    page.layoutData.content,
-                    componentId,
-                    (comp) => {
-                        const { visibilityCondition, ...restProps } = propsUpdates;
-                        const updated: any = {
-                            ...comp,
-                            props: { ...comp.props, ...restProps }
-                        };
-                        if (visibilityCondition !== undefined) {
-                            updated.visibilityCondition = visibilityCondition;
+                page.layoutData = {
+                    ...page.layoutData,
+                    content: updateComponentInTree(
+                        page.layoutData.content,
+                        componentId,
+                        (comp) => {
+                            const { visibilityCondition, ...restProps } = propsUpdates;
+                            const updated: any = {
+                                ...comp,
+                                props: { ...comp.props, ...restProps }
+                            };
+                            if (visibilityCondition !== undefined) {
+                                updated.visibilityCondition = visibilityCondition;
+                            }
+                            return updated;
                         }
-                        return updated;
-                    }
-                );
+                    )
+                };
             }
 
             const newPages = [...state.pages];
@@ -324,11 +335,14 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
             const page = { ...pages[pageIndex] };
 
             if (page.layoutData?.content) {
-                page.layoutData.content = updateComponentInTree(
-                    page.layoutData.content,
-                    componentId,
-                    (comp) => ({ ...comp, stylesData }) as ComponentData
-                );
+                page.layoutData = {
+                    ...page.layoutData,
+                    content: updateComponentInTree(
+                        page.layoutData.content,
+                        componentId,
+                        (comp) => ({ ...comp, stylesData }) as ComponentData
+                    )
+                };
             }
 
             const newPages = [...state.pages];
@@ -355,11 +369,14 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
             if (page.layoutData?.content) {
                 // Swap the matching node in place; newComponent keeps the same
                 // tree position (and its own id/children).
-                page.layoutData.content = updateComponentInTree(
-                    page.layoutData.content,
-                    componentId,
-                    () => newComponent
-                );
+                page.layoutData = {
+                    ...page.layoutData,
+                    content: updateComponentInTree(
+                        page.layoutData.content,
+                        componentId,
+                        () => newComponent
+                    )
+                };
             }
 
             const newPages = [...state.pages];
@@ -384,7 +401,10 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
             const page = { ...pages[pageIndex] };
 
             if (page.layoutData?.content) {
-                page.layoutData.content = removeComponentFromTree(page.layoutData.content, componentId);
+                page.layoutData = {
+                    ...page.layoutData,
+                    content: removeComponentFromTree(page.layoutData.content, componentId)
+                };
             }
 
             const newPages = [...state.pages];
@@ -439,18 +459,6 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         const page = pages.find(p => p.id === currentPageId);
         if (!page?.layoutData?.content) return;
 
-        // Find component recursively
-        const findComponent = (components: ComponentData[], id: string): ComponentData | null => {
-            for (const comp of components) {
-                if (comp.id === id) return comp;
-                if (comp.children) {
-                    const found = findComponent(comp.children, id);
-                    if (found) return found;
-                }
-            }
-            return null;
-        };
-
         const component = findComponent(page.layoutData.content, componentId);
         if (component) {
             set({ copiedComponent: JSON.parse(JSON.stringify(component)) });
@@ -471,11 +479,8 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         const page = pages[pageIndex];
         const content = page.layoutData?.content || [];
 
-        // Generate new ID for pasted component
-        const generateNewId = () => `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
         const cloneWithNewIds = (comp: ComponentData): ComponentData => {
-            const newComp = { ...comp, id: generateNewId() };
+            const newComp = { ...comp, id: uuidv4() };
             if (newComp.children) {
                 newComp.children = newComp.children.map(cloneWithNewIds);
             }
@@ -483,23 +488,6 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         };
 
         const newComponent = cloneWithNewIds(copiedComponent);
-
-        // Find the selected component and its parent to paste into the same container
-        const findComponentWithParent = (
-            components: ComponentData[],
-            id: string,
-            parent: ComponentData | null = null
-        ): { component: ComponentData; parent: ComponentData | null; index: number } | null => {
-            for (let i = 0; i < components.length; i++) {
-                const comp = components[i];
-                if (comp.id === id) return { component: comp, parent, index: i };
-                if (comp.children) {
-                    const found = findComponentWithParent(comp.children, id, comp);
-                    if (found) return found;
-                }
-            }
-            return null;
-        };
 
         set((state) => {
             const newPages = [...state.pages];
@@ -563,27 +551,11 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
         const page = pages[pageIndex];
         const content = page.layoutData?.content || [];
 
-        // Find component and its parent
-        const findComponentWithParent = (components: ComponentData[], id: string, parent: ComponentData | null = null): { component: ComponentData; parent: ComponentData | null; index: number } | null => {
-            for (let i = 0; i < components.length; i++) {
-                const comp = components[i];
-                if (comp.id === id) return { component: comp, parent, index: i };
-                if (comp.children) {
-                    const found = findComponentWithParent(comp.children, id, comp);
-                    if (found) return found;
-                }
-            }
-            return null;
-        };
-
         const result = findComponentWithParent(content, componentId);
         if (!result) return;
 
-        // Generate new ID
-        const generateNewId = () => `comp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
         const cloneWithNewIds = (comp: ComponentData): ComponentData => {
-            const newComp = { ...comp, id: generateNewId() };
+            const newComp = { ...comp, id: uuidv4() };
             if (newComp.children) {
                 newComp.children = newComp.children.map(cloneWithNewIds);
             }

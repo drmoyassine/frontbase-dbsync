@@ -46,6 +46,9 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
     isLoading: false,
     error: null,
 
+    // `setCurrentPage` is kept as a back-compat alias for `setCurrentPageId`
+    // (PageSelector.tsx still destructures the old name). Both set the same
+    // slice of state.
     setCurrentPage: (id) => set({ currentPageId: id }),
     setCurrentPageId: (id) => set({ currentPageId: id }),
 
@@ -98,27 +101,16 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         }
     },
 
-    restorePage: async (id) => {
-        const { setSaving } = get();
-        setSaving(true);
-        try {
-            // This would need to be implemented in the API
-            // For now, we'll just reload the pages
-            await get().loadPagesFromDatabase(true);
-
-            toast({
-                title: "Page restored",
-                description: "Page has been restored successfully"
-            });
-        } catch (error: any) {
-            toast({
-                title: "Error restoring page",
-                description: error.response?.data?.message || error.message || "Failed to restore page",
-                variant: "destructive"
-            });
-        } finally {
-            setSaving(false);
-        }
+    restorePage: async (_id) => {
+        // The builder slice does not yet wire up the restore endpoint
+        // (a generated `pagesRestorePage` client exists in services/pages-api.ts,
+        // but the integration was never completed here). Be honest about that
+        // instead of faking a success toast on a no-op reload.
+        toast({
+            title: "Restore is not yet available",
+            description: "Restoring a trashed page from the builder isn't wired up yet.",
+            variant: "destructive"
+        });
     },
 
     permanentDeletePage: async (id) => {
@@ -155,7 +147,8 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         // Sprint 2: pre-save validation (warnings only — never blocks saving)
         const validation = validatePageForSave(page);
         if (!validation.valid) {
-            console.warn('⚠️ [Store] Page has form validation issues:', validation.errors);
+            // Validation issues are surfaced in the UI; intentionally not logged
+            // to the console on every save.
         }
 
         setSaving(true);
@@ -182,20 +175,21 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 delete sanitizedPage.containerStyles;
             }
 
-            console.log('💾 [Store] Saving page:', {
-                id: pageId,
-                componentCount: page.layoutData?.content?.length || 0,
-                hasContainerStyles: !!page.containerStyles,
-                serializedToRoot: !!sanitizedPage.layoutData?.root?.containerStyles
-            });
-
             const updatedPage = await updatePageApi(pageId, sanitizedPage);
 
-            // Merge the backend's updated contentHash + deployments into Zustand
+            // Merge the backend's updated contentHash + deployments into Zustand.
+            // Also refresh hasUnpublishedChanges so the builder status badge stays
+            // honest between a save and the next full reload — the backend recomputes
+            // it (by comparing the new content hash vs each published deployment's hash)
+            // and returns it on the update response, so a saved-but-not-republished
+            // page correctly reads as "Modified" instead of regressing to "Published".
             if (updatedPage) {
                 const mergeFields: Record<string, unknown> = {};
                 if (updatedPage.contentHash) mergeFields.contentHash = updatedPage.contentHash;
                 if (updatedPage.deployments) mergeFields.deployments = updatedPage.deployments;
+                if (typeof updatedPage.hasUnpublishedChanges === 'boolean') {
+                    mergeFields.hasUnpublishedChanges = updatedPage.hasUnpublishedChanges;
+                }
                 if (Object.keys(mergeFields).length > 0) {
                     set((state) => ({
                         pages: state.pages.map(p =>
@@ -257,6 +251,12 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
 
             if (result.success) {
                 setUnsavedChanges(false);
+
+                // Reload so the per-page `hasUnpublishedChanges` flag (and the
+                // updated deployments list) reflects backend truth — otherwise
+                // the "Modified" badge lingers after a successful single-target
+                // publish. Mirrors the batch path below.
+                await get().loadPagesFromDatabase(false, true);
 
                 track('page_published', { page_id: pageId, engine_id: engineId, mode: 'single' });
 

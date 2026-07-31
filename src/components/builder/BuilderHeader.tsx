@@ -35,7 +35,8 @@ import { PageSelector } from './PageSelector';
 import { PageSettingsDrawer } from './PageSettingsDrawer';
 import { VersionHistoryDialog } from './settings/VersionHistoryDialog';
 import { UnsavedChangesDialog } from '@/components/ui/unsaved-changes-dialog';
-import { resolveEngineOrigin, resolvePreviewUrl } from '@/lib/edgeUtils';
+import { resolvePagePreviewUrl } from '@/lib/edgeUtils';
+import { isCloud } from '@/lib/edition';
 import { EdgePublishDialog } from '../dashboard/settings/shared/EdgePublishDialog';
 
 interface EdgeTarget {
@@ -46,6 +47,7 @@ interface EdgeTarget {
   is_active: boolean;
   edge_db_id: string | null;
   is_shared?: boolean;
+  is_system?: boolean;
 }
 
 export const BuilderHeader: React.FC<{
@@ -93,7 +95,12 @@ export const BuilderHeader: React.FC<{
 
     const currentPage = pages.find(page => page.id === currentPageId);
 
-    // Get unified page status
+    // Get unified page status.
+    // State map (signals: deletedAt, isPublic, hasUnsavedChanges, hasUnpublishedChanges):
+    //   deletedAt set                                              → Deleted
+    //   isPublic && (hasUnsavedChanges || hasUnpublishedChanges)   → Modified (live version is stale)
+    //   isPublic && in sync                                        → Published
+    //   !isPublic                                                  → Draft
     const getPageStatus = () => {
       if (!currentPage) return null;
 
@@ -106,6 +113,16 @@ export const BuilderHeader: React.FC<{
       }
 
       if (currentPage.isPublic) {
+        // The live deployment is stale if there are unsaved edits OR saved edits
+        // that haven't been re-published (hasUnpublishedChanges, backend-computed).
+        const stale = hasUnsavedChanges || !!currentPage.hasUnpublishedChanges;
+        if (stale) {
+          return {
+            label: 'Modified',
+            icon: AlertCircle,
+            className: 'text-amber-600 border-amber-500 bg-amber-50'
+          };
+        }
         return {
           label: 'Published',
           icon: CheckCircle2,
@@ -128,14 +145,27 @@ export const BuilderHeader: React.FC<{
       }
     };
 
-    const handlePublishTarget = async (targetId: string) => {
+    const handlePublishTarget = async (targetId: string, target?: EdgeTarget) => {
       if (!currentPageId || !currentPage) return;
       setIsPublishing(true);
       try {
         const returnedPreviewUrl = await publishPageToTarget(currentPageId, targetId);
         await loadPagesFromDatabase(false, true);
-        if (returnedPreviewUrl) {
-          window.open(returnedPreviewUrl.trim(), '_blank');
+
+        // Resolve a browser-usable preview URL. The backend-returned URL can be
+        // an internal hostname or empty for the system edge, so reuse the same
+        // resolution chain as EdgePublishDialog / PagesPanel (falls back to the
+        // current origin for the system edge, which IS this deployment's worker).
+        const freshPage = useBuilderStore.getState().pages.find(p => p.id === currentPageId) || currentPage;
+        const pagePath = freshPage.isHomepage ? '' : freshPage.slug || '';
+        const storedDep = freshPage.deployments?.find(
+          d => d.engineId === targetId && d.status === 'published'
+        );
+        const previewUrl = resolvePagePreviewUrl(target, pagePath, storedDep?.previewUrl, tenantSlug)
+          || (returnedPreviewUrl ?? '');
+
+        if (previewUrl) {
+          window.open(previewUrl.trim(), '_blank');
         } else {
           toast.success('Page published successfully');
         }
@@ -146,7 +176,7 @@ export const BuilderHeader: React.FC<{
       }
     };
 
-    // Main publish handler: single-target fallback vs dropdown
+    // Main publish handler: single-target fast path vs multi-target dialog
     const handlePublishClick = async () => {
       if (!currentPageId || !currentPage) return;
 
@@ -154,17 +184,20 @@ export const BuilderHeader: React.FC<{
       try {
         const response = await fetch('/api/edge-engines/active/by-scope/full');
         const data = await response.json();
-        
-        // Filter out local engines in cloud mode
+
+        // In CLOUD mode tenants can't publish to the control-plane system edge,
+        // but in SELF-HOST the system edge IS this deployment's worker and the
+        // only publish target — so it must stay eligible. (Mirrors EdgePublishDialog.)
         const eligible = (data as EdgeTarget[]).filter(
-          e => e.edge_db_id && (!tenantSlug || !e.is_system)
+          e => e.edge_db_id && (!isCloud() || !tenantSlug || !e.is_system)
         );
 
         if (eligible.length === 1) {
-          // Single target → direct publish + auto-preview (no dialog)
-          await handlePublishTarget(eligible[0].id);
+          // Single target (the common community case = system edge) → direct
+          // publish + auto-preview in a new tab, no dialog.
+          await handlePublishTarget(eligible[0].id, eligible[0]);
         } else {
-          // Multiple targets or empty → show dialog
+          // Multiple targets (future paid tiers) or none → show the picker.
           setPublishOpen(true);
         }
       } catch (err) {

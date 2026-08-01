@@ -4,7 +4,7 @@ import { Page } from '@/types/builder';
 import { BuilderState } from '../builder';
 import { toast } from '@/hooks/use-toast';
 import { track } from '@/lib/analytics';
-import { getPages, createPage as createPageApi, updatePage as updatePageApi, deletePage as deletePageApi, permanentDeletePage as permanentDeletePageApi } from '../../services/pages-api';
+import { getPages, createPage as createPageApi, updatePage as updatePageApi, deletePage as deletePageApi, restorePage as restorePageApi, permanentDeletePage as permanentDeletePageApi } from '../../services/pages-api';
 import { validatePageForSave, validatePageForPublish, type ValidationError } from '@/lib/validation/pageValidation';
 
 // Module-level in-flight dedup — prevents concurrent callers from
@@ -101,16 +101,29 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         }
     },
 
-    restorePage: async (_id) => {
-        // The builder slice does not yet wire up the restore endpoint
-        // (a generated `pagesRestorePage` client exists in services/pages-api.ts,
-        // but the integration was never completed here). Be honest about that
-        // instead of faking a success toast on a no-op reload.
-        toast({
-            title: "Restore is not yet available",
-            description: "Restoring a trashed page from the builder isn't wired up yet.",
-            variant: "destructive"
-        });
+    restorePage: async (id) => {
+        const { setSaving } = get();
+        setSaving(true);
+        try {
+            await restorePageApi(id);
+
+            // Reload (force=true) so the page moves out of trash and back into
+            // the active list, reflecting backend truth.
+            await get().loadPagesFromDatabase(false, true);
+
+            toast({
+                title: "Page restored",
+                description: "Page has been restored from trash"
+            });
+        } catch (error: any) {
+            toast({
+                title: "Error restoring page",
+                description: error.response?.data?.message || error.message || "Failed to restore page",
+                variant: "destructive"
+            });
+        } finally {
+            setSaving(false);
+        }
     },
 
     permanentDeletePage: async (id) => {

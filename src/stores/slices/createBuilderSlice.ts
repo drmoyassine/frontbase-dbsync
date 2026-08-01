@@ -340,7 +340,7 @@ export const createBuilderSlice: StateCreator<BuilderState, [], [], BuilderSlice
                     content: updateComponentInTree(
                         page.layoutData.content,
                         componentId,
-                        (comp) => ({ ...comp, stylesData }) as ComponentData
+                        (comp) => ({ ...comp, stylesData })
                     )
                 };
             }

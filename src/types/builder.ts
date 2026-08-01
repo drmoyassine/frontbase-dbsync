@@ -11,6 +11,30 @@ export interface ComponentData {
      * and freshly-added ones do not specify it.
      */
     visibilityCondition?: string;
+    /**
+     * Per-viewport styling state produced by the Styling tab (visual mode +
+     * viewport overrides + raw CSS). Mirrors `stylesData` on the framework's
+     * `PageComponent` (packages/edge-core/src/ssr/types.ts), which the framework
+     * types loosely as `Record<string, any>`; we use the richer product
+     * `StylesData` shape (defined below) since the builder store writes that
+     * exact shape via `updateComponentStylesData`. Optional — legacy components
+     * and freshly-added ones omit it.
+     */
+    stylesData?: StylesData;
+    /**
+     * Component-level data binding. Mirrors `binding` on the framework's
+     * `PageComponent`. The framework leaves this opaque
+     * (`Record<string, any>`); the product also keeps it loose — note that the
+     * DataTable/Grid/Repeater/etc. *props*.binding shape is a separate, richer
+     * object stored under `props`, not here. Optional.
+     */
+    binding?: Record<string, any>;
+    /**
+     * Per-device hide rules. Mirrors `visibility` on the framework's
+     * `PageComponent` (`{ mobile, tablet, desktop }`). Optional — components
+     * without explicit hide rules are visible on all viewports.
+     */
+    visibility?: { mobile: boolean; tablet: boolean; desktop: boolean };
 }
 
 // Legacy type for backward compatibility

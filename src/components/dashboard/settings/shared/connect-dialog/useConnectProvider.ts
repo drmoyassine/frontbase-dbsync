@@ -145,8 +145,12 @@ export function useConnectProvider(
             const data: TestResult = await res.json();
             setTestResult(data);
 
-            // Auto-name on success (generic — no provider-specific logic here)
-            if (data.success && data.detail && effectiveProvider !== 'supabase' && effectiveProvider !== 'neon' && effectiveProvider !== 'turso') {
+            // Auto-name on success ONLY when the backend returned an identifier-shaped
+            // detail ('Connected as <user>' / 'Connected to project: <name>'). The
+            // community worker returns a generic 'Connection verified' status, not an
+            // account name — naming the account after it would be wrong, so leave the
+            // default name in place when the detail isn't identifier-shaped.
+            if (data.success && /^Connected\s/.test(data.detail ?? '') && effectiveProvider !== 'supabase' && effectiveProvider !== 'neon' && effectiveProvider !== 'turso') {
                 const detailName = data.detail.replace(/^Connected (as |to (project: )?)?/, '').replace(/— .*/, '').trim();
                 if (detailName) setName(detailName);
             }

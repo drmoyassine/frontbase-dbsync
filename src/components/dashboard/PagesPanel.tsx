@@ -36,10 +36,11 @@ import { EdgePublishDialog } from './settings/shared/EdgePublishDialog';
 
 export const PagesPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { project, pages, createPage, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPageToTarget, publishPageToTargets, unpublishPageFromTarget } = useBuilderStore(useShallow(s => ({
+  const { project, pages, createPage, createPageInDatabase, deletePage, restorePage, permanentDeletePage, setCurrentPageId, loadPagesFromDatabase, publishPageToTarget, publishPageToTargets, unpublishPageFromTarget } = useBuilderStore(useShallow(s => ({
     project: s.project,
     pages: s.pages,
     createPage: s.createPage,
+    createPageInDatabase: s.createPageInDatabase,
     deletePage: s.deletePage,
     restorePage: s.restorePage,
     permanentDeletePage: s.permanentDeletePage,
@@ -205,11 +206,14 @@ export const PagesPanel: React.FC = () => {
 
   const handleDuplicatePage = async (page: any) => {
     try {
-      createPage({
-        ...page,
+      // Persist via createPageInDatabase (POSTs). The previous call to the
+      // in-memory createPage made the copy vanish on refresh.
+      const { id: _id, createdAt: _c, updatedAt: _u, ...rest } = page;
+      await createPageInDatabase({
+        ...rest,
         name: `${page.name} (Copy)`,
         slug: `${page.slug}-copy`,
-        isHomepage: false
+        isHomepage: false,
       });
 
       toast.success('Page duplicated successfully!');

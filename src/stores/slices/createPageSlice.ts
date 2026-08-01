@@ -10,6 +10,12 @@ import { validatePageForSave, validatePageForPublish, type ValidationError } fro
 // Module-level in-flight dedup — prevents concurrent callers from
 // triggering redundant page loads (App.tsx + BuilderPage.tsx + PagesPanel.tsx)
 let _loadPagesPromise: Promise<void> | null = null;
+// Monotonic generation counter — the trash (includeDeleted) load intentionally
+// runs outside `_loadPagesPromise`, so without ordering protection a slower
+// active-only load (App.tsx mount / StrictMode double-invoke) could resolve
+// AFTER the trash load and clobber `pages` back to active-only, making the
+// Trash view render empty. A load only commits if it is still the newest.
+let _loadGen = 0;
 
 export interface PageSlice {
     pages: Page[];
@@ -422,9 +428,16 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
         }
 
         const doLoad = async () => {
+            const myGen = ++_loadGen;
             set({ isPagesLoading: true });
             try {
                 const pagesRaw = await getPages(includeDeleted);
+                // A newer load (e.g. the user toggled Trash again, or a force
+                // reload) superseded this one while it was in flight — drop our
+                // result so we never clobber fresh state with stale rows (the
+                // classic "Trash renders empty" race: a slow active-only load
+                // resolving after the trash load and wiping deleted rows).
+                if (myGen !== _loadGen) return;
                 const safePages = Array.isArray(pagesRaw) ? pagesRaw : [];
 
                 // Deserialize containerStyles from layoutData.root to top-level
@@ -457,6 +470,7 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                     isInitialized: true
                 });
             } catch (error: any) {
+                if (myGen !== _loadGen) return;
                 console.error('Failed to load pages:', error);
                 toast({
                     title: "Error loading pages",
@@ -465,17 +479,20 @@ export const createPageSlice: StateCreator<BuilderState, [], [], PageSlice> = (s
                 });
                 set({ isInitialized: true });
             } finally {
-                set({ isPagesLoading: false });
-                _loadPagesPromise = null;
+                if (myGen === _loadGen) {
+                    set({ isPagesLoading: false });
+                    _loadPagesPromise = null;
+                }
             }
         };
 
-        if (!includeDeleted) {
-            _loadPagesPromise = doLoad();
-            await _loadPagesPromise;
-        } else {
-            await doLoad();
-        }
+        // Route both the active-only and the trash (includeDeleted) loads
+        // through the same in-flight promise so concurrent callers of either
+        // flavor share one network round-trip instead of racing to overwrite
+        // `pages`. The generation guard inside doLoad is the backstop that
+        // ultimately decides whose result commits.
+        _loadPagesPromise = doLoad();
+        await _loadPagesPromise;
     },
 
     createPageInDatabase: async (pageData) => {

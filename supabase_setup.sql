@@ -15,6 +15,37 @@ BEGIN
 END;
 $$;
 
+-- 1.2 Framework Compatibility: execute_query (SELECT queries)
+-- Matches the signature expected by frontbase-framework's supabaseRunner
+CREATE OR REPLACE FUNCTION execute_query(query_sql text, query_params jsonb = '[]'::jsonb)
+RETURNS TABLE(result jsonb)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Forward to exec_sql (ignore query_params for now — exec_sql handles inline params)
+  RETURN QUERY EXECUTE format('SELECT (exec_sql(%L))::jsonb AS result', query_sql);
+END;
+$$;
+
+-- 1.3 Framework Compatibility: execute_sql (INSERT/UPDATE/DELETE queries)
+-- Returns affected row count for DML operations
+CREATE OR REPLACE FUNCTION execute_sql(query_sql text, query_params jsonb = '[]'::jsonb)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  row_count bigint;
+BEGIN
+  -- Execute the DML statement
+  EXECUTE query_sql;
+  GET DIAGNOSTICS row_count = ROW_COUNT;
+  -- Return as JSON for framework compatibility
+  RETURN json_build_object('rowCount', row_count);
+END;
+$$;
+
 -- 1.5 Shared Filter Builder
 CREATE OR REPLACE FUNCTION frontbase__build_where(filters jsonb)
 RETURNS text

@@ -37,13 +37,14 @@ const BUILD_TIMESTAMP = new Date().getTime();
 //         cached; restart vite to pick up SW-source edits).
 // ---------------------------------------------------------------------------
 
-// The framework repo is checked out as a sibling of this product repo. We also
-// keep an absolute fallback so the build still resolves when the repos are not
-// laid out as siblings.
+// The framework repo is checked out as a sibling of this product repo. CI sets
+// FRONTBASE_FRAMEWORK to the framework checkout path (it is NOT laid out as a
+// sibling there), so prefer the env var; fall back to the sibling layout for
+// local dev. No hardcoded machine paths.
 const FRAMEWORK_EDGE_CORE_CANDIDATES = [
+  process.env.FRONTBASE_FRAMEWORK && path.resolve(process.env.FRONTBASE_FRAMEWORK, "packages/edge-core/dist/index.js"),
   path.resolve(__dirname, "../frontbase-framework/packages/edge-core/dist/index.js"),
-  "C:/Users/PC/OneDrive - studygram.me/VsCode/frontbase-framework/packages/edge-core/dist/index.js",
-];
+].filter(Boolean) as string[];
 
 function resolveEdgeCoreEntry(): string {
   for (const candidate of FRAMEWORK_EDGE_CORE_CANDIDATES) {

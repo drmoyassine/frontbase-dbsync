@@ -23,8 +23,12 @@ const TABLE_COLORS = [
 ];
 
 function getTableColor(tableName: string, allTables: string[]) {
+    // indexOf returns -1 for a table not in the list (e.g. a cross-schema FK
+    // target like auth.users, or a dangling reference). -1 % len = -1 in JS →
+    // TABLE_COLORS[-1] = undefined → ".border" crash → white screen. Math.abs
+    // clamps the unknown case to a valid index so rendering never throws.
     const index = allTables.indexOf(tableName);
-    return TABLE_COLORS[index % TABLE_COLORS.length];
+    return TABLE_COLORS[Math.abs(index) % TABLE_COLORS.length];
 }
 
 // Group relationships by source table

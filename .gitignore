@@ -162,3 +162,7 @@ scratch_*
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Dangling nested-repo reference (not a real submodule; no .gitmodules).
+# Kept locally as a reference checkout, untracked.
+shadcn-studio-reference/

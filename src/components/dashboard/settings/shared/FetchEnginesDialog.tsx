@@ -9,7 +9,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     Dialog, DialogContent, DialogDescription,
-    DialogHeader, DialogTitle, DialogTrigger,
+    DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
     useEdgeEngines, useEdgeProviders, edgeInfrastructureApi,
@@ -31,8 +31,14 @@ interface RemoteEngine {
     created_at: string;
 }
 
-export function FetchEnginesDialog() {
-    const [open, setOpen] = useState(false);
+/** Controlled-optional: the toolbar's ImportEngineMenu drives `open`; internal
+ *  state is the fallback when used uncontrolled. */
+export function FetchEnginesDialog({ open: openProp, onOpenChange: onOpenChangeProp }: {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+} = {}) {
+    const [openState, setOpenState] = useState(false);
+    const open = openProp ?? openState;
     const [step, setStep] = useState<'pick' | 'list'>('pick');
     const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
     const [selectedProvider, setSelectedProvider] = useState<string>('');
@@ -108,7 +114,8 @@ export function FetchEnginesDialog() {
     };
 
     const handleOpen = (v: boolean) => {
-        setOpen(v);
+        setOpenState(v);
+        onOpenChangeProp?.(v);
         if (v) reset();
     };
 
@@ -216,7 +223,7 @@ export function FetchEnginesDialog() {
         setImporting(false);
         setSelectedNames(new Set());
         if (imported === toImport.length) {
-            setOpen(false);
+            handleOpen(false);
         } else {
             setError(`Imported ${imported}/${toImport.length} engines`);
         }
@@ -231,12 +238,6 @@ export function FetchEnginesDialog() {
 
     return (
         <Dialog open={open} onOpenChange={handleOpen}>
-            <DialogTrigger asChild>
-                <Button variant="secondary" size="sm" className="h-8">
-                    <Download className="w-4 h-4 mr-2 text-muted-foreground" />
-                    Import Engines
-                </Button>
-            </DialogTrigger>
             <DialogContent className="sm:max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
                 <DialogHeader>
                     <DialogTitle>

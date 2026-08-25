@@ -191,6 +191,17 @@ async def import_engine(
         raise HTTPException(403, "No target project in this tenant")
     project_id = str(project.id)
 
+    # Tier gate — `engine_imports` plan feature flag. DELIBERATE DEVIATION from
+    # the other feature flags: this one is strict everywhere (no self-host /
+    # master-admin bypass via require_feature). Engine import is a paid
+    # differentiator on every deployment shape, and the framework worker
+    # enforces the identical default — the raw tenant_limits check keeps both
+    # backends answering 403 in lockstep. `GET /api/tenants/me/plan` returns
+    # the same raw limits, so the console's locked/unlocked signal matches.
+    from app.services.plan_limits import tenant_limits
+    if not bool(tenant_limits(db, ctx).get("engine_imports")):
+        raise HTTPException(403, "Engine import requires an upgraded plan")
+
     try:
         manifest = unseal_bundle(payload.bundle, payload.passphrase)
     except BadPassphrase:
@@ -544,6 +555,15 @@ async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db)
         assert_engine_resources_same_project(
             db, project_id, payload.edge_db_id, payload.edge_cache_id, payload.edge_queue_id
         )
+
+    # Discovery imports (FetchEnginesDialog) create engines with is_imported —
+    # the same strict `engine_imports` tier gate as POST /import (no self-host /
+    # master bypass; see the deviation note there). Plain creates — the deploy
+    # wizard — stay open.
+    if payload.is_imported:
+        from app.services.plan_limits import tenant_limits
+        if not bool(tenant_limits(db, ctx).get("engine_imports")):
+            raise HTTPException(403, "Engine import requires an upgraded plan")
 
     # Inject system key into engine_config for M2M auth
     from ..services.edge_client import inject_system_key

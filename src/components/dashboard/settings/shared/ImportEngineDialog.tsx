@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
     Dialog, DialogContent, DialogDescription,
-    DialogHeader, DialogTitle, DialogTrigger,
+    DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Download, Loader2, Copy, Check, ShieldAlert } from 'lucide-react';
 import { edgeInfrastructureApi } from '@/hooks/useEdgeInfrastructure';
@@ -19,8 +19,14 @@ import { toast } from 'sonner';
  * On success the backend returns a `confirm_secret` (S) which the caller must paste
  * back into the SOURCE to finalize the move (delete the soft-locked original).
  */
-export function ImportEngineDialog() {
-    const [open, setOpen] = useState(false);
+/** Controlled-optional: the toolbar's ImportEngineMenu drives `open`; internal
+ *  state is the fallback when used uncontrolled. */
+export function ImportEngineDialog({ open: openProp, onOpenChange: onOpenChangeProp }: {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+} = {}) {
+    const [openState, setOpenState] = useState(false);
+    const open = openProp ?? openState;
     const [bundle, setBundle] = useState('');
     const [passphrase, setPassphrase] = useState('');
     const [loading, setLoading] = useState(false);
@@ -31,6 +37,12 @@ export function ImportEngineDialog() {
 
     const reset = () => {
         setBundle(''); setPassphrase(''); setError(null); setResult(null); setCopied(false);
+    };
+
+    const handleOpen = (o: boolean) => {
+        setOpenState(o);
+        onOpenChangeProp?.(o);
+        if (!o) reset();
     };
 
     const handleImport = async () => {
@@ -55,12 +67,7 @@ export function ImportEngineDialog() {
     };
 
     return (
-        <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
-            <DialogTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                    <Download className="h-3.5 w-3.5" /> Import Engine
-                </Button>
-            </DialogTrigger>
+        <Dialog open={open} onOpenChange={handleOpen}>
             <DialogContent className="max-w-lg">
                 <DialogHeader>
                     <DialogTitle>Import Engine from Bundle</DialogTitle>
@@ -102,7 +109,7 @@ export function ImportEngineDialog() {
                                 </Button>
                             </div>
                         </div>
-                        <Button className="w-full" onClick={() => { setOpen(false); reset(); }}>Done</Button>
+                        <Button className="w-full" onClick={() => handleOpen(false)}>Done</Button>
                     </div>
                 ) : (
                     <div className="space-y-3">

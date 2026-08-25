@@ -96,6 +96,7 @@ LIMIT_REGISTRY: list[LimitDef] = [
     {"key": "auth_providers", "label": "Connect auth provider", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
     {"key": "remove_branding", "label": "Remove Frontbase branding", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
     {"key": "api_access", "label": "API access (/v1)", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
+    {"key": "engine_imports", "label": "Import engines", "kind": "bool", "category": "feature", "scope": "tenant", "unit": None, "default": False},
 ]
 
 _REGISTRY_BY_KEY: dict[str, LimitDef] = {d["key"]: d for d in LIMIT_REGISTRY}

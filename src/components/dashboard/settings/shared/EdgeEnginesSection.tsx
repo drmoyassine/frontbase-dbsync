@@ -23,12 +23,11 @@ import { EdgeInspectorDialog } from './EdgeInspectorDialog';
 import { RotationDialog } from './RotationDialog';
 
 import { DeployEngineWizard } from './DeployEngineWizard';
-import { FetchEnginesDialog } from './FetchEnginesDialog';
 import { AITestDialog } from './AITestDialog';
 import { EdgeEndpointDialog } from './EdgeEndpointDialog';
 import { EdgeResourceRow } from './EdgeResourceRow';
 import { HealthCheckPopover } from './HealthCheckPopover';
-import { ImportEngineDialog } from './ImportEngineDialog';
+import { ImportEngineMenu } from './ImportEngineMenu';
 import { ExportEngineDialog } from './ExportEngineDialog';
 import { MoveResolutionControls } from './FinalizeMoveDialog';
 import { toast } from 'sonner';
@@ -105,8 +104,7 @@ export function EdgeEnginesSection() {
                     <CardDescription>Deploys of the Unified Runtime Engine across your providers.</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                    <FetchEnginesDialog />
-                    <ImportEngineDialog />
+                    <ImportEngineMenu />
                     <DeployEngineWizard />
                 </div>
             </CardHeader>

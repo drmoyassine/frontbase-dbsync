@@ -359,7 +359,7 @@ async def batch_toggle_engines(
             result.failed.append({"id": eid, "error": "Engine is locked (pending move)"})
             continue
         engine.is_active = payload.is_active  # type: ignore[assignment]
-        engine.updated_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
+        engine.updated_at = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"  # type: ignore[assignment]
         result.success.append(eid)
     
     db.commit()
@@ -529,7 +529,7 @@ async def create_engine(payload: EdgeEngineCreate, db: Session = Depends(get_db)
         if not provider:
             raise HTTPException(status_code=400, detail="Invalid edge_provider_id")
 
-    now = datetime.now(UTC).isoformat() + "Z"
+    now = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
     
     project_id = None
     if ctx and ctx.tenant_id:

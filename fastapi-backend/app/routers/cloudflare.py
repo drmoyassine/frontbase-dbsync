@@ -226,7 +226,7 @@ async def deploy_to_cloudflare(payload: DeployRequest, db: Session = Depends(get
             from ..services.edge_client import inject_system_key
             engine_cfg = inject_system_key(engine_cfg)
 
-            deployed_at = datetime.now(UTC).isoformat() + "Z"
+            deployed_at = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
 
             if existing:
                 existing.is_active = True  # type: ignore[assignment]

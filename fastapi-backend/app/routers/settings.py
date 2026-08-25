@@ -496,7 +496,7 @@ async def send_admin_invite(request: AdminInviteRequest):
     # (Since there is no /register or set-password flow yet)
     user_id = f"admin-{secrets.token_hex(4)}"
     random_pass = secrets.token_urlsafe(12)
-    now = datetime.now(UTC).isoformat() + "Z"
+    now = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
     
     ADMIN_USERS[request.email] = {
         "id": user_id,

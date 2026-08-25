@@ -708,7 +708,7 @@ async def test_turso_database(
 
     db_url = target.get("url", "")
     db_token = target.get("token", "")
-    now = datetime.datetime.now(datetime.UTC).isoformat() + "Z"
+    now = datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "") + "Z"
 
     # Test via HTTP endpoint (libsql URLs support HTTP)
     try:

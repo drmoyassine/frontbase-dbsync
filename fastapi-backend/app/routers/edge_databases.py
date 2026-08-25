@@ -152,7 +152,7 @@ async def create_edge_database(payload: EdgeDatabaseCreate, ctx: TenantContext |
         # Validate provider account ownership
         _validate_provider_account_ownership(db, ctx, payload.provider_account_id)
         
-        now = datetime.now(UTC).isoformat() + "Z"
+        now = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
         
         # If this is set as default, unset all others
         if payload.is_default:
@@ -269,7 +269,7 @@ async def update_edge_database(db_id: str, payload: EdgeDatabaseUpdate, ctx: Ten
                 )
             edge_db.is_default = payload.is_default  # type: ignore[assignment]
         
-        edge_db.updated_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
+        edge_db.updated_at = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"  # type: ignore[assignment]
         db.commit()
         db.refresh(edge_db)
         

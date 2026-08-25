@@ -37,7 +37,7 @@ Status = Literal['success', 'failure']
 
 def _now_iso() -> str:
     """UTC ISO-8601 timestamp with a trailing 'Z' (matches engine_config usage)."""
-    return datetime.now(UTC).isoformat() + "Z"
+    return datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
 
 
 def log_tenant_secret_audit(

@@ -686,7 +686,7 @@ async def create_edge_vector(payload: EdgeVectorCreate, ctx: TenantContext | Non
                 detail="A vector store with this URL/DSN already exists"
             )
 
-        now = datetime.now(UTC).isoformat() + "Z"
+        now = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
 
         # If this is the first one, make it default
         count = db.query(EdgeVector).count()
@@ -812,7 +812,7 @@ async def update_edge_vector(vector_id: str, payload: EdgeVectorUpdate, ctx: Ten
                 clear_query.update({"is_default": False}, synchronize_session=False)
             vector.is_default = payload.is_default  # type: ignore[assignment]
 
-        vector.updated_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
+        vector.updated_at = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"  # type: ignore[assignment]
         db.commit()
         db.refresh(vector)
 

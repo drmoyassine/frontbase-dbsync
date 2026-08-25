@@ -77,7 +77,7 @@ def log_security_event(
     tenant_id = getattr(ctx, "tenant_id", None) if ctx else None
     project_id = getattr(ctx, "project_id", None) if ctx else None
 
-    now = datetime.now(UTC).isoformat() + "Z"
+    now = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
     safe_details = details or {}
 
     # 1. Always emit to Python logging (reliable path).

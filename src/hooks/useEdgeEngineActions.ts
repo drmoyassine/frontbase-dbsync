@@ -217,6 +217,9 @@ export function parseSafeDate(dateInput: string | Date | null | undefined): Date
         if (cleaned.includes(' ') && !cleaned.includes('T')) {
             cleaned = cleaned.replace(' ', 'T');
         }
+        // Heal the legacy "+00:00Z" / "Z+00:00" double suffix — an offset
+        // followed by a Z marker is not parseable by Date; strip the offset.
+        cleaned = cleaned.replace(/([+-]\d{2}:\d{2})Z$/, 'Z').replace(/Z([+-]\d{2}:\d{2})$/, 'Z');
         // Append Z if no timezone offset is present but time part exists
         if (!cleaned.includes('Z') && !cleaned.includes('+') && !cleaned.includes('-') && cleaned.includes('T')) {
             cleaned = cleaned + 'Z';

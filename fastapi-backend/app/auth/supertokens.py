@@ -83,7 +83,7 @@ def init_supertokens():
             try:
                 user = db.query(User).filter(User.id == user_id).first()
                 if user:
-                    user.last_login_at = datetime.now(UTC).isoformat() + "Z"  # type: ignore[assignment]
+                    user.last_login_at = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"  # type: ignore[assignment]
                     db.commit()
                     print(f"[SuperTokens Session Hook] Updated last_login_at for user {user_id}")
             except Exception as e:

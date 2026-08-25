@@ -578,7 +578,7 @@ async def rotate_secrets_key(
     # system_key is deterministic — flag it so callers know nothing changed).
     key_changed = new_key != old_key
 
-    now_iso = datetime.now(UTC).isoformat() + "Z"
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
 
     # 4. Persist: new key active. The old key is retained for a transition
     #    window only when window_seconds > 0; window_seconds == 0 means an
@@ -705,7 +705,7 @@ def prune_expired_rotation(engine: EdgeEngine, db: Session) -> bool:
     _record_rotation_history(cfg, {
         "rotation_id": rotation.get('id'),
         "started_at": started_at,
-        "completed_at": datetime.now(UTC).isoformat() + "Z",
+        "completed_at": datetime.now(UTC).isoformat().replace("+00:00", "") + "Z",
         "strategy": rotation.get('strategy'),
         "old_key_version": int(rotation.get('old_key_version', 0) or 0),
         "new_key_version": int(rotation.get('new_key_version', 0) or 0),
@@ -808,7 +808,7 @@ async def rollback_rotation(engine: EdgeEngine, db: Session, rotation_id: str) -
     _record_rotation_history(cfg, {
         "rotation_id": rotation_id,
         "started_at": rotation.get('started_at'),
-        "completed_at": datetime.now(UTC).isoformat() + "Z",
+        "completed_at": datetime.now(UTC).isoformat().replace("+00:00", "") + "Z",
         "strategy": rotation.get('strategy'),
         "old_key_version": old_version,
         "new_key_version": new_version,

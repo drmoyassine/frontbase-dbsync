@@ -147,7 +147,7 @@ async def redeploy(engine: EdgeEngine, db: Session) -> dict:
                 print(f"[Redeploy] Tenant-secrets sync failed (non-fatal): {sync_err}")
 
         # Update local record
-        deployed_at = datetime.now(UTC).isoformat() + "Z"
+        deployed_at = datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
         engine.bundle_checksum = source_hash  # type: ignore[assignment]
         engine.last_deployed_at = deployed_at  # type: ignore[assignment]
         engine.updated_at = datetime.now(UTC).isoformat()  # type: ignore[assignment]

@@ -399,7 +399,7 @@ async def verify_bot_token(token: Optional[str], ip_address: str, route: Literal
                 action="BOT_CHALLENGE_SUCCESS",
                 ip_address=ip_address,
                 details=f"Bot challenge passed using {provider} for {route}",
-                created_at=datetime.now(UTC).isoformat() + "Z"
+                created_at=datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
             )
             db.add(audit_log)
             db.commit()
@@ -410,7 +410,7 @@ async def verify_bot_token(token: Optional[str], ip_address: str, route: Literal
                 action="BOT_CHALLENGE_FAILED",
                 ip_address=ip_address,
                 details=f"Bot challenge failed using {provider} for {route}. Details: {details_str}",
-                created_at=datetime.now(UTC).isoformat() + "Z"
+                created_at=datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
             )
             db.add(audit_log)
             db.commit()
@@ -429,7 +429,7 @@ async def verify_bot_token(token: Optional[str], ip_address: str, route: Literal
                         id=str(uuid.uuid4()),
                         ip_or_range=ip_address,
                         reason="Bot Protection Auto-Ban (Repeated Failures)",
-                        created_at=datetime.now(UTC).isoformat() + "Z"
+                        created_at=datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
                     )
                     db.add(new_ban)
                     
@@ -439,7 +439,7 @@ async def verify_bot_token(token: Optional[str], ip_address: str, route: Literal
                         action="IP_AUTO_BANNED",
                         ip_address=ip_address,
                         details="IP blocked for repeated bot verification failures",
-                        created_at=datetime.now(UTC).isoformat() + "Z"
+                        created_at=datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
                     )
                     db.add(ban_audit)
                     db.commit()
@@ -536,7 +536,7 @@ async def log_security_event(db: Session, user_id: str, action: str, ip_address:
         ip_full_until=ip_full_until_iso,
         user_agent=user_agent,
         details=details,
-        created_at=now.isoformat() + "Z",
+        created_at=now.isoformat().replace("+00:00", "") + "Z",
     )
     db.add(audit_log)
     db.commit()
@@ -1353,7 +1353,7 @@ async def forgot_password(request: Request, body: ForgotPasswordRequest):
         
     # Generate token and expiry
     token = secrets.token_urlsafe(32)
-    expiry = (datetime.now(UTC) + timedelta(hours=1)).isoformat() + "Z"
+    expiry = (datetime.now(UTC) + timedelta(hours=1)).isoformat().replace("+00:00", "") + "Z"
     
     # Store token in-memory on the admin dict
     admin["reset_token"] = token
@@ -1619,7 +1619,7 @@ async def add_ip_ban(
         reason=body.reason,
         tenant_id=tenant_id,
         tenant_slug=tenant_slug,
-        created_at=datetime.now(UTC).isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
     )
     db.add(new_ban)
     
@@ -1631,7 +1631,7 @@ async def add_ip_ban(
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
         details=f"Banned IP/Range: {ip_str}. Reason: {body.reason}",
-        created_at=datetime.now(UTC).isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
     )
     db.add(audit_log)
     db.commit()
@@ -1687,7 +1687,7 @@ async def delete_ip_ban(
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
         details=f"Unbanned IP/Range: {ip_str}",
-        created_at=datetime.now(UTC).isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
     )
     db.add(audit_log)
     db.commit()
@@ -1800,7 +1800,7 @@ async def update_bot_protection_settings(
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
         details=f"Bot protection settings updated. Enabled: {body.enabled}, Provider: {body.provider}",
-        created_at=datetime.now(UTC).isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
     )
     db.add(audit_log)
     db.commit()
@@ -1894,7 +1894,7 @@ async def update_waf_settings(
         ip_address=request.client.host if request.client else "unknown",
         user_agent=request.headers.get("user-agent"),
         details=f"WAF toggled to {'ENABLED' if body.enabled else 'DISABLED'}",
-        created_at=datetime.now(UTC).isoformat() + "Z"
+        created_at=datetime.now(UTC).isoformat().replace("+00:00", "") + "Z"
     )
     db.add(audit_log)
     db.commit()

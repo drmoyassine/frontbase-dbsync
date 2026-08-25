@@ -313,15 +313,20 @@ export function EdgeEnginesSection() {
                                                 <div className="flex items-center space-x-2">
                                                     {engine.move_status === 'moved_out' ? (
                                                         <MoveResolutionControls engine={engine} />
-                                                    ) : canManage && (
+                                                    ) : (
                                                         <>
-                                                            <Switch
-                                                                title={engine.is_active ? "Pause Engine" : "Activate Engine"}
-                                                                id={`active-${engine.id}`}
-                                                                checked={engine.is_active}
-                                                                onCheckedChange={() => handleToggle(engine)}
-                                                            />
+                                                            {canManage && (
+                                                                <Switch
+                                                                    title={engine.is_active ? "Pause Engine" : "Activate Engine"}
+                                                                    id={`active-${engine.id}`}
+                                                                    checked={engine.is_active}
+                                                                    onCheckedChange={() => handleToggle(engine)}
+                                                                />
+                                                            )}
+                                                            {/* Read-only diagnostic — every engine card gets the health
+                                                                check, including system engines; management stays gated. */}
                                                             <HealthCheckPopover engineId={engine.id} engineUrl={engine.url} variant="icon" />
+                                                            {canManage && (<>
                                                             <EdgeInspectorDialog engine={engine} providerId={engine.edge_provider_id || ''} />
                                                             {isCommunityShared && (
                                                                 <RotationDialog engine={engine} />
@@ -365,6 +370,7 @@ export function EdgeEnginesSection() {
                                                                 supportsRemoteDelete={!!engine.provider && engine.provider !== 'unknown'}
                                                                 onDelete={(deleteRemote) => handleDelete(engine, deleteRemote)}
                                                             />
+                                                            </>)}
                                                         </>
                                                     )}
                                                 </div>

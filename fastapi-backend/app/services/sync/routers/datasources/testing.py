@@ -97,65 +97,9 @@ async def test_new_datasource(data: DatasourceTestRequest, db: AsyncSession = De
     """Test a new datasource connection with raw credentials without saving."""
     logger.info(f"Testing raw connection for new datasource: {data.name or 'Unnamed'} (Type: {data.type})")
     try:
-        api_url = data.api_url
-        api_key = data.api_key
-
-        # For Supabase without explicit URL and/or key: resolve the gaps from the Connected Account
-        if data.type.value == "supabase" and (not api_key or not api_url):
-            logger.info(
-                f"[SUPABASE-RESOLVE] Inline creds missing — api_url={bool(api_url)}, "
-                f"api_key={bool(api_key)}, provider_account_id={data.provider_account_id!r}"
-            )
-            try:
-                from app.database.config import SessionLocal
-                from app.core.credential_resolver import get_supabase_context, get_provider_context_by_id
-                sync_db = SessionLocal()
-                try:
-                    if data.provider_account_id:
-                        logger.info(f"[SUPABASE-RESOLVE] Looking up provider account: {data.provider_account_id}")
-                        ctx = get_provider_context_by_id(sync_db, data.provider_account_id)
-                        logger.info(
-                            f"[SUPABASE-RESOLVE] Provider ctx keys: {list(ctx.keys())}, "
-                            f"api_url={bool(ctx.get('api_url'))}, "
-                            f"service_role_key={bool(ctx.get('service_role_key'))}, "
-                            f"anon_key={bool(ctx.get('anon_key'))}, "
-                            f"provider_type={ctx.get('provider_type')}"
-                        )
-                        api_url = api_url or ctx.get("api_url", "")
-                        api_key = api_key or ctx.get("service_role_key", "") or ctx.get("anon_key", "")
-                    else:
-                        logger.info("[SUPABASE-RESOLVE] No provider_account_id — falling back to get_supabase_context()")
-                        ctx = get_supabase_context(sync_db, mode="builder")
-                        if ctx:
-                            logger.info(f"[SUPABASE-RESOLVE] ctx source={ctx.get('source')}, url={bool(ctx.get('url'))}, auth_key={bool(ctx.get('auth_key'))}")
-                            api_url = api_url or ctx.get("url", "")
-                            api_key = api_key or ctx.get("auth_key", "")
-                        else:
-                            logger.warning("[SUPABASE-RESOLVE] get_supabase_context returned None/empty")
-                finally:
-                    sync_db.close()
-            except Exception as e:
-                logger.warning(f"Could not resolve Supabase credentials from Connected Account: {type(e).__name__}: {e}", exc_info=True)
-
-            logger.info(f"[SUPABASE-RESOLVE] Final state — api_url={bool(api_url)}, api_key={bool(api_key)}")
-
-        # Supabase needs both an API URL and an API key for its REST client. If
-        # neither inline values nor a Connected Account supplied them, fail fast
-        # with an actionable result instead of raising mid-connect.
-        if data.type.value == "supabase" and (not api_url or not api_key):
-            if not api_url and not api_key:
-                requirement = "Supabase requires API URL and API Key"
-            elif not api_url:
-                requirement = "Supabase requires an API URL"
-            else:
-                requirement = "Supabase requires an API Key"
-            return DatasourceTestResult(
-                success=False,
-                message="Connection failed",
-                error=f"{requirement}.",
-                suggestion=_get_error_suggestion(ValueError(requirement)),
-            )
-
+        # Credential lockdown (task #124): the test request must reference a
+        # Connected Account (schema-required); the get_adapter factory hydrates
+        # a transient clone from it. No inline secrets are accepted or set.
         datasource = Datasource(
             name=data.name,
             type=data.type,
@@ -163,19 +107,11 @@ async def test_new_datasource(data: DatasourceTestRequest, db: AsyncSession = De
             port=data.port,
             database=data.database,
             username=data.username,
-            password_encrypted=data.password,
-            api_url=api_url,
-            api_key_encrypted=api_key,
+            api_url=data.api_url,
             table_prefix=data.table_prefix,
             extra_config=json.dumps(data.extra_config) if data.extra_config else None,
         )
-        # Bind the Connected Account so WordPress/Sheets adapters resolve creds from it
-        # (column-existence guard: older DBs may not have the column yet).
-        if data.provider_account_id:
-            try:
-                datasource.provider_account_id = data.provider_account_id
-            except Exception:
-                pass
+        datasource.provider_account_id = data.provider_account_id
 
         # If direct DB URI provided, set it
         if data.connection_uri:
@@ -203,7 +139,7 @@ async def test_new_datasource(data: DatasourceTestRequest, db: AsyncSession = De
 
 @router.post("/{datasource_id}/test-update/", response_model=DatasourceTestResult)
 async def test_datasource_update(
-    data: DatasourceUpdate = None,  # Make body optional to handle regression cases
+    data: Optional[DatasourceUpdate] = None,  # Make body optional to handle regression cases
     datasource: Datasource = Depends(get_scoped_datasource),
     db: AsyncSession = Depends(get_db)
 ):
@@ -212,7 +148,7 @@ async def test_datasource_update(
 
     # Handle missing body (regression fix: treat as no-op test of existing config)
     if data is None:
-        data = DatasourceUpdate()
+        data = DatasourceUpdate()  # pyright: ignore[reportCallIssue] — plugin mis-infers constrained Optional fields as required
 
     # Merge extra_config: use new data if provided, otherwise preserve existing
     existing_extra = datasource.extra_config
@@ -233,9 +169,9 @@ async def test_datasource_update(
         port=data.port or datasource.port,
         database=data.database or datasource.database,
         username=data.username or datasource.username,
-        password_encrypted=data.password or datasource.password_encrypted,
+        password_encrypted=datasource.password_encrypted,
         api_url=data.api_url or datasource.api_url,
-        api_key_encrypted=data.api_key or datasource.api_key_encrypted,
+        api_key_encrypted=datasource.api_key_encrypted,
         table_prefix=data.table_prefix or datasource.table_prefix,
         extra_config=merged_extra,
         provider_account_id=merged_provider_account_id,

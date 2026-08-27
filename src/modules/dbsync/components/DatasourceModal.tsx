@@ -35,15 +35,11 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
         port: datasource?.port || (datasource?.type === 'mysql' ? 3306 : 5432),
         database: datasource?.database || '',
         username: datasource?.username || '',
-        password: '',
         connection_uri: '',
         api_url: datasource?.api_url || '',
-        anon_key: '',
-        api_key: '',
         provider_account_id: (datasource as any)?.provider_account_id || '',
-        // WordPress Plugin specific fields (mapped to api_url/password by backend)
-        base_url: datasource?.api_url || '',  // api_url from datasource is base_url for WP Plugin
-        app_password: '',
+        // WordPress site URL (mapped to api_url by the backend; non-secret)
+        base_url: datasource?.api_url || '',
         // Google Sheets specific config in extra_config
         extra_config: (() => {
             const cfg = (datasource as any)?.extra_config;
@@ -57,6 +53,10 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
             return cfg || { spreadsheetId: '', webAppUrl: '', webAppSecret: '' };
         })(),
     });
+
+    // Credential lockdown: every datasource type resolves credentials from a
+    // Connected Account — nothing can be saved or tested without one.
+    const needsAccount = !formData.provider_account_id;
 
     const mutation = useMutation({
         mutationFn: (data: typeof formData) =>
@@ -281,7 +281,7 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                     <button
                         type="button"
                         onClick={() => testRawMutation.mutate(formData)}
-                        disabled={testRawMutation.isPending || mutation.isPending}
+                        disabled={testRawMutation.isPending || mutation.isPending || needsAccount}
                         className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold border-2 border-primary-600 text-primary-600 rounded-xl hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all disabled:opacity-50"
                     >
                         {testRawMutation.isPending ? (
@@ -301,7 +301,7 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                         </button>
                         <button
                             onClick={handleSubmit}
-                            disabled={mutation.isPending || testRawMutation.isPending}
+                            disabled={mutation.isPending || testRawMutation.isPending || needsAccount}
                             className="flex-1 px-4 py-3 text-sm font-bold bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-all disabled:opacity-50 shadow-lg shadow-primary-500/20"
                         >
                             {mutation.isPending ? (isEditing ? 'Saving...' : 'Adding...') : (isEditing ? 'Save Changes' : 'Add Data Source')}

@@ -20,7 +20,6 @@ class DatasourceBase(BaseModel):
 
     # Supabase/Neon specific
     api_url: Optional[str] = None
-    anon_key: Optional[str] = None  # Supabase anon key
 
     # WordPress specific
     table_prefix: str = Field(default="wp_", max_length=50)
@@ -72,6 +71,25 @@ def _ensure_url_scheme(url: Optional[str]) -> Optional[str]:
     return url
 
 
+_CREDENTIAL_FIELDS = ("password", "api_key", "anon_key", "app_password")
+
+
+def _reject_inline_credentials(data: Any) -> Any:
+    """Owner mandate (task #124): credentials only ever live in a Connected
+    Account. Any non-empty inline credential field on create/test/update is
+    rejected — empty strings pass (legacy clients send empty placeholders).
+    """
+    if isinstance(data, dict):
+        for f in _CREDENTIAL_FIELDS:
+            v = data.get(f)
+            if v is not None and str(v).strip() != "":
+                raise ValueError(
+                    f"Inline {f!r} is not accepted - credentials live in a Connected "
+                    "Account; connect one and reference it via provider_account_id."
+                )
+    return data
+
+
 def _parse_uri_metadata(data: Any) -> Any:
     """Helper to parse connection URI and inject fields into data dict."""
     if isinstance(data, dict) and data.get("connection_uri"):
@@ -87,42 +105,39 @@ def _parse_uri_metadata(data: Any) -> Any:
                 data["port"] = url.port or data.get("port") or 5432
                 data["database"] = url.database or data.get("database")
                 data["username"] = url.username or data.get("username")
-                data["password"] = url.password or data.get("password")
+                # NOTE: the URI password is deliberately NOT extracted — credentials
+                # only ever live in a Connected Account (owner mandate, task #124).
+                # Structural fields (host/port/database/username) still auto-fill.
         except Exception as e:
             raise ValueError(f"Invalid connection URI: {str(e)}")
     return data
 
 
 class DatasourceCreate(DatasourceBase):
-    """Schema for creating a datasource."""
+    """Schema for creating a datasource.
+
+    Credential lockdown (task #124 phase 5): a Connected Account is REQUIRED
+    and inline credential fields are rejected — credentials are created and
+    edited on the Connected Account, never on the datasource.
+    """
     name: str = Field(..., min_length=1, max_length=255)
-    password: Optional[str] = None
-    anon_key: Optional[str] = None  # Supabase anon key
-    api_key: Optional[str] = None  # Service role key for Supabase/Neon
-    provider_account_id: Optional[str] = None  # FK to Connected Account (central cred management)
+    provider_account_id: str  # FK to Connected Account — required (lockdown)
 
     @model_validator(mode="before")
     @classmethod
     def parse_connection_uri(cls, data: Any) -> Any:
-        """Parse connection URI and map WordPress Plugin fields."""
+        """Parse connection URI and map WordPress fields (non-secret parts)."""
+        data = _reject_inline_credentials(data)
         data = _parse_uri_metadata(data)
-        # Map WordPress Plugin fields to standard fields
+        # Map WordPress base_url → api_url (non-secret URL convenience)
         if isinstance(data, dict) and data.get("type") in [
             DatasourceType.WORDPRESS_REST,
             DatasourceType.WORDPRESS_GRAPHQL,
             DatasourceType.WORDPRESS_PLUGIN,
         ]:
-            # Map base_url → api_url
             if data.get("base_url") and not data.get("api_url"):
                 data["api_url"] = _ensure_url_scheme(data.pop("base_url"))
-            # Map app_password → password for REST/GraphQL, → api_key for Plugin
-            # Plugin uses api_key_encrypted, REST uses password_encrypted
-            if data.get("app_password"):
-                if data.get("type") == DatasourceType.WORDPRESS_PLUGIN:
-                    data["api_key"] = data.pop("app_password")
-                else:
-                    if not data.get("password"):
-                        data["password"] = data.pop("app_password")
+            data.pop("app_password", None)  # rejected above if non-empty
         return data
 
 
@@ -134,17 +149,12 @@ class DatasourceTestRequest(BaseModel):
     port: Optional[int] = Field(None, ge=1, le=65535)
     database: Optional[str] = Field(None, max_length=255)
     username: Optional[str] = None
-    password: Optional[str] = None
     connection_uri: Optional[str] = None
     api_url: Optional[str] = None
-    anon_key: Optional[str] = None  # Supabase anon key
-    api_key: Optional[str] = None  # Service role key
     table_prefix: str = Field(default="wp_", max_length=50)
-    # WordPress Plugin specific (frontend sends these, we map to api_url/password)
     base_url: Optional[str] = None
-    app_password: Optional[str] = None
     extra_config: Optional[Dict[str, Any]] = None
-    provider_account_id: Optional[str] = None  # Connected Account to resolve creds from
+    provider_account_id: str  # Connected Account — required (credential lockdown)
 
     @field_validator("type", mode="before")
     @classmethod
@@ -164,25 +174,17 @@ class DatasourceTestRequest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def parse_connection_uri(cls, data: Any) -> Any:
-        """Parse connection URI if provided."""
+        """Parse connection URI if provided (non-secret parts only)."""
+        data = _reject_inline_credentials(data)
         data = _parse_uri_metadata(data)
-        # Map WordPress Plugin fields to standard fields
         if isinstance(data, dict) and data.get("type") in [
             DatasourceType.WORDPRESS_REST,
             DatasourceType.WORDPRESS_GRAPHQL,
             DatasourceType.WORDPRESS_PLUGIN,
         ]:
-            # Map base_url → api_url
             if data.get("base_url") and not data.get("api_url"):
                 data["api_url"] = _ensure_url_scheme(data.pop("base_url"))
-            # Map app_password → password for REST/GraphQL, → api_key for Plugin
-            # Plugin uses api_key_encrypted, REST uses password_encrypted
-            if data.get("app_password"):
-                if data.get("type") == DatasourceType.WORDPRESS_PLUGIN:
-                    data["api_key"] = data.pop("app_password")
-                else:
-                    if not data.get("password"):
-                        data["password"] = data.pop("app_password")
+            data.pop("app_password", None)  # rejected above if non-empty
         return data
 
 
@@ -193,40 +195,27 @@ class DatasourceUpdate(BaseModel):
     port: Optional[int] = Field(None, ge=1, le=65535)
     database: Optional[str] = None
     username: Optional[str] = None
-    password: Optional[str] = None
     connection_uri: Optional[str] = None
     api_url: Optional[str] = None
-    anon_key: Optional[str] = None  # Supabase anon key
-    api_key: Optional[str] = None  # Service role key
     table_prefix: Optional[str] = None
     extra_config: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
     provider_account_id: Optional[str] = None  # Connected account for managed providers
-    # WordPress Plugin specific fields for updates
     base_url: Optional[str] = None
-    app_password: Optional[str] = None
 
     @model_validator(mode="before")
     @classmethod
     def parse_connection_uri(cls, data: Any) -> Any:
-        """Parse connection URI if provided."""
+        """Parse connection URI if provided (non-secret parts only)."""
+        data = _reject_inline_credentials(data)
         data = _parse_uri_metadata(data)
-        # Map WordPress Plugin fields to standard fields for updates
         if isinstance(data, dict) and data.get("type") in [
             DatasourceType.WORDPRESS_REST,
             DatasourceType.WORDPRESS_GRAPHQL,
             DatasourceType.WORDPRESS_PLUGIN,
         ]:
-            # Map base_url → api_url
             if data.get("base_url") and not data.get("api_url"):
                 data["api_url"] = _ensure_url_scheme(data.pop("base_url"))
-            # Map app_password → password for REST/GraphQL, → api_key for Plugin
-            if data.get("app_password"):
-                if data.get("type") == DatasourceType.WORDPRESS_PLUGIN:
-                    data["api_key"] = data.pop("app_password")
-                else:
-                    if not data.get("password"):
-                        data["password"] = data.pop("app_password")
         return data
 
 

@@ -72,7 +72,6 @@ async def create_datasource(
             detail=f"Datasource with name '{data.name}' already exists"
         )
 
-    from app.core.security import encrypt_field
     from sqlalchemy import inspect
 
     # Get actual database columns to avoid setting fields that don't exist in the DB
@@ -80,6 +79,8 @@ async def create_datasource(
     db_columns = {col.name for col in inspect(Datasource).columns}
 
     # Build datasource kwargs, only including fields that exist in the database
+    # Credential lockdown (task #124): no inline secret columns are ever
+    # written — credentials live in the Connected Account the row references.
     datasource_kwargs = {
         "name": data.name,
         "type": data.type,
@@ -87,43 +88,24 @@ async def create_datasource(
         "port": data.port,
         "database": data.database,
         "username": data.username,
-        "password_encrypted": encrypt_field(data.password),
         "api_url": data.api_url,
-        "api_key_encrypted": encrypt_field(data.api_key),
-        "anon_key_encrypted": encrypt_field(data.anon_key),
         "table_prefix": data.table_prefix,
         "extra_config": json.dumps(data.extra_config) if data.extra_config else None,
         "project_id": project_id,
     }
 
-    # Only add provider_account_id if the column exists in the database
-    if "provider_account_id" in db_columns and data.provider_account_id:
+    if "provider_account_id" in db_columns:
         datasource_kwargs["provider_account_id"] = data.provider_account_id
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="provider_account_id column missing — run migrations before creating datasources",
+        )
 
     datasource = Datasource(**datasource_kwargs)
 
     db.add(datasource)
     await db.commit()
-    
-    # Sync Supabase credentials to Frontbase project_settings
-    if data.type.value == "supabase" and data.api_url:
-        try:
-            from app.database.config import SessionLocal
-            from app.database.utils import update_project_settings, encrypt_data
-            
-            with SessionLocal() as frontbase_db:
-                update_data = {
-                    "supabase_url": data.api_url,
-                }
-                if data.anon_key:
-                    update_data["supabase_anon_key"] = data.anon_key
-                if data.api_key:  # Service role key
-                    update_data["supabase_service_key_encrypted"] = encrypt_data(data.api_key)
-                
-                update_project_settings(frontbase_db, project_id or "default", update_data)
-                logger.info(f"Synced Supabase credentials to Frontbase project_settings")
-        except Exception as e:
-            logger.warning(f"Failed to sync Supabase credentials to Frontbase: {e}")
     
     # Re-fetch with relationships to avoid 500 in serialization
     result = await db.execute(
@@ -256,10 +238,9 @@ async def update_datasource(
     
     # Update fields if provided
     update_data = data.model_dump(exclude_unset=True)
-    sensitive_fields = ["host", "port", "database", "username", "password", "connection_uri", "api_url", "api_key"]
+    sensitive_fields = ["host", "port", "database", "username", "connection_uri", "api_url", "provider_account_id"]
     should_reset_test = any(field in update_data for field in sensitive_fields)
 
-    from app.core.security import encrypt_field
     from sqlalchemy import inspect
 
     # Get actual database columns to avoid setting fields that don't exist in the DB
@@ -267,11 +248,7 @@ async def update_datasource(
     db_columns = {col.name for col in inspect(Datasource).columns}
 
     for field, value in update_data.items():
-        if field == "password" and value:
-            setattr(datasource, "password_encrypted", encrypt_field(value))
-        elif field == "api_key" and value:
-            setattr(datasource, "api_key_encrypted", encrypt_field(value))
-        elif field == "extra_config" and value is not None:
+        if field == "extra_config" and value is not None:
             # extra_config is a Text column — serialize dicts/lists to JSON.
             # DatasourceUpdate delivers extra_config as a dict; binding a dict to
             # VARCHAR raises "expected str, got dict" (BACKEND-6).
@@ -286,6 +263,14 @@ async def update_datasource(
     if should_reset_test:
         datasource.last_test_success = None
         datasource.last_tested_at = None
+
+    # Lockdown: attaching/repointing a Connected Account clears any legacy
+    # inline secrets still at rest on the row (hydration ignores them anyway,
+    # but they must not survive an update that names a CA).
+    if update_data.get("provider_account_id"):
+        for col in ("password_encrypted", "api_key_encrypted", "anon_key_encrypted"):
+            if col in db_columns:
+                setattr(datasource, col, None)
     
     await db.commit()
     

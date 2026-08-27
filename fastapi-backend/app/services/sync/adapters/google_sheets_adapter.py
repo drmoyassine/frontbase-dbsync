@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Union
 import httpx
 
 from app.services.sync.adapters.base import DatabaseAdapter
+logger = logging.getLogger("adapters.googlesheets")
 
 # Map the adapter's where-operators to the Web App's filter ops.
 _OP_MAP = {
@@ -68,35 +69,12 @@ class GoogleSheetsAdapter(DatabaseAdapter):
         self._spreadsheet_id = cfg.get("spreadsheetId")
         self._client: Optional[httpx.AsyncClient] = None
 
-        # Resolve secret from Connected Account or fallback to inline config
-        secret = cfg.get("webAppSecret")
-        encrypted = cfg.get("webAppSecretEncrypted")
+        # Credentials arrive pre-hydrated: the get_adapter factory merges the
+        # Connected Account (webAppUrl / spreadsheetId / webAppSecret) into
+        # extra_config on a transient clone — see adapters/__init__.py. db is
+        # kept for call-compat only.
+        self._secret = cfg.get("webAppSecret") or ""
 
-        # Try Connected Account first
-        if db and not secret and not encrypted:
-            from app.core.credential_resolver import get_datasource_credentials
-            try:
-                creds = get_datasource_credentials(db, datasource)
-                secret = creds.get("webAppSecret") or ""
-                self._web_app_url = creds.get("webAppUrl") or self._web_app_url
-                self._spreadsheet_id = creds.get("spreadsheetId") or self._spreadsheet_id
-                self._credential_source = creds.get("source", "unknown")
-            except Exception as e:
-                logger.warning("Failed to resolve Google Sheets credentials from Connected Account: %s", e)
-
-        # Fallback to inline encrypted field
-        if not secret and encrypted:
-            try:
-                from app.core.security import decrypt_field
-                secret = decrypt_field(encrypted) or ""
-            except Exception:
-                secret = ""
-
-        self._secret = secret or ""
-
-        # Debug logging
-        import logging
-        logger = logging.getLogger("adapters.googlesheets")
         logger.info(f"[GoogleSheets] Initialized with webAppUrl={bool(self._web_app_url)}, spreadsheetId={bool(self._spreadsheet_id)}, secret={bool(self._secret)}")
 
     def _read_config(self) -> Dict[str, Any]:
@@ -157,7 +135,7 @@ class GoogleSheetsAdapter(DatabaseAdapter):
         limit: int = 100,
         offset: int = 0,
         order_by: Optional[str] = None,
-        order_direction: str = "asc",
+        order_direction: Optional[str] = "asc",  # None → "asc" below
         search: Optional[str] = None,
     ) -> Dict[str, Any]:
         page_size = max(int(limit or 0), 1)

@@ -239,6 +239,18 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
         if proj:
             project_id_val = str(proj.id)
 
+    # REST: normalize `headers` from a JSON string (form input) to a dict so
+    # the stored secret is directly consumable - the REST adapter expects a
+    # dict in extra_config (task #124 Gap 3).
+    if payload.provider == "rest" and payload.provider_credentials:
+        raw_headers = payload.provider_credentials.get("headers")
+        if isinstance(raw_headers, str) and raw_headers.strip():
+            try:
+                parsed = json.loads(raw_headers)
+                payload.provider_credentials["headers"] = parsed if isinstance(parsed, dict) else None
+            except json.JSONDecodeError:
+                payload.provider_credentials["headers"] = None
+
     if payload.provider_credentials and payload.provider != "turso":
         # Dedup by account IDENTITY (primary credential), scoped to THIS tenant's
         # project only — never name-based, never another tenant's accounts.
@@ -329,6 +341,38 @@ async def create_provider(payload: EdgeProviderAccountCreate, db: Session = Depe
                     print(f"[Supabase Connect] JWT secret stored in encrypted credentials")
             except Exception as e:
                 print(f"Warning: Could not auto-fetch Supabase JWT secret: {e}")
+
+    # For Neon: fetch the selected project connection details so datasources
+    # created against this CA can connect. The discovered connection_uri never
+    # left the discovery response before this (task #124 Gap 1). Mirrors the
+    # Supabase auto-fetch above: password -> encrypted secrets, discrete
+    # host/port/database/username -> metadata.
+    if payload.provider == "neon" and payload.provider_credentials:
+        neon_api_key = payload.provider_credentials.get("api_key", "")
+        neon_project_id = payload.provider_credentials.get("project_id", "")
+        if neon_api_key and neon_project_id:
+            try:
+                from ..services.neon_management import fetch_neon_db_credentials
+                fetched = await fetch_neon_db_credentials(neon_api_key, neon_project_id)
+                if fetched:
+                    fetched_secrets, fetched_meta = split_credentials("neon", fetched)
+                    existing_meta = {}
+                    neon_meta_raw = provider.provider_metadata
+                    if neon_meta_raw is not None:
+                        try:
+                            existing_meta = json.loads(str(neon_meta_raw))
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    existing_meta.update(fetched_meta)
+                    provider.provider_metadata = json.dumps(existing_meta)  # type: ignore[assignment]
+                    existing_secrets = decrypt_credentials(str(provider.provider_credentials or "{}"))
+                    existing_secrets.update(fetched_secrets)
+                    provider.provider_credentials = encrypt_credentials(existing_secrets)  # type: ignore[assignment]
+                    db.commit()
+                    db.refresh(provider)
+                    print(f"[Neon Connect] Stored project connection details for {neon_project_id}")
+            except Exception as e:
+                print(f"Warning: Could not auto-fetch Neon connection details: {e}")
 
     # ── Plan tier detection ──────────────────────────────────────────────
     # Detect the user's plan tier at connect time and persist in metadata.

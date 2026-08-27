@@ -178,6 +178,7 @@ PROVIDER_SECRET_KEYS: dict[str, set[str]] = {
     "wordpress_plugin":  {"app_password"},
     "wordpress_graphql": {"app_password"},
     "google_sheets":    {"webAppSecret"},
+    "rest":             {"headers", "api_key"},   # Authorization etc. are secrets
     # ── Edge Infrastructure (Connected Account = management API token) ──
     "turso":         {"databases"},     # manual registry: JSON blob of DB entries
     "upstash_redis": {"cache_token"},
@@ -199,12 +200,13 @@ PROVIDER_METADATA_KEYS: dict[str, set[str]] = {
     # ── Data Sources ──
     "supabase_db":       {"api_url", "project_ref"},
     "postgres":          {"host", "port", "database", "username"},
-    "neon":              {"host", "database", "project_id"},
+    "neon":              {"host", "port", "database", "username", "project_id"},
     "mysql":             {"host", "port", "database", "username"},
     "wordpress_rest":    {"base_url", "username", "api_mode"},
     "wordpress_plugin":  {"api_url", "username"},
     "wordpress_graphql": {"api_url", "username"},
     "google_sheets":    {"webAppUrl", "spreadsheetId", "spreadsheetName"},
+    "rest":             {"baseUrl"},
     # ── Edge Infrastructure ──
     "turso":         set(),             # all data in encrypted blob
     "upstash_redis": {"cache_url"},

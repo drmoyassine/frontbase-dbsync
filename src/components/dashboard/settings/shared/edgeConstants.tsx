@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive, Bot, Cpu, Mail, Table } from 'lucide-react';
+import { Cloud, Server, Globe, Rocket, Database, Workflow, Triangle, Hexagon, Zap, HardDrive, Bot, Cpu, Mail, Table, Webhook } from 'lucide-react';
 import { BRAND_ICONS } from '@/components/icons/providers';
 import { Badge } from '@/components/ui/badge';
 
@@ -45,6 +45,7 @@ const LUCIDE_FALLBACKS: Record<string, React.FC<any>> = {
     mysql: HardDrive,
     neon: Database,
     google_sheets: Table,
+    rest: Webhook,
     turso: Cloud,
     openai: Bot,
     anthropic: Cpu,
@@ -270,6 +271,17 @@ export const PROVIDER_CONFIGS: Record<string, ProviderConfig> = {
             { key: 'username', label: 'Username', placeholder: 'root', required: true },
             { key: 'password', label: 'Password', placeholder: 'Password', type: 'password', required: true },
         ],
+    },
+    rest: {
+        label: 'REST API',
+        defaultName: 'REST API',
+        capabilities: ['database'],
+        fields: [
+            { key: 'baseUrl', label: 'Base URL', placeholder: 'https://api.example.com', required: true },
+            { key: 'api_key', label: 'API Key', placeholder: 'Bearer token (optional)', type: 'password', required: false },
+            { key: 'headers', label: 'Headers (JSON)', placeholder: '{ "X-API-Version": "2" }', required: false },
+        ],
+        helpText: <>Read-only datasource over a generic HTTP/JSON endpoint. Resource path and response mapping are configured per data source after connecting.</>,
     },
     wordpress_rest: {
         label: 'WordPress REST API',

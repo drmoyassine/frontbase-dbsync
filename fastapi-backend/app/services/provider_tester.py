@@ -9,6 +9,8 @@ Adding a new provider:
   That's it. No if/elif chains.
 """
 
+import json
+
 import httpx
 
 
@@ -449,6 +451,47 @@ async def _test_mailgun(creds: dict) -> dict:
     return {"success": True, "detail": f"Connected to Mailgun. Domain {domain} found."}
 
 
+async def _test_rest(creds: dict) -> dict:
+    """REST API datasource - GET the baseUrl with the supplied headers.
+
+    2xx/3xx/4xx all prove reachability; 401/403 also mean the key/headers are
+    wrong and are surfaced as failures so the user fixes them before saving.
+    Detail is deliberately NOT identifier-shaped so the frontend auto-name
+    gate keeps the default account name.
+    """
+    base_url = (creds.get("baseUrl") or "").strip().rstrip("/")
+    if not base_url:
+        return {"success": False, "detail": "Base URL is required"}
+    if "://" not in base_url:
+        base_url = f"https://{base_url}"
+
+    headers: dict = {}
+    raw = creds.get("headers")
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {"success": False, "detail": "Headers must be valid JSON"}
+        if isinstance(parsed, dict):
+            headers = parsed
+    elif isinstance(raw, dict):
+        headers = raw
+    api_key = creds.get("api_key", "")
+    if api_key and "Authorization" not in headers:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(base_url, headers=headers)
+    except httpx.HTTPError as e:
+        return {"success": False, "detail": f"Could not reach {base_url}: {e.__class__.__name__}"}
+    if resp.status_code in (401, 403):
+        return {"success": False, "detail": f"Endpoint reachable but returned {resp.status_code} - check your API key / headers"}
+    if resp.status_code >= 500:
+        return {"success": False, "detail": f"Endpoint returned {resp.status_code}"}
+    return {"success": True, "detail": f"Connection verified - {resp.status_code}"}
+
+
 # =============================================================================
 # Registry — add new providers here
 # =============================================================================
@@ -466,6 +509,7 @@ _TESTERS: dict[str, object] = {
     "wordpress_rest":   _test_wordpress,
     "wordpress_plugin": _test_wordpress_plugin,
     "neon":             _test_neon,
+    "rest":             _test_rest,
     "openai":           _test_openai,
     "anthropic":        _test_anthropic,
     "ollama":           _test_ollama,

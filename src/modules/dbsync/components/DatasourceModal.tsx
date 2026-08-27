@@ -146,7 +146,8 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                          formData.type === 'mysql' ||
                          formData.type === 'supabase' ||
                          formData.type === 'neon' ||
-                         formData.type === 'turso' ? (
+                         formData.type === 'turso' ||
+                         formData.type === 'rest' ? (
                             <div className="space-y-3">
                                 <AccountResourcePicker
                                     compatibleProviders={DATASOURCE_PROVIDER_MAP[formData.type] || [formData.type]}
@@ -186,6 +187,43 @@ export function DatasourceModal({ datasource, onClose, onCreated }: DatasourceMo
                             </div>
                         ) : null /* No other types need manual config */}
                     </div>
+
+                    {formData.type === 'rest' && (
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">Resource Path</label>
+                                <input
+                                    type="text"
+                                    value={(formData.extra_config as any)?.resourcePath || ''}
+                                    onChange={(e) => setFormData({ ...formData, extra_config: { ...formData.extra_config, resourcePath: e.target.value } })}
+                                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                    placeholder="/things"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">JSON Path</label>
+                                    <input
+                                        type="text"
+                                        value={(formData.extra_config as any)?.jsonPath || ''}
+                                        onChange={(e) => setFormData({ ...formData, extra_config: { ...formData.extra_config, jsonPath: e.target.value } })}
+                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        placeholder="data.items"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1.5 text-gray-700 dark:text-gray-300">ID Field</label>
+                                    <input
+                                        type="text"
+                                        value={(formData.extra_config as any)?.idField || ''}
+                                        onChange={(e) => setFormData({ ...formData, extra_config: { ...formData.extra_config, idField: e.target.value } })}
+                                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary-500 outline-none transition-all"
+                                        placeholder="id"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {testRawMutation.data && (
                         <div className={`p-4 rounded-2xl text-sm flex items-start gap-3 animate-in slide-in-from-top-2 duration-300 border ${testRawMutation.data.data.success

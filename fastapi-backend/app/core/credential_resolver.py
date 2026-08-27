@@ -12,9 +12,12 @@ the Supabase-specific get_supabase_context() helper.
 """
 
 import json
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
+
+if TYPE_CHECKING:
+    from app.services.sync.models.datasource import Datasource
 
 
 # ── Generic Provider Resolver ─────────────────────────────────────────
@@ -267,6 +270,41 @@ def is_supabase_connected(db: Session) -> bool:
     return bool(project and project.get("supabase_url") and project.get("supabase_anon_key"))
 
 
+def _normalize_db_url(creds: dict) -> dict:
+    """Decompose a full connection string into discrete connection fields.
+
+    If the credential dict carries a full connection string (``db_url`` /
+    ``connection_uri`` / ``database_url`` / ``connection_string`` / ``dsn``),
+    decompose it into ``host`` / ``port`` / ``database`` / ``username`` /
+    ``password`` — filling ONLY keys that are absent, never overriding discrete
+    fields a provider already stores.
+
+    Defensive/forward-looking: no Connected Account in the current adapter map
+    stores a connection string yet (Neon/Turso keep discrete fields or a
+    databases blob). The Neon fix (task #124 Gap 1) will store the discovered
+    ``connection_uri`` on the CA, relying on this normalizer to decompose it at
+    resolve time — which is why ``connection_uri`` (the exact key Neon
+    discovery emits, see provider_discovery._discover_neon) is checked.
+    """
+    url = (creds.get("db_url") or creds.get("connection_uri")
+           or creds.get("database_url") or creds.get("connection_string")
+           or creds.get("dsn"))
+    if not url:
+        return creds
+    try:
+        from sqlalchemy.engine.url import make_url
+        u = make_url(url)
+        for key, val in (("host", u.host), ("port", u.port), ("database", u.database),
+                         ("username", u.username), ("password", u.password)):
+            if val is not None and not creds.get(key):
+                creds[key] = val
+    except Exception:
+        # Unparseable string — leave creds untouched; callers fall back to
+        # whatever discrete fields they have.
+        pass
+    return creds
+
+
 def get_datasource_credentials(
     db: Session,
     datasource: "Datasource",
@@ -317,12 +355,12 @@ def get_datasource_credentials(
                     metadata = json.loads(str(provider.provider_metadata))
                 except (json.JSONDecodeError, TypeError):
                     pass
-            return {
+            return _normalize_db_url({
                 **metadata,
                 **creds,
                 "source": "connected_account",
                 "provider_id": str(provider.id),
-            }
+            })
 
     # 2. Fallback: legacy inline credential fields
     # Build dict from encrypted fields for backward compatibility
@@ -351,4 +389,4 @@ def get_datasource_credentials(
         except (json.JSONDecodeError, TypeError):
             pass
 
-    return {**legacy, "source": "legacy_inline"}
+    return _normalize_db_url({**legacy, "source": "legacy_inline"})

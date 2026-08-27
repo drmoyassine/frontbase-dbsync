@@ -24,6 +24,28 @@ COPY packages ./packages
 COPY index.html ./
 COPY vite.config.ts tsconfig*.json tailwind.config.ts postcss.config.js components.json ./
 
+# ── Framework renderer (builder canvas SW) ──────────────────────────────────
+# builder-sw.ts bundles @frontbase/edge-core — the SAME package the framework
+# worker uses to render published pages — so the canvas can never drift from
+# what visitors see (see vite.config.ts builderSwPlugin). Docker has no
+# framework checkout, so clone it at the SHA pinned in FRAMEWORK_PIN (update:
+# `node scripts/sync-framework-pin.mjs`) and build the package here. Public
+# clone — no credentials touch the image. typescript is pinned to the version
+# the framework workspace itself uses (its root devDependency), since
+# edge-core's own package.json does not carry it.
+COPY FRAMEWORK_PIN /tmp/FRAMEWORK_PIN
+RUN apk add --no-cache git && \
+    git init -q /frontbase-framework && \
+    cd /frontbase-framework && \
+    git remote add origin "$(node -p "require('/tmp/FRAMEWORK_PIN').repo")" && \
+    git fetch -q --depth 1 origin "$(node -p "require('/tmp/FRAMEWORK_PIN').commit")" && \
+    git checkout -q --detach FETCH_HEAD && \
+    cd packages/edge-core && \
+    npm install --no-audit --no-fund && \
+    npm install -D typescript@6.0.3 --no-audit --no-fund && \
+    npm run build
+ENV FRONTBASE_FRAMEWORK=/frontbase-framework
+
 # Build with API URL (empty = same-origin, which is what we want for production)
 ARG VITE_API_URL=""
 ENV VITE_API_URL=${VITE_API_URL}
